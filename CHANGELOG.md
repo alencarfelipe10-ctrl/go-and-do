@@ -2,6 +2,48 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.1.0] — 2026-07-23
+
+Release de resiliência ao runtime, motivada pelas mudanças do Claude Code 2.1.217/218
+(o 2.1.217 desligou por padrão o spawn aninhado de subagentes — a primitiva de que a
+orquestração em camadas depende) e por uma auditoria de fase real que achou a causa-raiz
+de falhas do revisor Antigravity em modo headless.
+
+### Adicionado
+
+- **Probe de aninhamento** (Sub-rotina H): antes do primeiro despacho de etapa que hospeda
+  um comando GSD spawnador, um subagente-sonda de ~2k tokens verifica se a camada 1 recebe o
+  tool `Agent`. Positivo → orquestração em camadas normal; negativo → rota inline decidida
+  de imediato, sem queimar um despacho inteiro para descobrir o bloqueio.
+- **Regras da rota inline** (Sub-rotina H): (1) ao hospedar uma etapa inline, o orquestrador
+  **lê o `prompts/<etapa>.md` antes de conduzir** — as disciplinas da etapa moram lá e não
+  podem ser perdidas no fallback; (2) o registro da decisão inline é sempre
+  **versão-condicionado** ("na CC X.Y.Z…"), nunca "o harness não permite" — evita que um
+  registro stale perpetue o fallback depois que o runtime muda.
+- **Passo 0 na Sub-rotina C (TaskList)**: os tools de task do Claude Code podem sumir da
+  sessão sem changelog (flag server-side). Se indisponíveis, a sub-rotina é pulada com uma
+  declaração única — sem retry, sem ruído; religa sozinha quando os tools voltam.
+- **README**: pré-requisito novo — env `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2` (com
+  snippet de configuração), necessário no Claude Code ≥ 2.1.217 para a orquestração em
+  camadas.
+
+### Corrigido
+
+- **Revisor Antigravity (`agy`) em headless** (`prompts/intent.md`): o arquivo de briefing
+  agora entra no workspace do agy via segundo `--add-dir`. Causa-raiz encontrada em fase
+  real: o briefing ficava num diretório temporário fora do workspace e o modo headless
+  auto-negava a leitura (`soft-denying ReadFile`) — o run morria antes de tocar o repo, e o
+  sintoma era confundido com falha de login. A orientação de diagnóstico agora cobre isso:
+  "not logged in" no início do log é ruído transitório, e o conserto seguro para soft-deny
+  residual é uma allow-rule de leitura escopada — nunca `--dangerously-skip-permissions`.
+
+### Alterado
+
+- **Evidência de modelo do Codex** (`prompts/convergence.md`): o banner do stderr (versão,
+  `workdir:`, `model:`, `provider:`) agora é copiado **verbatim** para o artefato durável de
+  revisão, por ciclo — o `.err` vive em diretório temporário e evapora; a prova precisa
+  sobreviver à sessão.
+
 ## [1.0.0] — 2026-07-22
 
 Primeira release pública. 🎉

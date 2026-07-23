@@ -22,6 +22,7 @@ Este repositório contém **três skills** que trabalham juntas:
 | Requisito | Obrigatório? | Notas |
 |-----------|--------------|-------|
 | [Claude Code](https://claude.com/claude-code) | ✅ Sim | É o runtime das skills. |
+| Env `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2` | Recomendado (forte) | O Claude Code **≥ 2.1.217 desligou por padrão** o spawn aninhado de subagentes — e a orquestração em camadas da go-and-do depende dele (a etapa despachada precisa spawnar os agentes GSD). Sem a variável, a skill detecta a limitação via probe e cai no **fallback inline** (funciona, mas as etapas rodam na janela do orquestrador e consomem o contexto dela). Configuração abaixo, em [Instalação](#instalação). |
 | [GSD (OpenGSD)](https://opengsd.net) ≥ 1.8.0 | ✅ Sim | `npx -y @opengsd/gsd-core@latest --claude` — as skills orquestram os comandos `gsd-*`. |
 | `gh` (GitHub CLI) autenticado | Para o ship | Sem ele, a etapa de PR reporta bloqueio de ambiente e o resto da fase funciona. |
 | [Codex CLI](https://github.com/openai/codex) e/ou Antigravity CLI (`agy`) | Recomendado | São os **revisores adversariais cross-AI** (revisão de intenção e convergência do plano). Sem nenhum dos dois, essas revisões são **puladas com aviso destacado no resumo executivo** (modo degradado) — a skill funciona, mas você perde a segunda opinião de máquina. |
@@ -43,6 +44,20 @@ Instalação manual (alternativa):
 git clone https://github.com/alencarfelipe10-ctrl/go-and-do.git
 cp -r go-and-do/skills/* ~/.claude/skills/
 ```
+
+Depois, habilite o spawn aninhado de subagentes (ver [Pré-requisitos](#pré-requisitos)) —
+no `~/.claude/settings.json`, dentro do bloco `env`:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "2"
+  }
+}
+```
+
+Vale a partir da próxima sessão do Claude Code. `2` é o suficiente: orquestrador (0) →
+etapa despachada (1) → agentes GSD (2).
 
 ## Uso
 

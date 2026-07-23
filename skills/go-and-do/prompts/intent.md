@@ -186,13 +186,26 @@ revisores externos** (Codex + Antigravity, decisão do usuário em 2026-07-22). 
      it contains. The repository under review is at <project_root> — verify claims
      against those files. Output only the resulting markdown review. Do not edit any
      files."`
+   - **O briefing precisa estar DENTRO do workspace do agy** (cwd ou um `--add-dir`) —
+     em headless, ler um arquivo fora dele é auto-negado (`soft-denying tool
+     confirmation "ReadFile"` no log) e o run aborta em ~12s ANTES de tocar o repo.
+     Provado em 2026-07-23 (agy 1.1.5, F16 oxmuscle): o briefing no scratchpad `/tmp`
+     matou as duas tentativas — e o diagnóstico registrado na hora culpou auth
+     erradamente. Por isso o comando abaixo passa um segundo `--add-dir` com o
+     diretório do briefing. Não confunda: linhas "not logged in" no INÍCIO do log do
+     agy são ruído transitório de startup (pollers de keyring), não a causa — se
+     segundos depois o log mostra `streamGenerateContent` respondendo, o login está OK.
    - **NUNCA passe `--dangerously-skip-permissions`** — o headless auto-nega tools de
      escrita (verificado: `write_file` negado, run aborta com aviso no stderr). Essa
-     negação É a garantia de leitura-apenas do revisor; a flag a desligaria.
+     negação É a garantia de leitura-apenas do revisor; a flag a desligaria. Se mesmo
+     com os `--add-dir` o log mais recente (`~/.gemini/antigravity-cli/log/cli-*.log`)
+     mostrar `soft-denying ... "ReadFile"`, o conserto seguro é uma allow-rule de
+     LEITURA escopada em `permissions.allow` no `~/.gemini/antigravity-cli/settings.json`
+     (o stderr do agy sugere a sintaxe exata) — nunca a flag.
 
    O comando (timeout de 600000; o killer externo cobre o stall pré-sessão que o
    `--print-timeout` não alcança):
-   `timeout 600 agy --print-timeout 540s --model "Gemini 3.1 Pro (High)" --add-dir "<project_root>" -p "<prompt curto>" </dev/null 2> <ciclo-agy.err> > <respostas-agy.md>`
+   `timeout 600 agy --print-timeout 540s --model "Gemini 3.1 Pro (High)" --add-dir "<project_root>" --add-dir "<dir_do_briefing>" -p "<prompt curto>" </dev/null 2> <ciclo-agy.err> > <respostas-agy.md>`
    (O `--model` explícito é obrigatório pelo mesmo motivo do Codex; `--add-dir` dá ao
    revisor o repo sob revisão — sem ele o agy ancora no scratch próprio e revisa o texto
    no vácuo. Probe: se `agy --help` não listar `--add-dir`, omita a flag — o prompt

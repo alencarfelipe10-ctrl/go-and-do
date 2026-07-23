@@ -52,10 +52,13 @@ despachar — não re-cheque.
    21/07: o path fixo reusado entregou o parecer do ciclo 1 como se fosse o do ciclo
    2 — só o md5 idêntico flagrou; o sufixo de ciclo mata o vetor na origem).
    **Evidência de modelo por ciclo:** capture o stderr do `codex exec` num `.err` e rode
-   `head -8` nele — a linha `model:` do banner (que fica no INÍCIO do stderr; `tail`
-   mostra só o fim do parecer) vai para o registro do ciclo (campo
-   `codex_model_evidencia:` no REVIEWS/CONVERGENCE). Autodeclarar `codex_model:` sem o
-   banner não é evidência. E o registro é por ciclo, gravado no disco no fim DO CICLO
+   `head -8` nele — as linhas do banner (versão, `workdir:`, `model:`, `provider:`; ficam
+   no INÍCIO do stderr; `tail` mostra só o fim do parecer) vão **copiadas verbatim** para
+   o registro do ciclo (campo `codex_model_evidencia:` no REVIEWS/CONVERGENCE) — citação
+   literal, não paráfrase nem só o nome do modelo. O porquê: o `.err` vive no scratchpad
+   efêmero (`/tmp`) e evapora — o artefato durável precisa carregar a prova em si (caso
+   real, F16 oxmuscle 23/07: o modelo foi declarado no REVIEWS mas a prova bruta ficou só
+   no `/tmp`). Autodeclarar `codex_model:` sem o banner não é evidência. E o registro é por ciclo, gravado no disco no fim DO CICLO
    (apêndice no `NN-REVIEWS.md`) — não só no fecho: uma convergência que não fecha
    (caso real 21/07: ~100min sem `NN-CONVERGENCE.md`) não pode deixar os ciclos que
    rodaram sem rastro de modelo em artefato.

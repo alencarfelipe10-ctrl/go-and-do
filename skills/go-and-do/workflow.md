@@ -368,6 +368,14 @@ São os mesmos sinais que a retomada (0.4 + Etapas 1/4/5) já usa pra pular o qu
 lista não inventa estado, lê o disco.
 
 **Montagem na Etapa 0 (toda invocação):**
+0. **Disponibilidade primeiro**: os tools de task são um recurso que o runtime liga e desliga
+   sem changelog (flag server-side — em 23/07, presentes numa sessão e ausentes noutra da
+   MESMA versão 2.1.218). Se `TaskCreate`/`TaskList` não estiverem na janela (nem via
+   `ToolSearch select:TaskCreate,TaskUpdate,TaskList`), **pule esta sub-rotina inteira**:
+   registre a limitação uma vez ("TaskList indisponível neste runtime — seguindo pelo disco")
+   e mencione no sumário executivo. Sem retry, sem ruído por etapa — o disco já é a fonte da
+   verdade e a lista é só espelho. Se os tools voltarem numa re-invocação, a montagem abaixo
+   religa sozinha.
 1. Consulte `TaskList`. Se já existem as tarefas desta fase (re-invocação na mesma sessão),
    só reconcilie os status — não duplique.
 2. Senão, `TaskCreate` para cada tarefa aplicável (pule a 4/UI e a 5/IA, e a 10/UI e a 11/IA, sem
@@ -818,6 +826,32 @@ disco, que é a fonte de verdade):
   trata conforme a semântica do bloco da etapa (re-tentar / Sub-rotina D). A descida para
   subagente **não afrouxa nenhum fail-closed** — o bloqueio sobe com motivo e é a camada 0
   quem para.
+
+**Probe de aninhamento (uma vez por fase, antes do 1º despacho que hospeda comando GSD).**
+O aninhamento (camada 1 spawnar camada 2) é uma capability que o runtime liga e desliga entre
+releases (funcionava na CC 2.1.216; a 2.1.217 o desligou por padrão — reabilitável via env
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, validada por probe A/B em 23/07). Antes do primeiro
+despacho de etapa que hospeda um comando GSD spawnador (plan/convergence/execute/gates/close),
+rode um probe mínimo: um subagente `general-purpose` cuja única tarefa é responder se tem o
+tool `Agent` na lista (base ou deferida via `ToolSearch select:Agent,Task`). Custa ~2k tokens
+e decide a rota da fase inteira; sem ele, a descoberta custa um despacho cheio queimado (caso
+real, F16 oxmuscle: ~9min/127k para receber `blocked`). Probe `sim` → camadas normais. Probe
+`não` → rota inline para as etapas spawnadoras, com as duas regras abaixo.
+
+**Rota inline (fallback do aninhamento) — duas regras inegociáveis.**
+1. **Inline ⇒ leia o `prompts/<etapa>.md` antes de conduzir.** A regra "não leia o prompt
+   antes de despachar" vale para o DESPACHO (evita duplicar na camada 0 o que vai pro disco);
+   no inline ela INVERTE — a camada 0 está assumindo o papel do subagente, e as disciplinas
+   da etapa (critérios, protocolos, correções recentes) moram no arquivo de prompt. Caso
+   real, F16 oxmuscle: a convergência rodou inline guiada só pelo resumo do workflow.md e o
+   critério de materialidade (correção de 22/07 em `prompts/convergence.md`) nunca entrou na
+   janela.
+2. **Registro versão-condicionado, nunca atemporal.** A decisão inline entra no
+   `NN-DECISOES.md` e no `.continue-here.md` como "na CC <versão-exata>, subagentes não
+   recebem `Agent`/`Task`" — jamais como "este harness não permite aninhamento". Um registro
+   atemporal vira anti-pattern stale que perpetua o inline depois que o runtime muda (caso
+   real: a D1 da F16 cristalizou como permanente uma regressão de 48h). Na retomada ou no
+   bump de versão do CC, re-rode o probe antes de reutilizar a decisão.
 
 **Telemetria envolvente.** O despacho é cercado como qualquer comando principal: `checkpoint`
 (Sub-rotina A) antes; `end` na volta, com os tokens que o harness reportou pro subagente no 7º
