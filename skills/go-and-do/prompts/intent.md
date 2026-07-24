@@ -208,8 +208,10 @@ revisores externos** (Codex + Antigravity, decisão do usuário em 2026-07-22). 
    `timeout 600 agy --print-timeout 540s --model "Gemini 3.1 Pro (High)" --add-dir "<project_root>" --add-dir "<dir_do_briefing>" -p "<prompt curto>" </dev/null 2> <ciclo-agy.err> > <respostas-agy.md>`
    (O `--model` explícito é obrigatório pelo mesmo motivo do Codex; `--add-dir` dá ao
    revisor o repo sob revisão — sem ele o agy ancora no scratch próprio e revisa o texto
-   no vácuo. Probe: se `agy --help` não listar `--add-dir`, omita a flag — o prompt
-   ancorado no path absoluto cobre o fallback.)
+   no vácuo. Probe: se `agy --help 2>&1` não listar `--add-dir`, omita a flag — o prompt
+   ancorado no path absoluto cobre o fallback. O `2>&1` é obrigatório: o agy ≥1.1.5
+   imprime o help no STDERR — com `2>/dev/null` o probe falso-negativa e o run sai sem
+   `--add-dir`, morrendo na leitura auto-negada [provado 2026-07-24, F19 grupo-inspired].)
    **⚠️ Critério de falha do agy é STDOUT VAZIO, nunca o exit code** — verificado: o agy
    devolve rc=0 mesmo quando aborta sem produzir nada (o aviso vai só pro stderr).
    **Evidência de modelo (obrigatória, por run):** o análogo do banner do Codex é o
@@ -218,6 +220,11 @@ revisores externos** (Codex + Antigravity, decisão do usuário em 2026-07-22). 
    devolve `Model Selection from None to Gemini 3.1 Pro (High)`; copie essa linha para
    o frontmatter (campo `agy_model_evidencia:`). O bloco só existe quando o `--model`
    foi aceito — ausência = sem evidência = registre em `sinos`, não invente.
+   **Modelo errado = revisor degradado:** se a evidência mostrar um modelo DIFERENTE do
+   configurado (ex.: `Gemini 3.5 Flash` — fallback silencioso por quota/default, 3
+   ocorrências provadas na F16-ox 23/07), trate o run como FALHO com sino, não como
+   parecer válido — um Flash com crachá de Pro fura a régua da revisão. Cheque extra
+   barato quando houver dúvida: `agy --continue --print "Qual modelo de LLM você é?"`.
 
    **Falha de UM revisor** (indisponível no pré-check, timeout, parecer vazio/ilegível —
    exit 0 com arquivo vazio conta como falha, não como "nenhum achado": uma revisão

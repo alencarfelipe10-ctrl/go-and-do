@@ -566,6 +566,14 @@ uma com o porquê e como desfazer) e o
 `NN-LEARNINGS.md` **se existir** (pode ainda não existir — ignore se faltar). **Não invente nada**
 que não esteja nesses arquivos — em especial, **não invente contexto externo de negócio**.
 
+**Atribuição de autoria de decisão — só com fonte citável.** Ao mencionar qualquer decisão
+tomada durante a fase, a autoria segue a fonte: está no `NN-DECISOES.md` → foi a orquestração
+("decidi por você"); está no Interview Log do SPEC como decisão do dono, num `AskUserQuestion`
+respondido ou num `--obs` → foi o dono ("você decidiu"). **Sem fonte que crave a autoria, use
+voz neutra** ("ficou decidido", "a fase definiu") — nunca "tomada por mim". Caso real
+(F19 grupo-inspired, 24/07): o resumo atribuiu ao sistema uma decisão de oráculo que o dono
+respondera ao vivo — erro na direção que rouba o crédito do dono e infla a autonomia relatada.
+
 **BLOCO DE TRANSPARÊNCIA (no `modo: final`, SEMPRE no topo do documento, antes de tudo):**
 Este é o sinal humano mais importante — escreva-o **primeiro**, destacado:
 - **Desfecho `ship`** + há `<itens_assumidos>` → abra com:
@@ -691,6 +699,13 @@ Os 4 eventos e onde cada um é registrado:
   que o harness reportou em cada volta; se só a última volta reporta (acumulado), use-a. Um
   despacho cujo desfecho roteia pra uma parada (`escalou`) ainda fecha com `end` — a etapa
   rodou e terminou; a parada em si é outro evento.
+  **Camada 2 conta:** se o host despachado spawna agentes próprios (ex.: a convergência
+  hospedando revisores/replans), o usage que o harness reporta à camada 0 cobre SÓ o host —
+  os filhos ficam de fora e a etapa sai subcontada (caso real F16-ox 23/07: 2 replans Opus
+  invisíveis no RUN-LOG). Regra: o prompt de todo host que pode spawnar exige, no retorno, a
+  linha `tokens_camada2: <soma reportada pelo harness aos seus despachos>` — a camada 0 soma
+  host + camada 2 no `subagent_tokens`. Host que não reportar a linha → registre só o host
+  (nunca estime) e anote `subagent_tokens_sem_camada2` na etapa do RUN-LOG.
   **Vale também para as rotas inline e híbridas** (execute inline da 3.3, verificação 3.4,
   resumo parcial/final da Sub-F, gera-UAT 5.3, UAT 5.4): TODA etapa aberta
   por um `checkpoint` fecha com `end` (ou `skip`/`stop`) — etapa inline sem `end` fica "aberta"
@@ -922,6 +937,13 @@ Mecânica da auto-decisão:
    bug da mesma família do passo pulado sem disclosure.
 3. Siga o fluxo. Num `needs_decision`, continue o MESMO subagente com o rótulo honesto da
    Sub-rotina H: **"decisão da camada 0 (triagem): X"** — nunca "decisão do usuário".
+
+**Decisões de timing também são decisões.** Escolher QUANDO envolver o dono — "não vou
+interrompê-lo agora, os gates ficam para a retomada", adiar uma pergunta para o fim da wave,
+segurar um aviso até o resumo — passa pela mesma mecânica: entrada no `NN-DECISOES.md` com
+critério, porquê e desfazer (ex.: "perguntar agora mesmo assim"). Caso real (F16-ox, 23/07): a
+escolha de não interromper o dono no gate do 16-12 foi narrada no chat mas não registrada — a
+narração se perde; o registro é o que o resumo e a auditoria releem.
 
 **Janela de silêncio (23h–07h locais):** um gate duro fora dela pergunta normalmente via
 `AskUserQuestion`. Dentro dela (confira `date +%H` no momento do gate), não pendure a pergunta

@@ -68,11 +68,15 @@ despachar — não re-cheque.
    conv-id do workspace em `cache/last_conversations.json`). Anote a contagem de linhas
    do transcript ANTES do ciclo (watermark) e, depois, `grep -o 'Model Selection.[^.]*'`
    nas linhas novas → `agy_model_evidencia:`. Bloco ausente = o `--model` não pegou =
-   sem evidência → `sinos`, nunca autodeclaração. **Critério de falha do agy é stdout
-   vazio, não o exit code** (verificado 2026-07-22: rc=0 com zero output e o aviso só no
-   stderr) — parecer vazio conta como revisor falho naquele ciclo, não como "sem
-   achados". E **jamais** `--dangerously-skip-permissions`: o auto-deny de escrita do
-   headless é a garantia de leitura-apenas do revisor.
+   sem evidência → `sinos`, nunca autodeclaração. **Modelo errado = revisor degradado:**
+   evidência mostrando modelo ≠ configurado (ex.: `Gemini 3.5 Flash` no lugar do 3.1
+   Pro — fallback silencioso provado 3x na F16-ox 23/07) → o ciclo conta como revisor
+   FALHO com sino, nunca como parecer válido. Cheque extra na dúvida:
+   `agy --continue --print "Qual modelo de LLM você é?"`. **Critério de falha do agy é
+   stdout vazio, não o exit code** (verificado 2026-07-22: rc=0 com zero output e o
+   aviso só no stderr) — parecer vazio conta como revisor falho naquele ciclo, não como
+   "sem achados". E **jamais** `--dangerously-skip-permissions`: o auto-deny de escrita
+   do headless é a garantia de leitura-apenas do revisor.
    - Plano já existe (é o caso aqui — a Etapa 2 planejou) → ele pula o planejamento
      inicial e vai direto pra revisão cruzada.
    - O comando roda os ciclos sozinho (revisores externos criticam → replaneja →
@@ -181,6 +185,7 @@ veredito: convergiu | escalou | config_off
 ciclos: <n>
 correcoes: [<1 linha por correção relevante aplicada ao plano; ausente se nenhuma>]
 revisores_efetivos: [codex, agy]   ← só os que revisaram de fato
+tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (replans, checkers); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
 impasse: <só no escalou: o travamento em ≤5 linhas — posições e o ponto de discórdia>
 sinos: [<ex.: "agy indisponível (stdout vazio) — revisão Codex-only"; ausente se vazio>]
 ```
