@@ -22,7 +22,7 @@ Este repositório contém **três skills** que trabalham juntas:
 | Requisito | Obrigatório? | Notas |
 |-----------|--------------|-------|
 | [Claude Code](https://claude.com/claude-code) | ✅ Sim | É o runtime das skills. |
-| Env `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2` | Recomendado (forte) | O Claude Code **≥ 2.1.217 desligou por padrão** o spawn aninhado de subagentes — e a orquestração em camadas da go-and-do depende dele (a etapa despachada precisa spawnar os agentes GSD). Sem a variável, a skill detecta a limitação via probe e cai no **fallback inline** (funciona, mas as etapas rodam na janela do orquestrador e consomem o contexto dela). Configuração abaixo, em [Instalação](#instalação). |
+| Spawn aninhado de subagentes | Só configurar na CC 2.1.217–2.1.218 | A orquestração em camadas depende dele (a etapa despachada precisa spawnar os agentes GSD). **Na CC ≥ 2.1.219 vem ligado de fábrica** (profundidade 3) — não faça nada. Só as versões **2.1.217 e 2.1.218** o desligaram por padrão; nelas, defina `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2` (ver [Instalação](#instalação)). ⚠️ Da 2.1.219 em diante essa env var **inverteu de papel**: ela só serve para *desligar* o aninhamento, e qualquer valor abaixo de 3 limita o padrão — se você a configurou no passado, **remova**. Sem aninhamento disponível, a skill detecta via probe e cai no **fallback inline** (funciona, mas as etapas rodam na janela do orquestrador e consomem o contexto dela). |
 | [GSD (OpenGSD)](https://opengsd.net) ≥ 1.8.0 | ✅ Sim | `npx -y @opengsd/gsd-core@latest --claude` — as skills orquestram os comandos `gsd-*`. |
 | `gh` (GitHub CLI) autenticado | Para o ship | Sem ele, a etapa de PR reporta bloqueio de ambiente e o resto da fase funciona. |
 | [Codex CLI](https://github.com/openai/codex) e/ou Antigravity CLI (`agy`) | Recomendado | São os **revisores adversariais cross-AI** (revisão de intenção e convergência do plano). Sem nenhum dos dois, essas revisões são **puladas com aviso destacado no resumo executivo** (modo degradado) — a skill funciona, mas você perde a segunda opinião de máquina. |
@@ -45,8 +45,14 @@ git clone https://github.com/alencarfelipe10-ctrl/go-and-do.git
 cp -r go-and-do/skills/* ~/.claude/skills/
 ```
 
-Depois, habilite o spawn aninhado de subagentes (ver [Pré-requisitos](#pré-requisitos)) —
-no `~/.claude/settings.json`, dentro do bloco `env`:
+**Spawn aninhado de subagentes** (ver [Pré-requisitos](#pré-requisitos)): na CC ≥ 2.1.219 já
+vem ligado por padrão, com profundidade 3 — **não configure nada**. Se você tem
+`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` no `~/.claude/settings.json` de quando isso era
+necessário, remova: nessa versão ela passou a servir só para *desligar* o aninhamento, e
+qualquer valor abaixo de 3 vira um limitador.
+
+Só nas versões **2.1.217 e 2.1.218** o aninhamento vinha desligado. Nelas, no
+`~/.claude/settings.json`, dentro do bloco `env`:
 
 ```json
 {

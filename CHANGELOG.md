@@ -2,6 +2,27 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.1.2] — 2026-07-24
+
+Release só de documentação. O Claude Code 2.1.219 religou o spawn aninhado de subagentes por
+padrão, e a instrução de pré-requisito introduzida na v1.1.0 — que mandava configurar uma
+variável de ambiente — virou desnecessária e enganosa para quem instalar a skill a partir de agora.
+
+### Alterado
+
+- **README, § Pré-requisitos e § Instalação**: a linha `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=2`
+  deixa de ser "Recomendado (forte)" e passa a ser **condicionada à versão do Claude Code**.
+  Na **CC ≥ 2.1.219 não configure nada** — o aninhamento vem ligado de fábrica com
+  profundidade 3. A variável só é necessária nas versões **2.1.217 e 2.1.218**, as únicas que
+  o desligaram por padrão. ⚠️ Da 2.1.219 em diante ela **inverteu de papel**: serve apenas
+  para *desligar* o aninhamento (`=1`), e qualquer valor abaixo de 3 vira um limitador — quem
+  a configurou seguindo a v1.1.0/v1.1.1 deve **removê-la**.
+- **`workflow.md`, § probe de aninhamento**: o histórico da capability passa a registrar as
+  três viradas (2.1.216 ligado → 2.1.217 desligado → 2.1.219 religado com teto 3) em vez de
+  parar na 2.1.217. O **probe continua obrigatório** — três mudanças de comportamento em três
+  releases são exatamente o motivo de nenhuma conclusão sobre aninhamento poder ser gravada
+  como atemporal.
+
 ## [1.1.1] — 2026-07-24
 
 Release de correções vinda da auditoria dupla de 24/07 (duas fases reais na mesma noite,

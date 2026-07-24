@@ -844,8 +844,12 @@ disco, que é a fonte de verdade):
 
 **Probe de aninhamento (uma vez por fase, antes do 1º despacho que hospeda comando GSD).**
 O aninhamento (camada 1 spawnar camada 2) é uma capability que o runtime liga e desliga entre
-releases (funcionava na CC 2.1.216; a 2.1.217 o desligou por padrão — reabilitável via env
-`CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, validada por probe A/B em 23/07). Antes do primeiro
+releases — por isso o probe existe, e por isso nenhuma conclusão sobre ele pode ser gravada
+como atemporal. Histórico: funcionava na CC 2.1.216; a 2.1.217 o desligou por padrão (antídoto
+da época: `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH`, validado por probe A/B em 23/07); a **2.1.219
+religou por padrão e subiu o teto para profundidade 3**, e nessa versão a mesma env var inverteu
+de papel — hoje ela só **desliga** (`=1`), e qualquer valor abaixo de 3 vira um limitador. Ou
+seja: na CC ≥ 2.1.219 o aninhamento não exige configuração nenhuma. Antes do primeiro
 despacho de etapa que hospeda um comando GSD spawnador (plan/convergence/execute/gates/close),
 rode um probe mínimo: um subagente `general-purpose` cuja única tarefa é responder se tem o
 tool `Agent` na lista (base ou deferida via `ToolSearch select:Agent,Task`). Custa ~2k tokens
