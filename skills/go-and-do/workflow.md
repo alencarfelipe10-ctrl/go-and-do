@@ -710,6 +710,15 @@ Os 4 eventos e onde cada um é registrado:
   linha `tokens_camada2: <soma reportada pelo harness aos seus despachos>` — a camada 0 soma
   host + camada 2 no `subagent_tokens`. Host que não reportar a linha → registre só o host
   (nunca estime) e anote `subagent_tokens_sem_camada2` na etapa do RUN-LOG.
+  **Notificação órfã de camada 2:** quando um agente de camada 2 pausado num checkpoint é
+  retomado, o harness pode entregar a notificação de conclusão dele — com o total de tokens —
+  à camada 0, e não ao pai que o despachou; o pai então reporta só o que viu antes da pausa,
+  e nem uma `tokens_camada2` perfeita cobre o delta (caso real, F19: o executor do plano
+  fechou em 261k, o pai só viu 188k, e os 73k da retomada sumiram da conta). Regra: chegou
+  notificação de subagente que você NÃO despachou diretamente, com total de tokens → some-o
+  ao `subagent_tokens` do `end` da etapa a que ele pertence; se o `end` daquela etapa já foi
+  gravado, grave um `end` adicional só com o delta e etapa = `"<etapa> (camada 2 retomada)"`.
+  Nunca descarte o número — a camada 0 é a única que o recebeu.
   **Vale também para as rotas inline e híbridas** (execute inline da 3.3, verificação 3.4,
   resumo parcial/final da Sub-F, gera-UAT 5.3, UAT 5.4): TODA etapa aberta
   por um `checkpoint` fecha com `end` (ou `skip`/`stop`) — etapa inline sem `end` fica "aberta"

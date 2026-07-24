@@ -2,6 +2,18 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.1.4] — 2026-07-24
+
+### Adicionado
+
+- **Telemetria: regra da notificação órfã de camada 2** (`workflow.md` § Sub-rotina G): quando um
+  agente de camada 2 pausado num checkpoint é retomado, o harness pode entregar a notificação de
+  conclusão (com o total de tokens) à camada 0 em vez do pai que o despachou — e o pai reporta só
+  o que viu antes da pausa, furando até uma `tokens_camada2` perfeita (caso real, F19: 73k da
+  retomada do 19-03 sumiram da conta). A camada 0 agora soma o total da notificação órfã ao
+  `subagent_tokens` da etapa (ou grava um `end` adicional com o delta, se a etapa já fechou).
+  O roteamento em si é comportamento do Claude Code; esta é a mitigação possível do nosso lado.
+
 ## [1.1.3] — 2026-07-24
 
 Correções da auditoria do fecho da F19 (grupo-inspired): a fase fechou inteira, e os três
