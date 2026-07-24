@@ -57,6 +57,8 @@ Antigravity finalmente configurável de verdade em headless.
   24/07). Quem usa o `agy` como revisor deve aplicar o mesmo `2>&1` em qualquer probe
   equivalente fora desta skill (ex.: workflows do GSD).
 
+## [1.1.0] — 2026-07-23
+
 Release de resiliência ao runtime, motivada pelas mudanças do Claude Code 2.1.217/218
 (o 2.1.217 desligou por padrão o spawn aninhado de subagentes — a primitiva de que a
 orquestração em camadas depende) e por uma auditoria de fase real que achou a causa-raiz
