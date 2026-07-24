@@ -57,7 +57,18 @@
     esac
   fi
 
+  # Versão da skill no evento `run` (mecânico — sem depender de disciplina do modelo):
+  # `git describe` no clone (o script vive dentro dele; pwd -P resolve o symlink).
+  # Motivo: na F19 uma release saiu com a fase em voo e a auditoria teve que reconstruir
+  # por timestamps de commit qual versão regia cada etapa. Falhou o git → campo omitido.
+  ver=""
+  if [ "$evento" = "run" ]; then
+    _sd=$(CDPATH= cd -- "$(dirname -- "$0")/.." 2>/dev/null && pwd -P)
+    [ -n "$_sd" ] && ver=$(git -C "$_sd" describe --tags --always 2>/dev/null | tr -cd 'A-Za-z0-9._-' | head -c 40)
+  fi
+
   linha="{\"ts\":\"$ts\",\"sessao\":\"$sess\",\"evento\":\"$evento\",\"etapa\":\"$etapa\""
+  [ -n "$ver" ] && linha="$linha,\"skill_version\":\"$ver\""
   case "$tokens" in (*[!0-9]*|'') ;; (*) linha="$linha,\"tokens\":$tokens";; esac
   case "$pct" in (*[!0-9]*|'') ;; (*) linha="$linha,\"pct\":$pct";; esac
   case "$lim" in (*[!0-9]*|'') ;; (*) linha="$linha,\"limit\":$lim";; esac

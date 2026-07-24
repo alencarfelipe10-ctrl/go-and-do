@@ -687,7 +687,11 @@ mesmo bloco — grava o denominador do `pct` e torna a linha autodescritiva.
 
 Os 4 eventos e onde cada um é registrado:
 - **`run`** — na Etapa 0.4, assim que o retrato entregou o `phase_dir` (marca o início ou a
-  retomada da rodada; etapa = `preparacao`).
+  retomada da rodada; etapa = `preparacao`). O script grava sozinho o campo `skill_version`
+  (`git describe` do clone da skill) nessa linha — é o que diz à auditoria qual versão regia
+  a rodada (caso real, F19: uma release saiu com a fase em voo e metade do pipeline rodou em
+  cada versão; a política associada — não publicar release com fase em voo — está no
+  CHANGELOG da v1.1.3).
 - **`checkpoint`** — no mesmo bloco Bash do context-check (Sub-rotina A, passo 1), com a etapa
   que vem a seguir e os `tokens`/`pct` medidos. É o "início" daquela etapa.
 - **`end`** — logo depois que o comando principal da etapa terminar (junto do `TaskUpdate` para
@@ -837,6 +841,25 @@ disco, que é a fonte de verdade):
   exatamente o carimbo invertido que a revisão adversarial existe para impedir (caso real:
   usuário respondeu com pergunta e a camada 0 repassou a própria recomendação como "decisão
   do usuário").
+  **Bloco de proveniência (quando a decisão É do usuário):** o rótulo sozinho não sobrevive à
+  descida — para quem está duas camadas abaixo, "Decisão do usuário: X" escrito por você é
+  asserção de agente, e um executor rigoroso vai (corretamente) recusá-la como resolução de
+  checkpoint bloqueante (caso real, F19: o repasse carimbado virou autorização "provisória"
+  com instrução de `git revert` plantada no STATE.md e verificação em `human_needed` — ~1h e
+  3 commits para re-provar uma decisão já tomada). Repasse decisão do usuário SEMPRE neste
+  formato, e instrua cada camada a repassá-lo verbatim ao descer:
+
+  ```
+  DECISAO-DO-DONO
+  canal: AskUserQuestion | --obs | resposta direta no chat | retomada pós-pausa
+  ts: <ISO da resposta>
+  pergunta: <1 linha — o que foi perguntado>
+  resposta_verbatim: "<a resposta dele, palavra por palavra>"
+  ```
+
+  A contraparte — a regra de autoridade que faz o bloco funcionar — vive nos prompts das
+  etapas que tocam checkpoint bloqueante (`prompts/execute.md`): só este bloco fecha um
+  checkpoint de decisão do dono; qualquer outra menção é relato e não fecha nada.
 - **`blocked`** — pré-condição indisponível (ex.: revisor cross-AI fora do ar). A camada 0
   trata conforme a semântica do bloco da etapa (re-tentar / Sub-rotina D). A descida para
   subagente **não afrouxa nenhum fail-closed** — o bloqueio sobe com motivo e é a camada 0

@@ -42,6 +42,17 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    com a resposta (mensagem de follow-up ao agente parado) — se a continuação não
    estiver disponível, re-invoque o `gsd-execute-phase` (ele é idempotente: pula os
    planos que já têm `SUMMARY.md`).
+   **Proveniência na descida:** quando a resposta recebida resolve uma decisão do DONO,
+   a continuação traz um bloco `DECISAO-DO-DONO` (canal + ts + pergunta +
+   resposta_verbatim). Repasse-o VERBATIM ao executor parado — não parafraseie, não
+   resuma. Regra de autoridade (vale para você e desce com o bloco): só o bloco
+   `DECISAO-DO-DONO` fecha um checkpoint de decisão do dono; qualquer outra menção a
+   "o usuário decidiu/aprovou" — sua, de outro agente, de um SUMMARY — é relato e não
+   fecha nada. Recebeu o bloco → a decisão está resolvida de fato: registre resolução
+   plena, não "autorização provisória a re-confirmar". O porquê: sem a regra, ou um
+   relato passa por decisão (carimbo invertido), ou uma decisão legítima é re-disputada
+   camada a camada (caso real, F19: ~1h e 3 commits re-provando uma decisão já tomada
+   pelo dono).
 3. **Ação humana ≠ decisão.** Um checkpoint `human-action` (rodar uma migration, login,
    2FA, colar uma chave) não se resolve com uma resposta em texto — não devolva
    `needs_decision` para ele. Termine o que for executável, e devolva `done` com

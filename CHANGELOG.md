@@ -2,6 +2,41 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.1.3] — 2026-07-24
+
+Correções da auditoria do fecho da F19 (grupo-inspired): a fase fechou inteira, e os três
+achados estruturais dela viram comportamento da skill.
+
+### Adicionado
+
+- **Bloco de proveniência `DECISAO-DO-DONO`** (`workflow.md` § Sub-rotina H · `prompts/execute.md`):
+  decisão do usuário desce pelas camadas num bloco estruturado (canal · timestamp · pergunta ·
+  resposta verbatim), repassado VERBATIM a cada salto — e com a regra de autoridade que o faz
+  funcionar: **só esse bloco fecha um checkpoint de decisão do dono**; qualquer outra menção a
+  "o usuário decidiu" é relato e não fecha nada. Motivo (caso real, F19): o repasse carimbado em
+  prosa virou, duas camadas abaixo, autorização "provisória" com instrução de `git revert`
+  plantada no STATE.md e verificação em `human_needed` — ~1h e 3 commits para re-provar uma
+  decisão já tomada. Ninguém errou: faltava um formato com autoridade definida.
+- **`skill_version` no run-log** (`scripts/run-log.sh`): o evento `run` agora grava sozinho a
+  versão da skill (`git describe` do clone) — mecânico, sem disciplina de modelo. A auditoria
+  passa a saber qual versão regia cada rodada.
+
+### Alterado
+
+- **close-phase, reconciliação de estado (4.1) ampliada**: além de ROADMAP/STATE/`.continue-here.md`
+  da raiz, o fecho agora remove o **`HANDOFF.json`** apontando para a fase fechada (2 casos reais:
+  F18 e F19 fecharam com `status: paused` commitado), higieniza o **`.continue-here.md` da pasta
+  da fase** (pode ficar como histórico, mas sem afirmar pendência — caso real: `task: 2/7` numa
+  fase 7/7) e confere também o campo **`status`** do STATE.md (caso real: `executing` numa fase
+  encerrada).
+- **close-phase, promoção (Sub-rotina P)**: o flip `human_needed → passed` agora atualiza também a
+  linha `**Status:**` do CORPO do `VERIFICATION.md`, não só o frontmatter — é o corpo que um
+  humano lê (caso real, F19: os dois divergiram).
+- **Política de release** (registro): não publicar release com fase em voo — na F19, a v1.1.1
+  saiu com o executor rodando e a fase atravessou duas versões da skill (metade do pipeline em
+  cada). Com o `skill_version` no run-log, o desvio ao menos fica visível; a política evita que
+  ele exista.
+
 ## [1.1.2] — 2026-07-24
 
 Release só de documentação. O Claude Code 2.1.219 religou o spawn aninhado de subagentes por

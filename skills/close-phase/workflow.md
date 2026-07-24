@@ -73,7 +73,7 @@ Legenda: ⏭️ retomada (pula se já feito) · ⏸️ pode parar
 10. `Skill gsd-ship` → `N`. ⏸️ Bloqueio de ambiente (sem remote/`gh`/branch) → roda a reconciliação (4.1) e SÓ ENTÃO respeita e reporta (a fase fechou localmente; só a publicação ficou). Os `AskUserQuestion` de revisão do ship ficam.
 
 **Etapa 4 — Encerramento**
-11. Reconciliação de estado (4.1): checkbox da fase no ROADMAP, STATE coerente, `.continue-here.md` obsoleto.
+11. Reconciliação de estado (4.1): checkbox da fase no ROADMAP, STATE coerente (inclusive `status`), `.continue-here.md` (raiz E pasta da fase) e `HANDOFF.json` obsoletos.
 12. Banner final com o PR e os próximos passos.
 
 </master_checklist>
@@ -202,6 +202,9 @@ node -e '
   let s=fs.readFileSync(p,"utf8");
   const before=s;
   s=s.replace(/^(status:\s*)"?human_needed"?\s*$/m, "$1passed");
+  // O corpo também — é o corpo que um humano lê (caso real, F19: frontmatter `passed`
+  // com o corpo ainda afirmando `human_needed` na linha de status).
+  s=s.replace(/^(\*\*Status:\*\*\s*)`?human_needed`?/m, "$1passed *(promovido — ver § Promoção de status)*");
   if(!/## Promoção de status \(close-phase\)/.test(s)){
     s=s.replace(/\s*$/,"")+"\n\n## Promoção de status (close-phase)\n\n"
       +"Status promovido de `human_needed` para `passed` em "+date+".\n"
@@ -344,20 +347,30 @@ Só se chegou até aqui (se parou antes, já reportou o bloqueio e parou — com
 bloqueio de ambiente do ship roda a 4.1 antes de parar, ver 3.2).
 
 **4.1 — Reconciliação de estado.** O fecho não termina nos artefatos: os MARCADORES têm
-que dizer a mesma coisa (caso real: a Fase 16 do grupo-inspired ficou `- [ ]` no ROADMAP
-por dias, com verificação `passed` e PR mergeado). Cheque e corrija, nesta ordem:
+que dizer a mesma coisa (casos reais: a Fase 16 do grupo-inspired ficou `- [ ]` no ROADMAP
+por dias, com verificação `passed` e PR mergeado; as Fases 18 e 19 fecharam com um
+`HANDOFF.json` commitado dizendo `status: paused` — quem retomar o repo pelo handoff é
+enganado). Cheque e corrija, nesta ordem:
 
 1. **ROADMAP:** `grep -n "Phase ${N}\b" .planning/ROADMAP.md` — a linha da fase está
    `- [ ]` com a verificação `passed`? → troque para `- [x]` (e acrescente
    `(completed YYYY-MM-DD)` se as outras fases fechadas seguem esse padrão).
 2. **`.planning/.continue-here.md`:** existe e aponta para ESTA fase? → remova (é
    marcador de pausa; a fase está fechada). Aponta para outra fase → não toque.
-3. **STATE.md:** `completed_phases`/`current_phase` coerentes com a fase fechada? O GSD
-   nativo costuma atualizar; divergiu → corrija só os campos divergentes.
+3. **`.planning/HANDOFF.json`:** existe e aponta para ESTA fase (`"phase"` = N)? → remova
+   — mesmo estatuto do caso 2: marcador de pausa numa fase fechada. Aponta para outra
+   fase → não toque.
+4. **`.continue-here.md` da PASTA DA FASE** (`<phase_dir>/.continue-here.md`): existe? →
+   ele pode ficar como histórico, mas não pode afirmar pendência: garanta
+   `status: resolved` no frontmatter e corrija contagens/frases que digam trabalho em
+   aberto (caso real, F19: `task: 2 / total_tasks: 7` commitado numa fase 7/7).
+5. **STATE.md:** `completed_phases`/`current_phase`/`status` coerentes com a fase fechada
+   (um `status: executing` com a fase encerrada é marcador enganoso da mesma família)?
+   O GSD nativo costuma atualizar; divergiu → corrija só os campos divergentes.
 
 Mudou qualquer arquivo e `commit_docs` é verdadeiro → commite:
-`git add .planning/ROADMAP.md .planning/STATE.md && git rm -q --cached --ignore-unmatch .planning/.continue-here.md 2>/dev/null; git diff --cached --quiet || git commit -m "docs(${PADDED_PHASE}): reconciliar marcadores de estado (ROADMAP/STATE)"`
-(mais `rm -f .planning/.continue-here.md` no disco, se o caso 2 se aplicou).
+`git add .planning/ROADMAP.md .planning/STATE.md && git rm -q --cached --ignore-unmatch .planning/.continue-here.md .planning/HANDOFF.json 2>/dev/null; git add -A "<phase_dir>/.continue-here.md" 2>/dev/null; git diff --cached --quiet || git commit -m "docs(${PADDED_PHASE}): reconciliar marcadores de estado (ROADMAP/STATE/handoff)"`
+(mais `rm -f` no disco dos arquivos removidos nos casos 2 e 3).
 Nada divergente → siga em silêncio (não gere commit vazio).
 
 **4.2 — Banner final.** Imprima fase + PR (#N e URL) + próximos passos: aprovar/merge ·
