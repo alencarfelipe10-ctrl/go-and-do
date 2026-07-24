@@ -2,6 +2,29 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.2.0] — 2026-07-24
+
+Fecha o P7 do roadmap: fim da pergunta pendurada no terminal sem ninguém saber (o inventário de
+julho somou ~73h de espera em gates que ninguém viu chegar).
+
+### Adicionado
+
+- **Aviso no Telegram** (`tools/notify-telegram.sh` + hook `Notification` do Claude Code, matcher
+  `permission_prompt`): quando uma pergunta interativa ou um pedido de permissão fica esperando o
+  usuário, chega no Telegram em segundos uma mensagem com projeto, pergunta e opções (permissões
+  mostram a ferramenta e o comando travado). Vale para **qualquer sessão** do CC, não só para a
+  go-and-do; numa fase da go-and-do, a mensagem ganha fase e etapa correntes (lidas do
+  `NN-RUN-LOG.jsonl` mais recente do projeto). Entre 23h e 07h a entrega é **muda**
+  (`disable_notification`) — casa com a janela de silêncio da skill sem acordar ninguém.
+  Instalação e credenciais (`~/.config/telegram-notify/config`, fora do repo): ver README
+  § "Aviso no Telegram". Contrato do script: **nunca atrapalha a sessão** — qualquer falha
+  (sem config, sem `jq`, sem rede) termina em exit 0, calada.
+  - Fatos de mecânica que sustentam o desenho (probe de 24/07): pergunta interativa dispara
+    `Notification` tipo `permission_prompt` ~2–8s depois de aparecer, **uma vez só**; `idle_prompt`
+    não participa; não existe hook `PreToolUse` para `AskUserQuestion`. Como a notificação corre
+    contra a gravação da pergunta no transcript (corrida real, perdida uma vez no UAT), o script
+    relê o transcript a cada 2s por até 16s antes de montar a mensagem.
+
 ## [1.1.4] — 2026-07-24
 
 ### Adicionado

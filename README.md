@@ -27,6 +27,7 @@ Este repositório contém **três skills** que trabalham juntas:
 | `gh` (GitHub CLI) autenticado | Para o ship | Sem ele, a etapa de PR reporta bloqueio de ambiente e o resto da fase funciona. |
 | [Codex CLI](https://github.com/openai/codex) e/ou Antigravity CLI (`agy`) | Recomendado | São os **revisores adversariais cross-AI** (revisão de intenção e convergência do plano). Sem nenhum dos dois, essas revisões são **puladas com aviso destacado no resumo executivo** (modo degradado) — a skill funciona, mas você perde a segunda opinião de máquina. |
 | gsd-browser (MCP) | Recomendado | Motor do **UAT automatizado** (o subagente clica, preenche e prova no navegador). Sem ele, os cenários caem no balde "não pude verificar" e a fase faz hand-back para verificação humana (`/gsd-verify-work`). |
+| Bot do Telegram + arquivo de config | Opcional | Alimenta o **[aviso no Telegram](#aviso-no-telegram-opcional)**: quando uma pergunta interativa ou um pedido de permissão fica pendurado esperando você, o celular pinga em segundos — em vez de a sessão esperar horas até você olhar o terminal. Sem o config, o script sai calado e nada muda. |
 
 ## Instalação
 
@@ -64,6 +65,56 @@ Só nas versões **2.1.217 e 2.1.218** o aninhamento vinha desligado. Nelas, no
 
 Vale a partir da próxima sessão do Claude Code. `2` é o suficiente: orquestrador (0) →
 etapa despachada (1) → agentes GSD (2).
+
+## Aviso no Telegram (opcional)
+
+Quando o Claude Code para e espera você — uma pergunta interativa (`AskUserQuestion`) ou um
+pedido de permissão — a sessão fica pendurada até você voltar ao terminal. O script
+[`tools/notify-telegram.sh`](tools/notify-telegram.sh) fecha esse buraco: um aviso chega no seu
+Telegram em segundos, com o texto da pergunta e as opções. Entre **23h e 07h** a mensagem chega
+**muda** (sem som nem vibração) — você não perde nada e não acorda por nada.
+
+Setup em três passos:
+
+1. **Crie o bot**: no Telegram, fale com o [@BotFather](https://t.me/BotFather), mande `/newbot`
+   e guarde o **token** que ele devolve. Depois abra o chat do seu bot novo e mande `/start`.
+2. **Descubra seu `chat_id`**: `curl -s "https://api.telegram.org/bot<TOKEN>/getUpdates"` — é o
+   número em `message.chat.id`.
+3. **Grave as credenciais** (fora de qualquer repo) em `~/.config/telegram-notify/config`, com
+   `chmod 600`:
+
+   ```
+   TELEGRAM_BOT_TOKEN=...
+   TELEGRAM_CHAT_ID=...
+   ```
+
+E ligue o hook no `~/.claude/settings.json` (ajuste o caminho para onde você clonou o repo):
+
+```json
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"/caminho/para/go-and-do/tools/notify-telegram.sh\"",
+            "timeout": 30,
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Notas de comportamento: o aviso vale para **qualquer sessão** do Claude Code, não só para a
+go-and-do (o gatilho é o hook `Notification` do próprio CC — perguntas interativas disparam como
+`permission_prompt`). Se a pergunta vem de uma fase da go-and-do, a mensagem ganha a fase e a
+etapa correntes (lidas do `NN-RUN-LOG.jsonl`). E o script **nunca atrapalha a sessão**: sem
+config, sem `jq` ou sem rede, ele sai calado com exit 0.
 
 ## Uso
 
