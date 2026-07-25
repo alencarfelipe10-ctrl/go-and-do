@@ -37,6 +37,15 @@
   # etapa é o único campo de texto livre — escapa aspas e barras pro JSON não quebrar
   etapa=$(printf '%s' "$etapa" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n\r\t')
 
+  # Checkpoint sem medição não passa em silêncio (caso real, F16-ox 25/07: o checkpoint da
+  # 5.4 nasceu sem tokens/pct e ninguém notou até a auditoria). O aviso vai pro stdout — é o
+  # canal que o orquestrador lê; a regra de reação (re-rodar o context-check 1x) é da Sub-G.
+  if [ "$evento" = "checkpoint" ]; then
+    case "$tokens" in
+      (''|*[!0-9]*|0) echo "aviso: checkpoint sem tokens/pct — context-check falhou? re-rode o bloco da Sub-rotina A (1x) antes de seguir" ;;
+    esac
+  fi
+
   # Detector mecânico de auto-compact (ver cabeçalho): só em checkpoint com tokens > 0
   # (0 = medição falhou, não compact) e com session id real (sem id, duas rodadas viram a
   # mesma "sessão" e uma retomada pareceria queda). prev = último valor > 0 da mesma sessão

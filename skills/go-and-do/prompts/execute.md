@@ -87,6 +87,27 @@ E devolva sempre o bloco do contrato de retorno — prosa de espera ("vou aguard
 notificação") no lugar do bloco é retorno inválido.
 Saída vazia com exit 0 também é falha.
 
+Worktrees × envs (o pré-requisito do paralelismo): um worktree nasce **sem** os arquivos
+`.env*` — o git só carrega o que está versionado, e segredo é git-ignored por design. Isso
+já custou caro duas vezes na mesma fase (F16-ox): verificações adiadas por falta de chave
+na rodada paralela, e a rodada seguinte inteira **serializada por override** ("sem env não
+dá") — pagando 2h25 de parede pelo que waves paralelas fariam em fração disso. Regra
+(decisão do dono, 25/07 — o paralelismo vem primeiro): **não desligue nem degrade
+worktrees por falta de env.** Em todo despacho de executor com worktree, inclua no briefing
+um **passo 0 obrigatório**, antes de qualquer trabalho:
+
+```bash
+cd "$(git rev-parse --show-toplevel)"   # raiz do SEU worktree
+MAIN="<project_root>"                    # o checkout principal, recebido no despacho
+(cd "$MAIN" && find . -maxdepth 4 -type f -name '.env*' -not -path '*/node_modules/*') \
+  | while IFS= read -r f; do mkdir -p "./$(dirname "$f")"; cp -n "$MAIN/$f" "./$f"; done
+```
+
+(`cp -n` preserva o que já existir.) A cópia é o canal **sancionado** — e não muda a regra
+de sempre: replicar ≠ inspecionar. Nenhum agente imprime/dumpa o conteúdo de `.env*` no
+transcript; quem precisa de um valor consome a env pelo processo (dotenv/`process.env`),
+nunca por `cat`.
+
 Economia de testes (princípio agnóstico de stack; o racional: na F16, 58% do tempo de
 execução foi suíte de teste, com ~1h45 de re-verificação duplicada e ~35min de runs
 mortos por timeout):

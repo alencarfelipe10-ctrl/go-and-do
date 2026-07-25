@@ -2,6 +2,35 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.3.0] — 2026-07-25
+
+Correções da auditoria do fecho da F16-ox (25/07): destrava o paralelismo com worktrees e
+endurece a honestidade do resumo executivo e da telemetria.
+
+### Adicionado
+
+- **Replicação de envs nos worktrees** (`prompts/execute.md`): worktree nasce sem os `.env*`
+  (git-ignored por design) e isso já custou verificações adiadas (rodada 2 da F16-ox) e uma
+  execução inteira serializada por override (rodada 3 — 2h25 de parede seriais). Decisão do
+  dono (25/07, opção "copiar tudo" — o paralelismo vem primeiro): todo despacho de executor em
+  worktree ganha um **passo 0 obrigatório** que replica os `.env*` do checkout principal
+  (`cp -n`, preservando o que existir), e fica **proibido desligar/degradar worktrees por
+  falta de env**. A cópia é o canal sancionado; a proibição de imprimir/dumpar `.env*` no
+  transcript segue intacta (replicar ≠ inspecionar).
+
+### Corrigido
+
+- **Radiografia dos gates no resumo executivo** (Sub-rotina F, regra dura nova): o resumo DEVE
+  citar o veredito agregado de cada gate que rodou (code review com IDs dos achados abertos ·
+  UI score · eval veredito+score · segurança · validação · UAT por balde). Caso real: o resumo
+  da F16-ox explicou os 4 blockers do eval mas omitiu o "36/100 NOT IMPLEMENTED" e não nomeou
+  o Critical restante (CR-E01) — o número mais duro da fase ficou fora do documento do dono.
+- **Checkpoint sem medição não passa mais em silêncio** (Sub-rotina G + `run-log.sh`): um
+  `checkpoint` com `tokens`/`pct` vazios agora dispara aviso no stdout do script, e a regra
+  manda re-rodar o context-check uma vez antes de seguir (persistindo, segue e anuncia a
+  medição perdida). Caso real: o checkpoint da 5.4 (execução do UAT) da F16-ox nasceu sem
+  tokens e a etapa ficou sem custo de contexto na auditoria.
+
 ## [1.2.0] — 2026-07-24
 
 Fecha o P7 do roadmap: fim da pergunta pendurada no terminal sem ninguém saber (o inventário de

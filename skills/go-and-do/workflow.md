@@ -635,6 +635,17 @@ clareza o que foi **assumido** (balde 4), o que ficou **não-verificado** (balde
 testado. Um problema descrito honestamente vale mais que um verde falso — e aqui isso pesa mais,
 porque na rota de ship o dono pode agir sobre o PR confiando em você.
 
+**Radiografia dos gates (regra dura):** o resumo DEVE citar, textualmente, o **veredito
+agregado de cada gate que rodou** — code review (status + contagem por severidade + o ID de
+cada achado que ficou ABERTO, ex.: "CR-E01"), UI review (score), eval review (veredito +
+score, ex.: "NOT IMPLEMENTED, 36/100"), segurança (ameaças abertas/aceitas), validação
+(veredito) e UAT (contagem por balde). Os vereditos estão nos frontmatters dos artefatos que
+você já lê. Cobrir a "substância" de um gate sem citar o veredito NÃO cumpre a regra — caso
+real (F16-ox, 25/07): o resumo explicou os 4 blockers do eval mas omitiu o "36/100 NOT
+IMPLEMENTED", e não nomeou o único Critical restante do code review; o número mais duro da
+fase só existia fora do documento do dono. Número ruim é exatamente o que este documento
+existe para mostrar.
+
 **Modo = `<modo>`:**
 - `final` + `desfecho: ship` → a fase está na **rota** de ship (o ship roda DEPOIS de você): termine
   o documento com a seção literal:
@@ -693,7 +704,11 @@ Os 4 eventos e onde cada um é registrado:
   cada versão; a política associada — não publicar release com fase em voo — está no
   CHANGELOG da v1.1.3).
 - **`checkpoint`** — no mesmo bloco Bash do context-check (Sub-rotina A, passo 1), com a etapa
-  que vem a seguir e os `tokens`/`pct` medidos. É o "início" daquela etapa.
+  que vem a seguir e os `tokens`/`pct` medidos. É o "início" daquela etapa. `tokens`/`pct`
+  saíram **vazios** (o context-check falhou — o `run-log.sh` avisa no stdout)? Re-rode o bloco
+  inteiro UMA vez antes de seguir; persistindo, siga com o checkpoint vazio e anuncie numa
+  linha a medição perdida (caso real, F16-ox 25/07: o checkpoint da 5.4 nasceu sem tokens em
+  silêncio e a etapa ficou sem custo de contexto na auditoria).
 - **`end`** — logo depois que o comando principal da etapa terminar (junto do `TaskUpdate` para
   `completed`, Sub-rotina C). A duração da etapa = `end.ts − checkpoint.ts`. Se a etapa rodou
   num subagente (Sub-rotina H), passe os tokens que o harness reportou pra ele como 7º
