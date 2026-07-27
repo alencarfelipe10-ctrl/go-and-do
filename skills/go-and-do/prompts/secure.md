@@ -88,6 +88,7 @@ security: <caminho absoluto do NN-SECURITY.md>
 veredito: secured | ameacas_abertas
 ameacas: <identificadas>/<mitigadas>/<abertas>
 riscos_aceitos: [<1 linha por ameaça aceita + ONDE o usuário decidiu (intent-review/plan/resposta desta rodada); ausente se nenhuma — aceite sem decisão do usuário rastreável NÃO entra aqui, vira needs_decision>]
+tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (agentes aninhados); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
 sinos: [<ex.: "sem threat model nos PLANs — STRIDE retroativo montado"; ausente se vazio>]
 ```
 

@@ -36,6 +36,11 @@ antes de te despachar — não re-cheque.
    ("Re-audit / View" — acontece no ciclo de conserto do UAT, quando o `NN-REVIEW.md`
    da rodada anterior já existe), escolha **re-auditar** você mesmo (é o propósito do
    despacho; não devolva `needs_decision` para isso).
+   **Nomenclatura das rodadas (ordem cronológica, regra dura):** rodou mais de uma
+   rodada? A 1ª fica/permanece em `NN-REVIEW.md` e as seguintes ganham sufixo crescente
+   (`NN-REVIEW.iter2.md` = 2ª rodada, e assim por diante) — NUNCA mova a rodada 1 para o
+   arquivo `iter2` deixando a 2ª no nome base (caso real F20: quem lia pelo nome lia as
+   rodadas ao contrário). Mesma regra para os `NN-REVIEW-FIX*.md`.
 3. Ao final, colha do `NN-REVIEW.md` (e do output do comando) os números do retorno:
    achados por severidade (encontrados / corrigidos / restantes), o veredito
    (`clean` quando não sobrou Critical), e a lista compacta dos itens
@@ -74,6 +79,7 @@ veredito: clean | criticals_restantes
 iteracoes_fixer: <n>
 achados: critical <encontrados>/<corrigidos>/<restantes> · warning <e>/<c>/<r>
 uat_humano: [<1 linha por item "requires human verification"; ausente se nenhum>]
+tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (agentes aninhados); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
 sinos: [<ex.: "2 Criticals restantes: <resumo>"; ausente se vazio>]
 ```
 

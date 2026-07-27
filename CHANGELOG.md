@@ -2,6 +2,68 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.3.1] — 2026-07-27
+
+Correções da auditoria da F20 do grupo-inspired (27/07, 1ª fase real da v1.3.0): telemetria
+com grade determinística, fecho de fase com asserção, e dois guards novos no executor.
+
+### Adicionado
+
+- **Fixtures gitignored nos worktrees** (`prompts/execute.md`): o passo 0 do despacho de
+  executor, que já replicava os `.env*`, agora também copia (`cp -an`) as pastas declaradas
+  em `.planning/worktree-fixtures.txt` do projeto — dados locais que o git não carrega ao
+  worktree (ex.: `.xlsx` LGPD). Sem isso, projetos com fixture gitignored ficavam presos à
+  execução serial (caso real: 7 fases 100% seriais no grupo-inspired; a F20 pagou 5h57 — 39%
+  da parede — em 8 planos sequenciais). A cópia é local (disco → disco), vive e morre com o
+  worktree, e continua gitignored lá dentro.
+- **Guarda anti-reversão no briefing de executor** (`prompts/execute.md`): bloco verbatim em
+  todo despacho proibindo `git checkout <hash> -- .`, `reset --hard`, `clean -fd`, `stash` e
+  `add -A`; precisa de um deles → para e devolve como decisão. Torna permanente o
+  endurecimento improvisado da F20 (um executor reverteu arquivos rastreados da árvore
+  compartilhada e se recuperou sozinho em 25s — zero perda, mas nada impedia a perda).
+- **Run-log endurecido** (`scripts/run-log.sh` — a grade virou determinística):
+  `seq` monotônico por arquivo (ordenação canônica; 7 pares end/checkpoint colidiam no mesmo
+  segundo na F20) · **auto-fechamento de janela** (checkpoint novo com a anterior aberta grava
+  `end` sintético `auto_fechado` — a 3.4 da F20 rodou e ficou sem janela) · vocabulário
+  canônico de `etapa` com aviso · `stop` com medição final de contexto + campo `motivo` ·
+  **`tokens_camada2` como campo real** (9º arg; ausência declarada = `"camada2":"sem_report"`)
+  · `parent_etapa` automático no end órfão de camada 2 · modo `audit` (lista janelas abertas
+  antes do stop) · `--selftest` com 14 casos. A Sub-rotina G do `workflow.md` documenta o
+  rebaixamento oficial: `subagent_tokens` é usage cumulativo reportado pelo harness —
+  **conferência, nunca métrica** (superconta ~3-4x; a métrica é o ledger da /audit-gad).
+- **Contrato `tokens_camada2` nos 8 prompts de host** (antes só execute e convergence):
+  plan, code-review, secure, validate, close e eval-review agora reportam a soma dos próprios
+  despachos — 5 etapas eram estruturalmente subcontadas sem marcador de ausência.
+- **close-phase: Etapa 4.1 virou script com asserção**
+  (`skills/close-phase/scripts/reconciliar-marcadores.sh`): usa o comando NATIVO
+  `gsd_run phase complete N` (escreve ROADMAP + REQUIREMENTS + STATE atomicamente, incl. o
+  frontmatter `status` — validado em sandbox: idempotente, sem carimbo duplicado) + `state.sync`,
+  corrige o predicado do HANDOFF ("a fase apontada está FECHADA?" — por checkbox `[x]` ou
+  VERIFICATION `passed` — em vez de "é a fase N?"), deriva as contagens dos `.continue-here.md`
+  da contagem real de SUMMARYs, trata arquivos da era pré-frontmatter, e **assere tudo no fim**
+  (`reconciliacao: ok` | `parcial` com residuais listados). Modos `--check` (dry-run) e
+  `--sweep` (varre phases/ e milestones/). Motivo: a 4.1 era prosa sem asserção e falhou de 3
+  jeitos distintos em fechos reais — F19: não rodou; F20: `status: executing` intocado (o
+  comando usado escrevia o corpo e o motor do GSD preserva o frontmatter) e HANDOFF da F19
+  sobrevivendo por instrução da própria regra.
+- **Contrato do close ganha `marcadores_reconciliados: ok | parcial`** (`prompts/close.md`):
+  a camada 0 e a auditoria passam a enxergar falha de reconciliação — antes o retorno só pedia
+  `pr`/`learnings`/`verificacao_promovida` e o defeito era invisível.
+
+### Corrigido
+
+- **Resumo executivo não afirma o mundo por artefato local** (Sub-rotina F, regra dura nova):
+  estado de OUTRA fase ou do repo publicado (PR pendente/mergeado, deploy) só entra com
+  consulta real (`gh pr view`) ou fonte local COM data, como atribuição — nunca como fato nu;
+  sem âncora, omite. Caso real (F20): o resumo afirmou "a Fase 19 segue pendente" lendo um
+  `ship_state.json` desatualizado, com o PR #31 mergeado havia 2,5 dias.
+- **Emenda 6.4c reconcilia o corpo do resumo pós-promoção**: se o close promoveu a verificação
+  (`human_needed` → `passed`), a menção antiga no corpo é emendada ou carimbada — a § 4 da F20
+  dizia `human_needed` para sempre, gerada 16 minutos antes da promoção e nunca atualizada.
+- **Rodadas de code review em ordem cronológica** (`prompts/code-review.md`): a 1ª rodada
+  fica no `NN-REVIEW.md` e as seguintes ganham sufixo crescente — na F20 o `iter2` continha a
+  rodada 1 e o arquivo base a rodada 2 (quem lia pelo nome lia ao contrário).
+
 ## [1.3.0] — 2026-07-25
 
 Correções da auditoria do fecho da F16-ox (25/07): destrava o paralelismo com worktrees e

@@ -635,6 +635,16 @@ clareza o que foi **assumido** (balde 4), o que ficou **não-verificado** (balde
 testado. Um problema descrito honestamente vale mais que um verde falso — e aqui isso pesa mais,
 porque na rota de ship o dono pode agir sobre o PR confiando em você.
 
+**Estado do mundo além desta fase (regra dura):** qualquer afirmação sobre o estado de OUTRA
+fase ou do repositório publicado (PR aberto/pendente/mergeado, deploy feito, fase "esperando
+publicação") só entra no documento com uma destas âncoras: (a) consulta real ao mundo no momento
+da escrita (`gh pr view`/`gh pr list` no repo de publicação), citando o resultado; ou (b) a fonte
+local **com data**, escrita como atribuição ("segundo `ship_state.json`, atualizado em <data>"),
+nunca como fato nu. **Artefato local não é evidência do mundo** — ele registra o que este repo
+viu, não o que aconteceu lá fora (caso real, F20: o resumo afirmou "a Fase 19 segue pendente"
+lendo um `ship_state.json` desatualizado, com o PR #31 mergeado havia 2,5 dias). Sem âncora
+possível, **omita a afirmação** — o documento é sobre ESTA fase.
+
 **Radiografia dos gates (regra dura):** o resumo DEVE citar, textualmente, o **veredito
 agregado de cada gate que rodou** — code review (status + contagem por severidade + o ID de
 cada achado que ficou ABERTO, ex.: "CR-E01"), UI review (score), eval review (veredito +
@@ -688,13 +698,34 @@ decisões de design da própria skill. O registro é um JSONL por fase:
 pelo campo `sessao`).
 
 ```bash
-bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> <evento> "<etapa>" [tokens] [pct] [subagent_tokens] [limit]
+bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> <evento> "<etapa>" [tokens] [pct] [subagent_tokens] [limit] [tokens_camada2] [motivo]
 ```
 
 `<phase_dir>` sempre ABSOLUTO (o script resolve relativo contra a raiz do git como
 defesa, mas não confie no cwd — um subagente na pasta errada já criou uma árvore
 `.planning/` duplicada). `limit` (8º arg) = o `limit=` que o context-check emitiu no
 mesmo bloco — grava o denominador do `pct` e torna a linha autodescritiva.
+`tokens_camada2` (9º arg) = a soma que o host reportou na linha `tokens_camada2:` do
+contrato de retorno; host que devia reportar e não reportou → passe o literal
+`sem_report` (vira a chave `"camada2":"sem_report"` — a ausência fica distinguível de
+contagem completa). `motivo` (10º arg) = texto livre do `stop`/`skip` — vai em campo
+próprio, não dentro da etapa.
+
+**Vocabulário canônico da `etapa` (regra dura):** a string SEMPRE começa com o ID do
+passo (`0-B intencao`, `2.3 planejamento`, `3.2 convergencia`, `3.3 execucao`,
+`3.4 verificacao`, `4.1 code review`, `4.1b re-review`, `4.4 secure`, `4.5 validate`,
+`5.3 gera-UAT`, `5.4 UAT`, `6.3 resumo`, `6.4 ship`) ou com um dos rótulos
+`preparacao` · `probe` · `resumo` · `lateral <descrição>` (despacho fora do fluxo, ex.:
+uma pesquisa pedida pelo dono). O script avisa quando o 1º token foge do vocabulário —
+sem ID estável, a agregação entre fases é inviável (caso real F20: 4 grafias distintas).
+
+O script também escreve sozinho (mecânico, sem disciplina): **`seq`** (contador
+monotônico — a ordenação canônica do arquivo; timestamps colidem no mesmo segundo) e o
+**auto-fechamento de janela** — um `checkpoint` novo com o anterior da mesma sessão ainda
+sem `end`/`skip`/`stop` grava antes um `end` sintético `"auto_fechado":true` e avisa no
+stdout (caso real F20: a 3.4 rodou e ficou sem janela; o custo caiu na etapa vizinha).
+Viu o aviso → a telemetria da etapa anterior se perdeu; anote o `subagent_tokens` dela
+num `end` corretivo se você o tiver.
 
 Os 4 eventos e onde cada um é registrado:
 - **`run`** — na Etapa 0.4, assim que o retrato entregou o `phase_dir` (marca o início ou a
@@ -721,10 +752,16 @@ Os 4 eventos e onde cada um é registrado:
   **Camada 2 conta:** se o host despachado spawna agentes próprios (ex.: a convergência
   hospedando revisores/replans), o usage que o harness reporta à camada 0 cobre SÓ o host —
   os filhos ficam de fora e a etapa sai subcontada (caso real F16-ox 23/07: 2 replans Opus
-  invisíveis no RUN-LOG). Regra: o prompt de todo host que pode spawnar exige, no retorno, a
-  linha `tokens_camada2: <soma reportada pelo harness aos seus despachos>` — a camada 0 soma
-  host + camada 2 no `subagent_tokens`. Host que não reportar a linha → registre só o host
-  (nunca estime) e anote `subagent_tokens_sem_camada2` na etapa do RUN-LOG.
+  invisíveis no RUN-LOG). Regra: o prompt de **todo** host de etapa (os 8 de `prompts/`)
+  exige, no retorno, a linha `tokens_camada2: <soma reportada pelo harness aos seus
+  despachos>` — a camada 0 grava o valor como **9º argumento** do `end` (campo próprio
+  `tokens_camada2`, separado do `subagent_tokens` do host). Host que não reportar a linha →
+  registre só o host (nunca estime) e passe o literal `sem_report` no 9º argumento — a
+  chave `"camada2":"sem_report"` marca a subcontagem de forma verificável.
+  **Papel dos números (não re-aprenda da pior forma):** `subagent_tokens`/`tokens_camada2`
+  são usage CUMULATIVO reportado pelo harness (input+cache+output de todos os turnos) —
+  servem de **conferência e ordem de grandeza**, nunca de métrica de custo; a métrica é o
+  ledger da /audit-gad, medido dos transcripts (o run-log superconta ~3-4x — caso real F20).
   **Notificação órfã de camada 2:** quando um agente de camada 2 pausado num checkpoint é
   retomado, o harness pode entregar a notificação de conclusão dele — com o total de tokens —
   à camada 0, e não ao pai que o despachou; o pai então reporta só o que viu antes da pausa,
@@ -745,11 +782,28 @@ Os 4 eventos e onde cada um é registrado:
   ```bash
   bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> end "<etapa>" "" "" <subagent_tokens>
   ```
-- **`stop`** — no desfecho da rodada: na Sub-rotina D (passo 2, etapa = `pausa: <motivo>`), no
-  banner final da 6.5 (etapa = `ship` ou `handback`) e em qualquer parada por `blocked` ou
-  impasse de um despacho (2.3, 3.2, 3.3, 4.1, 4.3, 4.4, 4.5 ou 6.4 — etapa =
-  `pausa: <etapa> indisponível` ou o motivo do impasse) — parada sem `stop` deixa a
-  rodada "aberta" no JSONL.
+- **`stop`** — no desfecho da rodada: na Sub-rotina D (passo 2), no banner final da 6.5 e em
+  qualquer parada por `blocked` ou impasse de um despacho (2.3, 3.2, 3.3, 4.1, 4.3, 4.4,
+  4.5 ou 6.4). Etapa = `pausa` | `ship` | `handback`; o texto do motivo vai no **10º
+  argumento** (campo `motivo`), não dentro da etapa. E o `stop` leva **medição final**:
+  rode o mesmo context-check do checkpoint no mesmo bloco — sem isso o custo final de
+  contexto da rodada fica desconhecido (caso real F20: último ponto medido 20min e um
+  despacho de 354k antes do fim). Bloco canônico:
+  ```bash
+  out=$(bash $HOME/.claude/skills/go-and-do/scripts/context-check.sh); echo "$out"
+  t=$(printf '%s' "$out" | sed -n 's/.*tokens=\([0-9]*\).*/\1/p')
+  p=$(printf '%s' "$out" | sed -n 's/.*pct=\([0-9]*\).*/\1/p')
+  l=$(printf '%s' "$out" | sed -n 's/.*limit=\([0-9]*\).*/\1/p')
+  bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> stop "pausa" "$t" "$p" "" "$l" "" "<motivo em 1 linha>"
+  ```
+  Parada sem `stop` deixa a rodada "aberta" no JSONL. (Forma antiga — motivo dentro da
+  etapa — continua aceita pelo script, mas não a use em registro novo.)
+  **Antes do `stop` de fim de rodada (6.5 ou pausa), rode a auditoria da grade:**
+  ```bash
+  bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> audit
+  ```
+  Ela lista janelas abertas (checkpoint sem end/skip) — feche cada uma (`end` ou `skip`
+  honesto) antes de fechar a rodada; e confira que todo passo pulado tem seu `skip`.
 
 O script nunca falha o pipeline (sai 0 sempre; valida os campos numéricos; append puro). Se o
 log não escrever, siga — telemetria é instrumento, não gate.
@@ -1738,6 +1792,15 @@ Sub-rotina F):
 - `blocked` → o motivo do bloqueio e o caminho real de publicação do projeto (ex.: "sem remote
   por design; publique com `/ship-clean-room NN`"). Nenhum PR existe — não deixe o texto sugerir
   que existe.
+- Em ambos os desfechos, **reconcilie o corpo do resumo com o estado pós-close**: o resumo foi
+  escrito ANTES do close — se a close-phase promoveu a verificação (`human_needed` → `passed`),
+  procure a menção antiga (`grep -n human_needed <phase_dir>/NN-RESUMO-EXECUTIVO.md`) e emende-a
+  no lugar, ou anexe à seção a nota "_status promovido a `passed` no fecho — ver § Desfecho do
+  ship_". Sem isso o documento nasce internamente contraditório (caso real, F20: a § 4 dizia
+  `human_needed` para sempre, com o estado real `passed` desde as 04:07 do mesmo fecho).
+- A emenda obedece à **regra do estado do mundo** da Sub-rotina F: nada de afirmar situação de
+  OUTRAS fases (pendente/publicada/mergeada) por artefato local — ou consulte o mundo
+  (`gh pr view`), ou cite fonte + data, ou omita.
 Commite: `git add <phase_dir>/NN-RESUMO-EXECUTIVO.md && git commit -m "docs(fase NN): desfecho
 do ship no resumo"` (best-effort, mesma regra da Sub-rotina F). Idempotente: se a seção já está
 preenchida (retomada), não reescreva. Regra de ouro: a emenda relata o retorno do subagente do

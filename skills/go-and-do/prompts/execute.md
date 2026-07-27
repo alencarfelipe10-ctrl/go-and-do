@@ -101,12 +101,35 @@ cd "$(git rev-parse --show-toplevel)"   # raiz do SEU worktree
 MAIN="<project_root>"                    # o checkout principal, recebido no despacho
 (cd "$MAIN" && find . -maxdepth 4 -type f -name '.env*' -not -path '*/node_modules/*') \
   | while IFS= read -r f; do mkdir -p "./$(dirname "$f")"; cp -n "$MAIN/$f" "./$f"; done
+# Fixtures gitignored declaradas pelo projeto (dados locais que o git não carrega ao
+# worktree — ex.: .xlsx LGPD; sem eles o executor bloqueia por falso "arquivo ausente"
+# e testes golden dão skip silencioso). Caso real: 7 fases seriais no grupo-inspired.
+if [ -f "$MAIN/.planning/worktree-fixtures.txt" ]; then
+  grep -v '^\s*#' "$MAIN/.planning/worktree-fixtures.txt" | grep -v '^\s*$' \
+    | while IFS= read -r d; do [ -e "$MAIN/$d" ] && mkdir -p "./$(dirname "$d")" && cp -an "$MAIN/$d" "./$(dirname "$d")/"; done
+fi
 ```
 
-(`cp -n` preserva o que já existir.) A cópia é o canal **sancionado** — e não muda a regra
-de sempre: replicar ≠ inspecionar. Nenhum agente imprime/dumpa o conteúdo de `.env*` no
+(`cp -n`/`cp -an` preservam o que já existir.) A cópia é o canal **sancionado** — e não muda a
+regra de sempre: replicar ≠ inspecionar. Nenhum agente imprime/dumpa o conteúdo de `.env*` no
 transcript; quem precisa de um valor consome a env pelo processo (dotenv/`process.env`),
-nunca por `cat`.
+nunca por `cat`. As fixtures copiadas vivem e morrem com o worktree (a remoção dele as
+apaga) e continuam gitignored lá dentro — nunca entram em commit.
+
+**Guarda anti-reversão (inclua este bloco, verbatim, em TODO briefing de executor —
+worktree ou árvore compartilhada):**
+
+> ⚠️ **Comandos de reversão em massa são PROIBIDOS**: `git checkout <hash|branch> -- .`
+> (ou qualquer pathspec largo), `git reset --hard`, `git clean -fd`, `git stash` e
+> `git add -A`. A árvore pode conter trabalho de outros e sujeira do usuário que não são
+> seus. Se você acha que precisa de um deles, **não rode**: pare e devolva a situação como
+> decisão (o que quer reverter, por quê, e o comando exato) — quem autoriza é a camada
+> acima. Restauração pontual de UM arquivo seu (`git checkout -- <arquivo>`) é permitida.
+
+O porquê (caso real, F20): um executor rodou `git stash -u` + `git checkout <hash> -- .`
+e reverteu arquivos rastreados da árvore compartilhada — detectou e desfez sozinho em 25s,
+mas nada impedia a perda. Mesma família do guard de proveniência: a proteção não pode
+depender do reflexo de quem errou.
 
 Economia de testes (princípio agnóstico de stack; o racional: na F16, 58% do tempo de
 execução foi suíte de teste, com ~1h45 de re-verificação duplicada e ~35min de runs

@@ -81,6 +81,7 @@ validation: <caminho absoluto do NN-VALIDATION.md>
 veredito: nyquist_compliant | partial
 cobertura: <cobertos>/<parciais>/<faltantes>
 testes_gerados: <n; 0 se nenhum>
+tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (agentes aninhados); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
 sinos: [<ex.: "MODEL-04 manual-only — sem teste automatizável"; ausente se vazio>]
 ```
 

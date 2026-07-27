@@ -71,7 +71,9 @@ veredito: shipado | uat_reprovado
 pr: <#numero + URL; só no shipado>
 learnings: <caminho absoluto do NN-LEARNINGS.md>
 verificacao_promovida: sim | nao
+marcadores_reconciliados: ok | parcial — <no parcial, os residuais que o script listou, em 1 linha>
 motivo_reprovacao: <só no uat_reprovado: o que o predicado uat-passed apontou>
+tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (agentes aninhados); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
 sinos: [<ex.: "PR criado mas CI não configurado no repo"; ausente se vazio>]
 ```
 

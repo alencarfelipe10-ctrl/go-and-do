@@ -67,6 +67,7 @@ score: <n>/100
 veredito: <o veredito literal do comando — ex.: PRODUCTION READY>
 critical_gaps: <n>
 dimensoes_missing: <n>
+tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (agentes aninhados); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
 sinos: [<ex.: "veredito abaixo de PRODUCTION READY (score 64)" · "auditou em State B (sem AI-SPEC)"; ausente se vazio>]
 ```
 

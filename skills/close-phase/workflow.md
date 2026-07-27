@@ -346,31 +346,32 @@ chegarem ao usuário, são a granularidade certa.
 Só se chegou até aqui (se parou antes, já reportou o bloqueio e parou — com uma exceção: o
 bloqueio de ambiente do ship roda a 4.1 antes de parar, ver 3.2).
 
-**4.1 — Reconciliação de estado.** O fecho não termina nos artefatos: os MARCADORES têm
-que dizer a mesma coisa (casos reais: a Fase 16 do grupo-inspired ficou `- [ ]` no ROADMAP
-por dias, com verificação `passed` e PR mergeado; as Fases 18 e 19 fecharam com um
-`HANDOFF.json` commitado dizendo `status: paused` — quem retomar o repo pelo handoff é
-enganado). Cheque e corrija, nesta ordem:
+**4.1 — Reconciliação de estado (via SCRIPT — muta e assere).** O fecho não termina nos
+artefatos: os MARCADORES têm que dizer a mesma coisa. Esta etapa era prosa e falhou de três
+jeitos distintos em fechos reais (F19: a 4.1 inteira não rodou; F20: o `status: executing`
+do frontmatter ficou intocado — o comando usado escrevia o corpo e o motor do GSD preserva
+o frontmatter — e o `HANDOFF.json` da F19 sobreviveu porque a regra antiga era "aponta para
+outra fase → não toque"). Agora ela é um script com asserção final, que usa o comando
+NATIVO `phase complete` (escreve ROADMAP + REQUIREMENTS + STATE atomicamente, incl. o
+frontmatter `status`; idempotente — validado em sandbox 27/07/2026):
 
-1. **ROADMAP:** `grep -n "Phase ${N}\b" .planning/ROADMAP.md` — a linha da fase está
-   `- [ ]` com a verificação `passed`? → troque para `- [x]` (e acrescente
-   `(completed YYYY-MM-DD)` se as outras fases fechadas seguem esse padrão).
-2. **`.planning/.continue-here.md`:** existe e aponta para ESTA fase? → remova (é
-   marcador de pausa; a fase está fechada). Aponta para outra fase → não toque.
-3. **`.planning/HANDOFF.json`:** existe e aponta para ESTA fase (`"phase"` = N)? → remova
-   — mesmo estatuto do caso 2: marcador de pausa numa fase fechada. Aponta para outra
-   fase → não toque.
-4. **`.continue-here.md` da PASTA DA FASE** (`<phase_dir>/.continue-here.md`): existe? →
-   ele pode ficar como histórico, mas não pode afirmar pendência: garanta
-   `status: resolved` no frontmatter e corrija contagens/frases que digam trabalho em
-   aberto (caso real, F19: `task: 2 / total_tasks: 7` commitado numa fase 7/7).
-5. **STATE.md:** `completed_phases`/`current_phase`/`status` coerentes com a fase fechada
-   (um `status: executing` com a fase encerrada é marcador enganoso da mesma família)?
-   O GSD nativo costuma atualizar; divergiu → corrija só os campos divergentes.
+```bash
+bash $HOME/.claude/skills/close-phase/scripts/reconciliar-marcadores.sh "<project_root>" ${N} --sweep
+```
 
-Mudou qualquer arquivo e `commit_docs` é verdadeiro → commite:
-`git add .planning/ROADMAP.md .planning/STATE.md && git rm -q --cached --ignore-unmatch .planning/.continue-here.md .planning/HANDOFF.json 2>/dev/null; git add -A "<phase_dir>/.continue-here.md" 2>/dev/null; git diff --cached --quiet || git commit -m "docs(${PADDED_PHASE}): reconciliar marcadores de estado (ROADMAP/STATE/handoff)"`
-(mais `rm -f` no disco dos arquivos removidos nos casos 2 e 3).
+O script: (1) fecha ROADMAP/STATE/REQUIREMENTS pela via nativa (fallback manual mínimo se
+o comando recusar); (2) remove `HANDOFF.json`/`.continue-here.md` da raiz **cuja fase
+apontada já está fechada** (predicado por checkbox `[x]` ou VERIFICATION `passed` — não
+por "é a fase N"); (3) garante `status: resolved` + contagens derivadas dos SUMMARYs nos
+`.continue-here.md` de fase fechada (o `--sweep` varre também `phases/` e `milestones/`);
+(4) **assere tudo no fim** — `exit 0` = `reconciliacao: ok`; `exit 1` = residual listado
+no stdout. Residual ≠ 0 → NÃO esconda: reporte a lista como pendência no banner (e no
+retorno, se você é subagente). `--check` roda a mesma matriz sem mutar (útil pra conferir).
+
+Mudou qualquer arquivo e `commit_docs` é verdadeiro → commite **só o que o script tocou**
+(a lista ✔ do stdout; nunca `git add -A .planning/` — a árvore pode ter sujeira do usuário
+que não é sua):
+`git add .planning/ROADMAP.md .planning/STATE.md .planning/REQUIREMENTS.md 2>/dev/null; git add -A .planning/HANDOFF.json .planning/.continue-here.md 2>/dev/null; git add -A <cada .continue-here.md listado no ✔> 2>/dev/null; git diff --cached --quiet || git commit -m "docs(${PADDED_PHASE}): reconciliar marcadores de estado (ROADMAP/STATE/handoff)"`
 Nada divergente → siga em silêncio (não gere commit vazio).
 
 **4.2 — Banner final.** Imprima fase + PR (#N e URL) + próximos passos: aprovar/merge ·
