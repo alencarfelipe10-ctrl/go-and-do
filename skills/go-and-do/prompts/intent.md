@@ -121,7 +121,7 @@ revisores externos** (Codex + Antigravity, decisão do usuário em 2026-07-22). 
   `"agy indisponível — revisão Codex-only"`) — degradação declarada não é falha sua;
   escondê-la é.
 - **Pelo menos um instalado** → o piso fail-closed vale: instalado-mas-falho em runtime
-  é falha, não ausência (regra no passo 3 — os DOIS falhos sem ciclo completo →
+  é falha, não ausência (regra no passo 4 — os DOIS falhos sem ciclo completo →
   `<blocked_path>`). O porquê (decisão do usuário em 2026-07-02): num setup que TEM
   revisor, seguir sem análise adversarial economiza minutos agora e cobra retrabalho
   depois — sem segunda opinião, a intenção não avança.
@@ -132,12 +132,42 @@ revisores externos** (Codex + Antigravity, decisão do usuário em 2026-07-22). 
    as escolhas implícitas que os comandos fizeram — cada uma com as alternativas e o
    porquê, inclusive as técnicas que normalmente não se mostraria ao usuário. O
    livro-razão é o que dá ao revisor visibilidade do que foi decidido sem ele.
-2. **Escreva o briefing do revisor** num arquivo temporário (`mktemp`), contendo:
+   Duas regras de qualidade do livro-razão:
+   - **Procedência de número:** número load-bearing (contagem, total, alvo) entra
+     re-derivado da fonte primária (dados/testes), no nível de agregação em que será
+     verificado — número copiado de outro documento não é procedência (em fase real, um
+     requisito inteiro foi escrito sobre uma população inexistente por herdar contagens
+     não conferidas).
+   - **Lições de fases anteriores:** se `<project_root>/.planning/LICOES-DE-INTENCAO.md`
+     existir, leia-o e marque no livro-razão cada decisão que colide com uma lição — a
+     lição vira checagem aplicada à decisão, não leitura de passagem.
+2. **Varredura reversa de impacto.** Para cada constante, contagem, valor, regra ou
+   invariante que o SPEC/CONTEXT prescreve **mudar**, rode `git grep` do símbolo a
+   partir do `project_root` — código E testes — e registre no `NN-SPEC.md` a seção
+   **"Asserções existentes que esta fase falsifica"**: uma linha por asserção atingida,
+   com `arquivo:linha` · veredito (inverter / reancorar / remover) · plano dono da
+   reconciliação. Nenhuma atingida → a seção afirma isso explicitamente. O porquê: a
+   superfície cega recorrente da intenção é o que JÁ existe e deixa de ser verdade — em
+   fase real, uma troca de alvo falsificava 7 testes pré-existentes detectáveis por um
+   grep, e a pausa que isso fabricou horas depois custou mais que a etapa inteira. As
+   asserções atingidas entram no livro-razão (a decisão que as falsifica carrega o
+   ponteiro).
+3. **Escreva o briefing do revisor** num arquivo temporário (`mktemp`), contendo:
    - Os **caminhos absolutos** dos artefatos (não o conteúdo — os revisores leem os
      arquivos eles mesmos): `<project_root>/.planning/PROJECT.md`, `.planning/ROADMAP.md`,
      `.planning/REQUIREMENTS.md`, `<phase_dir>/NN-SPEC.md`, `<phase_dir>/NN-CONTEXT.md`.
-   - O livro-razão de decisões (passo 1).
+   - O livro-razão de decisões (passo 1) e a seção "Asserções existentes que esta fase
+     falsifica" do SPEC (passo 2).
    - As dimensões de ambiguidade que ficaram abaixo do mínimo (Passo 1 — SPEC), se houver.
+   - Se `.planning/LICOES-DE-INTENCAO.md` existir, a seção **"Lições de fases
+     anteriores"** com o conteúdo do arquivo e o pedido: "Verifique se esta intenção
+     repete algum destes padrões de erro."
+   - O pedido adversarial de **enumeração reversa**: "Enumere toda asserção existente no
+     repositório que as mudanças prescritas tornam falsa ou insatisfazível — inclusive
+     em arquivos que os artefatos não citam. Qualquer lista de arquivos neste briefing é
+     ponto de partida, não fronteira." (O briefing não fixa quais testes importam — em
+     fase real, uma whitelist de 6 arquivos ancorou o revisor para longe dos 7 testes
+     que de fato quebravam.)
    - A pergunta direta do **raio de explosão**:
      "Qual é o raio de explosão real desta fase — o que ela toca de compartilhado, que
      contrato cria ou muda, o que não tem análogo no código, quem depende dela nas fases
@@ -155,12 +185,16 @@ revisores externos** (Codex + Antigravity, decisão do usuário em 2026-07-22). 
      autocensura esconde exatamente o achado raro que paga a revisão.)
    - No ciclo 2+: o que mudou desde o ciclo anterior e os achados já resolvidos (pra ele
      não repetir).
-3. **Rode os dois revisores** (leitura apenas; resposta final em arquivo; Bash a partir
-   do `project_root` — é lá que eles leem o código). O mesmo briefing serve aos dois; os
-   pareceres saem em arquivos separados (`respostas-codex.md` / `respostas-agy.md`).
+4. **Rode os dois revisores** (leitura apenas; resposta final em arquivo; Bash a partir
+   do `project_root` — é lá que eles leem o código). O mesmo briefing serve aos dois. Os
+   pareceres são artefatos da fase, não temporários: salve-os como
+   `<phase_dir>/NN-parecer-codex-c<C>.md` e `<phase_dir>/NN-parecer-agy-c<C>.md` (`C` =
+   número do ciclo), commitados no passo 7 — parecer persistido é o que torna a triagem
+   reabrível depois (em fase real, pareceres em `mktemp` evaporaram e 18 achados "já
+   cobertos" ficaram inauditáveis).
 
-   **3a. Codex** (timeout de 600000):
-   `codex exec -s read-only --model gpt-5.6-sol -c model_reasoning_effort=low -o <respostas.md> - < <briefing.md> 2> <ciclo.err>`
+   **4a. Codex** (timeout de 600000):
+   `codex exec -s read-only --model gpt-5.6-sol -c model_reasoning_effort=low -o <phase_dir>/NN-parecer-codex-cC.md - < <briefing.md> 2> <ciclo.err>`
    (O `--model` explícito é obrigatório: sem ele, o run herda o default da config — foi
    exatamente assim que uma fase inteira rodou num modelo errado em silêncio. O effort
    `low` é deliberado: o default `xhigh` não termina em 10min nesses prompts — medido em
@@ -173,7 +207,7 @@ revisores externos** (Codex + Antigravity, decisão do usuário em 2026-07-22). 
    `tail` — o banner fica no INÍCIO do stderr; o fim é o corpo do parecer. Um
    `codex_model:` sem essa linha é autodeclaração, não evidência.
 
-   **3b. Antigravity (agy)** — mesma missão, outro cérebro. Três invariantes antes do
+   **4b. Antigravity (agy)** — mesma missão, outro cérebro. Três invariantes antes do
    comando (todos verificados empiricamente em 2026-07-22, agy 1.1.3):
    - **Watermark do transcript ANTES de invocar** — o agy persiste tudo em
      `~/.gemini/antigravity-cli/brain/<conv-id>/.system_generated/logs/transcript.jsonl`
@@ -205,7 +239,7 @@ revisores externos** (Codex + Antigravity, decisão do usuário em 2026-07-22). 
 
    O comando (timeout de 600000; o killer externo cobre o stall pré-sessão que o
    `--print-timeout` não alcança):
-   `timeout 600 agy --agent revisor-gsd --print-timeout 540s --model "Gemini 3.1 Pro (High)" --add-dir "<project_root>" --add-dir "<dir_do_briefing>" -p "<prompt curto>" </dev/null 2> <ciclo-agy.err> > <respostas-agy.md>`
+   `timeout 600 agy --agent revisor-gsd --print-timeout 540s --model "Gemini 3.1 Pro (High)" --add-dir "<project_root>" --add-dir "<dir_do_briefing>" -p "<prompt curto>" </dev/null 2> <ciclo-agy.err> > <phase_dir>/NN-parecer-agy-cC.md`
    (O `--model` explícito é obrigatório pelo mesmo motivo do Codex; `--add-dir` dá ao
    revisor o repo sob revisão — sem ele o agy ancora no scratch próprio e revisa o texto
    no vácuo. Probe: se `agy --help 2>&1` não listar `--add-dir`, omita a flag — o prompt
@@ -244,7 +278,7 @@ revisores externos** (Codex + Antigravity, decisão do usuário em 2026-07-22). 
    e aplicado), a análise adversarial aconteceu — registre `intent_review: done` com os
    ciclos completados e a ressalva `ciclo_final_nao_rodou` no frontmatter + o mesmo item
    em `sinos` no retorno; parar aqui jogaria fora uma revisão que já cumpriu o papel.
-4. **Funda os pareceres e verifique cada achado contra o código/dados** (Read/Grep
+5. **Funda os pareceres e verifique cada achado contra o código/dados** (Read/Grep
    pontuais). Antes de verificar, deduplique: o mesmo achado apontado pelos dois
    revisores vira UMA entrada com `fontes: [codex, agy]` (convergência independente de
    dois modelos é sinal de força do achado — anote). **Nunca aceite
@@ -260,29 +294,44 @@ revisores externos** (Codex + Antigravity, decisão do usuário em 2026-07-22). 
      sustentar e registre como item de transparência (vai destacado no resumo executivo).
    O que não se sustentou na verificação → descarte, registrando o porquê (o descarte
    documentado é o que evita re-litigar o mesmo falso achado no ciclo seguinte).
-5. **Convergência (loop — teto de 3 ciclos).** Houve correção ou incorporação neste
-   ciclo e ainda há ciclo no teto → volte ao passo 2 com o dossiê revisado. Encerre o
-   loop quando: nenhum dos revisores trouxer achado novo que se sustente · OU a contagem de
-   achados confirmados não cair entre ciclos (estagnação — escale cedo: devolva o
-   impasse via `<business_pause>`, com as saídas possíveis como opções, em vez de
-   queimar o ciclo seguinte) · OU atingir o teto de 3 ciclos.
-6. **Escreva o `<phase_dir>/NN-INTENT-REVIEW.md`** com frontmatter:
+   Achado cuja alegação os artefatos **já cobrem** → registre como "já coberto" com o
+   ponteiro para onde está coberto (seção do SPEC/CONTEXT ou achado anterior) — "já
+   coberto" é um destino registrado, não um filtro silencioso.
+6. **Convergência (loop — teto de 3 ciclos).** Antes de avaliar os freios: se este
+   ciclo alterou 2 ou mais decisões/critérios, cheque a compatibilidade entre as
+   próprias alterações — o conjunto alterado é simultaneamente satisfazível? (Em fase
+   real, duas alterações do mesmo ciclo saíram algebricamente incompatíveis e ninguém as
+   compôs.) Houve correção ou incorporação neste ciclo e ainda há ciclo no teto → volte
+   ao passo 3 com o dossiê revisado. Encerre o loop quando: nenhum dos revisores trouxer
+   achado novo que se sustente · OU a contagem de achados confirmados não cair entre
+   ciclos (estagnação — escale cedo: devolva o impasse via `<business_pause>`, com as
+   saídas possíveis como opções, em vez de queimar o ciclo seguinte) · OU atingir o teto
+   de 3 ciclos. Esses três freios são a lista completa: o seu juízo de que "o revisor
+   não teria mais o que achar" (oráculo exaurido) não encerra o loop — com correção
+   aplicada e ciclo no teto, o ciclo seguinte roda.
+7. **Escreva o `<phase_dir>/NN-INTENT-REVIEW.md`** com frontmatter:
    `intent_review: done` · `revisores_efetivos: [...]` (só os que revisaram de fato) ·
    `codex_model_evidencia:` / `agy_model_evidencia:` (dos que rodaram) ·
    `ciclos: N` · `achados_confirmados: N` ·
    `achados_descartados: N` · `pausas_de_negocio: N` (quantos achados foram decididos
    pelo usuário — documenta as decisões que foram do owner) · `transparencia:` (a lista
    dos itens do 3º destino — é daqui que o resumo executivo lê). No corpo, a tabela de
-   achados: alegação → veredito da verificação → destino → ação tomada. Commite tudo
-   junto:
+   achados: alegação → veredito da verificação → destino → ação tomada. A tabela
+   enumera **100% dos achados brutos** dos pareceres — os "já cobertos" entram com o
+   ponteiro do passo 5; achado bruto fora da tabela é triagem que ninguém consegue
+   reabrir. Antes do commit, confira cada citação `arquivo:linha` presente nos
+   artefatos que você escreveu ou alterou: abra a linha e confirme que o
+   símbolo/asserção está lá (spot-check determinístico de ponteiros, não releitura
+   geral — as duas fases auditadas emitiram ponteiros errados que só a convergência
+   pegou). Commite tudo junto:
    ```bash
    cd "<project_root>"
-   git add "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-CONTEXT.md" "<phase_dir>/NN-INTENT-REVIEW.md" 2>/dev/null
+   git add "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-CONTEXT.md" "<phase_dir>/NN-INTENT-REVIEW.md" "<phase_dir>"/NN-parecer-*.md 2>/dev/null
    git diff --cached --quiet 2>/dev/null || \
      git commit -m "docs(fase NN): revisão adversarial de intenção (M ciclos, K achados)" >/dev/null
    ```
    Commit falhou (sem git, nada staged) → não pare; anote no retorno e siga.
-7. Devolva `done` pelo `<return_contract>`.
+8. Devolva `done` pelo `<return_contract>`.
 </adversarial_review>
 
 <business_pause>
@@ -299,14 +348,17 @@ Você não fala com o usuário — o orquestrador fala. O caminho:
    consegue avaliar teto e estagnação com fidelidade. Inclua a seção "Perguntas
    pendentes" (cada pergunta com: a alegação do revisor, o que a sua verificação
    confirmou, as opções com tradeoffs e a sua recomendação **primeiro**), e commite
-   (mesmo bloco de commit do passo 6).
+   (mesmo bloco de commit do passo 7). A evidência que sustenta cada pergunta é medida
+   sobre o oráculo inteiro, não sobre uma amostra de 1 — nas duas fases auditadas, as
+   perguntas subiram com evidência que não se sustentou (escopo errado, generalização de
+   n=1), e a decisão só saiu certa pela robustez do argumento.
 2. Devolva `needs_decision` pelo `<return_contract>` — até 4 perguntas por retorno; se o
    mesmo ciclo gerou mais de uma pausa de negócio, agrupe-as num retorno só (uma
    ida-e-volta ao usuário custa menos que quatro).
 3. **Na continuação** (a resposta do usuário chega como mensagem de follow-up, verbatim):
    incorpore cada decisão — aplique-a no SPEC/CONTEXT, registre no `NN-INTENT-REVIEW.md`
    (a pergunta sai de "pendentes" e vira linha da tabela de achados, destino 2, com a
-   decisão tomada) — e **retome o loop de onde parou** (passo 5 da revisão: avalie
+   decisão tomada) — e **retome o loop de onde parou** (passo 6 da revisão: avalie
    convergência; não re-rode o ciclo que já rodou).
 </business_pause>
 
@@ -316,7 +368,7 @@ Você não fala com o usuário — o orquestrador fala. O caminho:
 1. Escreva o `<phase_dir>/NN-INTENT-REVIEW.md` com frontmatter
    `intent_review: blocked` e `motivo: <por revisor — ex.: "codex indisponível; agy
    falhou: stdout vazio">` — é este registro que faz a próxima invocação saber o que
-   aconteceu e re-tentar a revisão. Commite (mesmo padrão do passo 6).
+   aconteceu e re-tentar a revisão. Commite (mesmo padrão do passo 7).
 2. Devolva `blocked` pelo `<return_contract>`. Quem para a fase (Sub-rotina D) é a
    camada 0 — a descida para subagente não afrouxa o fail-closed; ele apenas sobe com
    motivo.
@@ -329,7 +381,7 @@ Você não fala com o usuário — o orquestrador fala. O caminho:
    `intent_review: skipped` · `motivo: "nenhum revisor externo instalado (codex e agy
    ausentes no pré-check)"` · `revisores_efetivos: []` · `ciclos: 0` — o `skipped` é
    estado final, não pendência: a retomada não re-tenta (quem instalar um revisor depois
-   e quiser a revisão apaga este arquivo e re-roda). Commite (mesmo padrão do passo 6).
+   e quiser a revisão apaga este arquivo e re-roda). Commite (mesmo padrão do passo 7).
 2. Devolva `done` pelo `<return_contract>` com o sino obrigatório em `sinos`:
    `"revisão adversarial de intenção PULADA — nenhum revisor externo (codex/agy)
    instalado"`. Este sino é transparência devida ao dono: ele TEM que chegar ao bloco

@@ -41,7 +41,19 @@ artefatos pendentes — a árvore deve estar limpa para o preflight do ship.
 4. Ao final, colha do output: o número e a URL do PR, o caminho do `NN-LEARNINGS.md`
    e se a verificação foi promovida. Fidelidade acima de otimismo: se o PR não foi
    criado, o veredito é o que aconteceu (não "quase") — a camada 0 decide com isso.
-5. Devolva pelo `<return_contract>`.
+5. **Lições de intenção.** Com o `NN-LEARNINGS.md` extraído, destile de
+   `NN-LEARNINGS.md` + `NN-INTENT-REVIEW.md` até 3 lições novas para
+   `<project_root>/.planning/LICOES-DE-INTENCAO.md` (crie o arquivo se não existir;
+   teto ~30 linhas — o intent.md das fases seguintes o injeta no livro-razão e no
+   briefing do revisor, e um arquivo gordo vira ruído lá). Cada lição em 1–2 linhas:
+   **checagem acionável** ("antes de X, confira Y") · origem `[FNN]` · condição de
+   aposentadoria (o que precisa acontecer para a lição sair). Lição é checagem, nunca
+   escopo de busca: não nomeie arquivos como fronteira ("olhe os testes A, B, C" ancora
+   o revisor para longe do resto) e não cole trechos de LEARNINGS. Dedupe: lição que
+   recorre = merge na existente com origem composta `[FNN+FMM]`; lista cheia → sai a
+   mais antiga sem recorrência. Commite em commit próprio
+   (`docs(fase NN): lições de intenção`).
+6. Devolva pelo `<return_contract>`.
 </mission>
 
 <environment>

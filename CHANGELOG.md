@@ -2,6 +2,63 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.4.0] — 2026-07-28
+
+Aplicação integral da auditoria temática da etapa de intenção (F20+F21 do grupo-inspired,
+28/07): a revisão adversarial pagava o custo, mas 36/36 achados sustentados já tinham a
+informação no repo, e a pausa que travou a F21 foi fabricada pela própria intenção (uma
+decisão falsificava 7 testes pré-existentes, detectáveis por `git grep`). Esta versão
+compra a montante, por instrução, o que a revisão entregava — e deixa o revisor para o
+que só segundo cérebro pega.
+
+### Adicionado
+
+- **R1 — Varredura reversa de impacto** (`prompts/intent.md`, novo passo 2 da revisão):
+  para cada constante/valor/regra/invariante que o SPEC/CONTEXT muda, `git grep` do
+  símbolo (código E testes) e seção nova no SPEC — **"Asserções existentes que esta fase
+  falsifica"** (arquivo:linha · veredito · plano de reconciliação). As asserções
+  atingidas entram no livro-razão e no briefing. Fecha a causa-raiz da pausa da F21.
+- **R2 — Enumeração reversa no lugar de whitelist** (`prompts/intent.md`, briefing): o
+  briefing não fixa quais testes importam; pede ao revisor enumerar toda asserção que as
+  mudanças tornam falsa — "qualquer lista de arquivos é ponto de partida, não fronteira".
+  Na F21, uma whitelist de 6 arquivos ancorou o revisor para longe dos 7 testes que
+  quebravam.
+- **R3 — Pareceres persistidos** (`prompts/intent.md`): os pareceres saem de `mktemp`
+  para `<phase_dir>/NN-parecer-{codex,agy}-cN.md`, commitados com os artefatos; e a
+  tabela do INTENT-REVIEW enumera 100% dos achados brutos — "já coberto" vira destino
+  registrado com ponteiro, não filtro silencioso (na F20, 18 achados evaporaram).
+- **R5 — Procedência de número** (`prompts/intent.md`, livro-razão): número load-bearing
+  só entra re-derivado da fonte (dados/testes), no nível de agregação em que será
+  verificado; e evidência de pergunta ao dono medida sobre o oráculo inteiro, não n=1.
+- **R6 — Spot-check de citações** (`prompts/intent.md`, passo do commit): toda citação
+  `arquivo:linha` dos artefatos escritos/alterados é conferida antes do commit.
+- **R7 — Compatibilidade composicional** (`prompts/intent.md`, convergência): ciclo que
+  alterou 2+ decisões/critérios checa a satisfazibilidade entre as próprias alterações
+  (na F20, duas alterações do mesmo ciclo saíram algebricamente incompatíveis).
+- **R9 — Lições de intenção** (`prompts/close.md` + `prompts/intent.md`): arquivo por
+  projeto `.planning/LICOES-DE-INTENCAO.md` (teto ~30 linhas; cada lição = checagem
+  acionável + origem + condição de aposentadoria). O close destila ≤3 lições novas de
+  LEARNINGS+INTENT-REVIEW (dedupe por recorrência); a intenção o lê no livro-razão
+  (marcação ativa de decisões que colidem) e o injeta no briefing do revisor. Vedado
+  nomear arquivos como escopo de busca (anti-whitelist) e colar LEARNINGS inteiros.
+
+### Alterado
+
+- **R4 — Régua do ciclo 2 sem exceção** (`prompts/intent.md`, convergência): os três
+  freios do loop (sem achado novo · estagnação · teto de 3) são a lista completa —
+  "oráculo exaurido" não encerra o loop; com correção aplicada e ciclo no teto, o ciclo
+  seguinte roda (a F20 fechou no ciclo 1 com 8 correções aplicadas, contra a própria
+  régua, e dois vazamentos sobreviveram).
+- Passos do `<adversarial_review>` renumerados (1–8) para acomodar a varredura reversa
+  como passo 2; referências cruzadas atualizadas.
+
+### Fora desta versão (registrado)
+
+- **R8** (latência de relay de ~17 min entre resposta do dono e entrega ao subagente) é
+  investigação de harness/camada 0, não mudança de prompt — na fila do go-and-do-evolucao.
+- Espelho das lições no STATE.md (onda 2 do R9) fica para quando o fecho rodar em fase
+  real.
+
 ## [1.3.2] — 2026-07-28
 
 Correções da auditoria da rodada 1 da F21 do grupo-inspired (28/07, 1ª fase real da
