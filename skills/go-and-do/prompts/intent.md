@@ -85,7 +85,9 @@ com o score de ambiguidade. Termina no SPEC — não tem auto-advance.
 
 Se ele fechar com dimensões abaixo do mínimo (log `[auto] Max rounds reached…`), anote:
 isso entra obrigatoriamente no briefing do revisor e no campo `sinos` do seu retorno —
-é sinal de intenção mal-especificada que o orquestrador destaca no banner.
+é sinal de intenção mal-especificada que o orquestrador destaca no banner. O mesmo vale
+para edges `unclassified` que o probe deixou como pergunta nomeada (log `[auto]
+unclassified — RN…`): elas viajam no briefing junto com as dimensões abaixo do mínimo.
 </spec>
 
 <discuss>
