@@ -394,6 +394,11 @@ lista não inventa estado, lê o disco.
   `in_progress` a(s) tarefa(s) que ele cobre ao despachar e atualize pela tabela no retorno.
   (O despacho da intenção cobre as tarefas 1–3 de uma vez; um retorno `needs_decision` deixa
   a tarefa em curso `in_progress` — o passo está no meio, aguardando a resposta.)
+- **Varredura no fecho (anti-órfã):** no banner final (6.5) — ou na parada da Sub-rotina D —
+  confira a `TaskList`: nenhuma tarefa da fase pode sobrar `in_progress`. Etapa que terminou →
+  `completed`; etapa que não vai mais rodar → complete com nota do porquê. Caso real (F21,
+  28/07): a tarefa do UAT abriu `in_progress` às 16:11 e nunca fechou — a lista terminou a
+  fase mentindo que o UAT estava em curso.
 - A tarefa 15 (Encerramento) vira `completed` no fim da Etapa 6, junto com o banner.
 
 **Em parada** (stop point, gate de contexto no teto de tokens, bloqueio herdado): deixe a tarefa em curso
@@ -573,6 +578,16 @@ respondido ou num `--obs` → foi o dono ("você decidiu"). **Sem fonte que crav
 voz neutra** ("ficou decidido", "a fase definiu") — nunca "tomada por mim". Caso real
 (F19 grupo-inspired, 24/07): o resumo atribuiu ao sistema uma decisão de oráculo que o dono
 respondera ao vivo — erro na direção que rouba o crédito do dono e infla a autonomia relatada.
+
+**Números de progresso com fonte estrutural.** Ao narrar onde uma rodada pausou ou retomou
+("parou no plano X de Y", "N de M planos prontos"), derive o número do `HANDOFF.json`
+(campos `plan`/`task`) ou da contagem de `NN-*-SUMMARY.md` no disco — **nunca** de
+`remaining_tasks[].id` (o id da primeira tarefa restante não é o ordinal do plano). Antes de
+gravar, self-check de consistência: todo número/ordinal citado mais de uma vez no documento
+tem que bater entre as menções — e bater com a fonte. Caso real (F21, 28/07): o resumo disse
+"pausa no 4º de 9 planos" quando o HANDOFF dizia plano 3 (`remaining_tasks[0].id: 4` era a
+Task 2 do 21-03); o número errado sobreviveu a duas regerações e virou memória permanente
+da fase.
 
 **BLOCO DE TRANSPARÊNCIA (no `modo: final`, SEMPRE no topo do documento, antes de tudo):**
 Este é o sinal humano mais importante — escreva-o **primeiro**, destacado:
@@ -934,6 +949,11 @@ disco, que é a fonte de verdade):
   pergunta: <1 linha — o que foi perguntado>
   resposta_verbatim: "<a resposta dele, palavra por palavra>"
   ```
+
+  O `ts` é o timestamp REAL da resposta — copie do transcript ou rode `date -Iseconds` no
+  ato do registro. NUNCA aproximação ou placeholder (caso real F21, 28/07: um registro foi
+  gravado com `ts: 2026-07-28T05:2x-03:00` literal no `NN-DECISOES.md` — campo de
+  proveniência com valor inventado corrói a confiança do bloco inteiro).
 
   A contraparte — a regra de autoridade que faz o bloco funcionar — vive nos prompts das
   etapas que tocam checkpoint bloqueante (`prompts/execute.md`): só este bloco fecha um
@@ -1758,15 +1778,30 @@ git diff --cached --quiet 2>/dev/null || \
 > caso de árvore-suja-real a close-phase reporta como bloqueio de ambiente). Vale para **ambas** as
 > rotas (na de hand-back também, pra não deixar o `.spec.ts` solto sujando a árvore).
 
+**Evidência movida = `NN-UAT.md` emendado no mesmo passo.** Se você mover ou estacionar uma
+evidência fora do Git (ex.: PDF com PII — a decisão de não versionar está certa), emende o
+`NN-UAT.md` na hora: o campo `evidencia:` do cenário passa a apontar o paradeiro REAL, com o
+motivo numa linha. Path inexistente no `NN-UAT.md` é defeito de fecho — a prova deixa de ser
+auditável. Caso real (F21, 28/07): o PDF dos cenários 3/4 foi ao scratchpad por PII e o
+`21-UAT.md` continuou apontando `uat-evidencia/….pdf` — a fase fechou com 0 evidência
+versionada e 1 path fantasma.
+
 **6.4-SHIP — Ship via `/close-phase` (via subagente).** Gate de contexto (Sub-rotina A).
 Despache pela **Sub-rotina H** com `prompts/close.md` (leva `N`, `NN`, `phase_dir`,
 `project_root` absolutos): o subagente hospeda a skill `close-phase N`, que faz
 `extract-learnings → promove a verificação (com evidência "UAT automatizado", não "humana") →
 commita os docs → abre o PR`. Ela tem o **freio herdado**: só promove/shipa se o veredito da
 UAT for limpo pelo predicado nativo `phase uat-passed` (GSD 1.5.0+; markdown-aware,
-fail-closed, conta só `pass`/`passed`, varre todos os `*-UAT.md`). Reprovação real
-(pending/blocked/issue/failed/partial) → para; estados que o subagente da Etapa 5 **não**
-deixa sobrar quando fecha só com baldes 1+4 — na rota de ship daqui o veredito é `CLEAN`.
+fail-closed, conta só `pass`/`passed`, varre todos os `*-UAT.md`). ⚠️ **`assumed` (balde 4)
+REPROVA nesse predicado** — a Etapa 5 fecha "objetivamente limpa" com baldes 1+4, mas a
+allowlist nativa só aceita `pass`/`passed`: com ≥1 assumed o freio herdado segura e pergunta.
+**Não afirme o estado do gate no briefing do despacho** — estado de gate se MEDE, não se
+presume: rode o predicado antes do despacho (`phase uat-passed <N> --raw` via gsd-tools, o
+mesmo idioma da close-phase) e cite no briefing o resultado MEDIDO; ou despache sem afirmação
+nenhuma sobre o gate (o subagente mede sozinho — é o desenho do freio). Caso real (F21,
+28/07): o despacho afirmou o gate satisfeito com 1 assumed no UAT; o predicado reprovava com
+2 blockers e o subagente teve que desmentir a camada 0 por escrito antes de perguntar ao
+dono. Reprovação real (pending/blocked/issue/failed/partial) → para.
 - Roteamento do retorno:
   - `done · shipado` → `end` com `subagent_tokens` (Sub-rotina G); guarde o **PR (#N e
     URL)** pro banner e siga pra 6.5.

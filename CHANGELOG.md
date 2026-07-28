@@ -2,6 +2,39 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.4.1] — 2026-07-28
+
+Fixes da auditoria do fecho da F21 grupo-inspired (retomada `2e5e11b0`, relatório
+`280726-inspired-f21-fecho.md`): a fase fechou bem — o freio de UAT inclusive segurou o
+fecho contra uma afirmação falsa da própria camada 0 — mas a rodada expôs quatro pontos
+de disciplina, todos com caso real citado no texto.
+
+### Corrigido
+
+- **Camada 0 não afirma estado de gate sem medir** (`workflow.md`, 6.4-SHIP): o texto
+  antigo dizia que "na rota de ship o veredito é CLEAN" — falso quando o UAT fecha com
+  `assumed` (balde 4), que o predicado nativo `phase uat-passed` REPROVA (allowlist =
+  `pass`/`passed`). Regra nova: rodar o predicado antes do despacho e citar o resultado
+  MEDIDO no briefing, ou despachar sem afirmação nenhuma sobre o gate. (Caso real F21: o
+  despacho afirmou gate satisfeito; o subagente mediu, desmentiu e a pergunta subiu.)
+- **Ordinal de progresso com fonte estrutural** (`workflow.md`, Sub-rotina F): "onde a
+  rodada parou" deriva do `HANDOFF.json` (`plan`/`task`) ou da contagem de SUMMARYs —
+  nunca de `remaining_tasks[].id` — com self-check de consistência interna antes de
+  gravar. (Caso real F21: "pausa no 4º de 9" no resumo final quando o HANDOFF dizia
+  plano 3; o erro sobreviveu a duas regerações.)
+- **Evidência de UAT movida = `NN-UAT.md` emendado no mesmo passo** (`workflow.md`,
+  6.3b): evidência estacionada fora do Git (ex.: PII) exige emenda do campo `evidencia:`
+  com o paradeiro real e o motivo — path fantasma é defeito de fecho. (Caso real F21:
+  fase fechada com 0 evidência versionada e 1 path inexistente.)
+- **Higiene do fecho** — 3 itens miúdos da mesma família:
+  - `workflow.md` (Sub-rotina C): varredura anti-órfã da TaskList no fecho — nenhuma
+    tarefa da fase sobra `in_progress` (caso real F21: a tarefa do UAT nunca fechou);
+  - `workflow.md` (Sub-rotina H, bloco `DECISAO-DO-DONO`): `ts` é timestamp real
+    (transcript ou `date -Iseconds`), nunca placeholder (caso real F21: `05:2x` literal);
+  - `close-phase/scripts/reconciliar-marcadores.sh`: ao editar um `.continue-here.md`
+    (status/contagens), o campo `last_updated` acompanha a edição (caso real F21: 2
+    edições e o campo parado em 03:46Z).
+
 ## [1.4.0] — 2026-07-28
 
 Aplicação integral da auditoria temática da etapa de intenção (F20+F21 do grupo-inspired,

@@ -117,6 +117,7 @@ corrige_continue() {  # $1 = phase_dir  $2 = "arquivada?" (1 = milestone antigo)
     tot=$(ls "$d"/*-SUMMARY.md 2>/dev/null | wc -l | tr -d ' ')
     tem_counts=0; grep -qE '^total_tasks:' "$ch" && tem_counts=1
     if [ "$MODE" = "apply" ]; then
+      local mudou=0
       if [ "$st" != "resolved" ]; then
         if grep -qE '^status:' "$ch"; then
           sed -i -E '0,/^status:.*/s//status: resolved/' "$ch"
@@ -127,14 +128,20 @@ corrige_continue() {  # $1 = phase_dir  $2 = "arquivada?" (1 = milestone antigo)
           printf -- '---\nstatus: resolved\n---\n%s\n' "$(cat "$ch")" > "$ch"
         fi
         grep -qE '^status:[[:space:]]*resolved' "$ch" \
-          && CORRIGIDOS+=("$(basename "$d")/.continue-here.md: status → resolved")
+          && { CORRIGIDOS+=("$(basename "$d")/.continue-here.md: status → resolved"); mudou=1; }
       fi
       if [ "$tem_counts" = "1" ] && [ "$tot" -gt 0 ] 2>/dev/null; then
         if ! grep -qE "^total_tasks:[[:space:]]*$tot\$" "$ch" || ! grep -qE "^task:[[:space:]]*$tot\$" "$ch"; then
           sed -i -E "0,/^total_tasks:.*/s//total_tasks: $tot/" "$ch"
           sed -i -E "0,/^task:.*/s//task: $tot/" "$ch"
           CORRIGIDOS+=("$(basename "$d")/.continue-here.md: contagens → $tot/$tot (derivadas dos SUMMARY)")
+          mudou=1
         fi
+      fi
+      # last_updated acompanha a edição — resolução com data velha mente sobre quando o
+      # estado mudou (caso real F21, 28/07: 2 edições e o campo parado em 03:46Z)
+      if [ "$mudou" = "1" ] && grep -qE '^last_updated:' "$ch"; then
+        sed -i -E "0,/^last_updated:.*/s//last_updated: $(date -u +%Y-%m-%dT%H:%M:%SZ)/" "$ch"
       fi
     else
       [ "$st" != "resolved" ] && DIVERGENTES+=("$(basename "$d")/.continue-here.md: status=${st:-ausente} numa fase fechada")
