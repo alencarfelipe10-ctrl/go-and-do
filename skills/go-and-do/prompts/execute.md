@@ -131,6 +131,14 @@ e reverteu arquivos rastreados da árvore compartilhada — detectou e desfez so
 mas nada impedia a perda. Mesma família do guard de proveniência: a proteção não pode
 depender do reflexo de quem errou.
 
+**Alegação sobre config carrega trilha:** ao reportar o estado de um config do projeto
+(`.planning/config.json` ou similar) no retorno, em sino ou em SUMMARY, diga DE ONDE leu:
+se o valor em disco difere do commitado, reporte OS DOIS (`disco: X (não-commitado, ver
+git diff) · commitado: Y em <sha>`) — nunca o estado efêmero do disco como se fosse o
+fato. Caso real (F21): o retorno da execução alegou `use_worktrees: false` "não-commitado
+no disco" e a auditoria só achou `true` commitado — alegação sem trilha vira número morto
+em relatório permanente.
+
 Economia de testes (princípio agnóstico de stack; o racional: na F16, 58% do tempo de
 execução foi suíte de teste, com ~1h45 de re-verificação duplicada e ~35min de runs
 mortos por timeout):

@@ -2,6 +2,38 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.3.2] — 2026-07-28
+
+Correções da auditoria da rodada 1 da F21 do grupo-inspired (28/07, 1ª fase real da
+v1.3.1): blindagem estrutural do revisor Antigravity contra morte por soft-deny em
+headless, e dois fechos de telemetria/disciplina de evidência.
+
+### Adicionado
+
+- **`--agent revisor-gsd` na invocação do agy** (`prompts/intent.md`): a revisão de
+  intenção passa a rodar o Antigravity com um agente custom **sem ferramenta de shell**.
+  Causa-raiz provada em 3 fases (F16-ox, F20, F21): em modo headless, UM comando fora da
+  allow-list gera soft-deny e o CLI derruba a conversa inteira em ~60ms (rc=0, stdout
+  vazio) — e o modelo tem o hábito de "imprimir" o parecer final via `echo`/`cat`.
+  Sem shell não há pedido de permissão, logo a morte é impossível por construção; a
+  leitura segue pelas tools nativas (`view_file`, `grep_search`) com auto-grant no
+  workspace. **Capability-probed e fail-safe**: sem o agente instalado em
+  `~/.gemini/config/agents/revisor-gsd/agent.md` (ou sem `--agent` no help do agy), a
+  flag é omitida e a rota legada segue valendo, com sino de transparência. Validado por
+  6 probes + smoke test adversarial (isca de `echo` no briefing) em 28/07. O mesmo fix
+  para a convergência vive em patch local do `gsd-core/workflows/review.md` (fora deste
+  repo — overlay gen5-patches do usuário), já que o arquivo upstream serve 3 runtimes.
+- **`tokens_camada2` no contrato de retorno da intenção** (`prompts/intent.md`): a linha
+  existia em 8 prompts mas faltava no `intent.md` — a etapa 0-B saía como
+  `camada2: "sem_report"` no run-log mesmo sendo a mais cara da rodada (F21). Valor
+  esperado da intenção é `0`: os revisores externos (codex/agy) rodam por CLI, fora do
+  harness, e não entram na soma.
+- **Alegação sobre config carrega trilha** (`prompts/execute.md`): reportar estado de
+  config do projeto exige dizer de onde veio a leitura; disco ≠ commitado → reportar os
+  dois com fonte (`git diff`/sha), nunca o estado efêmero como fato. Caso real (F21): o
+  retorno da execução alegou `use_worktrees: false` "não-commitado" e a auditoria só
+  encontrou `true` no git.
+
 ## [1.3.1] — 2026-07-27
 
 Correções da auditoria da F20 do grupo-inspired (27/07, 1ª fase real da v1.3.0): telemetria
