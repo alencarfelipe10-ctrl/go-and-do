@@ -131,6 +131,22 @@ e reverteu arquivos rastreados da árvore compartilhada — detectou e desfez so
 mas nada impedia a perda. Mesma família do guard de proveniência: a proteção não pode
 depender do reflexo de quem errou.
 
+**Guarda de segredo PRÉ-commit (inclua no briefing de todo executor cujo plano toca API
+externa viva ou dados de terceiros):**
+
+> 🔐 Script ou artefato novo que imprime/salva resposta de API externa: **redija os campos
+> sensíveis** (tokens, chaves, e-mails, telefones, PII) ANTES do primeiro commit — nunca
+> commite o corpo cru "para arrumar depois". E rode a varredura de segredos **antes do
+> `git add`**, sobre os ARQUIVOS EXATOS, com caminhos explícitos — em zsh, glob não
+> expandido vira nome literal e a varredura passa vazia SEM avisar (falso-limpo real).
+> Varredura pós-commit não protege: o valor fica no histórico mesmo com o fix no commit
+> seguinte.
+
+O porquê (caso real, F2 rl-representation, 29/07): um probe commitou o corpo cru de
+`GET /users` com token interno, push token e e-mail de 34 funcionários; a redação veio 1
+commit depois — os valores permaneceram no histórico do repo, e a 1ª varredura tinha dado
+falso-limpo pelo artefato de zsh.
+
 **Alegação sobre config carrega trilha:** ao reportar o estado de um config do projeto
 (`.planning/config.json` ou similar) no retorno, em sino ou em SUMMARY, diga DE ONDE leu:
 se o valor em disco difere do commitado, reporte OS DOIS (`disco: X (não-commitado, ver

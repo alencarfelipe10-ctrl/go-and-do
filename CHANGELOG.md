@@ -2,6 +2,34 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.4.2] — 2026-07-30
+
+Melhorias da auditoria da F2 do rl-representation (sessão `805a8180`, interrompida por
+API 500; relatório `300726-rl-representation-f2-interrompida.md`). O fio condutor: a
+3ª fase serializada pelo mesmo padrão de worktree, e um vazamento de PII que a varredura
+só pegou depois do commit.
+
+### Adicionado
+
+- **Pré-flight de paralelismo** (`workflow.md`, passo novo 18b): com `use_worktrees: true`
+  e onda ≥2 planos, a camada 0 checa ANTES do despacho da execução se o worktree
+  degradaria. Base mismatch (HEAD ≠ origin/HEAD — o estado normal de uma fase, que
+  commita muito e só empurra no ship) → aplica sozinha `worktree.baseRef: "head"` no
+  settings do projeto, re-checa e registra como auto-decisão. Qualquer OUTRA causa →
+  investiga a solução e sobe AskUserQuestion com diagnóstico + opções (decisão do dono;
+  degradação nunca vira fato consumado). (Casos reais: F16-ox por env, F19-ox e F2
+  rl-representation por base mismatch — na F2 o fix existia desde a F19-ox e nunca fora
+  replicado; 16 planos rodaram seriais.)
+- **Guarda de segredo PRÉ-commit** (`prompts/execute.md`): briefing de executor cujo
+  plano toca API viva ganha regra dura — redigir campos sensíveis ANTES do primeiro
+  commit e varrer segredos antes do `git add`, com caminhos explícitos (glob não
+  expandido em zsh = falso-limpo silencioso). Varredura pós-commit não protege: o valor
+  fica no histórico. (Caso real F2: probe commitou corpo cru de `GET /users` com
+  token/e-mail de 34 funcionários; o fix veio 1 commit depois.)
+- **Contagem de ondas com fonte estrutural** (`workflow.md`, Sub-rotina F): o número de
+  ondas citado em resumo/checkpoint vem do `=== waves ===` computado pelo execute-phase,
+  nunca da declaração do planner. (Caso real F2: planner declarou 7, o execute rodou 6.)
+
 ## [1.4.1] — 2026-07-28
 
 Fixes da auditoria do fecho da F21 grupo-inspired (retomada `2e5e11b0`, relatório

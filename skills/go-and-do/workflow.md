@@ -108,6 +108,7 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 16. ⏭️ `has_verification` → pula a Etapa 3 inteira.
 17. Pré-detecção: `phase-plan-index N` → tem plano não-autônomo? Avisa que pode exigir sua ação.
 18. 🔒 ⏭️ Convergência via **subagente** (com `NN-CONVERGENCE.md` `done` → pula; Sub-rotina H + `prompts/convergence.md`, hospedando `gsd-plan-review-convergence --codex --agy --max-cycles 4`). Config off (checada na camada 0, antes do despacho) → degrada declarado (`skip`) e segue. Não convergiu (`escalou`) → ⏸️ para.
+18b. **Pré-flight de paralelismo** (só quando `use_worktrees: true` no `.planning/config.json` e a fase tem onda com ≥2 planos): ANTES do despacho da execução, cheque se o worktree degradaria — `gsd_run worktree base-check` se existir; senão compare `git rev-parse HEAD` × `git rev-parse origin/HEAD`. (a) Degradaria por **base mismatch** (HEAD ≠ origin/HEAD): esse é o estado NORMAL de uma fase — a skill commita dezenas de vezes e só empurra no ship — então aplique você mesma o antídoto: `"worktree": {"baseRef": "head"}` no `.claude/settings.local.json` do projeto, re-cheque, e registre como auto-decisão no `NN-DECISOES.md` (conduta de pipeline, 1 linha, reversível). (b) Degradaria por **qualquer outra causa** (env ausente, fixture gitignored, causa nova): **investigue a solução** (o que falta, o que copiar/configurar, custo e reversibilidade) e ⏸️ suba **AskUserQuestion** com o diagnóstico + as opções (aplicar o fix investigado / aceitar serial nesta fase / outra rota) — decisão do dono, sempre; a degradação nunca vira fato consumado, nem mesmo declarado. O porquê: 3 fases de projetos diferentes serializaram pelo mesmo padrão (F16-ox por env, F19-ox e F2 rl-representation por base mismatch — nesta última o fix existia desde a F19-ox e nunca fora replicado ao projeto; 16 planos rodaram seriais com disclosure e sem antídoto).
 19. 🔒 Execução: tudo autônomo → via **subagente** (Sub-rotina H + `prompts/execute.md`); há plano `autonomous: false` pendente → **inline** (`Skill gsd-execute-phase --auto --no-transition` — a interação humana é nativa na camada 0).
 20. Checa completude: sobrou plano sem SUMMARY (ação humana travou ondas) → ⏸️ Sub-rotina D (pause-work). Senão lê o status: passed → segue · human_needed → anota (vira insumo da Etapa 5) e segue · gaps_found → 21.
 21. *(gaps)* Fecha 1×: despacho da 2.3 (`prompts/plan.md`, args `N --gaps`) → re-execução pela regra de rota da 3.3 (`prompts/execute.md` ou inline) → re-verifica. ⏸️ Persistiu → Sub-rotina D (parada graciosa).
@@ -588,6 +589,11 @@ tem que bater entre as menções — e bater com a fonte. Caso real (F21, 28/07)
 "pausa no 4º de 9 planos" quando o HANDOFF dizia plano 3 (`remaining_tasks[0].id: 4` era a
 Task 2 do 21-03); o número errado sobreviveu a duas regerações e virou memória permanente
 da fase.
+**Contagem de ondas, mesma regra:** o número de ondas citado no resumo (ou em qualquer
+checkpoint) vem do `=== waves ===` que o execute-phase COMPUTOU (ou da contagem real de
+despachos), nunca da declaração do planner. Caso real (F2 rl-representation, 29/07): o
+planner declarou 7 ondas, o execute computou e rodou 6 — mesma família de número que
+sobrevive errado.
 
 **BLOCO DE TRANSPARÊNCIA (no `modo: final`, SEMPRE no topo do documento, antes de tudo):**
 Este é o sinal humano mais importante — escreva-o **primeiro**, destacado:
