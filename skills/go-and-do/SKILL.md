@@ -40,7 +40,8 @@ sozinha (`gsd-spec-phase --auto` → `gsd-discuss-phase --auto`, cada escolha lo
 submete a intenção a uma **revisão adversarial cross-AI**: dois revisores externos (Codex +
 Antigravity) leem o dossiê
 (PROJECT/ROADMAP/REQUIREMENTS/SPEC/CONTEXT) e o código real e tentam derrubar as decisões; o
-Claude verifica cada achado contra o código antes de aceitar (loop ≤ 3 ciclos, com detecção de
+Claude verifica cada achado contra o código antes de aceitar (loop por convergência: continua
+enquanto os achados novos confirmados caem e > 0; teto duro de 5 ciclos, com detecção de
 estagnação). Achado factual → corrigido no lugar; tradeoff de risco/implementação → adotado e
 destacado no bloco de transparência do resumo; achado que mexe em **requisito, critério de
 aceite ou oráculo de verdade** → pausa e espera o usuário. Sai o `NN-INTENT-REVIEW.md`. Um

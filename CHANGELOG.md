@@ -2,6 +2,62 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.5.0] — 2026-07-30
+
+Dieta de cache read da etapa de intenção — resposta à auditoria temática da intenção da
+F2 do rl-representation (relatório `300726-rlr-f2-intencao.md`): o pacote v1.4.0+gen5
+executou 100% e só reprovou no custo (~US$48 > teto ~US$35; motor = cache read 63M, 66%
+do custo, causado pelos workflows do spec/discuss residentes na camada 1 por ~200
+requests). O desenho: o subagente de intenção vira COORDENADOR e o trabalho verboso
+desce para filhos descartáveis de camada 2. Decisões de modelo/effort aprovadas pelo
+dono em 30/07.
+
+### Adicionado
+
+- **Agentes `gad-*`** (`agents/`, instalar em `~/.claude/agents/`): `gad-spec` (Opus 5,
+  high — hospeda o `gsd-spec-phase`), `gad-discuss` (Opus 5, high — hospeda o
+  `gsd-discuss-phase` + neutralização do `--auto` + fronteira anti-duplicação),
+  `gad-explore` (Sonnet 5, medium — busca somente-leitura, devolve conclusões com
+  ponteiros), `gad-verificador` (Sonnet 5, medium — config espelhada no
+  `audit-gad-cetico`, vencedora do A/B de 25/07: funde, deduplica, classifica e
+  verifica os achados dos pareceres). Todos com contrato rígido de retorno e regra de
+  batching; fallback inline declarado quando as definições não estão instaladas.
+- **Prompts-filhos** (`prompts/intent-spec.md`, `intent-discuss.md`,
+  `intent-verifica.md`): instruções gen-5 lidas do disco pelo próprio filho (mesmo
+  padrão da Sub-rotina H), com contratos de retorno parseáveis.
+- **`scripts/spot-check-ponteiros.sh`**: verificação determinística de citações
+  `arquivo:linha` (existência de arquivo e de linha). Régua: verificação vira script;
+  julgamento fica no modelo. Usado pelo `gad-verificador` (ponteiros dos pareceres) e
+  pela camada 1 antes do commit (ponteiros dos artefatos).
+
+### Mudado
+
+- **`prompts/intent.md` reescrito** (30,6KB → 27,4KB): passos 1–2 despacham
+  `gad-spec`/`gad-discuss` (os workflows de ~33KB do GSD deixam de residir na camada 1
+  — na F2 eles custaram ~5,5M de cache read sozinhos); passo 5 despacha o
+  `gad-verificador` e a camada 1 faz só a triagem de destino sobre a tabela de
+  vereditos (na F21, UMA verificação inline custou 8,16M).
+- **Convergência por redução, não por teto fixo**: o loop continua enquanto os achados
+  NOVOS confirmados caem e são > 0 (na F2, 21→12→8 teria ganhado um 4º ciclo);
+  encerra em 0; estagnação/subida → `needs_decision`; teto duro de segurança em
+  **5 ciclos**. Critério novo/reformulado/reaberto definido no `intent-verifica.md`
+  (reformulado é eco, não sinal — não sustenta o loop).
+- **Pareceres em subpasta**: `<phase_dir>/pareceres/NN-parecer-*-c<C>.md` (era a raiz
+  da fase).
+- **Anti-duplicação SPEC↔CONTEXT**: decisão/requisito/critério mora no SPEC; o CONTEXT
+  referencia por ponteiro (~20–25% de duplicação medida na F2, paga de novo em cada
+  etapa que relê os dois).
+- **Batching como regra de protocolo** (camada 1 e filhos): ações independentes no
+  mesmo turno — na F2 foram 211 requests para 122 tool calls.
+- `workflow.md` (itens 7–9, Sub-rotina H, 0B.2) e `SKILL.md` atualizados para o novo
+  desenho; README ganha o passo de instalação dos agentes.
+
+### A validar na próxima fase real
+
+Custo da intenção ≤ ~US$35 · filhos devolvem contrato rígido · convergência por
+redução em ação · `tokens_camada2` ≠ 0 (agora há despachos de verdade) · fallback
+inline nunca disparando num setup com os agentes instalados.
+
 ## [1.4.2] — 2026-07-30
 
 Melhorias da auditoria da F2 do rl-representation (sessão `805a8180`, interrompida por

@@ -44,7 +44,14 @@ Instalação manual (alternativa):
 ```bash
 git clone https://github.com/alencarfelipe10-ctrl/go-and-do.git
 cp -r go-and-do/skills/* ~/.claude/skills/
+cp go-and-do/agents/*.md ~/.claude/agents/
 ```
+
+**Agentes `gad-*` (obrigatórios desde a v1.5.0):** a etapa de intenção despacha filhos
+descartáveis (`gad-spec`, `gad-discuss`, `gad-explore`, `gad-verificador`) cujas definições
+— modelo, effort e ferramentas — moram em `agents/`. Instale-os em `~/.claude/agents/`
+(o `cp` acima; symlinks também funcionam). Sem eles o despacho do filho falha e a
+intenção degrada para o fluxo inline antigo.
 
 **Spawn aninhado de subagentes** (ver [Pré-requisitos](#pré-requisitos)): na CC ≥ 2.1.219 já
 vem ligado por padrão, com profundidade 3 — **não configure nada**. Se você tem

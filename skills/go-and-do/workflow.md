@@ -90,9 +90,9 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 
 **Etapa 0-B — Intenção: spec + discuss + revisão adversarial** *(⏭️ fase já planejada → pula inteira · retomada fina por arquivo)*
 6. ⏭️ `has_plans` (ou `has_verification`) → pula pra Etapa 1 (a intenção já virou plano).
-7. 🔒 ⏭️ Despacha o **subagente de intenção** (Sub-rotina H + `prompts/intent.md`) — um único despacho cobre os itens 7–9; a retomada fina por arquivo é do subagente. Dentro dele: SPEC (sem `NN-SPEC.md`): `gsd-spec-phase N --auto` (auto-decide e loga `[auto]`; termina no SPEC, sem auto-advance).
-8. ↳ *(no mesmo subagente)* CONTEXT (sem `NN-CONTEXT.md`): `gsd-discuss-phase N --auto`, **sem executar o `auto_advance`** dele (o encadeamento é desta skill) e zerando `workflow._auto_chain_active` na volta.
-9. ↳ *(no mesmo subagente)* Revisão adversarial de intenção (sem `NN-INTENT-REVIEW.md` `done`): Codex + agy criticam ↔ Claude verifica (achados fundidos, dedup por `fontes`), loop ≤ 3 ciclos. Factual → corrige no lugar · requisito/critério/oráculo → `needs_decision` sobe → ⏸️ a pergunta chega a você e a resposta continua o MESMO subagente (0B.3) · tradeoff → adota + transparência. Escreve `NN-INTENT-REVIEW.md`. UM revisor indisponível/falhou → segue com o outro, sino declarado; os DOIS instalados-mas-falhos → `blocked` sobe → ⏸️ **para** (grava `intent_review: blocked`; a retomada re-tenta); NENHUM instalado (pré-check) → revisão **pulada** com sino gritante (`intent_review: skipped`) e a fase segue — ausência de ferramenta degrada declarado; só falha de runtime bloqueia.
+7. 🔒 ⏭️ Despacha o **subagente de intenção** (Sub-rotina H + `prompts/intent.md`) — um único despacho cobre os itens 7–9; a retomada fina por arquivo é do subagente, que é um COORDENADOR: o trabalho verboso desce para filhos descartáveis de camada 2 (agentes `gad-*`, modelo/effort nas definições em `~/.claude/agents/`). Dentro dele: SPEC (sem `NN-SPEC.md`): filho `gad-spec` hospeda `gsd-spec-phase N --auto` (auto-decide e loga `[auto]`; termina no SPEC, sem auto-advance).
+8. ↳ *(filho `gad-discuss`)* CONTEXT (sem `NN-CONTEXT.md`): `gsd-discuss-phase N --auto`, **sem executar o `auto_advance`** dele (o encadeamento é desta skill), zerando `workflow._auto_chain_active` na volta e aplicando a fronteira anti-duplicação (decisão mora no SPEC; o CONTEXT referencia por ponteiro).
+9. ↳ *(no subagente de intenção)* Revisão adversarial de intenção (sem `NN-INTENT-REVIEW.md` `done`): Codex + agy criticam (pareceres em `<phase_dir>/pareceres/`) ↔ filho `gad-verificador` funde, deduplica, classifica (novo/reformulado/reaberto) e verifica; a triagem de destino fica na camada 1. Loop por convergência: continua enquanto os achados NOVOS confirmados caem e > 0; teto duro de 5 ciclos; estagnação → `needs_decision`. Factual → corrige no lugar · requisito/critério/oráculo → `needs_decision` sobe → ⏸️ a pergunta chega a você e a resposta continua o MESMO subagente (0B.3) · tradeoff → adota + transparência. Escreve `NN-INTENT-REVIEW.md`. UM revisor indisponível/falhou → segue com o outro, sino declarado; os DOIS instalados-mas-falhos → `blocked` sobe → ⏸️ **para** (grava `intent_review: blocked`; a retomada re-tenta); NENHUM instalado (pré-check) → revisão **pulada** com sino gritante (`intent_review: skipped`) e a fase segue — ausência de ferramenta degrada declarado; só falha de runtime bloqueia.
 
 **Etapa 1 — Contratos de design** *(🎌 só com a flag · retomada por existência de arquivo)*
 10. ⏭️ Sem `--ui` e sem `--ai` → pula a Etapa 1 inteira. Com a flag e o `NN-*-SPEC.md` já existe → pula o sub-passo.
@@ -849,8 +849,12 @@ log não escrever, siga — telemetria é instrumento, não gate.
 
 A skill é organizada em camadas: a **camada 0** (esta conversa, o orquestrador) decide, encadeia,
 trata erros e fala com o usuário; a **camada 1** são subagentes com janela própria e descartável
-que executam o trabalho verboso de uma etapa; a **camada 2** são os agentes internos que os
-comandos GSD spawnam por conta própria (planner, executor, reviewer — esta skill não os toca).
+que executam o trabalho verboso de uma etapa; a **camada 2** são os agentes que a camada 1
+despacha ou hospeda: os internos que os comandos GSD spawnam por conta própria (planner,
+executor, reviewer — esta skill não os toca) e os filhos descartáveis `gad-*` desta skill
+(spec, discuss, explore, verificador — definições com modelo/effort em `~/.claude/agents/`),
+que devolvem contrato rígido e não despacham adiante por iniciativa própria (só quando o
+workflow GSD que hospedam mandar).
 O porquê da divisão: a janela do orquestrador é o recurso mais escasso de uma orquestração
 longa — cada etapa hospedada inline deixa o modelo das etapas finais mais "cansado" que o das
 iniciais, e foi o eco de orquestração dos comandos GSD hospedados na camada 0 que levou fases
@@ -1191,11 +1195,13 @@ Abaixo da caixa, uma linha solta: o usuário pode sair de perto.
   do subagente, que decide pelo disco (`prompts/intent.md`, seção de chegada).
 
 **0B.2 — Despacho do subagente de intenção.** Gate de contexto (Sub-rotina A). Despache pela
-**Sub-rotina H** com `prompts/intent.md`: um único subagente executa, na própria janela, o
-SPEC (`gsd-spec-phase N --auto`) → o CONTEXT (`gsd-discuss-phase N --auto`, sem executar o
-`auto_advance` e zerando `workflow._auto_chain_active` — a neutralização dos 2 efeitos
-colaterais do `--auto`) → a revisão adversarial cross-AI (Codex + agy criticam, o subagente
-verifica cada achado contra o código antes de aceitar, loop ≤ 3 ciclos, fail-closed no piso
+**Sub-rotina H** com `prompts/intent.md`: um único subagente COORDENA, na própria janela, o
+SPEC (filho `gad-spec` hospeda `gsd-spec-phase N --auto`) → o CONTEXT (filho `gad-discuss`
+hospeda `gsd-discuss-phase N --auto`, sem executar o `auto_advance` e zerando
+`workflow._auto_chain_active` — a neutralização dos 2 efeitos colaterais do `--auto`) → a
+revisão adversarial cross-AI (Codex + agy criticam; filho `gad-verificador` verifica cada
+achado contra o código antes de aceitar; loop por convergência — continua enquanto os achados
+novos confirmados caem e > 0, teto duro de 5 ciclos — fail-closed no piso
 de "pelo menos um revisor"). O
 despacho leva `N`, `NN`, `phase_dir` e `project_root` — caminhos absolutos — e, numa
 continuação de pausa, a resposta do usuário verbatim.
