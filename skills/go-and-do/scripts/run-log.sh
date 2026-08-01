@@ -2,6 +2,11 @@
 # run-log.sh — telemetria da go-and-do (endurecida em 27/07/2026 — plano da auditoria F20).
 # Uso: run-log.sh <phase_dir> <NN> <evento> "<etapa>" [tokens] [pct] [subagent_tokens] [limit] [tokens_camada2] [motivo]
 #      run-log.sh <phase_dir> <NN> audit   → audita a GRADE (janelas abertas por sessão; não muta)
+#      run-log.sh <phase_dir> <NN> close --sessao <id> ["motivo"]
+#                                          → fecho ADMINISTRATIVO de janela órfã de sessão MORTA
+#                                            (end sintético "fechado_admin"; a sessão atual não
+#                                            consegue fechar janela alheia pelo caminho normal —
+#                                            2 ocorrências: F19-inspired e F2-rlr 29/07)
 #      run-log.sh --selftest               → auto-teste em sandbox (única rota que pode sair != 0)
 #
 #   evento ∈ {run, checkpoint, end, stop, skip, compact, audit}
@@ -87,6 +92,20 @@ if [ "$1" = "--selftest" ]; then
   out=$(bash "$SELF" "$D" 99 audit)
   echo "$out" | grep -q 'JANELA ABERTA.*6.3 resumo' && ok "audit: detecta janela aberta" || bad "audit: detecta janela aberta"
 
+  # close administrativo: sessão "morta" deixa janela aberta; outra sessão a fecha de fora
+  export CLAUDE_CODE_SESSION_ID="morta0000-0000"
+  bash "$SELF" "$D" 99 checkpoint "3.4 verificacao" 200000 50 "" 400000 >/dev/null
+  export CLAUDE_CODE_SESSION_ID="selftest0-0000-0000"
+  out=$(bash "$SELF" "$D" 99 audit)
+  echo "$out" | grep -q "close --sessao morta000" && ok "audit aponta o close p/ sessão morta" || bad "audit aponta o close p/ sessão morta"
+  out=$(bash "$SELF" "$D" 99 close --sessao morta0000 "API 500 matou a sessão")
+  echo "$out" | grep -q "fechada administrativamente" && grep -q '"fechado_admin":true' "$F" \
+    && grep -q '"fechado_por":"selftest"' "$F" && ok "close fecha janela de sessão morta" || bad "close fecha janela de sessão morta"
+  out=$(bash "$SELF" "$D" 99 close --sessao morta0000)
+  echo "$out" | grep -q "já está fechada" && ok "close é no-op na 2ª vez" || bad "close é no-op na 2ª vez"
+  out=$(bash "$SELF" "$D" 99 close --sessao selftest0)
+  echo "$out" | grep -q "SESSÃO ATUAL" && ok "close recusa a sessão atual" || bad "close recusa a sessão atual"
+
   seqs=$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$F" | tr '\n' ' ')
   python3 - "$F" <<'EOF' >/dev/null 2>&1 && ok "todas as linhas são JSON válido" || bad "linha JSON inválida"
 import json,sys
@@ -98,6 +117,53 @@ EOF
   rm -rf "$TMP"
   [ "$fail" -eq 0 ] && echo "SELFTEST: OK" || echo "SELFTEST: FALHOU"
   exit "$fail"
+fi
+
+# ───────────────────────────── modo close (administrativo) ─────────────────────────────
+# Fecha de fora a janela aberta de uma sessão que morreu (API 500, kill etc.): grava um
+# `end` sintético com "fechado_admin":true NA SESSÃO MORTA. Só age se a janela existe e
+# está aberta — rodar contra sessão sã ou já fechada é no-op com aviso. Nunca falha.
+if [ "$3" = "close" ]; then
+  {
+    dir="$1"; nn="$2"; shift 3
+    alvo=""; motivo=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --sessao) alvo="$2"; shift 2 ;;
+        *) motivo="$1"; shift ;;
+      esac
+    done
+    [ -n "$alvo" ] || { echo "close: uso — close --sessao <id> [\"motivo\"]"; exit 0; }
+    alvo="${alvo:0:8}"
+    case "$dir" in
+      /*) ;;
+      *) _root=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n "$_root" ] && dir="$_root/$dir" ;;
+    esac
+    f="$dir/$nn-RUN-LOG.jsonl"
+    [ -f "$f" ] || { echo "close: run-log inexistente ($f)"; exit 0; }
+    cur="${CLAUDE_CODE_SESSION_ID:-desconhecida}"
+    if [ "$alvo" = "${cur:0:8}" ]; then
+      echo "close: $alvo é a SESSÃO ATUAL — feche a janela pelo caminho normal (end/skip/stop)"; exit 0
+    fi
+    ln=$(grep -n "\"sessao\":\"$alvo\"" "$f" | grep '"evento":"checkpoint"' | tail -n1 | cut -d: -f1)
+    [ -n "$ln" ] || { echo "close: nenhuma janela da sessão $alvo neste run-log"; exit 0; }
+    closed=$(tail -n +"$((ln+1))" "$f" | grep "\"sessao\":\"$alvo\"" | grep -c '"evento":"\(end\|skip\|stop\)"')
+    if [ "$closed" -gt 0 ] 2>/dev/null; then
+      echo "close: a janela da sessão $alvo já está fechada — nada a fazer"; exit 0
+    fi
+    et=$(sed -n "${ln}p" "$f" | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
+    ts=$(date -Is 2>/dev/null || date +%s)
+    last_seq=$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$f" 2>/dev/null | tail -n1)
+    case "$last_seq" in (''|*[!0-9]*) last_seq=0 ;; esac
+    seq=$((last_seq+1))
+    motivo=$(printf '%s' "$motivo" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n\r\t')
+    linha="{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$alvo\",\"evento\":\"end\",\"etapa\":\"$et\",\"fechado_admin\":true,\"fechado_por\":\"${cur:0:8}\""
+    [ -n "$motivo" ] && linha="$linha,\"motivo\":\"$motivo\""
+    linha="$linha}"
+    printf '%s\n' "$linha" >> "$f"
+    echo "close: janela da sessão $alvo (etapa \"$et\") fechada administrativamente — o custo de subagentes dela NÃO foi registrado (anote se souber)"
+  } 2>/dev/null
+  exit 0
 fi
 
 # ───────────────────────────── modo audit ─────────────────────────────
@@ -117,7 +183,11 @@ if [ "$3" = "audit" ]; then
       closed=$(tail -n +"$((ln+1))" "$f" | grep "\"sessao\":\"$s\"" | grep -c '"evento":"\(end\|skip\|stop\)"')
       if [ "$closed" -eq 0 ] 2>/dev/null; then
         et=$(sed -n "${ln}p" "$f" | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
-        echo "audit: JANELA ABERTA na sessão $s — etapa \"$et\" sem end/skip/stop (feche-a antes do stop)"
+        if [ "$s" = "${CLAUDE_CODE_SESSION_ID:0:8}" ]; then
+          echo "audit: JANELA ABERTA na sessão $s — etapa \"$et\" sem end/skip/stop (feche-a antes do stop)"
+        else
+          echo "audit: JANELA ABERTA na sessão $s — etapa \"$et\" sem end/skip/stop; sessão NÃO é a atual (morreu?) → feche com: run-log.sh <dir> <NN> close --sessao $s \"motivo\""
+        fi
         abertas=$((abertas+1))
       fi
     done
