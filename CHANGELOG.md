@@ -2,6 +2,47 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.6.0] — 2026-08-01
+
+Fixes da auditoria da retomada da F2 do rl-representation (relatório
+`300726-rl-representation-f2-retomada.md`), aprovados pelo dono item a item em 01/08.
+O fio comum: onde a regra escrita reincidiu, a fonte virou script (fix mecânico >
+disciplina de modelo).
+
+### Adicionado
+
+- **`scripts/numeros-da-fase.sh`** — fonte MECÂNICA dos números do resumo executivo
+  (3ª reincidência de número "de memória": F21 ordinal · F2-rlr "6 ondas" com os
+  frontmatters declarando 9, "20 planos desta rodada" com 2 SUMMARYs da rodada anterior,
+  baseline "71 passing" fantasma — as regras escritas da v1.4.1/v1.4.2 estavam em vigor
+  e não seguraram). Computa do disco planos (total/summary/gap-closure/originais), ondas
+  distintas por frontmatter e SUMMARYs por dia; modo `--conferir <md>` valida todo
+  "N planos/ondas" citado num documento e sai 1 na divergência. Testado contra o caso
+  real: pega o "6 ondas" e aceita 18/20/9. A Sub-rotina F agora roda o script ANTES do
+  despacho (bloco colado no prompt via `<bloco_numeros>`) e DEPOIS (`--conferir` no
+  documento final; divergir → 1 re-despacho; persistir → 🔔 no banner, nunca silêncio).
+- **`run-log.sh close --sessao <id> ["motivo"]`** — fecho ADMINISTRATIVO de janela órfã
+  de sessão morta (2ª ocorrência do padrão: notificação órfã da F19-inspired · API 500
+  de 29/07 na F2-rlr). Grava `end` sintético com `fechado_admin: true` + `fechado_por`
+  na sessão morta; no-op se a janela já está fechada; recusa a sessão atual (essa fecha
+  pelo caminho normal). O modo `audit` passa a apontar o comando quando a janela órfã
+  não é da sessão atual — o orquestrador descobre a chave mecanicamente. Selftest: 4
+  casos novos, 18/18.
+
+### Corrigido
+
+- **3.5 passo 1b — replan de gap-closure ancora a re-convergência nos artefatos
+  canônicos**: o plan-checker do replan roda dentro do GSD, que não conhece o
+  `NN-CONVERGENCE.md` (marcador da 3.2) — na F2-rlr a 2ª convergência (3 blockers +
+  5 warnings fechados) só existia no git, com CONVERGENCE/REVIEWS de mtime da rodada
+  original. Agora a camada 0 acrescenta `gap_replan:` ao frontmatter dos dois arquivos
+  e commita.
+
+### Não aplicado (decisão do dono, 01/08)
+
+- Seção `incidentes:` obrigatória no retorno de hospedeiros (o caso da onda 3 invisível):
+  fica em MONITORAMENTO — aplica na reincidência (tarefa 24(a) do acervo).
+
 ## [1.5.0] — 2026-07-30
 
 Dieta de cache read da etapa de intenção — resposta à auditoria temática da intenção da

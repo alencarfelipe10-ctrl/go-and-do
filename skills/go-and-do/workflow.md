@@ -546,8 +546,18 @@ Telemetria: todo despacho desta sub-rotina fecha com `end` no run-log (Sub-rotin
 É um dos subagentes mais caros da rodada (caso real 21/07: ~421k tokens do resumo da pausa
 ficaram invisíveis no JSONL) — sem esta linha o custo dele some da telemetria.
 
+**Números com fonte MECÂNICA (antes e depois do despacho).** Regra escrita não segurou este
+padrão (3 reincidências: F21 ordinal · F2-rlr "6 ondas"/"20 planos desta rodada" com a regra
+da v1.4.2 em vigor) — agora a fonte é script:
+1. ANTES do despacho: rode `scripts/numeros-da-fase.sh <phase_dir> NN` e **cole o bloco
+   inteiro da saída no prompt** abaixo (placeholder `<bloco_numeros>`).
+2. DEPOIS do retorno: rode `scripts/numeros-da-fase.sh <phase_dir> NN --conferir
+   <phase_dir>/NN-RESUMO-EXECUTIVO.md`. Exit 1 → re-despache **1×** o mesmo subagente com as
+   divergências apontadas (ou emende você a linha, se for pontual) e re-confira. Persistiu →
+   siga, mas o banner final ganha 🔔 `resumo com número sem fonte` (nunca silencie).
+
 **Despache um `Agent` com `model: sonnet` e `run_in_background: false`** (despacho síncrono —
-mesma regra da Sub-rotina H) e este prompt (preencha `NN`, `<phase_dir>`, `<modo>`,
+mesma regra da Sub-rotina H) e este prompt (preencha `NN`, `<phase_dir>`, `<modo>`, `<bloco_numeros>`,
 `<motivo>`, `<desfecho>`, `<itens_assumidos>`, `<itens_nao_verificados>`, `<itens_intencao>`,
 `<itens_nao_rodados>`, `<riscos_aceitos>`, e — vindo da Etapa 6 — a dica de 🔔 que você já montou):
 
@@ -580,7 +590,13 @@ voz neutra** ("ficou decidido", "a fase definiu") — nunca "tomada por mim". Ca
 (F19 grupo-inspired, 24/07): o resumo atribuiu ao sistema uma decisão de oráculo que o dono
 respondera ao vivo — erro na direção que rouba o crédito do dono e infla a autonomia relatada.
 
-**Números de progresso com fonte estrutural.** Ao narrar onde uma rodada pausou ou retomou
+**Números de progresso com fonte estrutural.** O bloco abaixo foi COMPUTADO do disco — para
+planos e ondas, copie DELE, nunca de memória (o orquestrador confere mecanicamente depois e
+divergência volta pra você):
+
+<bloco_numeros>
+
+Ao narrar onde uma rodada pausou ou retomou
 ("parou no plano X de Y", "N de M planos prontos"), derive o número do `HANDOFF.json`
 (campos `plan`/`task`) ou da contagem de `NN-*-SUMMARY.md` no disco — **nunca** de
 `remaining_tasks[].id` (o id da primeira tarefa restante não é o ordinal do plano). Antes de
@@ -1454,6 +1470,12 @@ Se todos os planos têm `SUMMARY.md`, leia o status do `VERIFICATION.md`:
 
 **3.5 — Fechamento de gaps (1× só):**
 1. Replaneja só correções: despacho da 2.3 (`prompts/plan.md`) com args `N --gaps`.
+1b. **Ancora a re-convergência nos artefatos canônicos:** o replan roda o plan-checker dentro
+   do GSD, que não conhece o `NN-CONVERGENCE.md` (marcador nosso, da 3.2) — sem este passo a
+   2ª revisão só existe no git (caso real F2-rlr 30/07: CONVERGENCE/REVIEWS com mtime da
+   rodada original). Acrescente ao frontmatter do `NN-CONVERGENCE.md` (e do `NN-REVIEWS.md`,
+   se existir) a linha `gap_replan: "<data> — N planos gap_closure pelo plan-checker; commits
+   <shas>"` e commite. Frontmatter é edição permitida à camada 0; o corpo fica intacto.
 2. Re-executa: mesma regra de rota da 3.3 — planos de gap autônomos → despacho
    (`prompts/execute.md`, args `N --auto --no-transition`); senão inline.
 3. Re-verifica.
