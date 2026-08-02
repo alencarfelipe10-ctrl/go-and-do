@@ -148,7 +148,11 @@ espelha() {
     # ROADMAP. Upsert que NÃO toca o apelido (editado pelo Felipe no painel).
     _top=$(git -C "$_dir" rev-parse --show-toplevel 2>/dev/null || echo "$_dir")
     _caminho="~${_top#"$HOME"}"
-    _total=$(grep -c '^### Phase ' "$_top/.planning/ROADMAP.md" 2>/dev/null || echo 0)
+    # total = MAIOR número de fase do ROADMAP (numeração contínua entre milestones;
+    # 999 = laterais/backlog, fora da conta). Contar linhas subestimaria o total.
+    _total=$(grep -o '^### Phase [0-9]*' "$_top/.planning/ROADMAP.md" 2>/dev/null \
+      | grep -o '[0-9]*$' | grep -v '^999$' | sort -n | tail -1)
+    : "${_total:=0}"
     [ "$_total" -gt 0 ] && _total_json=$_total || _total_json=null
     curl -sS --max-time 3 -o /dev/null \
       -X POST "$SUPABASE_URL/rest/v1/gad_projetos?on_conflict=projeto" \
