@@ -144,6 +144,19 @@ espelha() {
       -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
       -H "Content-Type: application/json" \
       -d "{\"projeto\":\"$_proj\",\"fase\":$_fase,\"raw\":$_raw}"
+    # cadastro do projeto (gad_projetos): caminho + fase atual + total de fases do
+    # ROADMAP. Upsert que NÃO toca o apelido (editado pelo Felipe no painel).
+    _top=$(git -C "$_dir" rev-parse --show-toplevel 2>/dev/null || echo "$_dir")
+    _caminho="~${_top#"$HOME"}"
+    _total=$(grep -c '^### Phase ' "$_top/.planning/ROADMAP.md" 2>/dev/null || echo 0)
+    [ "$_total" -gt 0 ] && _total_json=$_total || _total_json=null
+    curl -sS --max-time 3 -o /dev/null \
+      -X POST "$SUPABASE_URL/rest/v1/gad_projetos?on_conflict=projeto" \
+      -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+      -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+      -H "Content-Type: application/json" \
+      -H "Prefer: resolution=merge-duplicates" \
+      -d "{\"projeto\":\"$_proj\",\"caminho\":\"$_caminho\",\"fase_atual\":$_fase,\"total_fases\":$_total_json,\"atualizado_em\":\"$(date -u +%FT%TZ)\"}"
   ) >/dev/null 2>&1 &
 }
 
