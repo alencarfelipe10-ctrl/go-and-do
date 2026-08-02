@@ -119,6 +119,34 @@ EOF
   exit "$fail"
 fi
 
+# ───────────────────────────── espelho na nuvem (gad-harness) ─────────────────────────────
+# Replica cada linha appendada na tabela gad_eventos do Supabase, para o painel ao vivo.
+# Fire-and-forget: subshell em background, timeout curto, saída descartada — o espelho
+# JAMAIS atrasa ou falha a fase. Sem config → sem espelho, em silêncio. O JSONL local
+# segue sendo a fonte canônica; a nuvem admite lacunas por definição.
+# Config: ~/.config/go-and-do/config com SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
+# (mesmo padrão do ~/.config/audit-gad/config do P9; chmod 600).
+# Uso: espelha <dir> <NN> <linha-json>
+espelha() {
+  [ -f "$HOME/.config/go-and-do/config" ] || return 0
+  case "${CLAUDE_CODE_SESSION_ID:-}" in selftest*) return 0 ;; esac
+  (
+    _dir="$1"; _nn="$2"; _raw="$3"
+    . "$HOME/.config/go-and-do/config" 2>/dev/null
+    [ -n "${SUPABASE_URL:-}" ] && [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ] || exit 0
+    # projeto = nome do diretório-raiz do repo alvo (chave canônica do P10)
+    _proj=$(basename "$(git -C "$_dir" rev-parse --show-toplevel 2>/dev/null || echo "$_dir")")
+    # fase como número JSON válido (NN pode vir com zero à esquerda: "02" não é JSON)
+    _fase=$(printf '%s' "$_nn" | sed 's/[^0-9]//g; s/^0*//'); : "${_fase:=0}"
+    curl -sS --max-time 3 -o /dev/null \
+      -X POST "$SUPABASE_URL/rest/v1/gad_eventos" \
+      -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
+      -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+      -H "Content-Type: application/json" \
+      -d "{\"projeto\":\"$_proj\",\"fase\":$_fase,\"raw\":$_raw}"
+  ) >/dev/null 2>&1 &
+}
+
 # ───────────────────────────── modo close (administrativo) ─────────────────────────────
 # Fecha de fora a janela aberta de uma sessão que morreu (API 500, kill etc.): grava um
 # `end` sintético com "fechado_admin":true NA SESSÃO MORTA. Só age se a janela existe e
@@ -161,6 +189,7 @@ if [ "$3" = "close" ]; then
     [ -n "$motivo" ] && linha="$linha,\"motivo\":\"$motivo\""
     linha="$linha}"
     printf '%s\n' "$linha" >> "$f"
+    espelha "$dir" "$nn" "$linha"
     echo "close: janela da sessão $alvo (etapa \"$et\") fechada administrativamente — o custo de subagentes dela NÃO foi registrado (anote se souber)"
   } 2>/dev/null
   exit 0
@@ -253,7 +282,9 @@ fi
       closed=$(tail -n +"$((ln+1))" "$f" | grep "\"sessao\":\"$sess\"" | grep -c '"evento":"\(end\|skip\|stop\)"')
       if [ "$closed" -eq 0 ] 2>/dev/null; then
         prev_etapa=$(sed -n "${ln}p" "$f" | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
-        printf '%s\n' "{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$sess\",\"evento\":\"end\",\"etapa\":\"$prev_etapa\",\"auto_fechado\":true}" >> "$f"
+        _linha_auto="{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$sess\",\"evento\":\"end\",\"etapa\":\"$prev_etapa\",\"auto_fechado\":true}"
+        printf '%s\n' "$_linha_auto" >> "$f"
+        espelha "$dir" "$nn" "$_linha_auto"
         echo "janela-fechada-automaticamente: etapa \"$prev_etapa\" estava sem end/skip — end sintético gravado; se houve subagente, o custo dele NÃO foi registrado (anote se souber)"
         seq=$((seq+1))
       fi
@@ -271,8 +302,9 @@ fi
         prev=$(grep "\"sessao\":\"$sess\"" "$f" 2>/dev/null \
                | sed -n 's/.*"tokens":\([0-9]*\).*/\1/p' | awk '$0+0 > 0' | tail -n1)
         if [ -n "$prev" ] && [ "$prev" -gt 0 ] 2>/dev/null && [ $(( prev - tokens )) -gt 100000 ]; then
-          printf '%s\n' "{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$sess\",\"evento\":\"compact\",\"etapa\":\"auto-detectado: queda ${prev} -> ${tokens} tokens\"}" \
-            >> "$f"
+          _linha_cpt="{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$sess\",\"evento\":\"compact\",\"etapa\":\"auto-detectado: queda ${prev} -> ${tokens} tokens\"}"
+          printf '%s\n' "$_linha_cpt" >> "$f"
+          espelha "$dir" "$nn" "$_linha_cpt"
           # Sinal no stdout — é assim que o orquestrador fica sabendo (o append é silencioso).
           echo "compact-detectado: queda ${prev} -> ${tokens} tokens"
           seq=$((seq+1))
@@ -311,5 +343,6 @@ fi
   linha="$linha}"
 
   printf '%s\n' "$linha" >> "$f"
+  espelha "$dir" "$nn" "$linha"
 } 2>/dev/null
 exit 0
