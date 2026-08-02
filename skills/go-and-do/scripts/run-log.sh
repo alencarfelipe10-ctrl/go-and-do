@@ -49,6 +49,7 @@
 if [ "$1" = "--selftest" ]; then
   SELF="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/$(basename -- "$0")"
   TMP=$(mktemp -d) || exit 1
+  export RUNLOG_SEM_ESPELHO=1
   export CLAUDE_CODE_SESSION_ID="selftest0-0000-0000"
   D="$TMP/.planning/phases/99-teste"; F="$D/99-RUN-LOG.jsonl"
   fail=0
@@ -129,6 +130,9 @@ fi
 # Uso: espelha <dir> <NN> <linha-json>
 espelha() {
   [ -f "$HOME/.config/go-and-do/config" ] || return 0
+  # dois guardas: a env dedicada cobre o selftest inteiro (que troca o session id
+  # no teste do close — caso 02/08: sessão "morta0000" vazou 99-teste pra nuvem)
+  [ -n "${RUNLOG_SEM_ESPELHO:-}" ] && return 0
   case "${CLAUDE_CODE_SESSION_ID:-}" in selftest*) return 0 ;; esac
   (
     _dir="$1"; _nn="$2"; _raw="$3"
