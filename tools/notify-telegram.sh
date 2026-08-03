@@ -85,6 +85,7 @@ fi
 
 # ── Enriquecimento opcional: fase/etapa do run-log da go-and-do, se houver. ──
 FASE_INFO=""
+RL=""
 if [ -n "$CWD" ] && [ -d "$CWD/.planning/phases" ]; then
   RL=$(ls -t "$CWD"/.planning/phases/*/*-RUN-LOG.jsonl 2>/dev/null | head -n 1)
   if [ -n "$RL" ]; then
@@ -121,6 +122,18 @@ if ! jq -e '.ok == true' "$STATE_DIR/last-send.json" >/dev/null 2>&1; then
     --data-urlencode "text=${TEXT}" \
     --data-urlencode "disable_notification=${SILENT}" \
     > "$STATE_DIR/last-send.json" 2>/dev/null || true
+fi
+
+# ── Evidência de máquina (P7): sidecar da fase ativa, auditável depois. ──────
+# NN-NOTIFICACOES.jsonl ao lado do run-log — arquivo próprio, para não poluir a
+# numeração de seq do NN-RUN-LOG.jsonl. Auditoria distingue "notificou e o dono
+# demorou" de "hook mudo" (2 auditorias seguidas ficaram sem_evidencia).
+if [ -n "$RL" ]; then
+  EVID="${RL%-RUN-LOG.jsonl}-NOTIFICACOES.jsonl"
+  OK=$(jq -r 'if .ok == true then "true" else "false" end' "$STATE_DIR/last-send.json" 2>/dev/null)
+  TIPO="permissao"; case "$TITULO" in *Pergunta*) TIPO="pergunta";; esac
+  printf '{"evento":"notify","canal":"telegram","ts":"%s","tipo":"%s","silencioso":%s,"enviado_ok":%s}\n' \
+    "$(date -Iseconds)" "$TIPO" "$SILENT" "${OK:-false}" >> "$EVID" 2>/dev/null || true
 fi
 
 exit 0

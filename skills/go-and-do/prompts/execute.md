@@ -116,6 +116,21 @@ transcript; quem precisa de um valor consome a env pelo processo (dotenv/`proces
 nunca por `cat`. As fixtures copiadas vivem e morrem com o worktree (a remoção dele as
 apaga) e continuam gitignored lá dentro — nunca entram em commit.
 
+**Paralelismo por wave é mandato, não preferência — a decisão de serializar NÃO é sua.**
+Com `use_worktrees: true` e onda com ≥2 planos, o despacho é paralelo com worktrees,
+ponto — a camada 0 já rodou o pré-flight e resolveu as degradações conhecidas antes de
+te despachar. Você (e o comando que você hospeda) **não pode** trocar para despacho
+serial por conta própria, e **precedente histórico não é autorização** ("serial foi
+validado na fase X" descreve o passado, não configura o presente — caso real F20,
+02/08: a camada 0 anunciou "sem degradação de paralelismo" e 6min depois a execução
+rodou 7 planos 100% seriais citando a Fase 7, sem o dono saber). Se algo te convencer
+de que serial é necessário (recurso, fixture, causa nova), a rota é uma só: **pare e
+devolva `needs_decision`** com o diagnóstico e as opções (fix que preserva o
+paralelismo primeiro — para fixture gitignored, o conserto sancionado é declará-la em
+`.planning/worktree-fixtures.txt` e copiar, nunca serializar) — quem decide é a camada
+acima. Serializou de fato, por qualquer caminho? Isso é desvio: entra OBRIGATORIAMENTE
+em `incidentes:` no retorno, nunca só num log de camada 2.
+
 **Guarda anti-reversão (inclua este bloco, verbatim, em TODO briefing de executor —
 worktree ou árvore compartilhada):**
 
@@ -193,6 +208,7 @@ verification: passed | human_needed | gaps_found | ausente
 acao_humana_pendente: <só no incompleto: a ação exata + planos travados; senão omita>
 human_needed_itens: [<1 linha por item, se verification=human_needed; senão omita>]
 tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (executores, checkers); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
+incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido — ex.: "despacho serial no lugar de waves paralelas"; sem desvio, escreva literalmente: nenhum>]
 sinos: [<ex.: "regressão consertada no plano 03-04 durante a onda 2"; ausente se vazio>]
 ```
 

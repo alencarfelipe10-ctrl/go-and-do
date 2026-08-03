@@ -82,6 +82,7 @@ veredito: nyquist_compliant | partial
 cobertura: <cobertos>/<parciais>/<faltantes>
 testes_gerados: <n; 0 se nenhum>
 tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (agentes aninhados); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
+incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido; sem desvio, escreva literalmente: nenhum>]
 sinos: [<ex.: "MODEL-04 manual-only — sem teste automatizável"; ausente se vazio>]
 ```
 

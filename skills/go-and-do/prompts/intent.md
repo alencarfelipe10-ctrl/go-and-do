@@ -255,6 +255,18 @@ Prepare a subpasta dos pareceres: `mkdir -p "<phase_dir>/pareceres"`.
    **Modelo errado = revisor degradado:** evidência mostrando modelo DIFERENTE do
    configurado (ex.: fallback silencioso para Flash — 3 ocorrências provadas) → trate o
    run como FALHO com sino, não como parecer válido.
+   **Canário de leitura (obrigatório, por ciclo):** antes de invocar o agy, gere um
+   nonce e grave-o num arquivo do repo que NÃO é o briefing:
+   `NONCE="PROVA-$(od -An -N3 -tx1 /dev/urandom | tr -d ' ')"; echo "Token de prova de leitura do ciclo C: $NONCE" > <phase_dir>/pareceres/.prova-leitura-cC.txt`
+   O briefing instrui: "abra `<phase_dir>/pareceres/.prova-leitura-cC.txt` e transcreva
+   o token dele na primeira linha do parecer, no formato `prova_leitura: <token>`". O
+   valor do nonce **nunca** vai no prompt nem no briefing — só no arquivo. Parecer
+   devolveu o token exato → prova mecânica de que o revisor leu arquivo do disco.
+   Não devolveu → o parecer conta como **corroboração**, não verificação independente:
+   registre `agy_prova_leitura: ausente` no frontmatter + sino `"agy sem prova de
+   leitura (canário) — parecer ponderado como corroboração"`. O porquê (F20 oxmuscle,
+   02/08): 4 ciclos de parecer plausível com `.err` de 0 bytes e caminho inexistente
+   citado — sem canário, paráfrase do briefing é indistinguível de leitura real.
 
    **Falha de UM revisor** (indisponível, timeout, parecer vazio/ilegível — exit 0 com
    arquivo vazio conta como falha, não como "nenhum achado") → siga com o outro,
@@ -391,6 +403,7 @@ achados_descartados: <n>
 pausas_de_negocio: <n>
 tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos via Agent (gad-spec, gad-discuss, gad-verificador, gad-explore); 0 se não despachou — os revisores externos (codex/agy) rodam por CLI, fora do harness, e NÃO entram; nunca estime — sem número reportado, escreva sem_report>
 transparencia: [<um item por linha; ausente se vazio>]
+incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido; sem desvio, escreva literalmente: nenhum>]
 sinos: [<itens 🔔: dimensões de ambiguidade abaixo do mínimo · ciclo_final_nao_rodou · degradação de revisor (ex.: "agy indisponível — revisão Codex-only") · revisão pulada ("revisão adversarial de intenção PULADA — nenhum revisor externo (codex/agy) instalado") · commit falhou · filho fora do contrato; ausente se vazio>]
 ```
 

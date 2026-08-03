@@ -942,6 +942,15 @@ disco, que é a fonte de verdade):
 
 - **`done`** — com veredito, caminhos dos artefatos escritos e contagens. A camada 0 segue o
   roteamento do bloco da etapa.
+  **Seção `incidentes:` (obrigatória em todo `done`, regra 24a):** todo hospedeiro declara os
+  desvios entre o anunciado/configurado e o executado — ou literalmente `nenhum`. A camada 0
+  checa a presença: seção ausente → continue o mesmo subagente com instrução de reconciliação
+  (retorno sem `incidentes:` é retorno fora do contrato); item ≠ `nenhum` → grave um evento
+  `incidente` no run-log (1 linha por item) E repasse cada item ao despacho da Sub-rotina F —
+  o resumo executivo os narra em seção própria ("Incidentes da rodada"). Um incidente
+  declarado numa camada intermediária e não repassado é exatamente o padrão que já enganou o
+  dono 2× (onda 3 da F2 rl-representation 30/07; execução serial da F20 oxmuscle 02/08, em
+  que a camada 0 afirmou o oposto do que a camada 1 registrou 6min depois).
 - **`needs_decision`** — o subagente esbarrou numa decisão que não é dele. Antes de
   devolver, ele **gravou todo o progresso em disco** (regra de ouro dos arquivos de prompt) e
   devolveu a pergunta mastigada (opções + tradeoffs + `recomendacao` + `reversivel`). A camada 0
@@ -976,10 +985,13 @@ disco, que é a fonte de verdade):
   resposta_verbatim: "<a resposta dele, palavra por palavra>"
   ```
 
-  O `ts` é o timestamp REAL da resposta — copie do transcript ou rode `date -Iseconds` no
-  ato do registro. NUNCA aproximação ou placeholder (caso real F21, 28/07: um registro foi
-  gravado com `ts: 2026-07-28T05:2x-03:00` literal no `NN-DECISOES.md` — campo de
-  proveniência com valor inventado corrói a confiança do bloco inteiro).
+  O `ts` é o timestamp REAL da resposta, e o preenchimento é MECÂNICO, nunca de cabeça:
+  rode `date -Iseconds` (Bash) no ato do registro e cole a saída — digitá-lo de memória é
+  proibido mesmo quando você "sabe" a hora (minuto redondo `:00` é red flag de placeholder).
+  NUNCA aproximação ou placeholder (caso real F21, 28/07: `ts: 2026-07-28T05:2x-03:00`
+  literal no `NN-DECISOES.md`; caso real F20-ox, 02/08: `ts: …T14:58:00-03:00` gravado para
+  uma resposta que o transcript prova às 14:52:08 — campo de proveniência com valor
+  inventado corrói a confiança do bloco inteiro).
 
   A contraparte — a regra de autoridade que faz o bloco funcionar — vive nos prompts das
   etapas que tocam checkpoint bloqueante (`prompts/execute.md`): só este bloco fecha um

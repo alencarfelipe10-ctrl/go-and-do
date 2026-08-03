@@ -77,6 +77,15 @@ despachar — não re-cheque.
    aviso só no stderr) — parecer vazio conta como revisor falho naquele ciclo, não como
    "sem achados". E **jamais** `--dangerously-skip-permissions`: o auto-deny de escrita
    do headless é a garantia de leitura-apenas do revisor.
+   **Canário de leitura do agy (obrigatório, por ciclo — mesma mecânica do
+   `prompts/intent.md` 4b):** antes de cada ciclo, grave um nonce em
+   `<phase_dir>/pareceres/.prova-leitura-c<k>.txt` e instrua no briefing que o parecer
+   transcreva o token na 1ª linha (`prova_leitura: <token>`) — o valor do nonce nunca
+   vai no prompt/briefing, só no arquivo. Token de volta = prova de leitura de disco;
+   ausente = o parecer conta como **corroboração**, não verificação independente
+   (registre `agy_prova_leitura: ausente` no ciclo + sino). O porquê (F20 oxmuscle,
+   02/08): 4 ciclos de parecer plausível com `.err` de 0 bytes — sem canário,
+   paráfrase do plano é indistinguível de leitura real.
    - Plano já existe (é o caso aqui — a Etapa 2 planejou) → ele pula o planejamento
      inicial e vai direto pra revisão cruzada.
    - O comando roda os ciclos sozinho (revisores externos criticam → replaneja →
@@ -108,6 +117,18 @@ despachar — não re-cheque.
      camada 0 checa antes), devolva `done` com `veredito: config_off`.
    - se a convergência só fechou no 4º ciclo (a margem pré-autorizada), registre em
      `sinos`: "teto padrão (3) estourado — 4º ciclo pré-autorizado resolveu".
+2b. **Anti-omissão em resumo de ciclo (obrigatório, a cada ciclo).** Um resumo de ciclo
+   (CYCLE_SUMMARY ou equivalente) é uma ALEGAÇÃO sobre o parecer bruto, não o parecer.
+   A cada ciclo, rode o piso mecânico sobre CADA parecer do ciclo:
+   `$HOME/.claude/skills/go-and-do/scripts/confere-ciclo.sh <parecer-bruto> <resumo-do-ciclo>`
+   (o resumo em arquivo — se ele só existe como texto de retorno, grave-o em /tmp antes).
+   Exit 1 (há `NAO-COBERTO`) → **leia o parecer bruto na íntegra** antes de aceitar o
+   resumo, e recupere o que faltou. E mesmo com exit 0, a leitura do bruto é obrigatória
+   quando o resumo REDUZ a contagem (menos achados que o parecer aparenta, ou série em
+   queda de um ciclo para o outro) — o script é piso, não teto: achado em prosa pura é
+   indetectável por padrão (foi assim que um HIGH real sumiu do resumo do ciclo 2 na
+   F20-ox, 02/08, e só voltou porque alguém leu o bruto por iniciativa — regra existe
+   para não depender de iniciativa). Omissão recuperada entra em `incidentes:`.
 3. **Convergiu → grave o marcador durável** `<phase_dir>/NN-CONVERGENCE.md` com
    frontmatter: `convergence: done` · `ciclos: <n>` · `revisores_efetivos: [...]` (+ os
    `sinos`, se houver) e, no corpo, 1 linha por correção aplicada. Commite
@@ -187,6 +208,7 @@ correcoes: [<1 linha por correção relevante aplicada ao plano; ausente se nenh
 revisores_efetivos: [codex, agy]   ← só os que revisaram de fato
 tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (replans, checkers); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
 impasse: <só no escalou: o travamento em ≤5 linhas — posições e o ponto de discórdia>
+incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido; sem desvio, escreva literalmente: nenhum>]
 sinos: [<ex.: "agy indisponível (stdout vazio) — revisão Codex-only"; ausente se vazio>]
 ```
 

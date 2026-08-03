@@ -2,6 +2,49 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.7.0] — 2026-08-03
+
+Fixes da auditoria da F20 do oxmuscle-v2 (relatório `020826-oxmuscle-f20-pausa.md`),
+aprovados pelo dono item a item em 03/08. O fio comum: incidente e leitura provados por
+mecânica, nunca por confiança — e a decisão de degradar deixa de ser de quem degrada.
+
+### Adicionado
+
+- **Seção `incidentes:` obrigatória (regra 24a)** em todo retorno `done` dos 9 contratos
+  de camada 1 (`prompts/*.md`): todo desvio entre o anunciado/configurado e o executado,
+  ou literalmente `nenhum`. Camada 0 (workflow.md): seção ausente = retorno fora do
+  contrato (reconciliação); item ≠ `nenhum` → evento `incidente` no run-log + seção
+  "Incidentes da rodada" no resumo executivo. Gatilho: 2ª ocorrência de incidente preso
+  em camada intermediária (F2-rlr 30/07; F20-ox 02/08 — camada 0 anunciou "sem degradação
+  de paralelismo" e a camada 1 registrou execução serial 6min depois, sem o dono saber).
+- **Canário de leitura do agy** (`prompts/intent.md` 4b + `prompts/convergence.md`): nonce
+  gravado em `pareceres/.prova-leitura-cN.txt` (nunca no prompt/briefing); o parecer
+  transcreve `prova_leitura: <token>` na 1ª linha. Token de volta = prova mecânica de
+  leitura de disco; ausente = parecer ponderado como corroboração
+  (`agy_prova_leitura: ausente` + sino). Motivo: F20-ox — 4 ciclos de parecer plausível
+  com `.err` de 0 bytes e caminho inexistente citado.
+- **`scripts/confere-ciclo.sh`** — piso mecânico anti-omissão em resumo de ciclo: extrai
+  do parecer bruto os achados estruturais (severidade, IDs `cN-XN`, refs arquivo:linha) e
+  confere rastro no CYCLE_SUMMARY; `NAO-COBERTO` (exit 1) → leitura obrigatória do bruto.
+  Fiado na convergência (passo 2b), com a regra complementar: resumo que REDUZ contagem
+  também obriga a leitura (o HIGH omitido do ciclo 2 da F20-ox estava em prosa pura —
+  indetectável por grep; o script é piso, não teto).
+- **Evidência de máquina do P7** (`tools/notify-telegram.sh`): todo disparo grava
+  `{"evento":"notify",ts,tipo,silencioso,enviado_ok}` em `NN-NOTIFICACOES.jsonl` ao lado
+  do run-log da fase ativa — 2 auditorias seguidas ficaram `sem_evidencia` com o hook
+  funcionando.
+
+### Modificado
+
+- **Paralelismo por wave vira mandato** (`prompts/execute.md`): a camada 1 perde a
+  autoridade de serializar — precedente histórico ("validado na fase X") não autoriza;
+  necessidade de serial → `needs_decision` à camada 0; fixture gitignored → declarar em
+  `.planning/worktree-fixtures.txt` e copiar, nunca serializar. Serialização de fato,
+  por qualquer caminho, entra obrigatoriamente em `incidentes:`.
+- **`ts` dos blocos DECISAO-DO-DONO é mecânico** (workflow.md): `date -Iseconds` colado
+  no ato — digitá-lo de memória é proibido (2º caso real de placeholder: F20-ox com
+  minuto redondo e ~6min de desvio contra o transcript).
+
 ## [1.6.0] — 2026-08-01
 
 Fixes da auditoria da retomada da F2 do rl-representation (relatório
