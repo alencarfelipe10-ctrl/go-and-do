@@ -2,6 +2,58 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.8.0] — 2026-08-03
+
+Dieta v2 da etapa de intenção, derivada da auditoria temática da F20 do oxmuscle-v2
+(relatório `030826-oxmuscle-f20-intencao.md`: v1.5.0 validada com custo $48→$35; alavancas
+restantes = coordenador com 53% do cache read e ~27min de espera serial de lane).
+Aprovada pelo dono item a item em 03/08. Estimativa: ~$35→~$24–28 e 1h49→~1h10–1h25 por
+etapa de intenção de 4–5 ciclos; validação = próxima fase real (tarefa 28 da evolução).
+
+### Adicionado
+
+- **Pipeline lane→verificador** (`prompts/intent.md` passos 4–5): as lanes Codex/agy saem
+  em background num único bloco Bash, cada uma com marcador de término
+  `pareceres/.done-cN-<lane>`; nos ciclos 1–2 UM `gad-verificador` é despachado
+  imediatamente, espera o marcador do Codex (chega primeiro), verifica esse parecer
+  enquanto o agy termina e incorpora o do agy depois — a espera de lane fica sobreposta à
+  verificação. Nunca um 2º verificador para o parecer atrasado (contexto novo = custo;
+  objeção do dono). Lane sem marcador no deadline → `sem_parecer` + regra de degradação
+  existente. Única exceção ao "sempre síncrono" — só para o Bash das lanes, nunca `Agent`.
+- **Freio de cauda** (passo 6, decisão do dono 2026-08-03): encerra o loop quando 2 ciclos
+  consecutivos devolvem ≤1 novo confirmado cada, nenhum CRÍTICO/ALTO, e todos são
+  refinamento de tema já tratado. Um único CRÍTICO/ALTO ou frente nova desarma. Registro
+  obrigatório em `motivo_encerramento` com a série e os ciclos restantes. (Medição F20-ox:
+  os ciclos 4–5 custaram ~11min/US$3 para devolver 1 reformulação cada.)
+- **Verificação inline nos ciclos magros** (passo 5): ciclos 3+ com ≤2 achados brutos
+  (contados pelo piso mecânico) são verificados inline pelo coordenador, mesmo protocolo
+  do `intent-verifica.md`, com `verificacao_inline_cN` em `transparencia:` — formaliza o
+  que a F20-ox fez espontaneamente no ciclo 5.
+- **`confere-ciclo.sh --tabela`**: emite o esqueleto dos achados estruturais dos pareceres
+  (lane · linha · trecho) — piso de enumeração da fusão: cada linha precisa de destino na
+  tabela final do ciclo. O `intent-verifica.md` parte dele (passo 1 novo).
+- **`motivo_encerramento:`** no frontmatter do `NN-INTENT-REVIEW.md` (passo 7): contagem
+  zerou · teto de 5 · freio de cauda — com a série.
+
+### Corrigido
+
+- **Extração de achados do `confere-ciclo.sh` estava cega para o formato real dos
+  pareceres**: a heurística da v1.7.0 (severidade em maiúsculas, IDs `cN-XN`) detectava
+  **0 achados** nos 10 pareceres reais da F20-ox (headings `### 1. …`, `### Achado N:`,
+  `### C3-1 —`, severidade minúscula). Refatorada para heading-first com fallback
+  case-insensitive; validada retroativamente nos 5 ciclos reais: 47/12/6/4/5 achados
+  estruturais por ciclo, sempre ≥ os 26/10/2/1/1 fundidos (piso sem furo por baixo).
+  Vale para os dois modos (anti-omissão e `--tabela`).
+
+### Alterado
+
+- **Dieta do coordenador de intenção** (`prompts/intent.md`): teto de ≤4 turnos por ciclo
+  (batching — o histórico do coordenador foi 53% do cache read da etapa na F20-ox);
+  do ciclo 2 em diante é proibido reler SPEC/CONTEXT integrais — o "o que mudou" do
+  briefing vem do próprio registro de triagem + `git diff`, trecho pontual via `sed -n`.
+- **`intent-verifica.md`**: modo pipeline (passo 0 — espera por marcadores com deadline,
+  Codex primeiro) + piso mecânico `--tabela` antes da leitura (passo 1).
+
 ## [1.7.0] — 2026-08-03
 
 Fixes da auditoria da F20 do oxmuscle-v2 (relatório `020826-oxmuscle-f20-pausa.md`),
