@@ -33,10 +33,10 @@ SEV='HIGH|MEDIUM|LOW|CRITICAL|BLOCKER|ALTA|ALTO|M[ÉE]DIA|M[ÉE]DIO|BAIXA|BAIXO|
 # com severidade (qualquer caixa) ou IDs cN-XN. Prosa pura segue indetectável.
 extrai_achados() {
   local f="$1" h
-  h=$(grep -nE '^#{3,4} +(Achado +)?[0-9]+[.:][^0-9]' "$f" \
+  h=$(grep -nE '^#{3,4} +(Achado +)?([0-9]+[.:][^0-9]|[Cc][0-9]+-[0-9]+)' "$f" \
     | grep -viE '^[0-9]+:#{3,4} +[0-9.]*\s*(pontos? fortes|strengths|sugest|suggestion)')
   if [ -n "$h" ]; then printf '%s\n' "$h"; return; fi
-  grep -inE "(^#{2,4} .*\\[?(${SEV})|^[*-] .*\`?\\*{0,2}(${SEV})|c[0-9]+-[a-z]+[0-9]*)" "$f" \
+  grep -inE "(^#{2,4} .*\\[?(${SEV})|^[*-] .*\`?\\*{0,2}(${SEV})|c[0-9]+-([a-z]+)?[0-9]+)" "$f" \
     | grep -viE '^\s*[0-9]+:\s*(#{2,4} )?[0-9.]*\s*(pontos? fortes|strengths|sugest|suggestion)'
 }
 
