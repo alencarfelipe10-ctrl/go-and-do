@@ -55,7 +55,11 @@ Regras do despacho, iguais para todos:
 
 **Batching.** Cada turno seu recusta o contexto inteiro em cache read. Quando várias
 ações não dependem umas das outras (ler 2 arquivos, rodar 3 greps, despachar os 2
-revisores), faça todas no MESMO turno.
+revisores), faça todas no MESMO turno. Na revisão adversarial, o alvo é **≤4 turnos
+seus por ciclo** (lançar lanes+canário · despachar/fazer verificação · triagem+aplicar
+correções · bookkeeping+briefing do próximo ciclo) — medido na F20-ox (02/08), o
+histórico do coordenador relido a cada turno foi 53% do cache read da etapa inteira;
+turno extra é o item mais caro desta janela.
 
 Quando um passo pedir o `gsd-tools`, cole este shim no início do bloco Bash (a função
 não sobrevive entre blocos):
@@ -192,10 +196,27 @@ Prepare a subpasta dos pareceres: `mkdir -p "<phase_dir>/pareceres"`.
      (alta/média/baixa) e severidade estimada. Não filtre por severidade — a triagem é
      do verificador."
    - No ciclo 2+: o que mudou desde o ciclo anterior e os achados já resolvidos (pra
-     ele não repetir).
-4. **Rode os dois revisores no MESMO turno** (leitura apenas; resposta final em
-   arquivo; Bash a partir do `project_root`). O mesmo briefing serve aos dois. Os
-   pareceres são artefatos da fase: salve-os como
+     ele não repetir). **Fonte do "o que mudou": o seu próprio registro de triagem do
+     ciclo anterior (as correções que VOCÊ aplicou) + `git diff` dos artefatos se algo
+     foi commitado — NUNCA a releitura integral do SPEC/CONTEXT.** Você os leu inteiros
+     uma vez (passo 1); do ciclo 2 em diante, reler os ~100KB dos dois por ciclo é o
+     desperdício nº 2 da janela (F20-ox, 02/08). Precisa conferir um trecho pontual?
+     `sed -n 'X,Yp'` na seção, não Read do arquivo.
+4. **Lance os dois revisores em background, num único bloco Bash** (leitura apenas;
+   resposta final em arquivo; Bash a partir do `project_root`, `run_in_background:
+   true`). O mesmo briefing serve aos dois. Molde do bloco — cada lane ganha um
+   **marcador de término** (é ele que o verificador espera; o `.md` pode existir
+   incompleto enquanto a lane escreve):
+   ```bash
+   ( <comando codex do 4a> ; touch "<phase_dir>/pareceres/.done-c<C>-codex" ) &
+   ( <comando agy do 4b>   ; touch "<phase_dir>/pareceres/.done-c<C>-agy" ) &
+   wait
+   ```
+   (Esta é a ÚNICA exceção ao "sempre síncrono" do `<environment>` — vale só para o
+   Bash das lanes externas, nunca para despachos `Agent`. Canário e watermark do agy
+   continuam ANTES do lançamento; a coleta de evidência de modelo — banner do stderr,
+   grep do transcript — fica para DEPOIS, no mesmo turno do bookkeeping do ciclo.)
+   Os pareceres são artefatos da fase: salve-os como
    `<phase_dir>/pareceres/NN-parecer-codex-c<C>.md` e
    `<phase_dir>/pareceres/NN-parecer-agy-c<C>.md` (`C` = número do ciclo), commitados
    no passo 7 — parecer persistido é o que torna a triagem reabrível (pareceres em
@@ -275,13 +296,35 @@ Prepare a subpasta dos pareceres: `mkdir -p "<phase_dir>/pareceres"`.
    recebido, verificado e aplicado), registre `intent_review: done` com a ressalva
    `ciclo_final_nao_rodou` no frontmatter + em `sinos` — parar aí jogaria fora uma
    revisão que já cumpriu o papel.
-5. **Verificação — desce para o filho.** Despache **`gad-verificador`** com o arquivo
-   de instruções `prompts/intent-verifica.md`, passando: os caminhos dos pareceres
-   deste ciclo, os caminhos do SPEC/CONTEXT, o ciclo `C` e — do ciclo 2 em diante — o
-   caminho do `NN-INTENT-REVIEW.md` parcial. O filho funde, deduplica, classifica cada
-   achado (`novo`/`reformulado`/`reaberto`), roda o spot-check determinístico de
-   ponteiros e verifica cada achado contra o código, devolvendo a tabela de vereditos.
-   **Você NÃO relê os pareceres** — a triagem trabalha sobre a tabela do filho.
+5. **Verificação — a rota depende da fase do loop** (medição F20-ox 02/08: o ciclo 1
+   custou 36min com ~10min de espera serial de lane; os ciclos 3+ trouxeram 1–2
+   achados cada e o filho custou mais que a verificação).
+
+   **Ciclos 1–2 (pareceres gordos) — pipeline:** despache **`gad-verificador`**
+   IMEDIATAMENTE após lançar as lanes (mesma sequência de turno), com o arquivo de
+   instruções `prompts/intent-verifica.md`, passando: os caminhos dos pareceres e dos
+   marcadores `.done-c<C>-*` deste ciclo, um deadline de espera (12 min), os caminhos
+   do SPEC/CONTEXT, o ciclo `C` e — do ciclo 2 em diante — o caminho do
+   `NN-INTENT-REVIEW.md` parcial. O filho espera o marcador do Codex (chega primeiro),
+   verifica esse parecer enquanto o agy termina, depois incorpora o do agy — a espera
+   de lane fica sobreposta à verificação, num despacho só (despachar um 2º verificador
+   para o parecer atrasado custa um contexto novo inteiro — não faça). Marcador que não
+   chegou no deadline → o filho devolve a lane como `sem_parecer` e você aplica a regra
+   de degradação do passo 4.
+
+   **Ciclos 3+ (série já em queda) — decida pelo volume:** aguarde as lanes (curtas a
+   essa altura; use o mesmo turno para adiantar bookkeeping) e conte os achados brutos
+   dos pareceres pelo piso mecânico (`confere-ciclo.sh --tabela`, abaixo). **≤2 brutos
+   no total → verifique inline você mesmo**, seguindo o protocolo do
+   `intent-verifica.md` (classificar contra o histórico, spot-check, veredito com
+   evidência própria), e registre `verificacao_inline_c<C>` em `transparencia:`.
+   3+ brutos → despache o filho como nos ciclos 1–2.
+
+   Em ambas as rotas o produto é o mesmo: fusão, dedup, classe
+   (`novo`/`reformulado`/`reaberto`), spot-check determinístico e veredito por achado.
+   **Você NÃO relê os pareceres** quando o filho roda — a triagem trabalha sobre a
+   tabela devolvida; o piso anti-omissão é o `confere-ciclo.sh` (v1.7.0), não a sua
+   releitura.
 
    **Triagem (sua alçada, achado a achado sobre os `confirmado`):**
    - **Correção factual** (o auto-decisor errou sobre um fato checável) → corrija o
@@ -306,15 +349,25 @@ Prepare a subpasta dos pareceres: `mkdir -p "<phase_dir>/pareceres"`.
      CAINDO em relação ao ciclo anterior · E há ciclo no teto.
    - **Encerre** quando a contagem chegar a 0 (nenhum revisor trouxe achado novo que se
      sustente) · OU ao atingir o teto de 5.
+   - **Freio de cauda (decisão do dono, 2026-08-03):** encerre também quando **2 ciclos
+     consecutivos** devolveram **≤1 novo confirmado cada**, **nenhum deles de
+     severidade CRÍTICA/ALTA**, e todos são refinamento/reformulação de tema já tratado
+     (não uma frente nova). Régua estrita: um único CRÍTICO/ALTO, ou um achado que abre
+     frente nova, desarma o freio e o ciclo seguinte roda. Registre no frontmatter
+     `motivo_encerramento: "freio de cauda (ciclos X-Y: ...)"` + a ressalva honesta de
+     quantos ciclos restavam até o teto. (Medição F20-ox: os ciclos 4–5 custaram
+     ~11min/US$3 para devolver 1 reformulação cada — é essa cauda que o freio corta.)
    - **Estagnou ou subiu** (novos confirmados ≥ ciclo anterior) → não queime o ciclo
      seguinte: devolva o impasse via `<business_pause>`, com as saídas possíveis como
      opções.
    Esses freios são a lista completa: o seu juízo de que "o revisor não teria mais o
-   que achar" (oráculo exaurido) não encerra o loop — com correção aplicada, contagem
+   que achar" (oráculo exaurido) não encerra o loop — o freio de cauda é uma régua
+   mecânica sobre a série, não um juízo; fora dela, com correção aplicada, contagem
    caindo e ciclo no teto, o ciclo seguinte roda.
 7. **Escreva o `<phase_dir>/NN-INTENT-REVIEW.md`** com frontmatter:
    `intent_review: done` · `revisores_efetivos: [...]` (só os que revisaram de fato) ·
    `codex_model_evidencia:` / `agy_model_evidencia:` (dos que rodaram) · `ciclos: N` ·
+   `motivo_encerramento:` (contagem zerou · teto de 5 · freio de cauda — com a série) ·
    `achados_confirmados: N` · `achados_descartados: N` · `pausas_de_negocio: N` ·
    `transparencia:` (a lista do 3º destino — é daqui que o resumo executivo lê). No
    corpo: a contagem de novos confirmados POR CICLO (é ela que audita a convergência) e

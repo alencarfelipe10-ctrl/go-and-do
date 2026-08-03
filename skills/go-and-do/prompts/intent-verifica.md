@@ -12,7 +12,23 @@ Bash com `cd "<project_root>"`.
 
 ## Trabalho
 
-1. **Leia os pareceres do ciclo e funda-os.** O mesmo achado apontado pelos dois
+0. **Modo pipeline (quando o despacho traz marcadores `.done-c<C>-*` e um deadline).**
+   As lanes ainda podem estar rodando — o `.md` do parecer só vale quando o marcador da
+   lane existir. Espere primeiro o do Codex (chega antes) com um loop barato num único
+   Bash (`until [ -f <marcador> ] ...; do sleep 15; done`, teto = deadline) e execute
+   os passos 1–4 sobre esse parecer enquanto o agy termina; depois espere o marcador do
+   agy e incorpore o parecer dele (funda com o que você já verificou — só os achados
+   que ele acrescenta ou corrobora geram trabalho novo). Marcador que não chegou no
+   deadline, ou `.md` vazio com marcador presente → devolva a lane no retorno como
+   `sem_parecer: <lane>` e siga com o que tem — a regra de degradação é de quem te
+   despachou, não sua.
+
+1. **Piso mecânico antes de ler:** rode
+   `$HOME/.claude/skills/go-and-do/scripts/confere-ciclo.sh --tabela <parecer(es)>` —
+   ele extrai o esqueleto dos achados estruturais (lane · linha · severidade). Sua
+   fusão parte desse esqueleto: cada linha dele precisa de destino na sua tabela final
+   (é o piso anti-omissão; prosa sem marcador o script não vê — a sua leitura cobre o
+   resto). **Leia os pareceres do ciclo e funda-os.** O mesmo achado apontado pelos dois
    revisores vira UMA entrada com `fontes: [codex, agy]` — convergência independente de
    dois modelos é sinal de força; anote-a.
 2. **Classifique cada achado contra o histórico** (ciclo 2+, lendo a tabela do
