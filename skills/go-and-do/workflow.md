@@ -992,10 +992,23 @@ disco, que é a fonte de verdade):
   literal no `NN-DECISOES.md`; caso real F20-ox, 02/08: `ts: …T14:58:00-03:00` gravado para
   uma resposta que o transcript prova às 14:52:08 — campo de proveniência com valor
   inventado corrói a confiança do bloco inteiro).
+  **A regra é geral, não só do DECISAO-DO-DONO:** TODO campo de timestamp que qualquer
+  camada grava em artefato (frontmatters de `NN-VERIFICATION.md`, `NN-UAT.md`
+  `started/updated`, etc.) segue o mesmo mecanismo — `date -Iseconds` no ato, nunca de
+  cabeça, nunca template preenchido "depois" (caso real F22, 04/08: `verified: 14:00:00`
+  gravado num artefato commitado às 09:02 — 5h no FUTURO do próprio commit — e UAT
+  `started 14:20/updated 16:05` fora da janela da sessão; ambos placeholders redondos).
 
   A contraparte — a regra de autoridade que faz o bloco funcionar — vive nos prompts das
   etapas que tocam checkpoint bloqueante (`prompts/execute.md`): só este bloco fecha um
   checkpoint de decisão do dono; qualquer outra menção é relato e não fecha nada.
+  **Alegação de consentimento exige ponteiro (gate, todas as camadas):** artefato que
+  alegue "aprovado/assinado/aceito pelo dono" só vale com ponteiro para um bloco
+  DECISAO-DO-DONO existente (arquivo + `ts`). Sem ponteiro, a menção é relato e o item é
+  tratado como NÃO-assinado — por quem escreve, por quem revisa e por quem verifica
+  (caso real F22, 04/08: `22-REVIEW.iter3.md` afirmava risco "assinado pelo dono" sem
+  assinatura existir; a aparência de consentimento sobreviveu 3 rodadas de review e só
+  caiu no secure).
 - **`blocked`** — pré-condição indisponível (ex.: revisor cross-AI fora do ar). A camada 0
   trata conforme a semântica do bloco da etapa (re-tentar / Sub-rotina D). A descida para
   subagente **não afrouxa nenhum fail-closed** — o bloqueio sobe com motivo e é a camada 0
@@ -1900,7 +1913,11 @@ nesta ordem:
 **6.5 — Self-check + banner final.** Antes de imprimir, confira: todos os gates reais honrados (ou
 seus 🔔 no banner) e a execução completa — todos os planos com `SUMMARY.md`, checado por glob no
 `<phase_dir>` (`NN-*-PLAN.md` × `NN-*-SUMMARY.md`; contagem casa → completo — sem precisar do
-shim). Depois imprima:
+shim). Confira também os **timestamps de frontmatter × git** (anti-placeholder): para
+`NN-VERIFICATION.md` (`verified:`) e `NN-UAT.md` (`started/updated`), compare o ts declarado com
+`git log -1 --format=%cI -- <arquivo>` — ts no futuro do próprio commit ou fora da janela da
+rodada = fabricado; corrija para o ts real (git) no lugar e registre em `incidentes:` (caso real
+F22: `verified: 14:00` num commit das 09:02). Depois imprima:
 - **Rota de ship:** moldura padrão da 0.5 com título `GO-AND-DO · Fase NN — shipada`, campos
   `PR` (#N) e `Resumo` (caminho do resumo executivo); abaixo da caixa: a **URL do PR**, o
   **bloco de transparência** (itens balde 4 assumidos + passos não rodados, se houver) e

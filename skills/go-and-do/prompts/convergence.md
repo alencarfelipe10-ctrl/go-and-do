@@ -55,7 +55,12 @@ despachar — não re-cheque.
    `head -8` nele — as linhas do banner (versão, `workdir:`, `model:`, `provider:`; ficam
    no INÍCIO do stderr; `tail` mostra só o fim do parecer) vão **copiadas verbatim** para
    o registro do ciclo (campo `codex_model_evidencia:` no REVIEWS/CONVERGENCE) — citação
-   literal, não paráfrase nem só o nome do modelo. O porquê: o `.err` vive no scratchpad
+   literal, não paráfrase nem só o nome do modelo. **A evidência durável é o banner
+   copiado, NUNCA o `.err` inteiro no git:** ao commitar pareceres, adicione só
+   `NN-parecer-*.md` (caminhos explícitos) — jamais `git add` de diretório nem dos
+   `.err`/`.done-*`/`.prova-leitura*` (caso real F22, 04/08: ~1,6MB de stderr bruto
+   foram commitados como "evidência", inflando o histórico sem ganho — o banner no
+   REVIEWS já é a prova). O porquê: o `.err` vive no scratchpad
    efêmero (`/tmp`) e evapora — o artefato durável precisa carregar a prova em si (caso
    real, F16 oxmuscle 23/07: o modelo foi declarado no REVIEWS mas a prova bruta ficou só
    no `/tmp`). Autodeclarar `codex_model:` sem o banner não é evidência. E o registro é por ciclo, gravado no disco no fim DO CICLO
