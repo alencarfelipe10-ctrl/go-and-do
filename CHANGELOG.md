@@ -2,6 +2,55 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.8.2] — 2026-08-04
+
+Enforcement da dieta v2 (v1.8.0) + captura de evidência de modelo do agy. Pacote da
+auditoria temática da intenção da F22 (`040826-inspired-f22-intencao.md`): a dieta
+executou pela metade porque as réguas de custo eram prosa — esta release as torna
+mecânicas. Decisão do dono (04/08): **endurecer** a rota inline, não re-calibrar.
+
+### Adicionado
+
+- **`scripts/confere-rotas.sh`** — enforcement fail-closed da rota de verificação:
+  cruza `.tabela-cN.txt` (piso mecânico) × `.verificador-cN.done` (prova de que o
+  `gad-verificador` rodou); ciclo com ≥3 brutos sem verificador = `VIOLACAO`, ciclo
+  sem tabela = `SEM-TABELA`, exit 1. Roda 2×: no passo 7b do `intent.md` (o coordenador
+  não devolve `done` com violação — despacha verificação retroativa) e no item 9b do
+  `workflow.md` (a camada 0 confere de novo antes de aceitar o `done`). Desenho
+  deliberado: o atalho fica mais caro que a rota certa. Validado contra a F22 real
+  (acusa exatamente c3 e c4; c1/c2/c5 ok).
+- **`scripts/conta-turnos.py`** — medição determinística dos turnos do coordenador por
+  ciclo (fronteiras = mtime dos nonces `.prova-leitura-cN.txt`; turno = mensagem
+  assistant com tool_use) + taxa de batching. Estouro do teto de 4 vira evento
+  `incidente` no run-log, com o número. Validado contra a F22 real (reproduz os
+  estouros e o batching 1.0/turno).
+- **`intent-verifica.md` grava `.verificador-cN.done`** como último ato — a prova de
+  máquina que o `confere-rotas.sh` exige.
+
+### Mudado
+
+- **Rota inline endurecida (`intent.md` passo 5):** a `.tabela-cN.txt` é obrigatória
+  em TODO ciclo (a contagem de brutos vem dela, nunca da leitura do modelo — contagem
+  autorreportada foi o furo dos c3–c5 da F22); com 3+ brutos o `gad-verificador` é
+  obrigatório SEM exceção — "consciente por custo de contexto" deixou de ser rota
+  válida (o verificador custa ~1,5M cache read ≈ US$0,75/ciclo, medido).
+- **Evidência de modelo do agy — canal novo, provado em 04/08** (`intent.md` 4b e
+  `convergence.md`): `--log-file` por ciclo fixa o log da invocação; a prova é a linha
+  `model_config_manager.go:311] Propagating selected model override to backend`
+  (timestampada, pós-auth), corroborada pelo step 0 do brain localizado pelo conv-id
+  extraído DO LOG — nunca de `cache/last_conversations.json` (cada `agy -p` cria
+  conversa nova; o cache aponta a run mais recente do workspace — a armadilha que
+  cegou a F22). `.err` de 0 bytes do agy é NORMAL (glog não vai ao stderr), não
+  degradação; o cheque `agy --continue` foi abolido (mesma armadilha). Limitação
+  declarada: prova o modelo selecionado/propagado pelo processo, não o servido.
+- **`spot-check-ponteiros.sh` multi-root** — caminho relativo tentado em cada raiz
+  passada; `MISSING-FILE` só se ausente em todas (F22: falsos-positivos em massa com
+  docs citando repo + transcrições; validado: 22-CONTEXT 39/44→44/44 limpo, restos do
+  SPEC = ponteiros genuinamente quebrados).
+- **Teto de ≤4 turnos/ciclo agora é medido** (`intent.md`): o `conta-turnos.py` roda
+  no fecho da etapa (camada 0); estouro = incidente auditável. O freio estrutural é a
+  rota do verificador — medição não bloqueia, torna visível.
+
 ## [1.8.1] — 2026-08-04
 
 Seis correções derivadas da auditoria da F22 do grupo-inspired (relatório

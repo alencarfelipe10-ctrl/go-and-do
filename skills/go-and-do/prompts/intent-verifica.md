@@ -55,6 +55,11 @@ Bash com `cd "<project_root>"`.
      SPEC/CONTEXT (ou achado anterior) onde está coberto.
 5. Você **não** decide destino (correção factual × pausa de negócio × transparência) —
    isso é alçada de quem te despachou. Seu produto termina no veredito.
+6. **Prova de máquina de que você rodou (v1.8.2):** como último ato antes do retorno,
+   `touch <pareceres_dir>/.verificador-c<C>.done` — é este marcador que o
+   `confere-rotas.sh` cruza com a `.tabela-c<C>.txt` no fecho da etapa para provar que
+   a rota de verificação independente foi respeitada. Só grave DEPOIS de os vereditos
+   estarem prontos; marcador sem trabalho é fabricação de evidência.
 
 ## Retorno (obrigatório, sem prosa antes ou depois)
 

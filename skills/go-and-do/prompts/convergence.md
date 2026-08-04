@@ -67,17 +67,27 @@ despachar — não re-cheque.
    (apêndice no `NN-REVIEWS.md`) — não só no fecho: uma convergência que não fecha
    (caso real 21/07: ~100min sem `NN-CONVERGENCE.md`) não pode deixar os ciclos que
    rodaram sem rastro de modelo em artefato.
-   **Evidência de modelo do agy (por ciclo, mesmo rigor):** o agy não tem banner de
-   stderr — o análogo é o bloco `<USER_SETTINGS_CHANGE>` que o CLI injeta na linha 1 do
-   transcript do run (`~/.gemini/antigravity-cli/brain/<conv-id>/.system_generated/logs/transcript.jsonl`;
-   conv-id do workspace em `cache/last_conversations.json`). Anote a contagem de linhas
-   do transcript ANTES do ciclo (watermark) e, depois, `grep -o 'Model Selection.[^.]*'`
-   nas linhas novas → `agy_model_evidencia:`. Bloco ausente = o `--model` não pegou =
-   sem evidência → `sinos`, nunca autodeclaração. **Modelo errado = revisor degradado:**
+   **Evidência de modelo do agy (por ciclo, mesmo rigor — canal novo v1.8.2, provado
+   em 04/08):** o agy não tem banner de stderr (o glog vai para o próprio log — por
+   isso **`.err` de 0 bytes é NORMAL do agy, nunca sinal de degradação**; diagnóstico
+   de falha usa o log, não o `.err`). Fixe o log da invocação com
+   `--log-file <phase_dir>/pareceres/NN-agy-c<k>.log` (probe `agy --help 2>&1`; sem a
+   flag, fallback = `~/.gemini/antigravity-cli/log/cli-*.log` do segundo do lançamento,
+   com sino pela fragilidade; o `.log` não vai no git). A prova:
+   `grep -E 'printmode.go:120|model_config_manager.go:311'` no log — a linha
+   `Propagating selected model override to backend: label="..."` → `agy_model_evidencia:`.
+   Corroboração: conv-id extraído do próprio log (NUNCA de
+   `cache/last_conversations.json` — cada `agy -p` cria conversa nova e o cache aponta
+   a run mais recente do workspace, não a sua: foi a armadilha que cegou a F22) → step
+   0 do brain (`brain/<conv-id>/.system_generated/logs/transcript.jsonl`) com
+   `created_at` + label + path do briefing. Linha ausente = o `--model` não pegou =
+   sem evidência → `sinos`, nunca autodeclaração. Limitação declarada: prova o modelo
+   selecionado/propagado pelo processo, não o servido pelo servidor. **Modelo errado = revisor degradado:**
    evidência mostrando modelo ≠ configurado (ex.: `Gemini 3.5 Flash` no lugar do 3.1
    Pro — fallback silencioso provado 3x na F16-ox 23/07) → o ciclo conta como revisor
-   FALHO com sino, nunca como parecer válido. Cheque extra na dúvida:
-   `agy --continue --print "Qual modelo de LLM você é?"`. **Critério de falha do agy é
+   FALHO com sino, nunca como parecer válido. (O cheque `agy --continue` foi ABOLIDO na
+   v1.8.2: `--continue` retoma a conversa mais recente do workspace, que pode não ser a
+   sua — mesma armadilha do cache.) **Critério de falha do agy é
    stdout vazio, não o exit code** (verificado 2026-07-22: rc=0 com zero output e o
    aviso só no stderr) — parecer vazio conta como revisor falho naquele ciclo, não como
    "sem achados". E **jamais** `--dangerously-skip-permissions`: o auto-deny de escrita

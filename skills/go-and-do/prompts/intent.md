@@ -59,7 +59,12 @@ revisores), faça todas no MESMO turno. Na revisão adversarial, o alvo é **≤
 seus por ciclo** (lançar lanes+canário · despachar/fazer verificação · triagem+aplicar
 correções · bookkeeping+briefing do próximo ciclo) — medido na F20-ox (02/08), o
 histórico do coordenador relido a cada turno foi 53% do cache read da etapa inteira;
-turno extra é o item mais caro desta janela.
+turno extra é o item mais caro desta janela. **Desde a v1.8.2 isso é MEDIDO, não
+confiado** (F22, 04/08: a régua em prosa rendeu 12-12-9-9-2 turnos com 1 tool_use por
+turno — zero batching): o orquestrador roda `conta-turnos.py` sobre o seu transcript
+no fecho da etapa e cada ciclo acima de 4 vira evento `incidente` no run-log com o
+número. A defesa é estrutural, não de força de vontade: agrupe as chamadas
+independentes e deixe a verificação com o `gad-verificador` (rota do passo 5).
 
 Quando um passo pedir o `gsd-tools`, cole este shim no início do bloco Bash (a função
 não sobrevive entre blocos):
@@ -236,11 +241,14 @@ Prepare a subpasta dos pareceres: `mkdir -p "<phase_dir>/pareceres"`.
 
    **4b. Antigravity (agy)** — mesma missão, outro cérebro. Invariantes (todos
    verificados empiricamente, 2026-07):
-   - **Watermark do transcript ANTES de invocar** — o agy persiste tudo em
-     `~/.gemini/antigravity-cli/brain/<conv-id>/.system_generated/logs/transcript.jsonl`
-     (conv-id em `~/.gemini/antigravity-cli/cache/last_conversations.json`); anote o
-     conv-id e a contagem de linhas. Sem watermark, um fallback leria resposta VELHA de
-     outro run.
+   - **Log fixado por invocação (v1.8.2 — substitui o watermark por
+     `last_conversations.json`, a armadilha que cegou a F22):** cada `agy -p` cria uma
+     conversa NOVA; o `last_conversations.json` aponta a run MAIS RECENTE do workspace,
+     não a sua — quem olha por ele observa o brain errado, parado. Em vez disso, fixe o
+     log da SUA invocação com a flag nativa: acrescente
+     `--log-file <phase_dir>/pareceres/NN-agy-c<C>.log` ao comando. O conv-id da run
+     sai DESSE log (regex de UUID), e o brain correspondente é
+     `~/.gemini/antigravity-cli/brain/<conv-id>/.system_generated/logs/transcript.jsonl`.
    - **Prompt curto por referência** — briefing longo inline no `-p` estoura o limite
      de argumento (rc 126). O prompt aponta o arquivo: `"Read the file at <briefing.md>
      in full and carry out the review request it contains. The repository under review
@@ -257,7 +265,11 @@ Prepare a subpasta dos pareceres: `mkdir -p "<phase_dir>/pareceres"`.
      `permissions.allow` no `~/.gemini/antigravity-cli/settings.json` — nunca a flag.
 
    O comando (timeout de 600000; o killer externo cobre o stall pré-sessão):
-   `timeout 600 agy --agent revisor-gsd --print-timeout 540s --model "Gemini 3.1 Pro (High)" --add-dir "<project_root>" --add-dir "<dir_do_briefing>" -p "<prompt curto>" </dev/null 2> <ciclo-agy.err> > <phase_dir>/pareceres/NN-parecer-agy-cC.md`
+   `timeout 600 agy --agent revisor-gsd --print-timeout 540s --model "Gemini 3.1 Pro (High)" --log-file "<phase_dir>/pareceres/NN-agy-cC.log" --add-dir "<project_root>" --add-dir "<dir_do_briefing>" -p "<prompt curto>" </dev/null 2> <ciclo-agy.err> > <phase_dir>/pareceres/NN-parecer-agy-cC.md`
+   (probe: se `agy --help 2>&1` não listar `--log-file`, omita a flag e caia no
+   fallback: o log da run é o `~/.gemini/antigravity-cli/log/cli-*.log` criado no
+   segundo do lançamento — resolução de segundo colide entre lanes; registre a
+   fragilidade em `sinos`. O `.log` do ciclo NÃO vai no git — mesma regra dos `.err`.)
    (`--model` explícito obrigatório; `--add-dir` dá ao revisor o repo — sem ele o agy
    revisa no vácuo. Probe: `agy --help 2>&1` — o `2>&1` é obrigatório, o help sai no
    STDERR; sem `--add-dir` listado, omita a flag, o prompt ancorado no path cobre.)
@@ -269,10 +281,17 @@ Prepare a subpasta dos pareceres: `mkdir -p "<phase_dir>/pareceres"`.
    registre em `sinos`: `agy sem revisor-gsd — rota legada sujeita a soft-deny`.
    **⚠️ Critério de falha do agy é STDOUT VAZIO, nunca o exit code** — o agy devolve
    rc=0 mesmo abortando sem produzir nada.
-   **Evidência de modelo (obrigatória, por run):** `grep -o 'Model Selection.[^.]*'
-   <transcript.jsonl>` nas linhas APÓS o watermark devolve `Model Selection from None
-   to Gemini 3.1 Pro (High)`; copie para o frontmatter (`agy_model_evidencia:`).
-   Ausência = sem evidência = registre em `sinos`, não invente.
+   **Evidência de modelo (obrigatória, por run — canal provado em 04/08):**
+   `grep -E 'printmode.go:120|model_config_manager.go:311' <NN-agy-c<C>.log>` — a linha
+   `Propagating selected model override to backend: label="..."` é o instante em que o
+   label vai ao backend, pós-auth, timestampado; copie-a para o frontmatter
+   (`agy_model_evidencia:`). Corroboração: o step 0 do brain da run (localizado pelo
+   conv-id extraído do log) traz `created_at` + o label + o path do briefing — amarra
+   run↔ciclo. Ausência = sem evidência = registre em `sinos`, não invente. **`.err` de
+   0 bytes do agy é NORMAL, não degradação** (o glog vai para o log-file, nunca para o
+   stderr) — diagnóstico de falha usa o tail do `--log-file`, não o `.err`. Limitação
+   declarada (vai no frontmatter quando citada): o canal prova o modelo *selecionado e
+   propagado pelo processo*, não o servido pelo servidor — não existe eco server-side.
    **Modelo errado = revisor degradado:** evidência mostrando modelo DIFERENTE do
    configurado (ex.: fallback silencioso para Flash — 3 ocorrências provadas) → trate o
    run como FALHO com sino, não como parecer válido.
@@ -312,13 +331,31 @@ Prepare a subpasta dos pareceres: `mkdir -p "<phase_dir>/pareceres"`.
    chegou no deadline → o filho devolve a lane como `sem_parecer` e você aplica a regra
    de degradação do passo 4.
 
-   **Ciclos 3+ (série já em queda) — decida pelo volume:** aguarde as lanes (curtas a
-   essa altura; use o mesmo turno para adiantar bookkeeping) e conte os achados brutos
-   dos pareceres pelo piso mecânico (`confere-ciclo.sh --tabela`, abaixo). **≤2 brutos
-   no total → verifique inline você mesmo**, seguindo o protocolo do
+   **Piso mecânico em TODO ciclo, qualquer rota (v1.8.2):** assim que as duas lanes
+   fecharem, rode a tabela GRAVANDO em arquivo:
+   ```bash
+   $HOME/.claude/skills/go-and-do/scripts/confere-ciclo.sh --tabela \
+     "<phase_dir>/pareceres/NN-parecer-codex-c<C>.md" \
+     "<phase_dir>/pareceres/NN-parecer-agy-c<C>.md" \
+     > "<phase_dir>/pareceres/.tabela-c<C>.txt"
+   ```
+   A contagem de brutos do ciclo — a que entra no INTENT-REVIEW e decide a rota — vem
+   DESSE arquivo, nunca da sua leitura (contagem autorreportada foi o furo dos c3–c5
+   da F22).
+
+   **Ciclos 3+ (série já em queda) — decida pelo volume MEDIDO:** aguarde as lanes
+   (curtas a essa altura; use o mesmo turno para adiantar bookkeeping). **≤2 brutos na
+   `.tabela-c<C>.txt` → verifique inline você mesmo**, seguindo o protocolo do
    `intent-verifica.md` (classificar contra o histórico, spot-check, veredito com
    evidência própria), e registre `verificacao_inline_c<C>` em `transparencia:`.
-   3+ brutos → despache o filho como nos ciclos 1–2.
+   **3+ brutos → despache o filho como nos ciclos 1–2 — SEM exceção, nem "consciente
+   por custo de contexto"** (F22, 04/08: c3=10 e c4=3 brutos verificados inline com
+   disclosure; o desvio disclosed não devolve a rede que a rota remove — verificação
+   independente + piso anti-omissão — e o verificador custa ~1,5M de cache read ≈
+   US$0,75/ciclo; decisão do dono, 04/08: endurecer). O enforcement é mecânico: o
+   fecho da etapa cruza `.tabela-c<C>.txt` × `.verificador-c<C>.done` via
+   `confere-rotas.sh` (passo 7b) — violação não passa: o trabalho volta como
+   verificação retroativa, mais cara que a rota certa.
 
    Em ambas as rotas o produto é o mesmo: fusão, dedup, classe
    (`novo`/`reformulado`/`reaberto`), spot-check determinístico e veredito por achado.
@@ -376,9 +413,11 @@ Prepare a subpasta dos pareceres: `mkdir -p "<phase_dir>/pareceres"`.
    "reformulados" com os ponteiros do filho) — achado bruto fora da tabela é triagem
    que ninguém consegue reabrir. Antes do commit, rode o spot-check determinístico nos
    artefatos que VOCÊ escreveu ou alterou:
-   `$HOME/.claude/skills/go-and-do/scripts/spot-check-ponteiros.sh <arquivo> <project_root>`
-   (SPEC, CONTEXT, INTENT-REVIEW) — ponteiro quebrado reportado pelo script: conserte
-   antes de commitar. Commite tudo junto:
+   `$HOME/.claude/skills/go-and-do/scripts/spot-check-ponteiros.sh <arquivo> <root1> [root2 ...]`
+   (SPEC, CONTEXT, INTENT-REVIEW; multi-root desde a v1.8.2 — passe TODAS as raízes
+   que os documentos citam, ex.: o repo + o diretório das transcrições; a F22 teve
+   falsos-positivos em massa por single-root) — ponteiro quebrado reportado pelo
+   script: conserte antes de commitar. Commite tudo junto:
    ```bash
    cd "<project_root>"
    git add "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-CONTEXT.md" "<phase_dir>/NN-INTENT-REVIEW.md" "<phase_dir>/pareceres/"NN-parecer-*.md 2>/dev/null
@@ -386,6 +425,17 @@ Prepare a subpasta dos pareceres: `mkdir -p "<phase_dir>/pareceres"`.
      git commit -m "docs(fase NN): revisão adversarial de intenção (M ciclos, K achados)" >/dev/null
    ```
    Commit falhou (sem git, nada staged) → não pare; anote no retorno e siga.
+7b. **Gate de rota (fail-closed, v1.8.2) — antes de devolver `done`:**
+   ```bash
+   $HOME/.claude/skills/go-and-do/scripts/confere-rotas.sh "<phase_dir>/pareceres"
+   ```
+   Exit 0 → siga ao passo 8. Exit 1 → **você não devolve `done`**: para cada ciclo
+   apontado (`VIOLACAO`/`SEM-TABELA`), gere a `.tabela-c<C>.txt` que faltar e despache
+   um `gad-verificador` retroativo (mesmo protocolo do passo 5) sobre os pareceres
+   daquele ciclo; incorpore o resultado ao INTENT-REVIEW (achados novos que o
+   retroativo confirmar reabrem a triagem), registre o evento como `incidente` no
+   retorno, e re-rode o gate. É deliberado que a rota errada saia MAIS CARA que a
+   certa — o objetivo do gate é tornar o atalho antieconômico, não puni-lo depois.
 8. Devolva `done` pelo `<return_contract>`.
 </adversarial_review>
 
