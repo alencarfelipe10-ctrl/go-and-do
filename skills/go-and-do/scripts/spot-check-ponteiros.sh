@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # spot-check-ponteiros.sh — verificação determinística de citações `arquivo:linha`.
 #
-# Uso: spot-check-ponteiros.sh <arquivo.md> [project_root]
-#   Extrai todo padrão `caminho:linha` do arquivo, resolve o caminho a partir de
-#   project_root (default: cwd) e confere: (a) o arquivo existe; (b) a linha existe.
+# Uso: spot-check-ponteiros.sh <arquivo.md> [root ...]
+#   Extrai todo padrão `caminho:linha` do arquivo, resolve o caminho e confere:
+#   (a) o arquivo existe; (b) a linha existe.
+#   Multi-root (auditoria 04/08 da F22: falsos-positivos MISSING-FILE em massa quando
+#   o documento cita mais de uma árvore — repo + transcrições fora dele): pode passar
+#   VÁRIAS raízes; um caminho relativo é tentado em cada uma, na ordem, e só é
+#   MISSING-FILE se não existir em NENHUMA. Sem root → default: cwd.
 #   Saída: uma linha por ponteiro QUEBRADO (`MISSING-FILE caminho:linha` ou
 #   `MISSING-LINE caminho:linha (arquivo tem N linhas)`), e um sumário final
 #   `OK <ok>/<total>`. Exit 0 sempre — é ferramenta de relato; o julgamento do que
@@ -12,23 +16,29 @@
 # Régua da skill: verificação vira script; julgamento fica no modelo.
 
 set -u
-DOC="${1:?uso: spot-check-ponteiros.sh <arquivo.md> [project_root]}"
-ROOT="${2:-$(pwd)}"
+DOC="${1:?uso: spot-check-ponteiros.sh <arquivo.md> [root ...]}"
+shift
+ROOTS=("$@")
+[ ${#ROOTS[@]} -eq 0 ] && ROOTS=("$(pwd)")
 
 [ -f "$DOC" ] || { echo "ERRO: arquivo não encontrado: $DOC" >&2; exit 2; }
-[ -d "$ROOT" ] || { echo "ERRO: project_root não encontrado: $ROOT" >&2; exit 2; }
+for r in "${ROOTS[@]}"; do
+  [ -d "$r" ] || { echo "ERRO: root não encontrado: $r" >&2; exit 2; }
+done
 
-total=0; ok=0
 # Padrão: sequência com pelo menos uma `/` ou extensão de arquivo, dois-pontos, número.
 # Deduplicado para não recontar a mesma citação repetida.
 grep -oE '[A-Za-z0-9_./-]+\.[A-Za-z0-9_]+:[0-9]+' "$DOC" | sort -u | while read -r ptr; do
   file="${ptr%:*}"; line="${ptr##*:}"
-  # Resolve: absoluto como veio; relativo a partir do ROOT.
+  # Resolve: absoluto como veio; relativo tentado em cada root, na ordem.
+  path=""
   case "$file" in
-    /*) path="$file" ;;
-    *)  path="$ROOT/$file" ;;
+    /*) [ -f "$file" ] && path="$file" ;;
+    *)  for r in "${ROOTS[@]}"; do
+          if [ -f "$r/$file" ]; then path="$r/$file"; break; fi
+        done ;;
   esac
-  if [ ! -f "$path" ]; then
+  if [ -z "$path" ]; then
     echo "MISSING-FILE $ptr"
     continue
   fi
