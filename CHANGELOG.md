@@ -2,6 +2,42 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [1.8.1] — 2026-08-04
+
+Seis correções derivadas da auditoria da F22 do grupo-inspired (relatório
+`040826-inspired-f22.md`), todas de comportamento — sem feature nova. Aprovadas pelo
+dono item a item em 04/08.
+
+### Corrigido
+
+- **`confere-ciclo.sh`: falsos-positivos removidos** — a linha do canário
+  (`prova_leitura:`/`PROVA-...`) e rubricas de classificação ("Nível Geral de Risco",
+  "Overall Risk") casavam nos padrões de achado e forçavam exit 1 mesmo sem omissão
+  (F22: exit 1 nas 8 execuções; no ciclo 4 era só ruído). Também corrigida a extração
+  da lane no `--tabela` (`22-parecer-plan-agy-c4.md` → `agy`, não `plan`). Validado
+  contra os pareceres reais da F22 como fixture.
+- **Guarda anti-aninhamento no passo 0 do executor** (`prompts/execute.md`): a cópia de
+  fixtures usa `rsync -a --ignore-existing` (merge idempotente; `cp -an` vira fallback)
+  + normalização de barra final + detecção pós-cópia de `dir/dir/` aninhado com parada
+  e incidente (caso F22: re-execução do `cp -an` aninhou `other-files/other-files/` e
+  destruiu ~23 arquivos dentro do worktree).
+- **Ts mecânico virou regra geral** (`workflow.md`): todo campo de timestamp gravado em
+  artefato por qualquer camada usa `date -Iseconds` no ato — frontmatters de
+  VERIFICATION/UAT incluídos (caso F22: `verified: 14:00:00` 5h no futuro do próprio
+  commit). O self-check do fecho (6.5) ganhou conferência mecânica frontmatter×git
+  (`git log -1 --format=%cI`).
+- **Consentimento exige ponteiro** (`workflow.md` + `prompts/code-review.md`): alegação
+  de "aprovado/assinado pelo dono" só vale com ponteiro para bloco DECISAO-DO-DONO
+  existente (arquivo + ts); sem ponteiro, o item é tratado como não-assinado (caso F22:
+  citação de assinatura fabricada sobreviveu 3 rodadas de review).
+- **Gates decidem sobre saída crua** (`workflow.md` operating_rules): comando cujo
+  resultado alimenta decisão de gate roda com `rtk proxy` quando há wrapper de filtro
+  ativo (caso F22: newline fantasma, `grep -h` reescrito e `wc -l` sobre saída filtrada
+  derrubaram 3 gates na mesma rodada). Leitura exploratória continua filtrada.
+- **`.err` bruto nunca vai pro git** (`prompts/convergence.md`): a evidência durável de
+  modelo é o banner copiado verbatim no REVIEWS; commit de pareceres adiciona só
+  `NN-parecer-*.md` (caso F22: ~1,6MB de stderr commitados como "evidência").
+
 ## [1.8.0] — 2026-08-03
 
 Dieta v2 da etapa de intenção, derivada da auditoria temática da F20 do oxmuscle-v2

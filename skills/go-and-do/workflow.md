@@ -71,6 +71,15 @@ Operating rules — read once, apply throughout:
 - Paths: the skill lives at `$HOME/.claude/skills/go-and-do/`. The phase directory
   comes from `init.phase-op` (`phase_dir`); the padded phase number (`padded_phase`,
   e.g. `03`) is the `NN` prefix of every artifact.
+- **Gates decidem sobre saída CRUA, nunca filtrada por wrapper.** Se o ambiente tem um hook
+  que reescreve comandos Bash e compacta a saída (ex.: RTK), todo comando cujo RESULTADO
+  alimenta uma decisão de gate (contagem via `wc -l`, teste de saída vazia, `grep` cujo
+  exit code roteia) roda com `rtk proxy <cmd>` — execução crua, sem filtro. A regra vale
+  para TODAS as camadas e vai repassada nos briefings que contêm comandos-gate. O porquê
+  (caso real F22, 04/08, 3 golpes na mesma rodada): newline do wrapper em saída vazia →
+  falso-positivo num gate; `grep -h` reescrito perdeu a flag; `| wc -l` contou a saída
+  FILTRADA e derrubou o UAT temporariamente. Leitura exploratória continua filtrada
+  (é o ganho do wrapper); só o comando-gate é cru.
 </operating_rules>
 
 ---

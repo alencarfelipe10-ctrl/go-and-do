@@ -31,13 +31,20 @@ SEV='HIGH|MEDIUM|LOW|CRITICAL|BLOCKER|ALTA|ALTO|M[ÉE]DIA|M[ÉE]DIO|BAIXA|BAIXO|
 # 1º os headings de achado (### 1. Titulo · ### Achado 1: ...) — formato real dos
 # pareceres codex/agy; se o parecer não usa headings numerados, cai para bullets
 # com severidade (qualquer caixa) ou IDs cN-XN. Prosa pura segue indetectável.
+# Linhas que NÃO são achado (fix F22, 04/08 — exit 1 falso-positivo no ciclo 4):
+# a linha do canário (prova_leitura:/PROVA-...) e rubricas de classificação de risco
+# ("Nível Geral de Risco: LOW", "Overall Risk", "Risk Level") casavam nos padrões.
+RUIDO='^[0-9]+:(prova_leitura:|.*\*\*Token de Leitura|.*PROVA-)|n[íi]vel (geral )?de risco|risco geral|overall risk|risk level'
+
 extrai_achados() {
   local f="$1" h
   h=$(grep -nE '^#{3,4} +(Achado +)?([0-9]+[.:][^0-9]|[Cc][0-9]+-[0-9]+)' "$f" \
-    | grep -viE '^[0-9]+:#{3,4} +[0-9.]*\s*(pontos? fortes|strengths|sugest|suggestion)')
+    | grep -viE '^[0-9]+:#{3,4} +[0-9.]*\s*(pontos? fortes|strengths|sugest|suggestion)' \
+    | grep -viE "$RUIDO")
   if [ -n "$h" ]; then printf '%s\n' "$h"; return; fi
   grep -inE "(^#{2,4} .*\\[?(${SEV})|^[*-] .*\`?\\*{0,2}(${SEV})|c[0-9]+-([a-z]+)?[0-9]+)" "$f" \
-    | grep -viE '^\s*[0-9]+:\s*(#{2,4} )?[0-9.]*\s*(pontos? fortes|strengths|sugest|suggestion)'
+    | grep -viE '^\s*[0-9]+:\s*(#{2,4} )?[0-9.]*\s*(pontos? fortes|strengths|sugest|suggestion)' \
+    | grep -viE "$RUIDO"
 }
 
 if [ "${1:-}" = "--tabela" ]; then
@@ -48,7 +55,8 @@ if [ "${1:-}" = "--tabela" ]; then
   TOTAL=0
   for P in "$@"; do
     [ -r "$P" ] || { echo "| $(basename "$P") | — | ILEGÍVEL |"; continue; }
-    LANE=$(basename "$P" | sed -E 's/^[0-9]+-parecer-([a-z]+)-.*$/\1/; s/\.md$//')
+    # lane = último nome antes do -cN (fix F22: 22-parecer-plan-agy-c4.md → agy, não plan)
+    LANE=$(basename "$P" | sed -E 's/^[0-9]+-parecer-(.*-)?([a-z]+)-c[0-9]+\.md$/\2/; s/^[0-9]+-parecer-([a-z]+)[^a-z].*$/\1/; s/\.md$//')
     LISTA=$(extrai_achados "$P")
     while IFS= read -r linha; do
       [ -n "$linha" ] || continue

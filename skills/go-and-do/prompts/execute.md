@@ -106,11 +106,27 @@ MAIN="<project_root>"                    # o checkout principal, recebido no des
 # e testes golden dão skip silencioso). Caso real: 7 fases seriais no grupo-inspired.
 if [ -f "$MAIN/.planning/worktree-fixtures.txt" ]; then
   grep -v '^\s*#' "$MAIN/.planning/worktree-fixtures.txt" | grep -v '^\s*$' \
-    | while IFS= read -r d; do [ -e "$MAIN/$d" ] && mkdir -p "./$(dirname "$d")" && cp -an "$MAIN/$d" "./$(dirname "$d")/"; done
+    | while IFS= read -r d; do
+        d="${d%/}"                                   # normaliza: sem barra final
+        [ -e "$MAIN/$d" ] || continue
+        mkdir -p "./$(dirname "$d")"
+        if command -v rsync >/dev/null 2>&1; then
+          rsync -a --ignore-existing "$MAIN/$d" "./$(dirname "$d")/"
+        else
+          cp -an "$MAIN/$d" "./$(dirname "$d")/"
+        fi
+        # guarda anti-aninhamento (caso real F22, 04/08: cp re-rodado aninhou
+        # other-files/other-files/ e ~23 arquivos foram destruídos no worktree)
+        if [ -d "./$d/$(basename "$d")" ]; then
+          echo "🔔 ANINHAMENTO em ./$d/$(basename "$d") — NÃO prossiga: remova só o nível aninhado e registre em incidentes:"
+        fi
+      done
 fi
 ```
 
-(`cp -n`/`cp -an` preservam o que já existir.) A cópia é o canal **sancionado** — e não muda a
+(rsync faz merge idempotente — re-rodar a cópia numa retomada não reaninha; `cp -n`/`cp -an`
+preservam o que já existir, mas re-execução sobre destino existente foi exatamente o vetor
+do aninhamento da F22 — por isso a guarda é obrigatória mesmo no fallback.) A cópia é o canal **sancionado** — e não muda a
 regra de sempre: replicar ≠ inspecionar. Nenhum agente imprime/dumpa o conteúdo de `.env*` no
 transcript; quem precisa de um valor consome a env pelo processo (dotenv/`process.env`),
 nunca por `cat`. As fixtures copiadas vivem e morrem com o worktree (a remoção dele as
