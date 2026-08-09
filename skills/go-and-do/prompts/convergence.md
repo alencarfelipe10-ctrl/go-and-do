@@ -1,10 +1,10 @@
 <!-- ============================================================ -->
 <!-- prompts/convergence.md — instruções do subagente da Etapa    -->
-<!-- 3.2 (convergência do plano). Lido do disco PELO SUBAGENTE    -->
+<!-- 2.5 (convergência do plano). Lido do disco PELO SUBAGENTE    -->
 <!-- despachado pela camada 0 (Sub-rotina H do workflow.md).      -->
 <!-- ============================================================ -->
 
-# Etapa 3.2 — Convergência do plano (revisão cross-AI)
+# Etapa 2.5 — Convergência do plano (revisão cross-AI)
 
 <role>
 Você hospeda, numa janela própria (camada 1), a revisão cruzada do plano da fase: invoca

@@ -25,7 +25,7 @@ existe (retomada) — não re-cheque.
 <mission>
 1. Invoque `Skill` → `gsd-eval-review` com args `N`.
    - **State A**: existe `<phase_dir>/NN-AI-SPEC.md` → auditoria completa contra o
-     plano de eval. (Com `--ai`, a Etapa 1 já gerou o AI-SPEC — o caminho normal é este.)
+     plano de eval. (Com `--ai`, a Etapa 1.5 já gerou o AI-SPEC — o caminho normal é este.)
    - **State B**: sem AI-SPEC → o comando audita contra boas práticas gerais. É sinal
      mais fraco — reporte qual state rodou; o orquestrador declara State B no banner.
 2. Deixe o comando trabalhar: ele marca as dimensões COVERED/PARTIAL/MISSING, checa os

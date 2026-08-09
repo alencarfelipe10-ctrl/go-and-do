@@ -30,14 +30,14 @@ Operating rules — read once, apply throughout:
   acceptance testing. Both are deliberate; if a future maintainer sees a violation, the right fix is
   upstream (a `--generate-only` mode in verify-work; a native interactive-UAT command), not removing
   the reuse. The close itself is NOT an exception — it reuses the native `/close-phase` skill.
-  A third declared deviation lives in Etapa 0-B: it invokes the native spec/discuss skills (pure
+  A third declared deviation lives in Etapa 1: it invokes the native spec/discuss skills (pure
   reuse), but suppresses the discuss `auto_advance` side-effect and resets the chain flag it
   persists (executed inside the intent subagent — see `prompts/intent.md`) — this skill owns the
   chaining; the right upstream fix is a `--no-advance` flag in discuss-phase. Dívida registrada.
 - Don't read artifact bodies into your own window — layer 0 decides by frontmatter, by the
   SDK's JSON status fields (`init.phase-op`, `phase-plan-index`) and by file existence, never
   by ingesting documents; reading them bloats context (the very thing the token gate
-  protects). Whoever genuinely needs an artifact's content — verifying the intent (Etapa 0-B),
+  protects). Whoever genuinely needs an artifact's content — verifying the intent (Etapa 1),
   reviewing the plan/code, deriving the UAT, **driving the browser**, narrating the summary —
   is the layer-1 subagent of that step (Sub-rotina H), which reads/writes on disk and returns
   only a compact status. (The old declared exception for `NN-SPEC.md`/`NN-CONTEXT.md` no
@@ -55,7 +55,7 @@ Operating rules — read once, apply throughout:
   printed handoff line.
 - Everything is resumable. Re-running `/go-and-do N` must never redo finished work.
   Check state first — Etapas 0/2/3 via `init.phase-op` (`has_plans`/`has_verification`); Etapas
-  0-B, 1, 3.2, 4 and 5 by file existence (`NN-SPEC.md`/`NN-CONTEXT.md`/`NN-INTENT-REVIEW.md`;
+  1, 1.5, 2.5, 4 and 5 by file existence (`NN-SPEC.md`/`NN-CONTEXT.md`/`NN-INTENT-REVIEW.md`;
   `NN-UI-SPEC.md`/`NN-AI-SPEC.md`; `NN-CONVERGENCE.md`; the `NN-*REVIEW`/`NN-SECURITY`/
   `NN-VALIDATION` artifacts; `NN-UAT.md`) — and skip what is already done.
 - Keep a live task list (TaskList) that mirrors disk state. Build it in Etapa 0 and, on
@@ -93,19 +93,19 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 **Etapa 0 — Preparação**
 1. Lê argumentos (fase + `--ui`/`--ai`/`--no-ship`/`--vault`/`--obs`). Sem número → ⏸️ para e pede.
 2. `gsd_run query init.phase-op N` (shim, Sub-rotina E) → retrato da fase.
-3. ⏸️ Portões de entrada (projeto GSD? fase no ROADMAP?). Falhou → para. (CONTEXT.md faltando não é mais portão — a Etapa 0-B gera.)
+3. ⏸️ Portões de entrada (projeto GSD? fase no ROADMAP?). Falhou → para. (CONTEXT.md faltando não é mais portão — a Etapa 1 gera.)
 4. Decide de onde começar (retomada por estado no disco), registra o evento `run` na telemetria (Sub-rotina G) e monta a lista de tarefas espelhando o disco (Sub-rotina C).
 5. Banner e libera.
 
-**Etapa 0-B — Intenção: spec + discuss + revisão adversarial** *(⏭️ fase já planejada → pula inteira · retomada fina por arquivo)*
-6. ⏭️ `has_plans` (ou `has_verification`) → pula pra Etapa 1 (a intenção já virou plano).
+**Etapa 1 — Intenção: spec + discuss + revisão adversarial** *(⏭️ fase já planejada → pula inteira · retomada fina por arquivo)*
+6. ⏭️ `has_plans` (ou `has_verification`) → pula pra Etapa 1.5 (a intenção já virou plano).
 7. 🔒 ⏭️ Despacha o **subagente de intenção** (Sub-rotina H + `prompts/intent.md`) — um único despacho cobre os itens 7–9; a retomada fina por arquivo é do subagente, que é um COORDENADOR: o trabalho verboso desce para filhos descartáveis de camada 2 (agentes `gad-*`, modelo/effort nas definições em `~/.claude/agents/`). Dentro dele: SPEC (sem `NN-SPEC.md`): filho `gad-spec` hospeda `gsd-spec-phase N --auto` (auto-decide e loga `[auto]`; termina no SPEC, sem auto-advance).
 8. ↳ *(filho `gad-discuss`)* CONTEXT (sem `NN-CONTEXT.md`): `gsd-discuss-phase N --auto`, **sem executar o `auto_advance`** dele (o encadeamento é desta skill), zerando `workflow._auto_chain_active` na volta e aplicando a fronteira anti-duplicação (decisão mora no SPEC; o CONTEXT referencia por ponteiro).
-9. ↳ *(no subagente de intenção)* Revisão adversarial de intenção (sem `NN-INTENT-REVIEW.md` `done`): Codex + agy criticam (pareceres em `<phase_dir>/pareceres/`) ↔ filho `gad-verificador` funde, deduplica, classifica (novo/reformulado/reaberto) e verifica; a triagem de destino fica na camada 1. Loop por convergência: continua enquanto os achados NOVOS confirmados caem e > 0; teto duro de 5 ciclos; estagnação → `needs_decision`. Factual → corrige no lugar · requisito/critério/oráculo → `needs_decision` sobe → ⏸️ a pergunta chega a você e a resposta continua o MESMO subagente (0B.3) · tradeoff → adota + transparência. Escreve `NN-INTENT-REVIEW.md`. UM revisor indisponível/falhou → segue com o outro, sino declarado; os DOIS instalados-mas-falhos → `blocked` sobe → ⏸️ **para** (grava `intent_review: blocked`; a retomada re-tenta); NENHUM instalado (pré-check) → revisão **pulada** com sino gritante (`intent_review: skipped`) e a fase segue — ausência de ferramenta degrada declarado; só falha de runtime bloqueia.
-9b. **Gate de rota + medição de turnos (camada 0, v1.8.2 — ao receber o `done` da 0-B, ANTES de marcar a tarefa concluída):** rode `scripts/confere-rotas.sh <phase_dir>/pareceres`. Exit 1 → o `done` NÃO é aceito: devolva ao MESMO subagente (SendMessage) a lista de `VIOLACAO`/`SEM-TABELA` com a ordem de executar o passo 7b do `intent.md` (verificação retroativa) — o gate é fail-closed e a dupla checagem é deliberada: o subagente roda o script no fecho dele, a camada 0 confere de novo com custo ~zero. Exit 0 → rode `scripts/conta-turnos.py <transcript-do-subagente> <phase_dir>/pareceres` (o transcript é `agent-<id>.jsonl` no diretório `subagents/` da sessão — o `<id>` vem do retorno do harness; se não localizar, registre sino `conta-turnos sem transcript` e siga): cada ciclo com estouro vira evento `incidente` no run-log (`turnos c<N>: <T> > 4`). Medição, não bloqueio — o freio estrutural do teto é a rota do verificador, que o gate acima garante.
+9. ↳ *(no subagente de intenção)* Revisão adversarial de intenção (sem `NN-INTENT-REVIEW.md` `done`): Codex + agy criticam (pareceres em `<phase_dir>/pareceres/`) ↔ filho `gad-verificador` funde, deduplica, classifica (novo/reformulado/reaberto) e verifica; a triagem de destino fica na camada 1. Loop por convergência: continua enquanto os achados NOVOS confirmados caem e > 0; teto duro de 5 ciclos; estagnação → `needs_decision`. Factual → corrige no lugar · requisito/critério/oráculo → `needs_decision` sobe → ⏸️ a pergunta chega a você e a resposta continua o MESMO subagente (1.3) · tradeoff → adota + transparência. Escreve `NN-INTENT-REVIEW.md`. UM revisor indisponível/falhou → segue com o outro, sino declarado; os DOIS instalados-mas-falhos → `blocked` sobe → ⏸️ **para** (grava `intent_review: blocked`; a retomada re-tenta); NENHUM instalado (pré-check) → revisão **pulada** com sino gritante (`intent_review: skipped`) e a fase segue — ausência de ferramenta degrada declarado; só falha de runtime bloqueia.
+9b. **Gate de rota + medição de turnos (camada 0, v1.8.2 — ao receber o `done` da Etapa 1, ANTES de marcar a tarefa concluída):** rode `scripts/confere-rotas.sh <phase_dir>/pareceres`. Exit 1 → o `done` NÃO é aceito: devolva ao MESMO subagente (SendMessage) a lista de `VIOLACAO`/`SEM-TABELA` com a ordem de executar o passo 7b do `intent.md` (verificação retroativa) — o gate é fail-closed e a dupla checagem é deliberada: o subagente roda o script no fecho dele, a camada 0 confere de novo com custo ~zero. Exit 0 → rode `scripts/conta-turnos.py <transcript-do-subagente> <phase_dir>/pareceres` (o transcript é `agent-<id>.jsonl` no diretório `subagents/` da sessão — o `<id>` vem do retorno do harness; se não localizar, registre sino `conta-turnos sem transcript` e siga): cada ciclo com estouro vira evento `incidente` no run-log (`turnos c<N>: <T> > 4`). Medição, não bloqueio — o freio estrutural do teto é a rota do verificador, que o gate acima garante.
 
-**Etapa 1 — Contratos de design** *(🎌 só com a flag · retomada por existência de arquivo)*
-10. ⏭️ Sem `--ui` e sem `--ai` → pula a Etapa 1 inteira. Com a flag e o `NN-*-SPEC.md` já existe → pula o sub-passo.
+**Etapa 1.5 — Contratos de design** *(🎌 só com a flag · retomada por existência de arquivo)*
+10. ⏭️ Sem `--ui` e sem `--ai` → pula a Etapa 1.5 inteira. Com a flag e o `NN-*-SPEC.md` já existe → pula o sub-passo.
 11. 🔒 🎌`--ui` Contrato de UI: `Skill gsd-ui-phase` → `N`. Herdadas: UI-SPEC BLOCKED; revision stall (máx 2).
 12. 🔒 🎌`--ai` Contrato de IA: `Skill gsd-ai-integration-phase` → `N`. Herdadas: entrevista do framework-selector; validation fail. Ordem com ambos: UI → IA. Config off → degrada e segue.
 
@@ -139,7 +139,7 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 
 **Etapa 6 — Encerramento + ship** *(roteamento por balde)*
 31. **Roteia o desfecho:** sobrou balde 2 → ⏸️ D (pause-work) · sobrou balde 3 **ou** flag `--no-ship` → **hand-back** ao `/gsd-verify-work` (não shipa) · só baldes 1+4 → segue pro ship.
-32. Consolida o "🔔 O que precisa de você agora" + os itens do **bloco de transparência** (balde 4 assumidos / balde 3 não-verificados / decisões de intenção adotadas por recomendação do revisor, 0-B / passos que não rodaram — config off ou ferramenta indisponível, com o motivo).
+32. Consolida o "🔔 O que precisa de você agora" + os itens do **bloco de transparência** (balde 4 assumidos / balde 3 não-verificados / decisões de intenção adotadas por recomendação do revisor, Etapa 1 / passos que não rodaram — config off ou ferramenta indisponível, com o motivo).
 33. Resumo executivo (modo final, com o bloco de transparência no topo): **Sub-rotina F**. ⏭️ idempotente (`go_and_do_resumo: final`).
 34. Commita os artefatos do UAT (`NN-UAT.md` + `tests/uat-fase-NN.spec.ts` + evidências) pra árvore ficar limpa pro preflight do ship (6.3b). 🔒 **Ship** (só na rota de ship): via **subagente** (Sub-rotina H + `prompts/close.md`, hospedando `close-phase N` — extract-learnings → promove a verificação → abre o PR). ⏸️ Bloqueio de ambiente (sem remote/`gh`) → sobe como `blocked`; respeita e reporta. Depois do retorno (shipado ou blocked): **emenda factual** da seção "Desfecho do ship" no resumo (6.4c) + commit.
 35. Self-check (rede: sobrou plano sem SUMMARY → Sub-rotina D) + banner final (PR + bloco de transparência + add-tests como passo **pós-PR**) + evento `stop` na telemetria (Sub-rotina G) e devolve o controle.
@@ -154,8 +154,8 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 
 A `/go-and-do` tem stops próprios (gate de contexto no teto de tokens, a pausa da revisão de
 intenção — achado confirmado que mexe em requisito/critério/oráculo sobe do subagente de intenção
-como `needs_decision` e chega a você (0B.3), os revisores de intenção
-instalados mas falhos — sem segunda opinião a fase não segue (Etapa 0-B, `intent_review:
+como `needs_decision` e chega a você (1.3), os revisores de intenção
+instalados mas falhos — sem segunda opinião a fase não segue (Etapa 1, `intent_review:
 blocked`; setup SEM nenhum revisor instalado não para: a revisão é pulada com sino,
 `intent_review: skipped`), gaps
 persistentes, ameaça aberta, portões de entrada, bug de UAT persistente, balde 3 que bloqueia o
@@ -171,7 +171,7 @@ subagente** (Sub-rotina H), o mesmo stop chega a você por outro cano — o hosp
 apresenta ao usuário e a resposta continua o mesmo subagente. O stop é honrado igual; só muda o
 transporte.
 
-**No `gsd-ui-phase` / `gsd-ai-integration-phase`** (Etapa 1 — contratos de design):
+**No `gsd-ui-phase` / `gsd-ai-integration-phase`** (Etapa 1.5 — contratos de design):
 - **UI-SPEC BLOCKED** — o `gsd-ui-researcher` não consegue montar o contrato (falta decisão crítica
   de design que o CONTEXT.md não cobre, ou registry de terceiros sem vetar). Para.
 - **Revision stall (UI)** — o `gsd-ui-checker` reprovou 2× sem convergir → "force approve / edit /
@@ -200,7 +200,7 @@ transporte.
   detecta a execução incompleta e fecha com handoff limpo (**Sub-rotina D**) em vez de deixar
   você preso no prompt.
 
-Regra de ouro: se o stop é uma decisão de design/escopo (contratos da Etapa 1 / plan) ou um portão
+Regra de ouro: se o stop é uma decisão de design/escopo (contratos da Etapa 1.5 / plan) ou um portão
 de realidade (regressão / schema / auth no execute), é legítimo — pausa, anota no banner, e o
 usuário decide. A Sub-rotina I formaliza essa régua: ela separa o que é do dono do que é carimbo,
 e é ela quem decide se a pergunta chega ao usuário, é auto-decidida com registro, ou (gate duro de
@@ -375,7 +375,7 @@ A TaskList só **espelha** esse estado. Quem mexe nela é só o orquestrador.
 | 14 | UAT interativo automatizado | `NN-UAT.md` com frontmatter `pre_uat: executed` e sem `result: issue` em aberto |
 | 15 | Encerramento + ship | rota de ship: PR criado (close-phase) · rota de hand-back: banner + `NN-RESUMO-EXECUTIVO.md` (`go_and_do_resumo: final`) |
 
-São os mesmos sinais que a retomada (0.4 + Etapas 1/4/5) já usa pra pular o que está pronto — a
+São os mesmos sinais que a retomada (0.4 + Etapas 1.5/4/5) já usa pra pular o que está pronto — a
 lista não inventa estado, lê o disco.
 
 **Montagem na Etapa 0 (toda invocação):**
@@ -390,7 +390,7 @@ lista não inventa estado, lê o disco.
 1. Consulte `TaskList`. Se já existem as tarefas desta fase (re-invocação na mesma sessão),
    só reconcilie os status — não duplique.
 2. Senão, `TaskCreate` para cada tarefa aplicável (pule a 4/UI e a 5/IA, e a 10/UI e a 11/IA, sem
-   a flag; pule as 1–3/Intenção quando a fase já tem planos — mesma regra da Etapa 0-B).
+   a flag; pule as 1–3/Intenção quando a fase já tem planos — mesma regra da Etapa 1).
 3. Marque o status pelo sinal de disco da tabela: pronta → `completed`; o resto → `pending`.
    Numa retomada, isso faz a lista nascer **fiel ao que já foi feito**, em vez de começar
    vazia mentindo que nada aconteceu.
@@ -425,7 +425,7 @@ a tarefa volta a `pending` e roda de novo — fiel ao que de fato ficou pronto.
 
 Use quando sobra **trabalho de implementação** que depende de você: uma ação humana
 (`human-action` — rodar `npx supabase db push`, login, 2FA, colar uma chave), as ondas que
-dependiam dela e não rodaram, os revisores de intenção bloqueados (Etapa 0-B — Codex E agy
+dependiam dela e não rodaram, os revisores de intenção bloqueados (Etapa 1 — Codex E agy
 instalados mas falhos, `intent_review: blocked`: você resolve o ambiente e retoma; nenhum
 instalado = revisão pulada com sino, não parada), gaps
 persistentes (3.5), uma **ameaça de segurança aberta** ao fim da 4.4, um **bug de UAT
@@ -460,7 +460,7 @@ terminar no vazio ou ficar presa num prompt, feche com um handoff limpo.
    **Reconciliação-lite do STATE.md:** depois do pause-work, confira que o `stopped_at` e o
    `Resume file` do `.planning/STATE.md` apontam para o ponto REAL da parada (a etapa desta
    pausa e o `.continue-here.md`) — o pause-work lê o disco, mas não corrige um `stopped_at`
-   herdado de uma etapa anterior (caso real 21/07: fase pausou na 3.2 e o STATE ficou dizendo
+   herdado de uma etapa anterior (caso real 21/07: fase pausou na 2.5 e o STATE ficou dizendo
    "UI-SPEC approved", 2 etapas atrás; quem retoma pelo STATE é enganado — mesma família do
    handoff stale da F18). Divergiu → emende as duas linhas e inclua no commit WIP.
 4. **Pare** e imprima uma linha de handoff `🔔` ao usuário: o **motivo** (ação humana, gaps
@@ -499,7 +499,7 @@ gsd_run query init.phase-op N
 ```
 
 **Cole o shim no início de TODO bloco Bash que consulta o SDK** — os passos 0.2, 2.4, 3.1b,
-3.2 (o `config-get` do gate de config, antes do despacho) e 3.4. A função `gsd_run` vive só
+2.5 (o `config-get` do gate de config, antes do despacho) e 3.4. A função `gsd_run` vive só
 no shell daquele bloco e **não sobrevive** entre chamadas Bash separadas (estado de shell não
 persiste), então cada um desses passos re-cola o shim e logo em seguida roda
 `gsd_run query <comando> N`. *(O `config-set` que zera a flag de chain do discuss vive agora
@@ -523,7 +523,7 @@ projeto (não-técnico)**. Chamada em dois momentos: `modo: final` no encerramen
 - no `final`: o `desfecho` ∈ {ship, handback}; a lista `itens_assumidos` (balde 4 — vai shipar
   assumido); no handback, a lista `itens_nao_verificados` (balde 3 — precisa do humano); em
   qualquer desfecho, a lista `itens_intencao` (decisões de intenção adotadas por recomendação do
-  revisor cross-AI na Etapa 0-B, com o tradeoff de cada uma — vem do `transparencia:` do
+  revisor cross-AI na Etapa 1, com o tradeoff de cada uma — vem do `transparencia:` do
   `NN-INTENT-REVIEW.md`; pode ser vazia), a lista `itens_nao_rodados` (passos que não rodaram
   por gate de config off ou ferramenta indisponível, com o motivo — da 6.2; pode ser vazia)
   e a lista `riscos_aceitos` (do retorno da 4.4, cada um com o ponteiro da decisão; pode ser
@@ -759,7 +759,7 @@ contagem completa). `motivo` (10º arg) = texto livre do `stop`/`skip` — vai e
 próprio, não dentro da etapa.
 
 **Vocabulário canônico da `etapa` (regra dura):** a string SEMPRE começa com o ID do
-passo (`0-B intencao`, `2.3 planejamento`, `3.2 convergencia`, `3.3 execucao`,
+passo (`1 intencao`, `2.3 planejamento`, `2.5 convergencia`, `3.3 execucao`,
 `3.4 verificacao`, `4.1 code review`, `4.1b re-review`, `4.4 secure`, `4.5 validate`,
 `5.3 gera-UAT`, `5.4 UAT`, `6.3 resumo`, `6.4 ship`) ou com um dos rótulos
 `preparacao` · `probe` · `resumo` · `lateral <descrição>` (despacho fora do fluxo, ex.:
@@ -830,7 +830,7 @@ Os 4 eventos e onde cada um é registrado:
   bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> end "<etapa>" "" "" <subagent_tokens>
   ```
 - **`stop`** — no desfecho da rodada: na Sub-rotina D (passo 2), no banner final da 6.5 e em
-  qualquer parada por `blocked` ou impasse de um despacho (2.3, 3.2, 3.3, 4.1, 4.3, 4.4,
+  qualquer parada por `blocked` ou impasse de um despacho (2.3, 2.5, 3.3, 4.1, 4.3, 4.4,
   4.5 ou 6.4). Etapa = `pausa` | `ship` | `handback`; o texto do motivo vai no **10º
   argumento** (campo `motivo`), não dentro da etapa. E o `stop` leva **medição final**:
   rode o mesmo context-check do checkpoint no mesmo bloco — sem isso o custo final de
@@ -858,7 +858,7 @@ log não escrever, siga — telemetria é instrumento, não gate.
 **Dois eventos adicionais:**
 - **`skip`** — sempre que um passo que TERIA rodado não roda (gate de config off, ferramenta
   indisponível), com etapa = `"<id do passo> (<motivo>)"` (ex.:
-  `"3.2 (config plan_review_convergence off)"`). Isso fecha o buraco do checkpoint-sem-`end`:
+  `"2.5 (config plan_review_convergence off)"`). Isso fecha o buraco do checkpoint-sem-`end`:
   um passo pulado depois do checkpoint termina em `skip`, não fica "aberto" no JSONL.
 - **`compact`** — gravado AUTOMATICAMENTE pelo próprio `run-log.sh` quando um `checkpoint`
   registra queda > 100k vs o último valor da mesma sessão (detector mecânico — a detecção
@@ -893,7 +893,7 @@ etapas que descem.
 `run_in_background: false` explícito na chamada do `Agent`** — o harness despacha em
 background por padrão, e um despacho background quebra o fluxo (a notificação de término não
 retoma o roteiro e a ida-e-volta de pergunta não se completa; caso real: um despacho
-background da 0-B exigiu que o usuário matasse a sessão e recomeçasse). O prompt de despacho é
+background da Etapa 1 exigiu que o usuário matasse a sessão e recomeçasse). O prompt de despacho é
 mínimo — as instruções detalhadas moram num arquivo que o SUBAGENTE lê do disco (mesmo padrão
 do `uat-playbook.md`). **Não leia o `prompts/<etapa>.md` antes de despachar** — referencie o
 caminho e pronto; ler duplica na camada 0 exatamente o conteúdo que a arquitetura mandou pro
@@ -1093,7 +1093,7 @@ stop herdado de comando rodando inline ou de um stop próprio do roteiro — cla
    opções; ele fornece o insumo. (Inventário: 23% de carimbo nessa classe — o humano informa,
    não carimba.)
 2. **Escopo/intenção** — aprovar ou alterar requisito, critério de aceite, oráculo de verdade,
-   SPEC/CONTEXT/ROADMAP (inclui a pausa da revisão de intenção da Etapa 0-B). É onde escopo
+   SPEC/CONTEXT/ROADMAP (inclui a pausa da revisão de intenção da Etapa 1). É onde escopo
    novo nasce nas respostas dele; auto-aprovar aqui é o carimbo invertido que a revisão
    adversarial existe para impedir.
 3. **Irreversível fora do trilho** — rotacionar/expor credencial, apagar dado, gastar dinheiro,
@@ -1172,13 +1172,13 @@ achar o `gsd-tools.cjs` (sai com `ERROR`), trate como portão de entrada (0.3) e
 1. `planning_exists` falso → **pare**: "não é um projeto GSD aqui".
 2. `phase_found` falso → **pare**: "fase N não está no ROADMAP (número errado?)".
 
-> `has_context` falso **não é mais portão de entrada**: a Etapa 0-B gera o SPEC e o CONTEXT
+> `has_context` falso **não é mais portão de entrada**: a Etapa 1 gera o SPEC e o CONTEXT
 > quando faltam (e submete a intenção à revisão adversarial). A skill não "inventa contexto" —
 > ela o deriva do ROADMAP/REQUIREMENTS com defaults logados e um cético de máquina conferindo.
 
 **0.4 — Retomada + telemetria + lista de tarefas.** Use o retrato pra saber o que pular:
-`has_plans` → pula a Etapa 0-B (Intenção) e a Etapa 2 (Planejamento); `has_verification` → pula
-a Etapa 3 (Construção). As Etapas 0-B (dentro dela), 1 (Contratos), 4 (Gates) e 5 (UAT) decidem
+`has_plans` → pula a Etapa 1 (Intenção) e a Etapa 2 (Planejamento); `has_verification` → pula
+a Etapa 3 (Construção). As Etapas 1 (dentro dela), 1.5 (Contratos), 4 (Gates) e 5 (UAT) decidem
 por estado de arquivo. Re-rodar nunca recomeça do zero. Com o `phase_dir` em mãos, registre
 o evento `run` na telemetria (**Sub-rotina G**). Em seguida, monte a lista de
 tarefas com a **Sub-rotina C** (mesmos sinais de disco) — assim
@@ -1203,7 +1203,7 @@ bloco de código `text`:
 ```
 
 Conteúdo dos campos: `Contratos` = flags UI/IA ligadas (que ligam tanto os contratos da
-Etapa 1 quanto as auditorias da Etapa 4); `Rota` = rota terminal (`--no-ship` → "para no seu
+Etapa 1.5 quanto as auditorias da Etapa 4); `Rota` = rota terminal (`--no-ship` → "para no seu
 UAT, sem shipar"; padrão → "vai até abrir o PR"); `Vault` e `Obs` são linhas condicionais —
 só entram se `--vault`/`obs_text` existirem (obs longo quebra em mais linhas `║`; mostre o
 texto literal — é a nota que vai acompanhar toda etapa despachada nesta rodada). Alinhamento:
@@ -1212,9 +1212,9 @@ Abaixo da caixa, uma linha solta: o usuário pode sair de perto.
 
 </stage>
 
-<stage id="0B" name="Intenção — spec + discuss + revisão adversarial">
+<stage id="1" name="Intenção — spec + discuss + revisão adversarial">
 
-## Etapa 0-B — Intenção (spec + discuss + revisão adversarial)
+## Etapa 1 — Intenção (spec + discuss + revisão adversarial)
 
 > Por que existe: spec e discuss eram manuais — e a entrevista interativa era um carimbo na
 > prática (o usuário segue a recomendação em ~100% das vezes; a cerimônia não agrega julgamento).
@@ -1231,21 +1231,21 @@ Abaixo da caixa, uma linha solta: o usuário pode sair de perto.
 > A fronteira agora é física: a etapa inteira roda num **subagente de camada 1**
 > (`prompts/intent.md`); a camada 0 só decide se despacha e roteia o retorno.
 
-**0B.1 — Retomada (camada 0 — decide por frontmatter e existência, nunca por corpo).**
-- `has_plans` (ou `has_verification`) verdadeiro → **pule a Etapa 0-B inteira**: a intenção já
+**1.1 — Retomada (camada 0 — decide por frontmatter e existência, nunca por corpo).**
+- `has_plans` (ou `has_verification`) verdadeiro → **pule a Etapa 1 inteira**: a intenção já
   virou plano, e revisá-la agora não muda o que foi planejado (mudança de intenção pós-plano é
   replanejamento — fora do escopo desta etapa).
 - Existe `<phase_dir>/NN-INTENT-REVIEW.md` com `intent_review: done` — ou `skipped`
   (revisão pulada por ausência total de revisores externos: estado final, não pendência;
   o sino do pulo já está no frontmatter e a 6.2 o recolhe) — (cheque só o frontmatter,
   ex.: `head -15 ... | grep intent_review`) → a intenção está pronta: pule a Etapa
-  0-B inteira.
+  Etapa 1 inteira.
 - Qualquer outro estado (artefatos de intenção faltando; `intent_review: blocked` — o bloqueio
   pode ter sido resolvido; `intent_review: needs_decision` — há pergunta pendente) →
-  **despache** (0B.2). A retomada fina — o que re-rodar e o que pular, arquivo a arquivo — é
+  **despache** (1.2). A retomada fina — o que re-rodar e o que pular, arquivo a arquivo — é
   do subagente, que decide pelo disco (`prompts/intent.md`, seção de chegada).
 
-**0B.2 — Despacho do subagente de intenção.** Gate de contexto (Sub-rotina A). Despache pela
+**1.2 — Despacho do subagente de intenção.** Gate de contexto (Sub-rotina A). Despache pela
 **Sub-rotina H** com `prompts/intent.md`: um único subagente COORDENA, na própria janela, o
 SPEC (filho `gad-spec` hospeda `gsd-spec-phase N --auto`) → o CONTEXT (filho `gad-discuss`
 hospeda `gsd-discuss-phase N --auto`, sem executar o `auto_advance` e zerando
@@ -1260,7 +1260,7 @@ continuação de pausa, a resposta do usuário verbatim.
 > janela da camada 0 (medido em fases reais) — o orquestrador chegava ao plano com metade da
 > janela gasta. O trabalho é o mesmo; a janela que o hospeda agora é descartável.
 
-**0B.3 — Roteamento do retorno.** Pelo `estado` do bloco compacto que o subagente devolve:
+**1.3 — Roteamento do retorno.** Pelo `estado` do bloco compacto que o subagente devolve:
 - **`done`** → registre o evento `end` com `subagent_tokens` (Sub-rotina G), atualize as
   tarefas 1–3 (Sub-rotina C), e guarde do retorno: `transparencia` (insumo da 6.2 — a fonte
   durável é o frontmatter do `NN-INTENT-REVIEW.md`), os itens `sinos` pro banner (dimensões
@@ -1293,9 +1293,9 @@ continuação de pausa, a resposta do usuário verbatim.
 
 </stage>
 
-<stage id="1" name="Contratos de design">
+<stage id="1.5" name="Contratos de design">
 
-## Etapa 1 — Contratos de design
+## Etapa 1.5 — Contratos de design
 
 > Por quê antes do planejamento: o `gsd-plan-phase` consome `UI-SPEC.md`/`AI-SPEC.md` como
 > contexto de design travado, e os gates de UI/eval da Etapa 4 auditam contra eles. Rodar os
@@ -1382,10 +1382,10 @@ autônomo → siga sem alarde. Isto é **só um aviso**: não reordena nem pula 
 waves do GSD já ordena por dependência, e essa é a única ordenação possível. O resultado real
 (o que rodou e o que travou) é apurado na 3.4 e reportado no banner final.
 
-**3.2 — Convergência do plano (via subagente).**
+**2.5 — Convergência do plano (via subagente).**
 - **Retomada (por arquivo):** existe `<phase_dir>/NN-CONVERGENCE.md` com
   `convergence: done` (cheque só o frontmatter)? → a revisão cruzada já convergiu numa
-  rodada anterior: pule a 3.2 inteira (a retomada da Etapa 3 só enxerga
+  rodada anterior: pule a 2.5 inteira (a retomada da Etapa 3 só enxerga
   `has_verification`, que vira `true` bem depois — sem este marcador, um crash entre a
   convergência e o fim do execute re-pagaria a revisão inteira).
 - **Gate de config (camada 0 — barato, sem gastar um subagente à toa):** rode Bash
@@ -1506,7 +1506,7 @@ Se todos os planos têm `SUMMARY.md`, leia o status do `VERIFICATION.md`:
 **3.5 — Fechamento de gaps (1× só):**
 1. Replaneja só correções: despacho da 2.3 (`prompts/plan.md`) com args `N --gaps`.
 1b. **Ancora a re-convergência nos artefatos canônicos:** o replan roda o plan-checker dentro
-   do GSD, que não conhece o `NN-CONVERGENCE.md` (marcador nosso, da 3.2) — sem este passo a
+   do GSD, que não conhece o `NN-CONVERGENCE.md` (marcador nosso, da 2.5) — sem este passo a
    2ª revisão só existe no git (caso real F2-rlr 30/07: CONVERGENCE/REVIEWS com mtime da
    rodada original). Acrescente ao frontmatter do `NN-CONVERGENCE.md` (e do `NN-REVIEWS.md`,
    se existir) a linha `gap_replan: "<data> — N planos gap_closure pelo plan-checker; commits
@@ -1572,7 +1572,7 @@ Se todos os planos têm `SUMMARY.md`, leia o status do `VERIFICATION.md`:
 - Despache pela **Sub-rotina H** com `prompts/eval-review.md` (leva `N`, `NN`, `phase_dir`,
   `project_root` absolutos): o subagente hospeda o `gsd-eval-review N`.
   - State A: existe `AI-SPEC.md` → auditoria completa contra o plano de eval. *(Com `--ai`, a
-    Etapa 1 já gerou o `AI-SPEC.md` — então o caminho normal aqui é o State A.)*
+    Etapa 1.5 já gerou o `AI-SPEC.md` — então o caminho normal aqui é o State A.)*
   - State B: sem `AI-SPEC.md` → audita contra boas práticas (sinal mais fraco);
     registra no banner que foi State B.
   - O auditor marca dimensões COVERED/PARTIAL/MISSING + 5 itens de infra + score /100 +
@@ -1811,7 +1811,7 @@ aconteceu, mas o ciclo final de confirmação do revisor não rodou). E monte os
 - **balde 4 (assumed)** — os itens subjetivos que vão ser **shipados assumidos** ("⚠️ Shipei
   assumindo estes pontos — confira antes de dar merge").
 - **balde 3 (não-verificados)** — na rota de hand-back, o que **precisa da sua verificação**.
-- **decisões de intenção (0-B)** — a lista `transparencia:` do frontmatter do
+- **decisões de intenção (Etapa 1)** — a lista `transparencia:` do frontmatter do
   `NN-INTENT-REVIEW.md` (tradeoffs adotados por recomendação do revisor cross-AI, sem passar
   por você). Vazia ou arquivo ausente → nada a incluir.
 - **passos não rodados** — o que esta rodada não rodou e por quê (gate de config off,

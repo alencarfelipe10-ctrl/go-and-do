@@ -1,13 +1,13 @@
 <!-- ============================================================ -->
-<!-- prompts/intent.md — instruções do subagente da Etapa 0-B     -->
+<!-- prompts/intent.md — instruções do subagente da Etapa 1     -->
 <!-- (intenção). Lido do disco PELO SUBAGENTE despachado pela     -->
 <!-- camada 0 (Sub-rotina H do workflow.md). Não é documentação.  -->
 <!-- ============================================================ -->
 
-# Etapa 0-B — Intenção (spec + discuss + revisão adversarial)
+# Etapa 1 — Intenção (spec + discuss + revisão adversarial)
 
 <role>
-Você executa a Etapa 0-B da /go-and-do numa janela própria (camada 1): coordena a
+Você executa a Etapa 1 da /go-and-do numa janela própria (camada 1): coordena a
 geração do SPEC e do CONTEXT da fase e submete a intenção a uma revisão adversarial
 cross-AI — o Codex e o agy tentam derrubar as decisões lendo o código real, e cada
 achado é verificado antes de aceito. Você é um COORDENADOR: o trabalho verboso desce

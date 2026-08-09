@@ -30,12 +30,12 @@ This skill **does not reimplement** GSD logic — it invokes the native commands
 (like `gsd-autonomous`, but with design contracts up front, an interactive automated UAT, and an
 automated close at the end). It has two declared reuses-of-logic instead of invocations, both in
 Etapa 5 (deriving the UAT scenarios; driving the browser via the `uat-playbook.md`), plus one
-declared side-effect suppression in Etapa 0-B (the discuss `auto_advance` — this skill owns the
+declared side-effect suppression in Etapa 1 (the discuss `auto_advance` — this skill owns the
 chaining) — deliberate, documented exceptions (see workflow.md `operating_rules`). The close reuses the native
 `/close-phase` skill (extract-learnings → verification bridge → ship), inheriting its safety brake:
 it refuses to ship unless the UAT is genuinely clean.
 
-**Intenção primeiro (Etapa 0-B):** quando a fase ainda não tem SPEC/CONTEXT, a skill os gera
+**Intenção primeiro (Etapa 1):** quando a fase ainda não tem SPEC/CONTEXT, a skill os gera
 sozinha (`gsd-spec-phase --auto` → `gsd-discuss-phase --auto`, cada escolha logada `[auto]`) e
 submete a intenção a uma **revisão adversarial cross-AI**: dois revisores externos (Codex +
 Antigravity) leem o dossiê
@@ -68,7 +68,7 @@ telemetria e o bloco de transparência do resumo executivo.
 orquestração longa, então a skill separa **camada 0** (esta conversa: decide, encadeia, roteia,
 pausa e fala com o usuário) de **camada 1** (subagentes com janela própria e descartável que
 hospedam o trabalho verboso) e **camada 2** (os agentes internos que os comandos GSD spawnam —
-intocados). Descem para a camada 1: a intenção inteira (Etapa 0-B — `prompts/intent.md`), o
+intocados). Descem para a camada 1: a intenção inteira (Etapa 1 — `prompts/intent.md`), o
 planejamento (2.3 — `prompts/plan.md`), a convergência do plano (3.2 —
 `prompts/convergence.md`), a execução (3.3 — `prompts/execute.md`; **exceção**: com plano
 `autonomous: false` pendente o execute roda inline, porque ação humana provável pede a
@@ -92,7 +92,7 @@ suas). A descida não afrouxa nenhum fail-closed
 camada 0 (é ela que não pode morrer) e o custo dos subagentes fica visível na telemetria
 (`subagent_tokens`).
 
-**Design contracts up front (Etapa 1):** under `--ui`/`--ai`, the skill first runs
+**Design contracts up front (Etapa 1.5):** under `--ui`/`--ai`, the skill first runs
 `gsd-ui-phase`/`gsd-ai-integration-phase` to produce the `UI-SPEC.md`/`AI-SPEC.md` design
 contracts *before* planning — because the planner consumes them, and the end-of-phase UI/eval
 gates audit against them. Phases without the flag skip this.
@@ -137,10 +137,10 @@ orquestrador. Ver Sub-rotina F no workflow.md.
 harness auto-compact observed at ~460k, so the skill's graceful pause acts first; env
 `CONTEXT_TOKEN_LIMIT`) — before each main command it reads the session's absolute token usage and,
 if at/over the ceiling, checkpoints + pauses (it fails open and announces what it measured, so a
-silent no-op stays visible); (2) the skill's own hard stop points — the intent-review pause (Etapa 0-B: a confirmed finding
+silent no-op stays visible); (2) the skill's own hard stop points — the intent-review pause (Etapa 1: a confirmed finding
 that touches a requirement, acceptance criterion, or truth oracle surfaces from the intent
 subagent as `needs_decision` and waits for the user), the
-intent-review fail-closed floor (Etapa 0-B: both external reviewers — Codex and agy —
+intent-review fail-closed floor (Etapa 1: both external reviewers — Codex and agy —
 installed but failing blocks the phase, recorded as `intent_review: blocked` so the next run knows
 and retries; a single missing reviewer degrades declared via `sinos`; a setup with NO external
 reviewer installed skips the review loudly instead of blocking — `intent_review: skipped`,
@@ -179,8 +179,8 @@ Phase number + flags: $ARGUMENTS
 **Argument:** `<phase>` — required. The phase number to run (e.g. `3`). No number → stop and ask.
 
 **Flags:**
-- `--ui` — the phase has frontend; enables the UI design contract (Etapa 1) and the UI review gate (4.2), which spins up the dev server for a rendered audit.
-- `--ai` — the phase is an AI feature; enables the AI design contract (Etapa 1) and the eval review gate (4.3).
+- `--ui` — the phase has frontend; enables the UI design contract (Etapa 1.5) and the UI review gate (4.2), which spins up the dev server for a rendered audit.
+- `--ai` — the phase is an AI feature; enables the AI design contract (Etapa 1.5) and the eval review gate (4.3).
 - `--no-ship` — run everything including the automated UAT, then **stop** and hand back without closing/shipping (the older "prepare for your UAT" behavior). Default is to go through the UAT and ship.
 - `--vault <profile>` — pass a pre-configured gsd-browser vault profile so the UAT subagent can log in and verify authenticated flows (moves login flows from basket 3 to verifiable). 2FA/captcha stay basket 3.
 - `--obs "<texto livre>"` — a free-text note for this run (e.g. "check file X", "see continue-here.md"). Captured once in Etapa 0.1 and carried as a standing note to **every** stage dispatched in this invocation (Sub-rotina H prefixes it onto each subagent's dispatch message) — each stage judges for itself whether it's relevant. Not persisted across sessions: repeat the flag on a resume if you want it applied again.
@@ -193,7 +193,7 @@ in the summary.
 <process>
 Execute end-to-end following workflow.md.
 Preserve every gate and every stop point: entry gates (Etapa 0.3), the intent-review pause
-(Etapa 0-B — a confirmed finding touching a requirement, acceptance criterion, or truth oracle
+(Etapa 1 — a confirmed finding touching a requirement, acceptance criterion, or truth oracle
 waits for the user; both external reviewers (Codex + agy) unavailable/failed blocks the phase,
 `intent_review: blocked`, never proceed without the second opinion — one missing reviewer
 degrades declared, never silently), persistent gaps
