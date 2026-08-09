@@ -2,6 +2,104 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.0.0] — 2026-08-09
+
+Reformulação major da `/go-and-do` (plano aprovado em 09/08, blocos A–K). Princípio
+regente (P15): **número, gatilho e verificação moram em script com exit code; o
+julgamento mora no modelo.** Todo o registro de decisões está em
+`gad-major-update.md` do projeto de evolução; aqui, a consolidação.
+
+### Quebra de contrato (o porquê do major)
+
+- **Renumeração das etapas:** a intenção deixa de ser "0-B" e vira **Etapa 1**;
+  Contratos de design viram **1.5**; a convergência do plano deixa de ser "3.2" e
+  vira **2.5** (ela pertence ao planejamento). IDs novos em roteiro, prompts,
+  scripts e run-log. Eventos antigos seguem legíveis (validação só na escrita).
+- **Esquema novo do run-log:** regra do **escritor único** — `run` (abre-rodada) ·
+  `checkpoint` (pre-despacho) · `end` (confere-etapa, com `tokens_reais`/`custo_usd`
+  medidos do transcript) · `despacho`/`retorno` (hook) · `script` (auto-registro) ·
+  `stop`/`compact`. **`tokens_camada2` MORREU** (autodeclaração de subagente não é
+  medição); o custo real sai do `mede-tokens.py` + `precos.json` (dedup por
+  requestId, preço por request×modelo). Divergência 0% contra o token-ledger da
+  /audit-gad na F21-ox real (31 subagentes).
+- **Hook novo `hooks/gad-lifecycle.sh`** (PreToolUse/PostToolUse em `Agent|Task`):
+  grava despacho/retorno com camada de origem e modelo/effort da definição do
+  agente. Global, no-op fora de rodada (~17ms); sem ele a skill degrada declarado.
+- **Fail-closed sem revisor externo (PC-6):** sem NENHUM revisor (codex/agy)
+  instalado, a convergência (2.5) NÃO continua — `pre-despacho.sh 2.5` sai com
+  exit 4 e a pergunta vai ao dono. Um ausente = segue com o outro, disclosed.
+
+### Adicionado
+
+- **Par de cancelas 2.C em toda etapa:** `pre-despacho.sh <id>` (gate de contexto
+  absorvido, teto 400k · flags/config/retomada · janela de silêncio · checkpoint) e
+  `confere-etapa.sh <id>` (motor de asserts por manifest declarativo — 13
+  `scripts/manifests/etapa-*.json` — + extração de veredito canônico + `end`
+  medido). A camada 0 roteia por exit code; nunca relê relatório.
+- **`abre-rodada.sh`** — abertura atômica em 10 estágios (portões, retrato, gate,
+  retomada `etapa_1`/`etapa_2`, alerta de vault, cache versão-condicionado do probe
+  de aninhamento, conferência do hook, retrato da TaskList, evento `run` + ponteiro
+  `.planning/.gad-rodada-ativa.json`).
+- **Etapa 1 (intenção) mecanizada:** agentes `gad-intent`/`gad-contratos`/`gad-plan`
+  pinados (Opus 5 medium); `setup-intencao.sh` (chegada), `briefing-build.sh`
+  (livro-razão 1:1 com `[auto]`, missão canônica, canário de leitura),
+  `decide-ciclo.sh` (parada por custo marginal, teto 4), taxonomia A–E de achados
+  (`prompts/categorias-achados.md`), artefatos de ciclo em `.intent/`.
+- **Convergência (2.5):** lanes externas por `roda-codex.sh`/`roda-agy.sh`
+  (frescor, evidência de modelo no stderr, canário em exit code — exit 5 =
+  ausente, 6 = falho no ciclo), `registra-ciclo.sh`, `grava-convergence.sh`,
+  briefing direcionado com trilha do plan-checker, `--max-cycles 3`.
+- **Gates (4):** lane Codex paralela no code review (4.D, funil `gad-verificador`,
+  merge com `fonte: codex`); iterações 2+ estreitadas por `calcula-files.sh` (diff
+  + dependentes reversos de 1 salto, 4.C); UI review desce a subagente (4.B) com
+  `dev-server.sh up|down` (receita persistida + heurística + morte por sessão);
+  mastigação antecipada de aceites do secure (4.E).
+- **UAT (5):** classificador mecânico `uat.classify-coverage` antes da derivação
+  (5.D); `confere-etapa.sh 5` reconcilia baldes/probes/evidência do disco, linta
+  gaps, roda o predicado nativo `uat-passed`, varre **SEGREDOS** (padrão-gitleaks;
+  PII genérica vetada) e é o escritor único das promoções de frontmatter
+  (`pre_uat`, `status`, `pre_uat_fix_cycle`).
+- **Encerramento (6):** roteamento por baldes no `pre-despacho.sh 6` +
+  `uat_passed_raw` medido no briefing do ship + transparência extraída de 5 fontes;
+  `commita-artefatos.sh` (uat|runlog); **merge direto pós-PR (6.D)** com o freio
+  `uat-passed` na frente (revisão pós-PR = "Skip" carimbado — dev solo, o review
+  real rodou na Etapa 4); ship alternativo por julgamento da camada 0 quando não há
+  remote (6.E — sem config nova, a fonte é o projeto).
+- **Formato híbrido do workflow (T.3):** residente = roteiro + contratos +
+  sub-rotinas (~15,3k tokens, antes ~33k); condicional em `workflow-ui.md`,
+  `workflow-ai.md`, `workflow-dev-server.md` (lidos sob demanda); o prompt da
+  Sub-rotina F virou `prompts/resumo.md` (o subagente lê do disco).
+
+### Mudado
+
+- 8 prompts da camada 1 reformados (intent/plan/convergence/code-review/close +
+  novos contratos/ui-review/codex-code-review/resumo); `uat-playbook.md` 409→373
+  linhas (lifecycle 5.A: a janela do UAT é dona do server; frontmatter só via
+  script; blindagem RTK); `close-phase` ganha o merge direto (3.3) e dieta de
+  narrativa (mecânica intocada, 6.F). Sub-rotina F em Sonnet 5.
+- Fecho do planejamento (2.4b/2.H): todo `autonomous: false` é resolvido no fim da
+  Etapa 2 (pergunta agora · `NN-ACAO-HUMANA.md` executado e apagado · deferido ao
+  UAT) — a rota inline da Etapa 3 vira exceção rara.
+
+### Removido
+
+- `tokens_camada2` (8 prompts + run-log) · pré-detecção de ações humanas da Etapa 3
+  (3.1b) · subagente de conversão de balde 3 (5.4b/5.B) · passo 29b · shim colável
+  da Sub-rotina E (virou `scripts/lib/gsd-shim.sh`) · gravação manual de
+  checkpoint/end pela camada 0 (escritor único).
+
+### Desvios declarados (estimativa era alvo; a garantia venceu)
+
+- `uat-playbook.md` ficou em 373 linhas (alvo ~270).
+- Residente do workflow ficou em ~15,3k tokens (alvo ~10–12k).
+
+### Validação
+
+- Aceites por bloco contra dados reais (F20/F21/F22, INS-19/21/22, RLR-02, AOS-13);
+  a validação de campo são as **2 primeiras fases reais** desta versão (tarefas
+  27/28 do projeto de evolução, payoff testável = fase equivalente à F21-ox fechar
+  sem os incidentes dela).
+
 ## [1.8.2] — 2026-08-04
 
 Enforcement da dieta v2 (v1.8.0) + captura de evidência de modelo do agy. Pacote da
