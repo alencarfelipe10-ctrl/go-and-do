@@ -105,9 +105,9 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 9b. **Gate de rota + medição de turnos (camada 0, v1.8.2 — ao receber o `done` da Etapa 1, ANTES de marcar a tarefa concluída):** rode `scripts/confere-rotas.sh <phase_dir>/pareceres`. Exit 1 → o `done` NÃO é aceito: devolva ao MESMO subagente (SendMessage) a lista de `VIOLACAO`/`SEM-TABELA` com a ordem de executar o passo 7b do `intent.md` (verificação retroativa) — o gate é fail-closed e a dupla checagem é deliberada: o subagente roda o script no fecho dele, a camada 0 confere de novo com custo ~zero. Exit 0 → rode `scripts/conta-turnos.py <transcript-do-subagente> <phase_dir>/pareceres` (o transcript é `agent-<id>.jsonl` no diretório `subagents/` da sessão — o `<id>` vem do retorno do harness; se não localizar, registre sino `conta-turnos sem transcript` e siga): cada ciclo com estouro vira evento `incidente` no run-log (`turnos c<N>: <T> > 4`). Medição, não bloqueio — o freio estrutural do teto é a rota do verificador, que o gate acima garante.
 
 **Etapa 1.5 — Contratos de design** *(🎌 só com a flag · retomada por existência de arquivo)*
-10. ⏭️ Sem `--ui` e sem `--ai` → pula a Etapa 1.5 inteira. Com a flag e o `NN-*-SPEC.md` já existe → pula o sub-passo.
-11. 🔒 🎌`--ui` Contrato de UI: `Skill gsd-ui-phase` → `N`. Herdadas: UI-SPEC BLOCKED; revision stall (máx 2).
-12. 🔒 🎌`--ai` Contrato de IA: `Skill gsd-ai-integration-phase` → `N`. Herdadas: entrevista do framework-selector; validation fail. Ordem com ambos: UI → IA. Config off → degrada e segue.
+10. ⏭️ `setup-contratos.sh <phase_dir> <NN> [--ui] [--ai]` decide: ambos `pular`/`sem-flag` → pula a etapa inteira; flag × config off → flip declarado (flag vence).
+11. 🔒 🎌 Despacha o agente `gad-contratos` (Opus 5 medium) com `prompts/contratos.md` — hospeda `gsd-ui-phase` e `gsd-ai-integration-phase` inline (ordem UI → IA). Perguntas herdadas (UI-SPEC BLOCKED · revision stall · entrevista do framework-selector · validation fail) sobem como `needs_decision` e a resposta continua o MESMO subagente.
+12. Ao voltar: `confere-etapa.sh 1.5` (asserts por flag) — exit 1 devolve ao mesmo subagente.
 
 **Etapa 2 — Planejamento**
 13. ⏭️ `has_plans` → pula pra Etapa 3.
@@ -1222,37 +1222,25 @@ continuação de pausa, a resposta do usuário verbatim.
 > contexto de design travado, e os gates de UI/eval da Etapa 4 auditam contra eles. Rodar os
 > contratos aqui dá ao planner esse insumo e fecha o loop com as auditorias do fim.
 
-**1.1 — Retomada (por existência de arquivo).** Sem `--ui` e sem `--ai` → **pule a Etapa 1
-inteira**. Com `--ui` e já existe `<phase_dir>/NN-UI-SPEC.md` → pule o sub-passo de UI (não chame
-o comando — isso evita o `AskUserQuestion` "Existing UI-SPEC: Update/View/Skip" do ui-phase). Idem
-`--ai`/`NN-AI-SPEC.md`. (O `init.phase-op` não rastreia esses artefatos; a retomada é só por arquivo.)
+**1.5.1 — Setup mecânico.** Rode
+`$HOME/.claude/skills/go-and-do/scripts/setup-contratos.sh <phase_dir> <NN> [--ui] [--ai]`
+e obedeça o JSON: ambos `pular`/`sem-flag` → pule a etapa inteira (sem despacho).
+`config_corrigida` não-vazio → some ao bloco de transparência (flag do dono venceu config
+esquecida — flip declarado, nunca silencioso).
 
-**1.2 — Contrato de UI · só com `--ui`.**
-- Gate de contexto (Sub-rotina A).
-- `Skill gsd-ui-phase` com args `N`. Orquestra `gsd-ui-researcher` → `gsd-ui-checker` (com loop de
-  revisão), gravando o `NN-UI-SPEC.md`.
-  > Não passamos `--auto`: o ui-phase não parseia essa flag (é inerte). O que evita o prompt
-  > "existing spec" é a retomada-por-arquivo da 1.1 — quando o arquivo não existe, o comando roda
-  > limpo (o prompt só dispara se já existe).
-- Config `workflow.ui_phase: false` → o comando sai sozinho; degrada com elegância e segue
-  (registre o evento `skip` com motivo `config` — fecha o checkpoint desta etapa no JSONL).
-- Herdadas (deixe chegar ao usuário): **UI-SPEC BLOCKED**; **revision stall** (máx 2). Ver "Paradas herdadas".
+**1.5.2 — Despacho.** Gate de saída (`pre-despacho.sh 1.5`). Despache o agente
+**`gad-contratos`** (def própria: Opus 5, effort medium, com Agent e Skill) com
+`prompts/contratos.md`, passando `N`, `NN`, `phase_dir`, `project_root`, as flags e o JSON
+do setup. Ele hospeda o `gsd-ui-phase` e o `gsd-ai-integration-phase` INLINE (ordem fixa
+UI → IA); os agentes GSD que eles despacham nascem como camada 2.
 
-**1.3 — Contrato de IA · só com `--ai`.**
-- Gate de contexto (Sub-rotina A).
-- `Skill gsd-ai-integration-phase` com args `N`. Encadeia internamente
-  `gsd-framework-selector` → `gsd-ai-researcher` → `gsd-domain-researcher` → `gsd-eval-planner`,
-  gravando o `NN-AI-SPEC.md`.
-  > A **entrevista do framework-selector** dispara quando o `CONTEXT.md` não cobre as decisões de
-  > IA (tipo de sistema, provider, linguagem, requisito). É uma decisão de arquitetura legítima —
-  > deixe chegar ao usuário (não se automatiza a escolha do framework às cegas). Se o `discuss-phase`
-  > cobriu essas decisões, o selector pula a entrevista e segue sozinho.
-- Config `workflow.ai_integration_phase: false` → o comando sai sozinho; degrada e segue
-  (registre o evento `skip` com motivo `config`).
-- Herdada: **AI validation fail** (SPEC incompleto → re-run / continuar). Ver "Paradas herdadas".
-
-**1.4 — Ordem com ambas as flags.** Rode UI (1.2) **antes** de IA (1.3) — ordem fixa e
-determinística (são arquivos disjuntos; a ordem só importa pra reprodutibilidade).
+**1.5.3 — Roteamento do retorno.**
+- `done` → `confere-etapa.sh 1.5` (asserts por flag); pass → siga. Sinos do retorno →
+  bloco de transparência.
+- `needs_decision` → pergunta interceptada de um comando GSD (UI-SPEC BLOCKED · revision
+  stall · entrevista/falha do framework-selector · AI validation fail): triagem da
+  Sub-rotina I; resposta continua o MESMO subagente.
+- `blocked` → Sub-rotina D com o motivo.
 
 </stage>
 

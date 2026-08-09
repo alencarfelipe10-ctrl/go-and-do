@@ -78,12 +78,14 @@ avalia() {
   case "$tipo" in
     glob)
       padrao=$(subst "$(jq -r '.padrao' <<<"$a")")
-      arquivos=( $padrao ); n=${#arquivos[@]}
+      # nullglob não filtra caminho LITERAL (sem metacaractere) — conte só o que existe
+      n=0; for arq in $padrao; do [ -e "$arq" ] && n=$((n+1)); done
       det="$n arquivo(s) para $(basename "$padrao")" ;;
     grep)
       padrao=$(subst "$(jq -r '.arquivo' <<<"$a")")
       regex=$(jq -r '.regex' <<<"$a")
-      arquivos=( $padrao ); n=0
+      arquivos=(); for arq in $padrao; do [ -f "$arq" ] && arquivos+=("$arq"); done
+      n=0
       if [ ${#arquivos[@]} -gt 0 ]; then
         n=$(grep -hEc "$regex" "${arquivos[@]}" 2>/dev/null | awk '{s+=$1} END{print s+0}')
       fi
@@ -125,7 +127,8 @@ aplica_condicao() {
   fi
   sinal=$(subst "$(jq -r '.condicao.sinal // empty' <<<"$a")")
   [ -n "$sinal" ] || return 1
-  local s=( $sinal ); [ ${#s[@]} -gt 0 ] && return 0 || return 1
+  local sf; for sf in $sinal; do [ -e "$sf" ] && return 0; done
+  return 1
 }
 
 RES="[]"; FALHAS=0
