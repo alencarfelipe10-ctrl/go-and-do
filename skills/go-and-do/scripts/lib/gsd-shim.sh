@@ -93,3 +93,21 @@ gad_json_out() {
 gad_runlog() {
   bash "$GAD_SCRIPTS_DIR/run-log.sh" "$@" || true
 }
+
+# Auto-registro G.2-ii: todo script da skill grava o próprio resultado no run-log ao
+# rodar DENTRO de uma rodada ativa (descoberta pelo ponteiro PC-3; sem rodada = no-op).
+# Uso típico: trap 'gad_autoregistro "<nome>.sh" "$?"' EXIT
+gad_autoregistro() { # <nome> <exit> [resumo]
+  local root p nn pd rl et
+  root="$(gad_project_root)" || return 0
+  p="$root/.planning/.gad-rodada-ativa.json"
+  [ -f "$p" ] || return 0
+  nn=$(jq -r '.nn // empty' "$p" 2>/dev/null); pd=$(jq -r '.phase_dir // empty' "$p" 2>/dev/null)
+  rl=$(jq -r '.runlog // empty' "$p" 2>/dev/null)
+  [ -n "$nn" ] && [ -n "$pd" ] || return 0
+  et=$(grep '"evento":"checkpoint"' "$rl" 2>/dev/null | tail -n1 \
+       | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p'); : "${et:=0 abertura}"
+  gad_runlog "$pd" "$nn" script "$et" \
+    --kv script="$1" --kv exit="${2:-0}" ${3:+--kv resumo="$3"} >/dev/null
+  return 0
+}

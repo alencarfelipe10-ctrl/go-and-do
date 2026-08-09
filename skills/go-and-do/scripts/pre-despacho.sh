@@ -106,8 +106,11 @@ fi
 # ── política de limite (2.C) ─────────────────────────────────────────────────
 if [ "$status" = "stop" ]; then
   handoff="Contexto em $((tokens/1000))k (teto $((limite/1000))k) — pausa graciosa. Retome numa sessão nova com: /go-and-do $FASE"
-  [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" stop "$RUNLOG_ETAPA" \
-    "$tokens" "$pct" "" "$limite" "" "contexto em $((tokens/1000))k"
+  if [ "$DRY" = 0 ]; then
+    gad_runlog "$PHASE_DIR" "$NN" stop "$RUNLOG_ETAPA" \
+      "$tokens" "$pct" "" "$limite" "" "contexto em $((tokens/1000))k"
+    rm -f "$PONTEIRO"   # PC-3: rodada parada não arma mais o hook
+  fi
   gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" --arg h "$handoff" \
     --argjson t "${tokens:-0}" --argjson p "${pct:-0}" --argjson l "${limite:-0}" --argjson x "$extras" \
     '{etapa:$e, despacho:"stop", contexto:{tokens:$t,pct:$p,limit:$l,status:"stop"}, handoff:$h} + $x')"

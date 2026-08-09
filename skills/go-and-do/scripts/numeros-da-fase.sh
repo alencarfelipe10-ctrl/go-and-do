@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null && trap 'gad_autoregistro "numeros-da-fase.sh" "$?"' EXIT || true
 # numeros-da-fase.sh — números da fase com FONTE ESTRUTURAL (tarefa 24(b), 01/08/2026).
 #
 # Motivação: 3ª reincidência de número "de memória" no resumo executivo (F21: ordinal do

@@ -24,6 +24,7 @@
 # achados em redução → leitura obrigatória do parecer bruto (regra no prompt).
 
 set -u
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null && trap 'gad_autoregistro "confere-ciclo.sh" "$?"' EXIT || true
 
 SEV='HIGH|MEDIUM|LOW|CRITICAL|BLOCKER|ALTA|ALTO|M[ÉE]DIA|M[ÉE]DIO|BAIXA|BAIXO|CR[ÍI]TIC'
 

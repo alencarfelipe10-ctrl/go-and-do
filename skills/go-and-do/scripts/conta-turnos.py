@@ -81,7 +81,30 @@ def main() -> None:
             estouro = True
         batch = f"{tools[c] / turnos[c]:.1f}" if turnos[c] else "-"
         print(f"c{c}: {turnos[c]} turnos · {tools[c]} tool_use ({batch}/turno){flag}")
-    sys.exit(1 if estouro else 0)
+    codigo = 1 if estouro else 0
+    _autoregistro(codigo)
+    sys.exit(codigo)
+
+
+def _autoregistro(codigo):
+    """Auto-registro G.2-ii: grava o próprio resultado no run-log quando há rodada
+    ativa (ponteiro PC-3); fora de rodada é no-op. Nunca falha o script."""
+    import os
+    import subprocess
+    try:
+        root = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                              capture_output=True, text=True).stdout.strip() or os.getcwd()
+        p = os.path.join(root, ".planning", ".gad-rodada-ativa.json")
+        if not os.path.isfile(p):
+            return
+        with open(p, encoding="utf-8") as fh:
+            d = json.load(fh)
+        rl = os.path.join(os.path.dirname(os.path.realpath(__file__)), "run-log.sh")
+        subprocess.run(["bash", rl, d["phase_dir"], d["nn"], "script", "1 intencao",
+                        "--kv", "script=conta-turnos.py", "--kv", f"exit={codigo}"],
+                       capture_output=True, timeout=10)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":

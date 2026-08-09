@@ -16,6 +16,7 @@
 # Régua da skill: verificação vira script; julgamento fica no modelo.
 
 set -u
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null && trap 'gad_autoregistro "spot-check-ponteiros.sh" "$?"' EXIT || true
 DOC="${1:?uso: spot-check-ponteiros.sh <arquivo.md> [root ...]}"
 shift
 ROOTS=("$@")

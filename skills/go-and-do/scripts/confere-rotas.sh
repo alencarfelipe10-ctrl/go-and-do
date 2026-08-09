@@ -20,6 +20,7 @@
 # Régua da skill: verificação vira script; julgamento fica no modelo.
 
 set -u
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null && trap 'gad_autoregistro "confere-rotas.sh" "$?"' EXIT || true
 DIR="${1:?uso: confere-rotas.sh <pareceres_dir>}"
 [ -d "$DIR" ] || { echo "ERRO: diretório não encontrado: $DIR" >&2; exit 2; }
 

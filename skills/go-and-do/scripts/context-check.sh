@@ -50,6 +50,7 @@
 # Exit:          sempre 0 — quem decide é a skill, lendo a linha.
 
 set -uo pipefail
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null && trap 'gad_autoregistro "context-check.sh" "$?"' EXIT || true
 
 TOKEN_LIMIT=400000
 
