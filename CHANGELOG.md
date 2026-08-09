@@ -2,6 +2,17 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.1.1] — 2026-08-09
+
+### Corrigido
+
+- **`precos.json`: preço do `claude-fable` corrigido** de $5/$25 (preço do Opus) para
+  os $10/$50 oficiais por MTok (cache write $12.50, cache read $1.00). O erro fazia o
+  `mede-tokens.py` subcontar em ~2× o custo de sessões rodando em Fable 5. Conferência
+  de 09/08 contra a página oficial de modelos: Opus ($5/$25), Sonnet ($3/$15) e Haiku
+  ($1/$5) batem e ficam como estavam — no Sonnet o preço introdutório ($2/$10 até
+  31/08/2026) é deliberadamente ignorado, mantendo o sticker por viés conservador.
+
 ## [2.1.0] — 2026-08-09
 
 ### Adicionado
