@@ -136,11 +136,11 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 30. *(balde 2)* 🔒 1 ciclo de conserto: despacho da 2.3 (args `N --gaps`) → re-execução pela regra da 3.3 (args `... --gaps-only`) → despacho da 4.1 (`iteracao: 2+`, `--files` do `calcula-files.sh`) → re-despacha o subagente de UAT **só** nos cenários `issue` (a janela nova sobe o server sozinha) → `confere-etapa.sh 5 --fix-cycle` valida e carimba `pre_uat_fix_cycle: done`. Persistiu → ⏸️ Sub-rotina D.
 
 **Etapa 6 — Encerramento + ship** *(roteamento por balde)*
-31. **Roteia o desfecho:** sobrou balde 2 → ⏸️ D (pause-work) · sobrou balde 3 **ou** flag `--no-ship` → **hand-back** ao `/gsd-verify-work` (não shipa) · só baldes 1+4 → segue pro ship.
+31. **Roteamento mecânico:** `pre-despacho.sh 6` → `rota` (pausa → ⏸️ D · handback → banner · ship) + `git_remote` (false → rota B 6.E: ship alternativo do projeto, executado com autorização prévia) + `uat_passed_raw` + transparência extraída (6.2).
 32. Consolida o "🔔 O que precisa de você agora" + os itens do **bloco de transparência** (balde 4 assumidos / balde 3 não-verificados / decisões de intenção adotadas por recomendação do revisor, Etapa 1 / passos que não rodaram — config off ou ferramenta indisponível, com o motivo).
 33. Resumo executivo (modo final, com o bloco de transparência no topo): **Sub-rotina F**. ⏭️ idempotente (`go_and_do_resumo: final`).
-34. Commita os artefatos do UAT (`NN-UAT.md` + evidências — a varredura de segredos do `confere-etapa.sh 5` já barrou vazamento; `.spec.ts` não existe mais, 5.F/6.B) pra árvore ficar limpa pro preflight do ship (6.3b). 🔒 **Ship** (só na rota de ship): via **subagente** (Sub-rotina H + `prompts/close.md`, hospedando `close-phase N` — extract-learnings → promove a verificação → abre o PR). ⏸️ Bloqueio de ambiente (sem remote/`gh`) → sobe como `blocked`; respeita e reporta. Depois do retorno (shipado ou blocked): **emenda factual** da seção "Desfecho do ship" no resumo (6.4c) + commit.
-35. Self-check (rede: sobrou plano sem SUMMARY → Sub-rotina D) + banner final (PR + bloco de transparência + add-tests como passo **pós-PR**) + evento `stop` na telemetria (Sub-rotina G) e devolve o controle.
+34. `commita-artefatos.sh uat` (6.3b, escritor único). 🔒 **Ship** (rota A): via **subagente** (`prompts/close.md`, hospedando `close-phase N` — learnings → promoção → PR → revisão auto-"Skip" carimbada → `gh pr merge --squash --delete-branch`, 6.D). Rota B (sem remote): ship alternativo do projeto executado pela camada 0 (6.E). ⏸️ Bloqueio de ambiente → `blocked`; respeita e reporta. Depois: emenda factual do "Desfecho do ship" no resumo (6.4c) + commit.
+35. `confere-etapa.sh 6` (self-check mecânico: PLAN×SUMMARY + anti-placeholder de ts) + banner final (PR/merge + bloco de transparência + add-tests **pós-PR**) + evento `stop` + ponteiro removido + `commita-artefatos.sh runlog`, e devolve o controle.
 
 </master_checklist>
 
@@ -463,7 +463,7 @@ falhando — **pare** (como na Etapa 0.3) e mostre ao usuário o comando de inst
 
 </subroutine>
 
-<subroutine name="F — gerar o resumo executivo (subagente Sonnet 4.6)">
+<subroutine name="F — gerar o resumo executivo (subagente Sonnet 5)">
 
 ## Sub-rotina F — gerar o resumo executivo (via SUBAGENTE)
 
@@ -494,7 +494,7 @@ projeto (não-técnico)**. Chamada em dois momentos: `modo: final` no encerramen
 > artefatos verbosos da fase (SUMMARY/REVIEW/SECURITY/VERIFICATION/UAT…) — exatamente o que a
 > operating_rule "não leia artefatos verbosos na sua janela" + o gate de contexto proíbem no
 > orquestrador. O subagente tem janela própria; o orquestrador lê de volta só um status compacto.
-> **Modelo: Sonnet 4.6** (`Agent` com `model: sonnet`) — é tarefa de síntese/escrita, não precisa
+> **Modelo: Sonnet 5** (`Agent` com `model: sonnet`) — é tarefa de síntese/escrita, não precisa
 > de Opus; mais rápido e barato, e não consome a janela do orquestrador.
 
 **Retomada / idempotência (só no `modo: final`):** se já existe `<phase_dir>/NN-RESUMO-EXECUTIVO.md`
@@ -1577,32 +1577,21 @@ O subagente retorna: `uat_path`, `total`, e por cenário o tipo `{logic|api|cli|
 Só se chegou até aqui (se parou antes, a Sub-rotina D já fez o handoff). Esta etapa tem **duas
 rotas terminais**: **ship** (caminho feliz) e **hand-back** (devolve sem shipar).
 
-**6.1 — Roteia o desfecho** (lendo o resumo compacto do subagente da Etapa 5 + o estado da fase):
-- **Sobrou balde 2** (bug não fechou após o ciclo único) → **Sub-rotina D** (pause-work). *(Já
-  tratado na 5.5; esta é a rede.)*
-- **Sobrou balde 3** (não-pude-verificar: login sem vault, 2FA, browser indisponível) **OU** a flag
-  **`--no-ship`** → **rota de hand-back** (6.4-HB). A fase está completa e auditada, mas **não
-  shipa**: ou porque há comportamento que ninguém confirmou (balde 3), ou porque você pediu pra
-  conferir antes (`--no-ship`).
-- **Só baldes 1+4** (objetivo limpo, sem balde 3) e **sem `--no-ship`** → **rota de ship** (6.4-SHIP).
+**6.1 — Roteia o desfecho (mecânico).** Rode `pre-despacho.sh 6` e obedeça `rota`:
+`pausa` (sobrou balde 2 — rede da 5.5) → Sub-rotina D · `handback` (balde 3 ou `--no-ship`)
+→ 6.4-HB · `ship` → 6.4-SHIP. O JSON também traz `git_remote` (gatilho da rota B, 6.4-SHIP),
+`uat_passed_raw` (cola no briefing do ship — resultado MEDIDO) e o bloco `transparencia`
+(as 5 listas extraídas mecanicamente). Você não decide rota; lê o veredito.
 
 **6.2 — Monta o "🔔 O que precisa de você agora" + o bloco de transparência.** Junte tudo que
 merece atenção, mesmo o que seguiu sem parar: Criticals do code-review (+ itens `requires human
 verification`); pilares de UI 1-2 / Registry Safety; eval abaixo de PRODUCTION READY; validação
 *partial*; a ressalva `ciclo_final_nao_rodou` da revisão de intenção, se existir (a revisão
-aconteceu, mas o ciclo final de confirmação do revisor não rodou). E monte os **itens do bloco de transparência** (insumo do resumo):
-- **balde 4 (assumed)** — os itens subjetivos que vão ser **shipados assumidos** ("⚠️ Shipei
-  assumindo estes pontos — confira antes de dar merge").
-- **balde 3 (não-verificados)** — na rota de hand-back, o que **precisa da sua verificação**.
-- **decisões de intenção (Etapa 1)** — a lista `transparencia:` do frontmatter do
-  `NN-INTENT-REVIEW.md` (tradeoffs adotados por recomendação do revisor cross-AI, sem passar
-  por você). Vazia ou arquivo ausente → nada a incluir.
-- **passos não rodados** — o que esta rodada não rodou e por quê (gate de config off,
-  ferramenta indisponível — os eventos `skip` e as degradações declaradas da rodada).
-  Nada pulado → nada a incluir.
-- **riscos aceitos (4.4)** — a lista `riscos_aceitos` que o subagente do secure devolveu
-  (cada um com o ponteiro de onde o usuário decidiu). Aceite de risco é assinatura do dono —
-  ele precisa REVER a assinatura no resumo, não descobri-la no código. Vazia → nada a incluir.
+aconteceu, mas o ciclo final de confirmação do revisor não rodou). Os **itens do bloco de transparência** já vieram EXTRAÍDOS no campo `transparencia` do
+JSON da 6.1 (balde 4 shipado-assumido · balde 3 a verificar · `transparencia:` do
+INTENT-REVIEW · eventos `skip`/degradações do run-log · `riscos_aceitos` do secure — aceite
+de risco é assinatura do dono; ele REVÊ no resumo, não descobre no código). Seu trabalho é
+só REDIGIR; lista vazia → nada a incluir.
 
 **6.3 — Resumo executivo (modo final, com bloco de transparência).** **Sub-rotina F** com
 `modo: final`, passando o **desfecho** (`ship` ou `handback`), a lista de itens **balde 4 (assumed)**,
@@ -1613,22 +1602,10 @@ a lista **`itens_intencao`** (as decisões de intenção da 6.2), a lista **`ite
 > Ordem: o resumo é gerado e **commitado antes** do `close-phase` — assim ele entra na árvore limpa
 > que o ship empacota, e vira parte do diff do PR.
 
-**6.3b — Árvore limpa pro ship (commit dos artefatos do UAT).** O subagente da Etapa 5 pode ter
-gerado um teste Playwright (`tests/uat-fase-NN.spec.ts`, fora do `.planning/` → **não** é coberto
-por gitignore) e evidências (`<phase_dir>/uat-evidencia/`). O preflight do `gsd-ship` (chamado pela
-close-phase) **exige árvore limpa** — esses arquivos não-commitados o travariam ou disparariam o
-prompt "commit/stash" no meio do fluxo autônomo. Então, **antes** de chamar a close-phase, commite-os
-(use os caminhos `teste_gerado` / `evidencias` que o subagente devolveu no resumo compacto):
-```bash
-git add "<phase_dir>/NN-UAT.md" "tests/uat-fase-NN.spec.ts" "<phase_dir>/uat-evidencia" 2>/dev/null
-git diff --cached --quiet 2>/dev/null || \
-  git commit -m "test(fase NN): UAT automatizado — cenários + e2e do caminho feliz" >/dev/null
-```
-> O `git add ... 2>/dev/null` ignora os que não existem (sem `--ui` não há `.spec.ts`/evidência; o
-> `NN-UAT.md` pode estar em `.planning/` gitignorado). O `git diff --cached --quiet` pula o commit se
-> nada foi staged. Falhou (sem git, nada a commitar) → **não pare**: registre numa linha e siga (o
-> caso de árvore-suja-real a close-phase reporta como bloqueio de ambiente). Vale para **ambas** as
-> rotas (na de hand-back também, pra não deixar o `.spec.ts` solto sujando a árvore).
+**6.3b — Árvore limpa pro ship (commit dos artefatos do UAT).** O preflight do `gsd-ship`
+exige árvore limpa. Rode `commita-artefatos.sh <phase_dir> <NN> uat` (escritor único:
+script commita — `NN-UAT.md` + `uat-evidencia/`; a varredura de segredos já rodou na
+cancela da Etapa 5; `.spec.ts` não existe mais, 5.F). Vale para ambas as rotas.
 
 **Evidência movida = `NN-UAT.md` emendado no mesmo passo.** Se você mover ou estacionar uma
 evidência fora do Git (ex.: PDF com PII — a decisão de não versionar está certa), emende o
@@ -1638,7 +1615,15 @@ auditável. Caso real (F21, 28/07): o PDF dos cenários 3/4 foi ao scratchpad po
 `21-UAT.md` continuou apontando `uat-evidencia/….pdf` — a fase fechou com 0 evidência
 versionada e 1 path fantasma.
 
-**6.4-SHIP — Ship via `/close-phase` (via subagente).** Gate de contexto (Sub-rotina A).
+**6.4-SHIP — Ship.** `git_remote: false` no JSON da 6.1 → **rota B (6.E — julgamento
+seu):** o projeto shipa por caminho próprio por design (caso real: grupo-inspired via
+`/ship-clean-room` para não vazar dados de alunos). Descubra o ship alternativo nos
+artefatos do PRÓPRIO projeto (skills do projeto, CLAUDE.md) e **execute com autorização
+prévia** (decisão do dono 09/08 — sem perguntar nem hand-back), registrando escolha e
+porquê no `NN-DECISOES.md`. Não achou caminho → `blocked` honesto como hoje. NENHUMA
+config canônica nova — a fonte é o projeto, o juiz é você.
+
+**Rota A (com remote) — via `/close-phase` (subagente).** Gate de contexto (Sub-rotina A).
 Despache pela **Sub-rotina H** com `prompts/close.md` (leva `N`, `NN`, `phase_dir`,
 `project_root` absolutos): o subagente hospeda a skill `close-phase N`, que faz
 `extract-learnings → promove a verificação (com evidência "UAT automatizado", não "humana") →
@@ -1703,14 +1688,11 @@ nesta ordem:
 3. `/close-phase N` — depois do UAT limpo: `extract-learnings → ship` (cria o PR). *(Ou re-rode
    `/go-and-do N` sem `--no-ship` depois de resolver o balde 3 — ela retoma e shipa.)*
 
-**6.5 — Self-check + banner final.** Antes de imprimir, confira: todos os gates reais honrados (ou
-seus 🔔 no banner) e a execução completa — todos os planos com `SUMMARY.md`, checado por glob no
-`<phase_dir>` (`NN-*-PLAN.md` × `NN-*-SUMMARY.md`; contagem casa → completo — sem precisar do
-shim). Confira também os **timestamps de frontmatter × git** (anti-placeholder): para
-`NN-VERIFICATION.md` (`verified:`) e `NN-UAT.md` (`started/updated`), compare o ts declarado com
-`git log -1 --format=%cI -- <arquivo>` — ts no futuro do próprio commit ou fora da janela da
-rodada = fabricado; corrija para o ts real (git) no lugar e registre em `incidentes:` (caso real
-F22: `verified: 14:00` num commit das 09:02). Depois imprima:
+**6.5 — Self-check + banner final.** Rode `confere-etapa.sh 6` — glob PLAN×SUMMARY
+(sobrou plano sem SUMMARY = falha) + anti-placeholder de timestamps + asserts do resumo;
+🔔 automático em divergência (divergência de ts = corrija para o ts real do git e registre
+em `incidentes:`). O JSON extrai `plans`/`summaries` — reconcilie a TaskList (varredura
+anti-órfã S.C: tarefa `in_progress` sobrando = 🔔). Depois imprima:
 - **Rota de ship:** moldura padrão da 0.5 com título `GO-AND-DO · Fase NN — shipada`, campos
   `PR` (#N) e `Resumo` (caminho do resumo executivo); abaixo da caixa: a **URL do PR**, o
   **bloco de transparência** (itens balde 4 assumidos + passos não rodados, se houver) e
@@ -1719,13 +1701,9 @@ F22: `verified: 14:00` num commit das 09:02). Depois imprima:
   a caixa — reaproveite o mesmo banner) + os itens **balde 3** a resolver + as pendências da
   6.4-HB + onde está o resumo. Encerre.
 Em ambas as rotas, junto do banner, registre o evento `stop` na telemetria (Sub-rotina G) com a
-etapa `ship` ou `handback` — fecha a medição da rodada — e, no mesmo bloco Bash, **commite o
-run-log** (best-effort):
-```bash
-git add "<phase_dir>/NN-RUN-LOG.jsonl" 2>/dev/null
-git diff --cached --quiet 2>/dev/null || \
-  git commit -m "chore(fase NN): telemetria — fim da rodada" >/dev/null
-```
+etapa `ship` ou `handback` — fecha a medição da rodada; remova o ponteiro
+`.planning/.gad-rodada-ativa.json` (PC-3) — e commite o run-log por script:
+`commita-artefatos.sh <phase_dir> <NN> runlog`.
 > Por quê: os eventos gravados depois do último commit de docs são um append não-commitado —
 > num sync posterior do branch (checkout/reset pós-merge), um arquivo sujo trava o checkout e
 > o append acaba descartado (aconteceu em fase real: o `stop` do ship se perdeu). Commit

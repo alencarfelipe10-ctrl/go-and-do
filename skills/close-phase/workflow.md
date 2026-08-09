@@ -70,7 +70,7 @@ Legenda: ⏭️ retomada (pula se já feito) · ⏸️ pode parar
 
 **Etapa 3 — Ship**
 9. ⏭️ Retomada por PR: `gh pr list --head <branch>` → PR já existe → pula a criação, guarda nº/URL.
-10. `Skill gsd-ship` → `N`. ⏸️ Bloqueio de ambiente (sem remote/`gh`/branch) → roda a reconciliação (4.1) e SÓ ENTÃO respeita e reporta (a fase fechou localmente; só a publicação ficou). Os `AskUserQuestion` de revisão do ship ficam.
+10. `Skill gsd-ship` → `N`; revisão pós-PR = "Skip" auto-respondido com carimbo (6.D) → `gh pr merge --squash --delete-branch` (3.3). ⏸️ Bloqueio de ambiente (sem remote/`gh`/branch) → roda a reconciliação (4.1) e SÓ ENTÃO respeita e reporta (a fase fechou localmente; só a publicação ficou).
 
 **Etapa 4 — Encerramento**
 11. Reconciliação de estado (4.1): checkbox da fase no ROADMAP, STATE coerente (inclusive `status`), `.continue-here.md` (raiz E pasta da fase) e `HANDOFF.json` obsoletos.
@@ -325,9 +325,20 @@ EXISTING_PR=$(gh pr list --head "$(git branch --show-current)" --json number,url
 - Não existe → vá pra 3.2.
 
 **3.2 — Ship.** `Skill gsd-ship` com args `N`. O ship faz o próprio preflight (agora passa:
-status promovido + árvore limpa), faz push, gera o corpo do PR e cria o PR; depois oferece
-revisão (`AskUserQuestion`: Skip / Self-review / Request review) — deixe esses prompts
-chegarem ao usuário, são a granularidade certa.
+status promovido + árvore limpa), faz push, gera o corpo do PR e cria o PR. A oferta de
+revisão (`AskUserQuestion`: Skip / Self-review / Request review) tem **resposta
+pré-decidida (6.D do gad-major, dono 09/08): "Skip"** — responda você mesmo e registre o
+carimbo no `NN-DECISOES.md` (dev solo; o code review real já rodou na fase, com auto-fix).
+
+**3.3 — Merge direto (6.D).** Com o PR criado E o gate da Sub-rotina V aprovado (é a
+condição de você ter chegado aqui — `assumed`/`skipped` bloquearam-e-perguntaram antes):
+
+```bash
+gh pr merge <numero> --squash --delete-branch
+```
+
+Banner e resumo dizem "mergeado" — nunca prometa revisão que o fluxo não tem. Falhou o
+merge (proteção de branch, CI obrigatório) → PR fica aberto, registre o motivo no banner.
 - **Bloqueio de ambiente** que não controlamos — sem `origin`, `gh` ausente/não autenticado,
   ou branch errado → o ship reporta e sai. **Respeite o bloqueio**, mas antes de parar rode a
   **reconciliação de estado (4.1)**: o bloqueio é de PUBLICAÇÃO; a fase está fechada

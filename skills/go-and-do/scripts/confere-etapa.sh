@@ -228,6 +228,28 @@ if [ "$ETAPA" = "5" ]; then
   fi
 fi
 
+# ── etapa 6: self-check mecânico (6.A/6.5) ───────────────────────────────────
+if [ "$ETAPA" = "6" ]; then
+  n_plans=0; n_sums=0
+  for f in "$PHASE_DIR"/*-PLAN.md;    do [ -f "$f" ] && n_plans=$((n_plans+1)); done
+  for f in "$PHASE_DIR"/*-SUMMARY.md; do [ -f "$f" ] && n_sums=$((n_sums+1)); done
+  if [ "$n_plans" -gt "$n_sums" ]; then
+    RES=$(jq -c --arg d "sobrou plano sem SUMMARY ($n_plans planos × $n_sums summaries) — ação humana travou onda?" \
+      '. + [{id:"plan_x_summary", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+  fi
+  # anti-placeholder de timestamp (fabricação em série: F20/F22)
+  PLACE=$( { grep -rlE '<ts>|YYYY-MM|0000-00-00|\[timestamp\]' \
+      "$PHASE_DIR/$NN-RESUMO-EXECUTIVO.md" "$PHASE_DIR/$NN-UAT.md" \
+      "$PHASE_DIR/$NN-LEARNINGS.md" 2>/dev/null || true; } | head -2 )
+  if [ -n "$PLACE" ]; then
+    RES=$(jq -c --arg d "placeholder de timestamp em: $(basename $PLACE | tr '\n' ' ')" \
+      '. + [{id:"ts_placeholder", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+  fi
+  # varredura anti-órfã da TaskList (S.C): sinal p/ camada 0 reconciliar
+  EXTRAI=$(jq -c --argjson p "$n_plans" --argjson s "$n_sums" \
+    '. + {plans:$p, summaries:$s}' <<<"$EXTRAI")
+fi
+
 # ── veredito + eventos + medição ─────────────────────────────────────────────
 if [ "$FALHAS" = 0 ]; then VEREDITO=pass; else VEREDITO=fail; fi
 MEDICAO=null

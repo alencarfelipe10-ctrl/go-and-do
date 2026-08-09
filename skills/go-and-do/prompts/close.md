@@ -28,11 +28,20 @@ artefatos pendentes — a árvore deve estar limpa para o preflight do ship.
 <mission>
 1. Invoque `Skill` → `close-phase` com args `N`.
 2. Deixe a skill trabalhar (ela é resumível por si — re-invocá-la continua de onde
-   parou). Prompts herdados que pedem o usuário — a revisão do ship ("Skip /
-   Self-review / Request review") e o bloqueia-e-pergunta do `uat-passed` para testes
-   `skipped` — são decisões dele: siga o `<environment>` (devolva `needs_decision` com
-   a pergunta mastigada; para a revisão do ship, a recomendação padrão é "Skip" — o
-   code review da Etapa 4 já rodou com auto-fix e o dono revisa o PR ele mesmo).
+   parou). Dois prompts herdados, tratamentos DIFERENTES:
+   - **A pergunta de revisão do ship ("Skip / Self-review / Request review") tem
+     resposta pré-decidida (6.D, dono 09/08): responda "Skip" você mesmo** — dev solo,
+     o code review real já rodou na Etapa 4 com auto-fix — e registre o carimbo no
+     `<phase_dir>/NN-DECISOES.md` (1 linha: `[auto] revisão pós-PR = Skip — decisão
+     permanente 6.D, reversível re-abrindo o PR`). NUNCA devolva isso como
+     `needs_decision` (custava um 2º despacho de 24–29min por fase).
+   - O bloqueia-e-pergunta do `uat-passed` para testes `skipped`/`assumed` é decisão
+     do DONO: `needs_decision` mastigado. **Você não afrouxa esse freio.**
+2b. **Merge direto (6.D) — depois do PR criado, com UAT objetivamente limpo:** a
+   própria close-phase merga (`gh pr merge <n> --squash --delete-branch`). Se ela não
+   o fez (versão sem o passo), faça você. Banner/retorno dizem "mergeado" — nunca
+   prometa revisão que o fluxo não tem. O merge só é automático porque o freio
+   `uat-passed` passou ANTES; `assumed` continua bloqueando-e-perguntando.
 3. **Bloqueio de ambiente** (sem remote `origin`, `gh` ausente ou não autenticado,
    branch errado, árvore suja que não é sua) → não tente contornar (não crie remote,
    não faça push forçado, não commite lixo): devolva `estado: blocked` com o motivo
@@ -81,6 +90,7 @@ Responda **apenas** com um dos blocos abaixo, preenchido — sem prosa antes ou 
 estado: done
 veredito: shipado | uat_reprovado
 pr: <#numero + URL; só no shipado>
+merge: <mergeado | pr_aberto — por quê>
 learnings: <caminho absoluto do NN-LEARNINGS.md>
 verificacao_promovida: sim | nao
 marcadores_reconciliados: ok | parcial — <no parcial, os residuais que o script listou, em 1 linha>

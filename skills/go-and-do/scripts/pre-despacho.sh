@@ -145,6 +145,40 @@ if [ "$(jq -r '.pre.git_remote // false' "$MANIFEST")" = "true" ]; then
   extras=$(jq -cn --argjson gr "$gr" --argjson prev "$extras" '$prev + {git_remote: $gr}')
 fi
 
+# ── etapa 6: roteamento por baldes (6.1) + transparência mecânica (6.2) ──────
+if [ "$ETAPA" = "6" ]; then
+  UAT="$PHASE_DIR/$NN-UAT.md"
+  cnt() { { grep -cE "$1" "$UAT" 2>/dev/null || true; } | head -1; }
+  n_issue=$(cnt 'result: *issue'); n_pend=$(cnt 'result: *(\[pending\]|blocked|pending)')
+  n_pass=$(cnt 'result: *pass'); n_assumed=$(cnt 'result: *assumed')
+  NO_SHIP=false; [ -f "$PONTEIRO" ] && NO_SHIP=$(jq -r '.args.no_ship // false' "$PONTEIRO")
+  if [ "${n_issue:-0}" -gt 0 ]; then ROTA=pausa
+  elif [ "${n_pend:-0}" -gt 0 ] || [ "$NO_SHIP" = true ]; then ROTA=handback
+  else ROTA=ship; fi
+  # predicado nativo medido, colado no briefing do ship (a regra escrita furou na F21)
+  UPRAW=$( (cd "$ROOT" && gsd_run phase uat-passed "$FASE" --raw 2>/dev/null || \
+            gsd_run phase uat-passed "$FASE" 2>/dev/null) | head -c 2000 | tr -d '\n' || true )
+  # transparência: 5 fontes extraídas mecanicamente — o modelo só redige
+  # cada estágio protegido: sob pipefail, grep/awk sem match ou sem arquivo sai !=0
+  # e o set -e mata o script logo após a atribuição
+  b4=$({ grep -B2 'result: *assumed' "$UAT" 2>/dev/null || true; } \
+       | { grep -vE '^--$|result:' || true; } | head -8 | jq -R . | jq -cs .)
+  b3=$({ grep -B2 -E 'result: *(\[pending\]|blocked)' "$UAT" 2>/dev/null || true; } \
+       | { grep -vE '^--$|result:' || true; } | head -8 | jq -R . | jq -cs .)
+  itr=$({ awk '/^transparencia:/{f=1;next} f&&/^[a-z_]+:/{f=0} f&&/^ *- /{print}' \
+        "$PHASE_DIR/$NN-INTENT-REVIEW.md" 2>/dev/null || true; } | head -8 | jq -R . | jq -cs .)
+  sk=$({ grep '"evento":"skip"' "$PHASE_DIR/$NN-RUN-LOG.jsonl" 2>/dev/null || true; } \
+       | { jq -c '.etapa' 2>/dev/null || true; } | head -8 | jq -cs .)
+  ra=$({ awk '/^riscos_aceitos:/{f=1;next} f&&/^[a-z_]+:/{f=0} f&&/^ *- /{print}' \
+       "$PHASE_DIR/$NN-SECURITY.md" 2>/dev/null || true; } | head -8 | jq -R . | jq -cs .)
+  extras=$(jq -cn --argjson prev "$extras" --arg rota "$ROTA" --arg up "$UPRAW" \
+    --argjson p "${n_pass:-0}" --argjson i "${n_issue:-0}" --argjson pe "${n_pend:-0}" --argjson a "${n_assumed:-0}" \
+    --argjson b4 "$b4" --argjson b3 "$b3" --argjson itr "$itr" --argjson sk "$sk" --argjson ra "$ra" \
+    '$prev + {rota:$rota, baldes:{pass:$p, issue:$i, pending:$pe, assumed:$a},
+      uat_passed_raw:$up,
+      transparencia:{balde_4:$b4, balde_3:$b3, intent_review:$itr, skips_runlog:$sk, riscos_aceitos:$ra}}')
+fi
+
 # ── política de limite (2.C) ─────────────────────────────────────────────────
 if [ "$status" = "stop" ]; then
   handoff="Contexto em $((tokens/1000))k (teto $((limite/1000))k) — pausa graciosa. Retome numa sessão nova com: /go-and-do $FASE"
