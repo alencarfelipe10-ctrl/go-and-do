@@ -28,7 +28,10 @@ TABELA="$PAR/.tabela-c$K.txt"
 if [ ${#PARECERES[@]} -gt 0 ]; then
   bash "$GAD_SCRIPTS_DIR/confere-ciclo.sh" --tabela "${PARECERES[@]}" > "$TABELA" 2>/dev/null || true
 fi
-BRUTOS=$(grep -cE '^\| [a-z]+ \| L?[0-9]+ \|' "$TABELA" 2>/dev/null | head -1); : "${BRUTOS:=0}"
+BRUTOS=0
+if [ -f "$TABELA" ]; then
+  BRUTOS=$( { grep -cE '^\| [a-z]+ \| L?[0-9]+ \|' "$TABELA" || true; } | head -1 ); : "${BRUTOS:=0}"
+fi
 
 {
   echo
