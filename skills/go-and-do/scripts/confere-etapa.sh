@@ -161,6 +161,17 @@ while IFS= read -r x; do
           && lista=$(jq -c --arg f "$(basename "$f")" '. + [$f]' <<<"$lista")
       done
       EXTRAI=$(jq -c --arg id "$xid" --argjson l "$lista" '. + {($id): $l}' <<<"$EXTRAI") ;;
+    grep-valor)
+      # primeiro match inteiro do regex — dado de roteamento (a camada 0 nunca relê o
+      # relatório do gate; vereditos são strings/números canônicos, 4.A)
+      padrao=$(subst "$(jq -r '.arquivo' <<<"$x")")
+      regex=$(jq -r '.regex' <<<"$x")
+      val=""
+      for f in $padrao; do
+        [ -f "$f" ] || continue
+        val=$(grep -hoE "$regex" "$f" 2>/dev/null | head -1) && [ -n "$val" ] && break
+      done
+      EXTRAI=$(jq -c --arg id "$xid" --arg v "$val" '. + {($id): (if $v=="" then null else $v end)}' <<<"$EXTRAI") ;;
   esac
 done < <(jq -c '.extrai[]?' "$MANIFEST")
 

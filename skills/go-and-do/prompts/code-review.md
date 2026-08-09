@@ -17,18 +17,38 @@ roteamento.
 
 <inputs>
 O despacho te entrega: o número da fase (`N`), o prefixo (`NN`), o `phase_dir`, o
-`project_root` — ambos **absolutos** — e os `args` do comando (padrão `N --fix --auto`;
-no ciclo de conserto do UAT a camada 0 acrescenta `--files=<arquivos do fix>`). Seu
-diretório de trabalho inicial não é a raiz do projeto: comece todo bloco Bash com
-`cd "<project_root>"` e use caminhos absolutos em tudo. A camada 0 já checou a retomada
-antes de te despachar — não re-cheque.
+`project_root` — ambos **absolutos** — os `args` do comando (padrão `N --fix --auto`)
+e a `iteracao` (1 = review cheio; 2+ = re-review estreitado). Seu diretório de
+trabalho inicial não é a raiz do projeto: comece todo bloco Bash com
+`cd "<project_root>"` e use caminhos absolutos em tudo. A camada 0 já checou a
+retomada antes de te despachar — não re-cheque. Scripts em
+`$HOME/.claude/skills/go-and-do/scripts/`.
 </inputs>
 
 <mission>
-1. Invoque `Skill` → `gsd-code-review` com os `args` que o despacho trouxe. Sem `--all`
-   — Info é cosmético, não vale o risco do fixer mexer às cegas. O escopo de arquivos
-   sai dos `SUMMARY.md` da fase (ou do `--files=` do despacho); o comando resolve isso
-   sozinho.
+0. **Escopo por iteração (4.C — o re-review NUNCA relê o escopo inteiro):**
+   - `iteracao: 1` → escopo cheio (o comando resolve pelos SUMMARY.md).
+   - `iteracao: 2+` → rode `calcula-files.sh "<phase_dir>" "<NN>"` e acrescente
+     `--files=<a lista>` aos args (diff desde o último review + dependentes reversos
+     de 1 salto — o raio além disso é da suíte Nyquist e do UAT).
+   - Re-review disparado porque o secure tocou src/ (gate 4.1b) → a camada 0 já mandou
+     `--files=` calculado com `--tocados`.
+1. **Lane Codex paralela (SÓ na iteração 1 — re-review é conferência de fix, não caça
+   nova; 4.D):** ANTES de invocar o comando, monte o briefing do revisor externo:
+   copie `$HOME/.claude/skills/go-and-do/prompts/codex-code-review.md` para
+   `<phase_dir>/pareceres/.briefing-review.md` e anexe a lista de arquivos do escopo
+   (dos SUMMARY.md) + o caminho do repo. Lance em background:
+   ```bash
+   ( $HOME/.claude/skills/go-and-do/scripts/roda-codex.sh "<phase_dir>" "<NN>" review \
+       "<phase_dir>/pareceres/.briefing-review.md" \
+       --out "<phase_dir>/pareceres/<NN>-parecer-codex-review.md" ) &
+   ```
+   e siga IMEDIATAMENTE para o passo 2 (o custo do Codex é só de parede). Exit 5
+   (`revisor_ausente`) → siga sem a lane, sino declarado — o reviewer interno canônico
+   é o piso do gate 22 (não bloqueia, PC-6 vale só para a revisão adversarial).
+1b. Invoque `Skill` → `gsd-code-review` com os `args` (+ o `--files=` do passo 0,
+   quando houver). Sem `--all` — Info é cosmético, não vale o risco do fixer mexer às
+   cegas.
 2. Deixe o comando trabalhar: o fixer corrige Critical+Warning em worktree isolado, num
    loop corrige→re-revisa de até 3 iterações, commitando as correções. Correções de
    lógica ele marca `requires human verification` — essas viram insumo do UAT (Etapa 5)
@@ -41,6 +61,25 @@ antes de te despachar — não re-cheque.
    (`NN-REVIEW.iter2.md` = 2ª rodada, e assim por diante) — NUNCA mova a rodada 1 para o
    arquivo `iter2` deixando a 2ª no nome base (caso real F20: quem lia pelo nome lia as
    rodadas ao contrário). Mesma regra para os `NN-REVIEW-FIX*.md`.
+2b. **Funil + merge da lane Codex (iteração 1, depois que o comando fechar):** espere o
+   parecer com waiter de disco (marcador do roda-codex; deadline 10min — não chegou →
+   siga sem ele, sino). Parecer presente → despache **`gad-verificador`** (síncrono)
+   com `prompts/intent-verifica.md` adaptado no despacho: "verifique cada achado do
+   parecer `<caminho>` contra o código real; vereditos confirmado/nao_sustentado; sem
+   classificação de ciclo". Então faça o merge no formato canônico:
+   - confirmados entram no `NN-REVIEW.md` CONTINUANDO a numeração canônica (CR-xx
+     Critical · WR-xx Warning; preferir CR a BL-x) com `fonte: codex` no corpo;
+   - achado coincidente com um do reviewer interno (mesmo arquivo/linha/classe) →
+     funde no existente creditando as duas fontes (dedup);
+   - não confirmado → apêndice "descartados (codex)" com a razão, nunca silencioso;
+   - reconte o frontmatter (`critical:`/`warning:`/`total:`) — fixer e cancela do 4.A
+     consomem 1:1 sem saber quem achou. Criticals novos do Codex → mais uma passada do
+     fixer neles (mesmo loop).
+   Sem loop de negociação: no código o árbitro é o repo (confirma ou descarta por
+   evidência).
+2c. *(Experimento 4.C-c, a validar em fase real:)* quando o model profile do GSD
+   permitir, rode o fixer em Sonnet e registre `fixer=sonnet (experimento)` em
+   `sinos` — nunca em silêncio.
 3. Ao final, colha do `NN-REVIEW.md` (e do output do comando) os números do retorno:
    achados por severidade (encontrados / corrigidos / restantes), o veredito
    (`clean` quando não sobrou Critical), e a lista compacta dos itens

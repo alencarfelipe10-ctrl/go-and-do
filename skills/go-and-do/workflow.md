@@ -123,11 +123,11 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 21. *(gaps)* Fecha 1×: despacho da 2.3 (`prompts/plan.md`, args `N --gaps`) → re-execução pela regra de rota da 3.3 (`prompts/execute.md` ou inline) → re-verifica. ⏸️ Persistiu → Sub-rotina D (parada graciosa).
 
 **Etapa 4 — Gates de qualidade** *(retomada por existência de arquivo)*
-22. 🔒 ⏭️ Code review via **subagente** (sem `NN-REVIEW.md`; Sub-rotina H + `prompts/code-review.md`, hospedando `gsd-code-review N --fix --auto`). Critical restante → 🔔; segue sempre.
-23. 🔒 🎌`--ui` ⏭️ UI review (sem `NN-UI-REVIEW.md`): sobe dev server → `gsd-ui-review N` → derruba. Pilar 1-2 / flag → 🔔.
-24. 🔒 🎌`--ai` ⏭️ Eval review via **subagente** (sem `NN-EVAL-REVIEW.md`; Sub-rotina H + `prompts/eval-review.md`, hospedando `gsd-eval-review N`). Veredito < PRODUCTION READY → 🔔.
-25. 🔒 ⏭️ Secure phase via **subagente** (sem `NN-SECURITY.md` com `threats_open: 0` limpo de `aceites_sem_dono`; Sub-rotina H + `prompts/secure.md`). Decisão de ameaça sobe (`needs_decision`) — inclusive aceite de risco NOVO. ⏸️ Ameaça aberta ao final → **bloqueia**.
-26. 🔒 ⏭️ Validate phase via **subagente** (sem `NN-VALIDATION.md` com `nyquist_compliant: true`; Sub-rotina H + `prompts/validate.md`). ⏸️ Gaps → a escolha (Fix all / Skip) sobe como `needs_decision`.
+22. 🔒 ⏭️ `pre-despacho.sh 4-code-review` → Code review via **subagente** (`prompts/code-review.md`, iteração 1 com lane Codex 4.D; 2+ estreitadas via `calcula-files.sh`). `confere-etapa.sh` extrai critical/warning/total → Critical restante 🔔; segue sempre.
+23. 🔒 🎌 `pre-despacho.sh 4-ui-review` → UI review via **subagente** (`prompts/ui-review.md`; server pelo `dev-server.sh up|down`). Overall/pilares extraídos; pilar 1–2 baixo → 🔔.
+24. 🔒 🎌 `pre-despacho.sh 4-eval-review` (sino: AI-SPEC sem `--ai` = esquecimento?) → Eval review via **subagente** (`prompts/eval-review.md`). Verdict ENUM extraído; < PRODUCTION READY → 🔔.
+25. 🔒 ⏭️ `pre-despacho.sh 4-secure` → Secure via **subagente** (`prompts/secure.md`); aceites chegam MASTIGADOS (4.E). ⏸️ `confere-etapa.sh 4-secure` exit ≠ 0 → **bloqueia** (único gate bloqueante). Secure tocou src/ → 4.1b re-review estreitado.
+26. 🔒 ⏭️ `pre-despacho.sh 4-validate` → Validate via **subagente** (`prompts/validate.md`). ⏸️ Gaps → `needs_decision` (Fix all recomendado).
 
 **Etapa 5 — UAT interativo automatizado** *(retomada por ESTADO do `NN-UAT.md`, não mera existência)*
 27. ⏭️ Retomada por estado (5.1): ausente → 28 · `pre_uat` ≠ `executed` → 29 · `executed` + `issue` sem marcador de fix → 30 · `executed` + `issue` com marcador → ⏸️ D · `executed`, sem `issue` em aberto → Etapa 6 (que roteia: balde 3 → hand-back · senão → ship).
@@ -283,65 +283,19 @@ cobre o pior caso.
 
 ## Sub-rotina B — subir / derrubar o dev server (UI review e UAT)
 
-0. **Consulta a receita de launch persistida, se houver** (acelerador oportunista — não é
-   dependência; a heurística dos passos 1–5 segue sendo o caminho padrão). Do diretório do
-   projeto até a raiz git, procure uma skill de run no disco:
-   `grep -Hm1 '^description:' <dir>/.claude/skills/*/SKILL.md` em cada nível. Case pela
-   **descrição** (menciona subir/rodar/launch deste app), não pelo nome da pasta — `run-<nome>/`
-   é o padrão, mas o nome varia.
-   - **Achou** → leia o `SKILL.md` (e o driver que ele referencia) e extraia a **receita**:
-     comando de launch, env vars, porta, pré-requisitos. Execute a receita você mesmo nos passos
-     2–3 (mesmo esquema background + poll da porta) e pule o passo 1 — a receita já diz o
-     comando. **Não invoque skill nenhuma**: nem `/run` (inline — despejaria DOM/logs na sua
-     janela) nem `/run-skill-generator` (é `disableModelInvocation` — só o humano dispara). O
-     ganho é a receita consultada, não a delegação.
-   - **Não achou** → siga para o passo 1.
-1. **Detecta o tipo de projeto e o comando** (leia o `package.json`; o gerenciador vem do lockfile:
-   `pnpm-lock.yaml`→pnpm, `yarn.lock`→yarn, `bun.lockb`→bun, senão npm):
-   - **Expo / React Native** — se `expo` está nas deps **ou** algum script roda `expo start`. O
-     gsd-browser só dirige **navegador**, então o alvo é o **web do Expo** (não o app nativo
-     iOS/Android, que precisaria de Maestro/Detox/Appium — fora do alcance desta skill). Comando:
-     - se há um script que invoca `expo start --web` (ex.: `"web": "expo start --web"`) → rode-o pelo
-       gerenciador (`npm run web` / `pnpm web` / `yarn web`);
-     - senão → `npx expo start --web`.
-     - Suba com `CI=1 BROWSER=none` no ambiente (não-interativo — sem o menu de teclas do Expo — e
-       sem auto-abrir aba do navegador). Porta a esperar: **8081** (Metro web; fallback **19006** no
-       Expo antigo baseado em webpack).
-   - **Web comum** (Next/Vite/etc.) — script `dev` (fallback `start`). Porta a esperar:
-     `3000` / `5173` / `8080`.
-2. Sobe em background (`run_in_background` no Bash — um dev server nunca "termina"; em
-   primeiro plano prenderia a skill).
-3. Espera a porta (polling na porta da receita do passo 0 — se houve — ou na lista do tipo
-   detectado no passo 1, timeout ~60-90s — o **primeiro
-   boot do Expo web é lento**, pode bundlar por ~1-2 min na 1ª vez; se for Expo, use o teto de 90s).
-   Guarde a **porta** que respondeu — é ela que vai no prompt do subagente de UAT (5.4).
-4. De pé → use o servidor: o `gsd-ui-review` (4.2) acha sozinho; no UAT (5.4) o orquestrador passa a
-   URL `http://localhost:<PORT>` ao **subagente** (que dirige o browser — o orquestrador não navega).
-5. **Cold-start limpo SEM receita (o passo 0 não achou nada e a heurística subiu)?** Auto-persista
-   a receita para a próxima rodada pular a adivinhação — escreva
-   `<projeto>/.claude/skills/run-<nome-do-app>/SKILL.md` (você escreve o arquivo direto; é o mesmo
-   precedente do `/verify` nativo, que persiste o próprio SKILL.md):
-   ```markdown
-   ---
-   name: run-<nome-do-app>
-   description: Sobe o <nome-do-app> localmente para desenvolvimento/verificação (dev server em localhost:<porta>)
-   ---
-   # Como subir o <nome-do-app>
-   - Pré-requisitos: <.env? banco? install prévio? deps de web do Expo? — só o que você constatou>
-   - Comando: `<o comando exato que funcionou>` (background, env: <CI=1 BROWSER=none etc.>)
-   - Porta: <a porta que respondeu> (boot observado: ~<N>s)
-   - Derrubar: matar a árvore de processos inteira do comando acima (não só o PID pai)
-   ```
-   O valor da receita está nas pegadinhas não-óbvias que você acabou de resolver — registre-as. Se
-   já subiu por uma receita existente (passo 0) e algo dela divergiu (porta/comando mudou),
-   atualize o arquivo em vez de criar outro. Falhou a escrita → siga sem ela; a receita é bônus.
-6. Não subiu no timeout → siga em code-only e registre a ressalva. Causas comuns: monorepo, projeto
-   não-Node, dev server que exige `.env`/banco/`install` prévio, ou — no Expo — **faltam as deps de
-   web** (`react-dom`, `react-native-web`, `@expo/metro-runtime`); sem elas o `expo start --web`
-   aborta. No UAT, sem server os cenários de UI viram **balde 3** (não-pude-verificar).
-7. Cleanup obrigatório: ao terminar, mate o processo do servidor (e filhos),
-   pra não deixar órfão consumindo recursos. *(O Metro do Expo abre processos filhos — garanta que
-   o kill alcance a árvore inteira, não só o PID pai.)*
+Mecanizada no `scripts/dev-server.sh` (decisão 4.B + adendo): `up` consulta a receita
+persistida (`run-<nome>/SKILL.md`, probe por descrição subindo até a raiz git) ou cai
+na heurística por tipo de projeto (Expo web 8081 com `CI=1 BROWSER=none`; web comum
+dev/start em 3000/5173/8080), espera a porta, e — cold-start limpo sem receita —
+auto-persiste a receita com os valores constatados (P15). `down` mata a árvore inteira
+de processos (process group — o Metro do Expo abre filhos). Estado em
+`.planning/.gad-dev-server.json`.
+
+Regras que o script não muda: **quem sobe/derruba é o orquestrador da vez** (a janela
+que hospeda o gate/UAT); o subagente de UAT só navega — recebe a URL
+`http://localhost:<porta>` no despacho. `up` exit 1 (não subiu no timeout) → siga em
+code-only com a ressalva declarada; no UAT, sem server os cenários de UI viram
+balde 3.
 
 </subroutine>
 
@@ -1415,109 +1369,61 @@ Se todos os planos têm `SUMMARY.md`, leia o status do `VERIFICATION.md`:
 
 ## Etapa 4 — Gates de qualidade
 
-> Retomada por existência de arquivo aqui (o `init.phase-op` não rastreia estes
-> artefatos). Antes de cada gate desta etapa — todos eles, não só o primeiro — cheque
-> se o arquivo já existe na `<phase_dir>`; se sim, pule. Isso também evita o
-> `AskUserQuestion` ("Re-audit/View") que alguns comandos disparam quando o arquivo já
-> existe, e que travaria o pipeline.
+> Camada 0 100% mecanizada (4.A): para CADA gate, `pre-despacho.sh 4-<gate>` resolve
+> flag/config/retomada num exit code (pular · pular_flag · ok — o skip já sai gravado
+> no run-log; `sino_esquecimento` = AI-SPEC presente sem `--ai`, 4.F) e
+> `confere-etapa.sh 4-<gate>` asserta o artefato E extrai o veredito canônico — você
+> NUNCA relê relatório de gate; roteia pelo dado extraído. O que fica de julgamento:
+> mastigação de `needs_decision`, prosa do "🔔 o que precisa de você" no fecho.
 
 ### 4.1 — Code review (via subagente)
-- Gate de contexto.
-- Retomada: existe `<phase_dir>/NN-REVIEW.md`? → pule.
-- Despache pela **Sub-rotina H** com `prompts/code-review.md` (leva `N`, `NN`, `phase_dir`,
-  `project_root` absolutos): o subagente hospeda o `gsd-code-review N --fix --auto` — sem
-  `--all` (Info é cosmético, não vale o risco do fixer mexer às cegas); o escopo de arquivos
-  sai dos `SUMMARY.md`. O fixer corrige Critical+Warning em worktree isolado, loop
-  corrige→re-revisa até 3×; correções de lógica ele marca `requires human verification`.
-- Roteamento do retorno: `done` → `end` com `subagent_tokens` (Sub-rotina G); guarde
-  `uat_humano` (é passado ao despacho da derivação do UAT, 5.3) e os `sinos`. Decisão:
-  sempre segue (não para); Critical restante → 🔔 forte no banner final.
-  `needs_decision` → pergunta ao usuário + continuação do MESMO subagente (Sub-rotina H);
-  roteie o novo retorno. `blocked` → registre o evento `stop` (Sub-rotina G, etapa
-  `pausa: code review indisponível`), **pare** e reporte (o review não aconteceu —
-  re-rodar `/go-and-do N` retoma aqui).
+- `pre-despacho.sh 4-code-review` → `ok`? Despache pela **Sub-rotina H** com
+  `prompts/code-review.md` (leva `N`, `NN`, `phase_dir`, `project_root` e
+  `iteracao: 1`): o subagente hospeda o `gsd-code-review N --fix --auto` COM a lane
+  Codex paralela da iteração 1 (4.D: parecer bruto → funil `gad-verificador` → merge
+  CR/WR com `fonte: codex`, dedup, frontmatter recontado — codex ausente não bloqueia,
+  o reviewer interno é o piso). Iterações 2+ e o gate 4.1b (secure tocou src/ pós-
+  review) despacham com `iteracao: 2+` — o subagente estreita via `calcula-files.sh`
+  (diff desde o último review + dependentes reversos de 1 salto, 4.C).
+- Ao voltar: `confere-etapa.sh 4-code-review` (extrai `status`/`critical`/`warning`/
+  `total`). Sempre segue; `critical` restante → 🔔 forte no banner. Guarde `uat_humano`
+  (insumo da 5.3). `needs_decision` → pergunta + continuação do MESMO subagente.
+  `blocked` → `stop`, pare.
 
-### 4.2 — UI review · só com `--ui`
-- Sem `--ui` → pule o gate inteiro.
-- Gate de contexto.
-- Retomada: existe `<phase_dir>/NN-UI-REVIEW.md`? → pule (nem chame o comando).
-- Sobe o dev server (Sub-rotina B) pra auditoria ver a tela renderizada.
-- Tela auditada atrás de login? Prepare o acesso sancionado ANTES (wrapper/helper — regra de
-  credenciais da Sub-rotina H) e passe-o à auditoria junto com a proibição literal de
-  ler/dumpar `.env*`. Sem via sancionada → a página logada fica em code-only com ressalva
-  registrada, nunca com login improvisado (caso real 21/07: o auditor escreveu um script para
-  evadir o guard de `.env` e imprimiu senha+TOTP — contido, mas era exatamente isto que
-  faltava aqui).
-- `Skill gsd-ui-review` com args `N`. O auditor detecta o servidor e tira screenshots.
-- Derruba o dev server (cleanup — Sub-rotina B). Não subiu no timeout → segue em
-  code-only e registra a ressalva.
-- O gate dá nota 1-4 em 6 pilares (/24) + Top 3 + Registry Safety (se shadcn de
-  terceiros). Não corrige nada — diagnóstico.
-- Decisão: sempre segue. 🔔 forte se algum pilar tirar 1 ou 2 OU houver flag de
-  Registry Safety.
+### 4.2 — UI review · só com `--ui` (via subagente — 4.B: deixou de ser exceção inline)
+- `pre-despacho.sh 4-ui-review` (pular_flag sem `--ui` e sem UI-SPEC) → `ok`? Despache
+  pela **Sub-rotina H** com `prompts/ui-review.md`: o subagente sobe o server via
+  `dev-server.sh up` (receita persistida ou heurística), roda `gsd-ui-review N`,
+  derruba via `down`. Tela atrás de login → credencial pela regra de nascença da
+  Sub-rotina H (nunca login improvisado; sem via sancionada = code-only com ressalva).
+- Ao voltar: `confere-etapa.sh 4-ui-review` (extrai `overall`/`pilar1`/`pilar2`;
+  Overall não parseável = fail-up → LEIA o relatório). Sempre segue; pilar 1–2 com
+  nota 1–2 ou flag de Registry Safety → 🔔 forte.
 
 ### 4.3 — Eval review · só com `--ai` (via subagente)
-- Sem `--ai` → pule.
-- Gate de contexto.
-- Retomada: existe `<phase_dir>/NN-EVAL-REVIEW.md`? → pule.
-- Despache pela **Sub-rotina H** com `prompts/eval-review.md` (leva `N`, `NN`, `phase_dir`,
-  `project_root` absolutos): o subagente hospeda o `gsd-eval-review N`.
-  - State A: existe `AI-SPEC.md` → auditoria completa contra o plano de eval. *(Com `--ai`, a
-    Etapa 1.5 já gerou o `AI-SPEC.md` — então o caminho normal aqui é o State A.)*
-  - State B: sem `AI-SPEC.md` → audita contra boas práticas (sinal mais fraco);
-    registra no banner que foi State B.
-  - O auditor marca dimensões COVERED/PARTIAL/MISSING + 5 itens de infra + score /100 +
-    veredito. Não corrige nada.
-- Roteamento do retorno: `done` → `end` com `subagent_tokens` (Sub-rotina G); guarde os
-  `sinos`. Decisão: sempre segue. 🔔 forte se veredito não for PRODUCTION READY
-  (score < 80) ou houver critical gaps > 0. `needs_decision` → pergunta ao usuário +
-  continuação do MESMO subagente (Sub-rotina H); roteie o novo retorno. `blocked` →
-  registre o evento `stop` (Sub-rotina G, etapa `pausa: eval review indisponível`),
-  **pare** e reporte (a auditoria não aconteceu — re-rodar `/go-and-do N` retoma aqui).
+- `pre-despacho.sh 4-eval-review` (pular_flag; `sino_esquecimento` quando há AI-SPEC
+  sem `--ai`) → `ok`? Despache pela **Sub-rotina H** com `prompts/eval-review.md`
+  (hospeda `gsd-eval-review N` — State A com AI-SPEC, State B sem, com aviso).
+- Ao voltar: `confere-etapa.sh 4-eval-review` (extrai o `verdict` ENUM canônico —
+  verbatim, nunca recompute). Sempre segue; abaixo de PRODUCTION READY → 🔔.
 
 ### 4.4 — Secure phase (via subagente)
-- Gate de contexto.
-- Retomada: existe `<phase_dir>/NN-SECURITY.md` **com `threats_open: 0` E sem o marcador
-  `aceites_sem_dono`**? → pule. (Existe com ameaças abertas, com `aceites_sem_dono` no
-  frontmatter, ou não existe → roda. O marcador é gravado pelo subagente quando encontra
-  riscos "aceitos" sem decisão do usuário rastreável — o arquivo já está no estado "bom",
-  e sem essa checagem a retomada pularia o gate com um aceite órfão dentro.)
-- Despache pela **Sub-rotina H** com `prompts/secure.md` (leva `N`, `NN`, `phase_dir`,
-  `project_root` absolutos): o subagente hospeda o `gsd-secure-phase N` — verifica as
-  mitigações do threat model dos `PLAN.md` no código (sem threat model, STRIDE
-  retroativo). A varredura desce; a decisão sobre ameaça aberta sobe.
-- Roteamento do retorno:
-  - `done · secured` (`threats_open: 0`) → `end` com `subagent_tokens` (Sub-rotina G);
-    guarde `riscos_aceitos`/`sinos` — a lista `riscos_aceitos` entra no bloco de
-    transparência da 6.2 e chega ao resumo (Sub-F) — e siga.
-  - `done · ameacas_abertas` → registre o `end` (a auditoria rodou; o desfecho é
-    bloqueio), **pare** via **Sub-rotina D** (motivo `ameaça de segurança aberta`) —
-    este é o stop point onde a autonomia legitimamente cede (segurança não se
-    auto-aceita). 🔔 forte.
-  - `needs_decision` (a decisão Verify/Accept de cada ameaça, mastigada) → pergunta ao
-    usuário + **continuação do MESMO subagente** (Sub-rotina H); roteie o novo retorno.
-  - `blocked` → registre o evento `stop` (etapa `pausa: secure indisponível`), **pare**
-    e reporte (re-rodar `/go-and-do N` retoma aqui).
+- `pre-despacho.sh 4-secure` → `ok`? Despache pela **Sub-rotina H** com
+  `prompts/secure.md`. Decisão de ameaça sobe (`needs_decision`) — inclusive aceite de
+  risco NOVO. **Mastigação antecipada (4.E):** ao receber o `needs_decision`, prepare a
+  decisão mastigada (ameaça, severidade, opções com recomendação primeiro) — o custo
+  real medido do gate era a espera da pergunta crua (36–43min); mastigada resolve em ~1.
+- Ao voltar: `confere-etapa.sh 4-secure` — exit ≠ 0 (threats_open > 0 ou aceite sem
+  dono) é o ÚNICO bloqueio da etapa: ⏸️ pare. O secure tocou src/ DEPOIS do code
+  review? Gate 4.1b: `calcula-files.sh --tocados "<arquivos>"` → re-despacho da 4.1
+  estreitado.
 
 ### 4.5 — Validate phase (via subagente)
-- Gate de contexto.
-- Retomada: existe `<phase_dir>/NN-VALIDATION.md` com `nyquist_compliant: true` **ou** com o
-  marcador custom `go_and_do_validate: done`? → pule. (O marcador é gravado pelo subagente ao
-  concluir com veredito `partial` — desfecho terminal que não bloqueia; sem ele, toda retomada
-  posterior re-pagaria o auditor e re-perguntaria a estratégia que você já decidiu.)
-- Despache pela **Sub-rotina H** com `prompts/validate.md` (leva `N`, `NN`, `phase_dir`,
-  `project_root` absolutos): o subagente hospeda o `gsd-validate-phase N` — mapeia
-  requisito↔teste (COVERED/PARTIAL/MISSING) e pode gerar os testes faltantes. Não
-  bloqueia a fase.
-- Roteamento do retorno:
-  - `done` (`nyquist_compliant` ou `partial`) → `end` com `subagent_tokens`
-    (Sub-rotina G); `partial` → 🔔 no banner (validação *partial* já era item da 6.2).
-    Siga.
-  - `needs_decision` (a escolha Fix all / Skip manual-only, mastigada — "Fix all" gera
-    os testes agora, commitados, e o add-tests manual depois os enxerga) → pergunta ao
-    usuário + **continuação do MESMO subagente** (Sub-rotina H); roteie o novo retorno.
-  - `blocked` → registre o evento `stop` (etapa `pausa: validate indisponível`),
-    **pare** e reporte (re-rodar `/go-and-do N` retoma aqui).
+- `pre-despacho.sh 4-validate` → `ok`? Despache pela **Sub-rotina H** com
+  `prompts/validate.md` (hospeda `gsd-validate-phase N`). ⏸️ Gaps → a escolha
+  (Fix all / Skip manual-only) sobe como `needs_decision` — recomendação padrão:
+  Fix all.
+- Ao voltar: `confere-etapa.sh 4-validate`. Segue.
 
 </stage>
 

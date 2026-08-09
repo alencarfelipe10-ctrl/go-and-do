@@ -80,6 +80,26 @@ case "$hora" in 23|00|01|02|03|04|05|06) silencio=true ;; esac
 
 # ── extras da etapa (declarados no manifest, executados aqui) ────────────────
 extras="{}"
+# gate condicionado a flag (4.A): sem a flag da rodada E sem o artefato-sinal → pular;
+# sinal presente SEM a flag → sino de esquecimento (4.F: AI-SPEC órfã de --ai)
+FLAG_NOME=$(jq -r '.pre.flag.nome // empty' "$MANIFEST")
+if [ -n "$FLAG_NOME" ]; then
+  FL=false
+  [ -f "$PONTEIRO" ] && FL=$(jq -r ".args.$FLAG_NOME // false" "$PONTEIRO")
+  SINAL=$(jq -r '.pre.flag.sinal // empty' "$MANIFEST" | sed "s|{fase}|$PHASE_DIR|; s|{nn}|$NN|")
+  SINAL_EXISTE=false; [ -n "$SINAL" ] && [ -e "$SINAL" ] && SINAL_EXISTE=true
+  if [ "$FL" != true ]; then
+    if [ "$SINAL_EXISTE" = true ]; then
+      extras=$(jq -cn --argjson prev "$extras" --arg f "$FLAG_NOME" --arg s "$SINAL" \
+        '$prev + {sino_esquecimento: ("fase tem " + ($s|split("/")|last) + " mas a rodada veio sem --" + $f + " — o gate não vai rodar. Esquecimento?")}')
+    else
+      [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" skip "$RUNLOG_ETAPA (sem --$FLAG_NOME)"
+      gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" --arg f "$FLAG_NOME" \
+        '{etapa:$e, despacho:"pular_flag", motivo:("gate condicionado a --" + $f + " — flag ausente e sem artefato-sinal")}')"
+      exit 0
+    fi
+  fi
+fi
 # retomada por marcador (2.5-C: grep de frontmatter — artefato presente = etapa já feita)
 RET_ARQ=$(jq -r '.pre.retomada.arquivo // empty' "$MANIFEST")
 if [ -n "$RET_ARQ" ]; then

@@ -1,10 +1,41 @@
 {
-  "etapa": "4-validate", "nome": "validate", "runlog_etapa": "4.5 validate",
+  "etapa": "4-validate",
+  "nome": "validate",
+  "runlog_etapa": "4.5 validate",
   "asserts": [
-    { "id": "validation_fechada", "tipo": "ou", "de": [
-        { "tipo": "grep", "arquivo": "{fase}/{nn}-VALIDATION.md", "regex": "^nyquist_compliant: true", "min": 1 },
-        { "tipo": "grep", "arquivo": "{fase}/{nn}-VALIDATION.md", "regex": "^go_and_do_validate: done", "min": 1 }
+    {
+      "id": "validation_fechada",
+      "tipo": "ou",
+      "de": [
+        {
+          "tipo": "grep",
+          "arquivo": "{fase}/{nn}-VALIDATION.md",
+          "regex": "^nyquist_compliant: true",
+          "min": 1
+        },
+        {
+          "tipo": "grep",
+          "arquivo": "{fase}/{nn}-VALIDATION.md",
+          "regex": "^go_and_do_validate: done",
+          "min": 1
+        }
       ],
-      "desc": "NN-VALIDATION.md compliant (ou desfecho partial com marcador done)" }
-  ]
+      "desc": "NN-VALIDATION.md compliant (ou desfecho partial com marcador done)"
+    },
+    {
+      "id": "status_validated",
+      "tipo": "grep",
+      "arquivo": "{fase}/{nn}-VALIDATION.md",
+      "regex": "^status: validated",
+      "min": 1,
+      "nivel": "informativo",
+      "desc": "status: validated no frontmatter (ausente no desfecho partial — informativo)"
+    }
+  ],
+  "pre": {
+    "retomada": {
+      "arquivo": "{fase}/{nn}-VALIDATION.md",
+      "regex": "^(nyquist_compliant: true|go_and_do_validate: done)"
+    }
+  }
 }

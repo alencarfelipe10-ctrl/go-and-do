@@ -1,7 +1,15 @@
 {
   "etapa": "4-code-review", "nome": "code-review", "runlog_etapa": "4.1 code-review",
+  "pre": { "retomada": { "arquivo": "{fase}/{nn}-REVIEW.md", "regex": "^status:" } },
   "asserts": [
-    { "id": "review", "tipo": "glob", "padrao": "{fase}/{nn}-REVIEW.md", "min": 1,
-      "desc": "NN-REVIEW.md existe" }
+    { "id": "review_com_frontmatter", "tipo": "grep", "arquivo": "{fase}/{nn}-REVIEW.md",
+      "regex": "^status:", "min": 1,
+      "desc": "NN-REVIEW.md com frontmatter canônico (status/critical/warning/total — mesmo grep do canônico)" }
+  ],
+  "extrai": [
+    { "id": "status",   "tipo": "grep-valor", "arquivo": "{fase}/{nn}-REVIEW.md", "regex": "^status: *[a-z_]+" },
+    { "id": "critical", "tipo": "grep-valor", "arquivo": "{fase}/{nn}-REVIEW.md", "regex": "^ *critical: *[0-9]+" },
+    { "id": "warning",  "tipo": "grep-valor", "arquivo": "{fase}/{nn}-REVIEW.md", "regex": "^ *warning: *[0-9]+" },
+    { "id": "total",    "tipo": "grep-valor", "arquivo": "{fase}/{nn}-REVIEW.md", "regex": "^ *total: *[0-9]+" }
   ]
 }

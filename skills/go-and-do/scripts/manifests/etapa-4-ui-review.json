@@ -1,8 +1,19 @@
 {
   "etapa": "4-ui-review", "nome": "ui-review", "runlog_etapa": "4.2 ui-review",
+  "pre": { "flag": { "nome": "ui", "sinal": "{fase}/{nn}-UI-SPEC.md" },
+           "retomada": { "arquivo": "{fase}/{nn}-UI-REVIEW.md", "regex": "Overall" } },
   "asserts": [
     { "id": "ui_review", "tipo": "glob", "padrao": "{fase}/{nn}-UI-REVIEW.md", "min": 1,
       "condicao": { "flag": "ui", "sinal": "{fase}/{nn}-UI-SPEC.md" },
-      "desc": "NN-UI-REVIEW.md existe (só com --ui)" }
+      "desc": "NN-UI-REVIEW.md existe (só com --ui)" },
+    { "id": "overall_parseavel", "tipo": "grep", "arquivo": "{fase}/{nn}-UI-REVIEW.md",
+      "regex": "Overall:? *\\*{0,2}[0-9]+ */ *24", "min": 1, "nivel": "informativo",
+      "condicao": { "flag": "ui", "sinal": "{fase}/{nn}-UI-SPEC.md" },
+      "desc": "score Overall N/24 parseável (fail-up: não parseou → a camada 0 LÊ o relatório em vez de confiar no roteamento)" }
+  ],
+  "extrai": [
+    { "id": "overall", "tipo": "grep-valor", "arquivo": "{fase}/{nn}-UI-REVIEW.md", "regex": "Overall:? *\\*{0,2}[0-9]+ */ *24" },
+    { "id": "pilar1",  "tipo": "grep-valor", "arquivo": "{fase}/{nn}-UI-REVIEW.md", "regex": "\\| *1\\.[^|]*\\| *[0-9]+ */ *4" },
+    { "id": "pilar2",  "tipo": "grep-valor", "arquivo": "{fase}/{nn}-UI-REVIEW.md", "regex": "\\| *2\\.[^|]*\\| *[0-9]+ */ *4" }
   ]
 }

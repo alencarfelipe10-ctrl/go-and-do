@@ -1,8 +1,18 @@
 {
   "etapa": "4-eval-review", "nome": "eval-review", "runlog_etapa": "4.3 eval-review",
+  "pre": { "flag": { "nome": "ai", "sinal": "{fase}/{nn}-AI-SPEC.md" },
+           "retomada": { "arquivo": "{fase}/{nn}-EVAL-REVIEW.md", "regex": "PRODUCTION READY|NEEDS WORK|SIGNIFICANT GAPS|NOT IMPLEMENTED" } },
   "asserts": [
     { "id": "eval_review", "tipo": "glob", "padrao": "{fase}/{nn}-EVAL-REVIEW.md", "min": 1,
       "condicao": { "flag": "ai", "sinal": "{fase}/{nn}-AI-SPEC.md" },
-      "desc": "NN-EVAL-REVIEW.md existe (só com --ai)" }
+      "desc": "NN-EVAL-REVIEW.md existe (só com --ai)" },
+    { "id": "verdict_enum", "tipo": "grep", "arquivo": "{fase}/{nn}-EVAL-REVIEW.md",
+      "regex": "PRODUCTION READY|NEEDS WORK|SIGNIFICANT GAPS|NOT IMPLEMENTED", "min": 1,
+      "condicao": { "flag": "ai", "sinal": "{fase}/{nn}-AI-SPEC.md" },
+      "desc": "veredito é o ENUM canônico calculado por script no gsd-tools (use verbatim; never recompute)" }
+  ],
+  "extrai": [
+    { "id": "verdict", "tipo": "grep-valor", "arquivo": "{fase}/{nn}-EVAL-REVIEW.md",
+      "regex": "PRODUCTION READY|NEEDS WORK|SIGNIFICANT GAPS|NOT IMPLEMENTED" }
   ]
 }
