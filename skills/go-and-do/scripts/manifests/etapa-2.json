@@ -1,14 +1,38 @@
 {
-  "etapa": "2", "nome": "planejamento", "runlog_etapa": "2 planejamento",
+  "etapa": "2",
+  "nome": "planejamento",
+  "runlog_etapa": "2 planejamento",
   "asserts": [
-    { "id": "has_plans", "tipo": "sdk", "query": "init.phase-op {n}", "jq": ".has_plans", "espera": "true",
-      "desc": "retrato do SDK confirma planos" },
-    { "id": "plan_files", "tipo": "glob", "padrao": "{fase}/*-PLAN.md", "min": 1,
-      "desc": ">=1 PLAN.md no disco" }
+    {
+      "id": "has_plans",
+      "tipo": "sdk",
+      "query": "init.phase-op {n}",
+      "jq": ".has_plans",
+      "espera": "true",
+      "desc": "retrato do SDK confirma planos"
+    },
+    {
+      "id": "plan_files",
+      "tipo": "glob",
+      "padrao": "{fase}/*-PLAN.md",
+      "min": 1,
+      "desc": ">=1 PLAN.md no disco"
+    }
   ],
   "extrai": [
-    { "id": "nao_autonomos", "tipo": "grep-arquivos", "padrao": "{fase}/*-PLAN.md",
+    {
+      "id": "nao_autonomos",
+      "tipo": "grep-arquivos",
+      "padrao": "{fase}/*-PLAN.md",
       "regex": "^autonomous: false",
-      "desc": "planos autonomous:false — a camada 0 classifica (a)/(b)/(c) no fecho da etapa (2.H)" }
+      "desc": "planos autonomous:false — a camada 0 classifica (a)/(b)/(c) no fecho da etapa (2.H)"
+    },
+    {
+      "id": "mapper_pulado",
+      "tipo": "grep-arquivos",
+      "padrao": "{fase}/{nn}-DECISOES.md",
+      "regex": "mapper=pulado",
+      "desc": "decisão do juiz 2.E no NN-DECISOES — a camada 0 cruza com planos que criam arquivo novo (sino, não retrabalho)"
+    }
   ]
 }

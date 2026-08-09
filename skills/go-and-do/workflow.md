@@ -110,16 +110,15 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 12. Ao voltar: `confere-etapa.sh 1.5` (asserts por flag) — exit 1 devolve ao mesmo subagente.
 
 **Etapa 2 — Planejamento**
-13. ⏭️ `has_plans` → pula pra Etapa 3.
-14. 🔒 Planejamento via **subagente** (Sub-rotina H + `prompts/plan.md`, hospedando `gsd-plan-phase N --tdd --research`).
-15. ⏸️ Confirma que o plano nasceu (camada 0, pelo shim); senão para.
+13. ⏭️ Obedeça `etapa_2` do abre-rodada (`pular` → Etapa 2.5).
+14. 🔒 `pre-despacho.sh 2` → despacha o agente `gad-plan` (Opus 5 medium) com `prompts/plan.md` — ele julga pesquisa/mapper/granularidade (2.D/2.E/2.G) e hospeda o `gsd-plan-phase`.
+15. ⏸️ `confere-etapa.sh 2` (cancela mecânica; senão devolve ao subagente) + fecho 2.4b: classifica os `autonomous: false` — (a) pergunta agora · (b) `NN-ACAO-HUMANA.md` detalhado, executado e apagado · (c) defere ao UAT — e flipa os planos.
 
 **Etapa 3 — Construção**
 16. ⏭️ `has_verification` → pula a Etapa 3 inteira.
-17. Pré-detecção: `phase-plan-index N` → tem plano não-autônomo? Avisa que pode exigir sua ação.
 18. 🔒 ⏭️ Convergência via **subagente** (com `NN-CONVERGENCE.md` `done` → pula; Sub-rotina H + `prompts/convergence.md`, hospedando `gsd-plan-review-convergence --codex --agy --max-cycles 4`). Config off (checada na camada 0, antes do despacho) → degrada declarado (`skip`) e segue. Não convergiu (`escalou`) → ⏸️ para.
 18b. **Pré-flight de paralelismo** (só quando `use_worktrees: true` no `.planning/config.json` e a fase tem onda com ≥2 planos): ANTES do despacho da execução, cheque se o worktree degradaria — `gsd_run worktree base-check` se existir; senão compare `git rev-parse HEAD` × `git rev-parse origin/HEAD`. (a) Degradaria por **base mismatch** (HEAD ≠ origin/HEAD): esse é o estado NORMAL de uma fase — a skill commita dezenas de vezes e só empurra no ship — então aplique você mesma o antídoto: `"worktree": {"baseRef": "head"}` no `.claude/settings.local.json` do projeto, re-cheque, e registre como auto-decisão no `NN-DECISOES.md` (conduta de pipeline, 1 linha, reversível). (b) Degradaria por **qualquer outra causa** (env ausente, fixture gitignored, causa nova): **investigue a solução** (o que falta, o que copiar/configurar, custo e reversibilidade) e ⏸️ suba **AskUserQuestion** com o diagnóstico + as opções (aplicar o fix investigado / aceitar serial nesta fase / outra rota) — decisão do dono, sempre; a degradação nunca vira fato consumado, nem mesmo declarado. O porquê: 3 fases de projetos diferentes serializaram pelo mesmo padrão (F16-ox por env, F19-ox e F2 rl-representation por base mismatch — nesta última o fix existia desde a F19-ox e nunca fora replicado ao projeto; 16 planos rodaram seriais com disclosure e sem antídoto).
-19. 🔒 Execução: tudo autônomo → via **subagente** (Sub-rotina H + `prompts/execute.md`); há plano `autonomous: false` pendente → **inline** (`Skill gsd-execute-phase --auto --no-transition` — a interação humana é nativa na camada 0).
+19. 🔒 Execução via **subagente** (Sub-rotina H + `prompts/execute.md`) — o fecho 2.4b flipou os planos; sobrou `autonomous: false` (exceção rara: checkpoint surgido depois do fecho) → **inline** (`Skill gsd-execute-phase --auto --no-transition` — a interação humana é nativa na camada 0).
 20. Checa completude: sobrou plano sem SUMMARY (ação humana travou ondas) → ⏸️ Sub-rotina D (pause-work). Senão lê o status: passed → segue · human_needed → anota (vira insumo da Etapa 5) e segue · gaps_found → 21.
 21. *(gaps)* Fecha 1×: despacho da 2.3 (`prompts/plan.md`, args `N --gaps`) → re-execução pela regra de rota da 3.3 (`prompts/execute.md` ou inline) → re-verifica. ⏸️ Persistiu → Sub-rotina D (parada graciosa).
 
@@ -1248,31 +1247,46 @@ UI → IA); os agentes GSD que eles despacham nascem como camada 2.
 
 ## Etapa 2 — Planejamento
 
-**2.1 — Retomada.** `has_plans` verdadeiro → pule pra Etapa 3.
+**2.1 — Retomada.** Obedeça `etapa_2` do JSON do abre-rodada: `pular` → Etapa 2.5;
+`despachar` → 2.2. (Rodada contínua: você acabou de sair da 1.5 — não re-consulte nada.)
 
-**2.2 — Gate de contexto** (Sub-rotina A).
+**2.2 — Cancela de saída.** `pre-despacho.sh 2` (gate de contexto + checkpoint da etapa).
 
-**2.3 — Planejar (via subagente).** Despache pela **Sub-rotina H** com `prompts/plan.md`
-(leva `N`, `NN`, `phase_dir`, `project_root` absolutos e os args `N --tdd --research`): o
-subagente hospeda o `gsd-plan-phase` — internamente ele pesquisa → planeja → verifica em
-loop, tudo em agentes próprios (camada 2). O porquê das flags (e das paradas herdadas de
-coverage/split/stall, que sobem como `needs_decision`) mora no próprio `plan.md`.
-> Por que um subagente: o planejamento media +64–73k de eco de orquestração na janela da
-> camada 0 (medido em fases reais) — leitura de contexto que desce quase inteira.
+**2.3 — Planejar (via subagente).** Despache o agente **`gad-plan`** (def própria: Opus 5,
+effort medium — os julgamentos de entrada têm alta alavancagem) com `prompts/plan.md`
+(leva `N`, `NN`, `phase_dir`, `project_root` absolutos e os args-base `N --tdd`): o
+subagente JULGA pesquisa (2.D, viés pesquisar; RESEARCH existente → sem flag) ·
+pattern-mapper (2.E, só fase que cria arquivo novo) · granularidade (2.G, matriz
+dependência×tamanho), invoca o `gsd-plan-phase` com as flags resultantes e persiste a
+trilha do checker em `.plan-checker/iter-N.yaml` (2.B). Paradas herdadas sobem como
+`needs_decision`.
 - Roteamento do retorno:
-  - `done · planejado` → `end` com `subagent_tokens` (Sub-rotina G); anote
-    `planos_nao_autonomos` (confere com a pré-detecção da 3.1b) e os `sinos`; siga pra 2.4.
-  - `done · sem_plano` → registre o `end` e o evento `stop` (etapa `pausa: planejamento sem
-    plano`), **pare** e avise (o planejamento não produziu plano).
-  - `needs_decision` → pergunta ao usuário + **continuação do MESMO subagente** com a
-    resposta (Sub-rotina H); roteie o novo retorno por esta lista.
-  - `blocked` → registre o evento `stop` (Sub-rotina G, etapa `pausa: planejamento
-    indisponível`), **pare** e reporte (re-rodar `/go-and-do N` retoma aqui).
+  - `done · planejado` → siga pra 2.4; anote `pesquisa`/`mapper`/`granularidade`/`sinos`
+    (vão ao bloco de transparência).
+  - `done · sem_plano` → evento `stop` (etapa `pausa: planejamento sem plano`), **pare**.
+  - `needs_decision` → pergunta ao usuário + **continuação do MESMO subagente**.
+  - `blocked` → evento `stop`, **pare** (re-rodar `/go-and-do N` retoma aqui).
 
-**2.4 — Confirma (camada 0 — verificação independente).** Re-rode (shim da Sub-rotina E +
-`gsd_run query init.phase-op N`): `has_plans` virou `true`? Se não → registre o evento `stop`
-(etapa `pausa: planejamento sem plano`), **pare** e avise (o planejamento não produziu plano
-— não confie só no retorno do subagente).
+**2.4 — Cancela de chegada.** `confere-etapa.sh 2` — asserts do manifest (has_plans ∧
+≥1 PLAN.md) + extração `nao_autonomos`. Exit 1 → devolva ao MESMO subagente a lista do
+que falta, não importa o que ele alegou. O sino do mapper (decisão `pulado` × planos
+criando arquivo novo) sai daqui — vigiar no code review, sem re-rodar nada.
+
+**2.4b — Fecho: `autonomous: false` resolvido AQUI, não sofrido na Etapa 3 (2.H).**
+Para cada plano em `nao_autonomos`, classifique o checkpoint (julgamento seu):
+- **(a) Decisão respondível por texto** (escolher rota, autorizar gasto) → pergunte ao
+  dono AGORA (AskUserQuestion mastigada — ele está presente no fim do planejamento); a
+  resposta vira bloco `DECISAO-DO-DONO` anexado ao despacho da execução, e você flipa o
+  frontmatter do plano para `autonomous: true`.
+- **(b) Ação humana antecipável** (colar chave, migration, login, 2FA) → escreva
+  `<phase_dir>/NN-ACAO-HUMANA.md` com o passo a passo DETALHADO (comandos exatos, onde
+  clicar, o que esperar como confirmação — quanto mais detalhado, melhor). O dono
+  executa e confirma → flipe o plano e **apague o arquivo** (o fato "ação X executada
+  pelo dono" vira 1 linha no `NN-DECISOES.md`).
+- **(c) Verificação de runtime** (`human-verify`) → **deferida ao UAT da Etapa 5**
+  (redundante com o UAT automatizado): flipe o plano e o item entra na pauta do UAT.
+Efeito: a rota inline da Etapa 3 vira exceção raríssima — zero paradas no meio das
+ondas por checkpoint antecipável.
 
 </stage>
 
@@ -1282,14 +1296,9 @@ coverage/split/stall, que sobem como `needs_decision`) mora no próprio `plan.md
 
 **3.1 — Retomada.** `has_verification` verdadeiro → pule a Etapa 3 inteira.
 
-**3.1b — Pré-detecção de ações humanas.** Antes de construir, rode Bash (shim da Sub-rotina E +
-`gsd_run query phase-plan-index N`). Leia `has_checkpoints` e, por plano, `autonomous`/`wave`.
-Se houver planos `autonomous: false`, avise numa linha **antes de começar** (ex.: "a fase tem
-2 planos não-autônomos — 03-03, 03-05; sob `--auto` verificações e decisões são automáticas,
-mas se algum exigir uma AÇÃO sua — migration, login, 2FA — o execute vai parar nele"). Tudo
-autônomo → siga sem alarde. Isto é **só um aviso**: não reordena nem pula nada — o motor de
-waves do GSD já ordena por dependência, e essa é a única ordenação possível. O resultado real
-(o que rodou e o que travou) é apurado na 3.4 e reportado no banner final.
+> A pré-detecção de ações humanas MORREU aqui: o fecho 2.4b da Etapa 2 já classificou e
+> resolveu todo `autonomous: false` (pergunta agora / ação humana antecipada / deferido ao
+> UAT) — os planos chegam flipados.
 
 **2.5 — Convergência do plano (via subagente).**
 - **Retomada (por arquivo):** existe `<phase_dir>/NN-CONVERGENCE.md` com
@@ -1345,10 +1354,10 @@ waves do GSD já ordena por dependência, e essa é a única ordenação possív
     indisponível`), **pare** e reporte o motivo: a revisão cruzada não aconteceu; você
     decide re-tentar (`/go-and-do N` retoma aqui) ou desligar o gate na config do projeto.
 
-**3.3 — Execução.** Gate de contexto (Sub-rotina A). A rota depende da pré-detecção da 3.1b
-(re-conferida com o `planos_nao_autonomos` do retorno da 2.3):
+**3.3 — Execução.** Gate de contexto (Sub-rotina A). Rota padrão = subagente (o fecho 2.4b
+da Etapa 2 flipou os não-autônomos; re-confira com `nao_autonomos` do retorno da 2.3):
 
-- **Todos os planos pendentes são autônomos → via subagente.** Despache pela **Sub-rotina H**
+- **Todos os planos pendentes são autônomos (o caso normal) → via subagente.** Despache pela **Sub-rotina H**
   com `prompts/execute.md` (leva `N`, `NN`, `phase_dir`, `project_root` absolutos e os args
   `N --auto --no-transition`): o subagente hospeda o `gsd-execute-phase` — ondas de
   `gsd-executor` (camada 2) → código + commits + `SUMMARY.md` → verificação →
