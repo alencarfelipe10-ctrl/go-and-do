@@ -1,0 +1,8 @@
+{
+  "etapa": "4-ui-review", "nome": "ui-review", "runlog_etapa": "4.2 ui-review",
+  "asserts": [
+    { "id": "ui_review", "tipo": "glob", "padrao": "{fase}/{nn}-UI-REVIEW.md", "min": 1,
+      "condicao": { "flag": "ui", "sinal": "{fase}/{nn}-UI-SPEC.md" },
+      "desc": "NN-UI-REVIEW.md existe (só com --ui)" }
+  ]
+}

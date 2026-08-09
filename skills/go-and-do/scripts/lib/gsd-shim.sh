@@ -81,8 +81,9 @@ gad_phase_dir() {
 
 gad_json_out() {
   local slug="$1" json="$2" root compact
-  compact="$(printf '%s' "$json" | jq -c . 2>/dev/null)" || {
-    echo "ERRO: gad_json_out recebeu JSON inválido ($slug)" >&2; return 1; }
+  compact="$(printf '%s' "$json" | jq -c . 2>/dev/null)" || compact=""
+  [ -n "$compact" ] || {
+    echo "ERRO: gad_json_out recebeu JSON inválido ou vazio ($slug)" >&2; return 1; }
   root="$(gad_project_root)"
   [ -d "$root/.planning" ] && printf '%s\n' "$compact" > "$root/.planning/.gad-last-$slug.json"
   printf '%s\n' "$compact"

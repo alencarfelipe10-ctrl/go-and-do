@@ -1,0 +1,9 @@
+{
+  "etapa": "3", "nome": "construcao", "runlog_etapa": "3 construcao",
+  "asserts": [
+    { "id": "has_verification", "tipo": "sdk", "query": "init.phase-op {n}", "jq": ".has_verification", "espera": "true",
+      "desc": "retrato do SDK confirma execução verificada" },
+    { "id": "summaries", "tipo": "glob", "padrao": "{fase}/*-SUMMARY.md", "min": 1,
+      "desc": ">=1 SUMMARY.md (planos executados)" }
+  ]
+}

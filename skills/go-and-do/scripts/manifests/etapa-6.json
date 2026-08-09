@@ -1,0 +1,12 @@
+{
+  "etapa": "6", "nome": "encerramento", "runlog_etapa": "6 encerramento",
+  "pre": { "git_remote": true },
+  "asserts": [
+    { "id": "resumo_final", "tipo": "grep", "arquivo": "{fase}/{nn}-RESUMO-EXECUTIVO.md",
+      "regex": "^go_and_do_resumo: final", "min": 1,
+      "desc": "resumo executivo no estado final" },
+    { "id": "learnings", "tipo": "glob", "padrao": "{fase}/{nn}-LEARNINGS.md", "min": 1,
+      "nivel": "informativo",
+      "desc": "LEARNINGS extraído (rota de ship via close-phase)" }
+  ]
+}

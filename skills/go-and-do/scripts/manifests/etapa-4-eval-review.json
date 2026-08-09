@@ -1,0 +1,8 @@
+{
+  "etapa": "4-eval-review", "nome": "eval-review", "runlog_etapa": "4.3 eval-review",
+  "asserts": [
+    { "id": "eval_review", "tipo": "glob", "padrao": "{fase}/{nn}-EVAL-REVIEW.md", "min": 1,
+      "condicao": { "flag": "ai", "sinal": "{fase}/{nn}-AI-SPEC.md" },
+      "desc": "NN-EVAL-REVIEW.md existe (só com --ai)" }
+  ]
+}

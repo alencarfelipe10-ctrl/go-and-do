@@ -1,0 +1,11 @@
+{
+  "etapa": "4-secure", "nome": "secure", "runlog_etapa": "4.4 secure",
+  "asserts": [
+    { "id": "threats_zerados", "tipo": "grep", "arquivo": "{fase}/{nn}-SECURITY.md",
+      "regex": "^threats_open: 0", "min": 1,
+      "desc": "NN-SECURITY.md com threats_open: 0 (ameaça aberta bloqueia)" },
+    { "id": "sem_aceites_orfaos", "tipo": "grep", "arquivo": "{fase}/{nn}-SECURITY.md",
+      "regex": "^aceites_sem_dono:", "min": 0, "max": 0,
+      "desc": "nenhum marcador aceites_sem_dono (aceite de risco sem dono não fecha)" }
+  ]
+}

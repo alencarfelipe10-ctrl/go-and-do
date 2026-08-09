@@ -1,0 +1,7 @@
+{
+  "etapa": "4-code-review", "nome": "code-review", "runlog_etapa": "4.1 code-review",
+  "asserts": [
+    { "id": "review", "tipo": "glob", "padrao": "{fase}/{nn}-REVIEW.md", "min": 1,
+      "desc": "NN-REVIEW.md existe" }
+  ]
+}

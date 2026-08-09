@@ -1,0 +1,9 @@
+{
+  "etapa": "0", "nome": "abertura", "runlog_etapa": "0 abertura",
+  "asserts": [
+    { "id": "ponteiro_rodada", "tipo": "glob", "padrao": "{root}/.planning/.gad-rodada-ativa.json", "min": 1,
+      "desc": "abre-rodada.sh gravou o ponteiro da rodada ativa (PC-3)" },
+    { "id": "evento_run", "tipo": "grep", "arquivo": "{fase}/{nn}-RUN-LOG.jsonl", "regex": "\"evento\":\"run\"", "min": 1,
+      "desc": "run-log tem o evento run da abertura" }
+  ]
+}

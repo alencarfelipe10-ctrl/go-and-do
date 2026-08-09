@@ -1,0 +1,10 @@
+{
+  "etapa": "4-validate", "nome": "validate", "runlog_etapa": "4.5 validate",
+  "asserts": [
+    { "id": "validation_fechada", "tipo": "ou", "de": [
+        { "tipo": "grep", "arquivo": "{fase}/{nn}-VALIDATION.md", "regex": "^nyquist_compliant: true", "min": 1 },
+        { "tipo": "grep", "arquivo": "{fase}/{nn}-VALIDATION.md", "regex": "^go_and_do_validate: done", "min": 1 }
+      ],
+      "desc": "NN-VALIDATION.md compliant (ou desfecho partial com marcador done)" }
+  ]
+}

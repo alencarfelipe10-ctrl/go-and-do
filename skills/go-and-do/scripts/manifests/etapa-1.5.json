@@ -1,0 +1,11 @@
+{
+  "etapa": "1.5", "nome": "contratos", "runlog_etapa": "1.5 contratos",
+  "asserts": [
+    { "id": "ui_spec", "tipo": "glob", "padrao": "{fase}/{nn}-UI-SPEC.md", "min": 1,
+      "condicao": { "flag": "ui", "sinal": "{fase}/{nn}-UI-SPEC.md" },
+      "desc": "contrato de UI existe (só com --ui)" },
+    { "id": "ai_spec", "tipo": "glob", "padrao": "{fase}/{nn}-AI-SPEC.md", "min": 1,
+      "condicao": { "flag": "ai", "sinal": "{fase}/{nn}-AI-SPEC.md" },
+      "desc": "contrato de IA existe (só com --ai)" }
+  ]
+}

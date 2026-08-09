@@ -1,0 +1,14 @@
+{
+  "etapa": "1", "nome": "intencao", "runlog_etapa": "1 intencao",
+  "asserts": [
+    { "id": "spec", "tipo": "glob", "padrao": "{fase}/{nn}-SPEC.md", "min": 1,
+      "desc": "SPEC da fase existe" },
+    { "id": "context", "tipo": "glob", "padrao": "{fase}/{nn}-CONTEXT.md", "min": 1,
+      "desc": "CONTEXT (discuss) existe" },
+    { "id": "intent_review_fechada", "tipo": "grep", "arquivo": "{fase}/{nn}-INTENT-REVIEW.md",
+      "regex": "^intent_review: (done|skipped)", "min": 1,
+      "desc": "revisão adversarial fechada (needs_decision/blocked NÃO concluem)" },
+    { "id": "chain_flag_zerada", "tipo": "sdk", "query": "config-get workflow._auto_chain_active", "espera": "false",
+      "desc": "flag de chain do discuss zerada (decisão 1.4 — crash entre discuss e plan não dispara chain fantasma)" }
+  ]
+}
