@@ -2,6 +2,24 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.1.0] — 2026-08-09
+
+### Adicionado
+
+- **`NN-PRE-SPEC.md` como insumo formal da intenção.** Quando o diretório da fase já
+  contém `NN-PRE-SPEC.md` (decisões travadas pelo usuário numa sessão interativa
+  anterior à rodada — nome exato, NN com zero à esquerda), a abertura o detecta
+  automaticamente (`abre-rodada.sh` e `setup-intencao.sh` → campo `pre_spec`;
+  registrado no evento `run`) e a Etapa 1 o usa como insumo: os filhos spec e discuss
+  leem o arquivo antes de invocar o workflow e adotam as decisões dele como
+  **travadas** — marcadas `[pre-spec]`, nunca re-perguntadas nem contrariadas por
+  escolha `[auto]`; conflito irreconciliável com ROADMAP/REQUIREMENTS/SPEC vira sino.
+  O briefing adversarial declara a origem (decisão `[pre-spec]` tem dono — o revisor
+  ataca a consequência técnica, não a "falta de justificativa") e o livro-razão
+  mecânico enumera `[pre-spec]` junto de `[auto]`. O arquivo entra no commit da
+  intenção. A flag `--obs` deixa de ser o veículo para esse hábito (segue existindo
+  para notas livres).
+
 ## [2.0.0] — 2026-08-09
 
 Reformulação major da `/go-and-do` (plano aprovado em 09/08, blocos A–K). Princípio
