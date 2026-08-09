@@ -1,46 +1,64 @@
 #!/usr/bin/env bash
-# run-log.sh — telemetria da go-and-do (endurecida em 27/07/2026 — plano da auditoria F20).
-# Uso: run-log.sh <phase_dir> <NN> <evento> "<etapa>" [tokens] [pct] [subagent_tokens] [limit] [tokens_camada2] [motivo]
-#      run-log.sh <phase_dir> <NN> audit   → audita a GRADE (janelas abertas por sessão; não muta)
-#      run-log.sh <phase_dir> <NN> close --sessao <id> ["motivo"]
-#                                          → fecho ADMINISTRATIVO de janela órfã de sessão MORTA
-#                                            (end sintético "fechado_admin"; a sessão atual não
-#                                            consegue fechar janela alheia pelo caminho normal —
-#                                            2 ocorrências: F19-inspired e F2-rlr 29/07)
-#      run-log.sh --selftest               → auto-teste em sandbox (única rota que pode sair != 0)
+# run-log.sh — telemetria da go-and-do (esquema major de 2026-08 — retrato fiel da linha
+# do tempo, decisões G.1/G.2 do gad-major-update).
 #
-#   evento ∈ {run, checkpoint, end, stop, skip, compact, audit}
+# Uso (escrita):
+#   run-log.sh <phase_dir> <NN> <evento> "<etapa>" [tokens] [pct] [subagent_tokens] [limit] \
+#              [_morto] [motivo] [FLAGS]
+#   FLAGS:  --camada <0|1|2|externa>   camada onde a ação ocorreu
+#           --modelo <id>              modelo em uso (opus-5, sonnet-5, gpt-5.x, …)
+#           --effort <nível>           effort do modelo
+#           --tokens-reais <int>       tokens MEDIDOS do transcript (mede-tokens.py; nunca
+#                                      autodeclarados)
+#           --custo <usd>              custo da etapa calculado por mede-tokens.py (precos.json)
+#           --kv <chave=valor>         campo extra (repetível; número/true/false viram JSON cru)
+#   evento ∈ {run, checkpoint, end, stop, skip, compact, despacho, retorno, script}
+#     run        — abertura da rodada (escrito pelo abre-rodada.sh)
+#     checkpoint — fotografia do contexto da camada 0 (abre janela de etapa)
+#     end        — fecha a janela de etapa (escrito pelo confere-etapa.sh no fecho)
+#     stop/skip  — pausa/pulo declarado
+#     compact    — auto-detectado (queda >100k na mesma sessão)
+#     despacho   — início de despacho de subagente (escrito pelo pre-despacho.sh e pelo
+#                  hook gad-lifecycle.sh; NUNCA pelo modelo)
+#     retorno    — fim de despacho (escrito pelo hook; par do despacho — não fecha janela
+#                  de etapa, que é do par checkpoint/end)
+#     script     — auto-registro de um script da skill (nome+exit+resumo via --kv)
+#
+# Modos:  run-log.sh <phase_dir> <NN> audit                    → audita a GRADE (não muta)
+#         run-log.sh <phase_dir> <NN> close --sessao <id> [m]  → fecho ADMINISTRATIVO de
+#                    janela órfã de sessão MORTA (2 ocorrências: F19-inspired e F2-rlr)
+#         run-log.sh --selftest                                → sandbox (única rota exit != 0)
 #
 # ── PAPEL DOS NÚMEROS (leia antes de somar qualquer coisa) ─────────────────────────────
-#   `tokens`/`pct` (checkpoint) = FOTOGRAFIA do contexto da camada 0 naquele instante.
-#   `subagent_tokens` (end)     = usage CUMULATIVO que o harness reportou a um despacho
-#   (input + cache_creation + cache_read + output de TODOS os turnos — o cache_read
-#   recontabiliza a janela inteira a cada turno). É CONFERÊNCIA, nunca métrica de custo:
-#   somar isso como "custo da fase" superconta ~3-4x (caso real F20: 8,34M alegados vs
-#   2,30M de output medidos). A métrica é o ledger da /audit-gad (mede dos transcripts).
-#   O que este log tem de INSUBSTITUÍVEL é a GRADE: seq + timestamps + etapas canônicas,
-#   que permitem atribuir o consumo medido a etapas nomeadas.
+#   `tokens`/`pct` (checkpoint)  = FOTOGRAFIA do contexto da camada 0 (context-check.sh).
+#   `subagent_tokens` (end)      = usage CUMULATIVO que o harness reportou a um despacho.
+#     É CONFERÊNCIA, nunca métrica de custo: somar isso superconta ~3-4x (F20: 8,34M
+#     alegados vs 2,30M medidos).
+#   `tokens_reais`/`custo_usd`   = medição do transcript por mede-tokens.py (4 campos de
+#     usage, dedup por requestId) — a MÉTRICA. Só entram por flag, só de fonte mecânica.
+#   O campo autodeclarado `tokens_camada2` MORREU nesta versão (supercontagem sistêmica;
+#   subagente não reporta token nenhum) — o 9º argumento posicional é aceito e DESCARTADO
+#   com aviso, para compatibilidade de chamada.
 #
 # ── ENDURECIMENTOS MECÂNICOS (nenhum depende de disciplina do modelo) ──────────────────
-#   seq            — contador monotônico por arquivo; ordenação canônica (7 pares end/checkpoint
-#                    no mesmo segundo na F20 tornavam a ordem por timestamp ambígua).
+#   flock          — toda escrita (inclusive o cálculo do seq) roda sob lock exclusivo no
+#                    próprio JSONL: paralelismo real de 6 lanes já foi medido; append
+#                    concorrente tem garantia formal, não estatística.
+#   seq            — contador monotônico por arquivo; ordenação canônica (7 pares end/
+#                    checkpoint no mesmo segundo na F20 tornavam timestamp ambíguo).
 #   auto-fechamento— checkpoint novo com a janela anterior da MESMA sessão ainda aberta →
-#                    grava antes um `end` sintético `"auto_fechado":true` e avisa no stdout
-#                    (caso real F20: a 3.4 verificação rodou, produziu artefato e ficou sem
-#                    janela — o custo dela caiu no balde do code review).
-#   vocabulário    — a etapa DEVE começar com o ID canônico (`3.3 execucao`, `0-B intencao`,
-#                    `lateral pesquisa X`); fora do vocabulário → aviso no stdout (não falha).
-#   compact        — detector mecânico (desde 07/07/2026): queda > 100k na mesma sessão →
-#                    evento `compact` gravado pelo próprio script (na AOS-10 o modelo detectou
-#                    verbalmente e esqueceu de logar).
-#   skill_version  — `git describe` no clone, no evento `run` (na F19 uma release saiu com a
-#                    fase em voo e a auditoria reconstruiu a versão por timestamps).
-#   camada2        — 9º arg: número = tokens_camada2 (soma reportada aos despachos do host);
-#                    literal `sem_report` = chave `"camada2":"sem_report"` (ausência passa a
-#                    ser distinguível de contagem completa). NUNCA estimado.
-#   motivo         — 10º arg: texto livre do stop/skip vai em campo próprio, não na etapa.
+#                    grava antes um `end` sintético `"auto_fechado":true` e avisa no stdout.
+#   vocabulário    — validado NA ESCRITA (PC-2: eventos antigos no mesmo arquivo são
+#                    tolerados na leitura). A etapa DEVE começar com o ID canônico da
+#                    numeração nova: `0` abertura · `1` intencao · `1.5` contratos ·
+#                    `2` planejamento · `2.5` convergencia · `3` construcao · `4.x` gates ·
+#                    `5` uat · `6` encerramento · ou preparacao|probe|lateral|resumo|
+#                    verificacao. Fora disso → aviso no stdout (não falha).
+#   compact        — detector mecânico: queda > 100k na mesma sessão → evento `compact`.
+#   skill_version  — `git describe` no clone, no evento `run`.
+#   motivo         — 10º arg: texto livre do stop/skip em campo próprio, não na etapa.
 #   parent_etapa   — end órfão de camada 2 (etapa contendo "(camada 2 retomada") ganha
-#                    automaticamente `"parent_etapa":"<ID>"` — atribuição determinística ao pai.
+#                    `"parent_etapa":"<ID>"` — atribuição determinística ao pai.
 #
 # Appenda 1 linha JSON em <phase_dir>/<NN>-RUN-LOG.jsonl.
 # Telemetria é instrumento, não gate: fora do --selftest, NUNCA falha o pipeline (exit 0).
@@ -56,36 +74,59 @@ if [ "$1" = "--selftest" ]; then
   ok()  { echo "PASS: $1"; }
   bad() { echo "FAIL: $1"; fail=1; }
 
-  bash "$SELF" "$D" 99 run "preparacao" >/dev/null
+  bash "$SELF" "$D" 99 run "0 abertura" --modelo fable-5 --effort high --kv hook_instalado=true >/dev/null
   grep -q '"evento":"run"' "$F" && grep -q '"seq":1' "$F" && ok "run + seq inicial" || bad "run + seq inicial"
   grep -q '"skill_version"' "$F" && ok "skill_version no run" || bad "skill_version no run (git describe falhou?)"
+  grep -q '"modelo":"fable-5","effort":"high"' "$F" && grep -q '"hook_instalado":true' "$F" \
+    && ok "run com modelo/effort/kv" || bad "run com modelo/effort/kv"
 
-  bash "$SELF" "$D" 99 checkpoint "0-B intencao" 300000 75 "" 400000 >/dev/null
+  bash "$SELF" "$D" 99 checkpoint "1 intencao" 300000 75 "" 400000 >/dev/null
   grep -q '"tokens":300000,"pct":75,"limit":400000' "$F" && ok "checkpoint com medição" || bad "checkpoint com medição"
 
-  out=$(bash "$SELF" "$D" 99 checkpoint "2.3 planejamento" 310000 77 "" 400000)
+  out=$(bash "$SELF" "$D" 99 checkpoint "2 planejamento" 310000 77 "" 400000)
   echo "$out" | grep -q "janela-fechada-automaticamente" && grep -q '"auto_fechado":true' "$F" \
     && ok "auto-fechamento de janela aberta" || bad "auto-fechamento de janela aberta"
 
-  bash "$SELF" "$D" 99 end "2.3 planejamento" "" "" 123456 "" 9999 >/dev/null
-  grep -q '"subagent_tokens":123456,"tokens_camada2":9999' "$F" && ok "end com tokens_camada2" || bad "end com tokens_camada2"
+  out=$(bash "$SELF" "$D" 99 end "2 planejamento" "" "" 123456 "" 9999 2>/dev/null)
+  echo "$out" | grep -q "tokens_camada2 morreu" && grep -q '"subagent_tokens":123456' "$F" \
+    && ! grep -q '"tokens_camada2"' "$F" \
+    && ok "9º arg descartado com aviso (campo autodeclarado morto)" || bad "9º arg descartado com aviso"
 
-  bash "$SELF" "$D" 99 end "3.2 convergencia" "" "" 111 "" sem_report >/dev/null
-  grep -q '"camada2":"sem_report"' "$F" && ok "marcador sem_report" || bad "marcador sem_report"
+  bash "$SELF" "$D" 99 end "2.5 convergencia" "" "" "" "" "" "" --tokens-reais 88123 --custo 1.37 --camada 1 >/dev/null
+  grep -q '"tokens_reais":88123,"custo_usd":1.37' "$F" && grep -q '"camada":1' "$F" \
+    && ok "end com medição mecânica (tokens_reais/custo/camada)" || bad "end com medição mecânica"
 
-  out=$(bash "$SELF" "$D" 99 checkpoint "3.3 execucao" 100000 25 "" 400000)
+  bash "$SELF" "$D" 99 despacho "1 intencao" --camada 0 --modelo opus-5 --effort medium --kv agente=gad-intent >/dev/null
+  grep -q '"evento":"despacho".*"agente":"gad-intent"' "$F" && ok "evento despacho com agente" || bad "evento despacho"
+  bash "$SELF" "$D" 99 retorno "1 intencao" --camada 0 --kv agente=gad-intent >/dev/null
+  grep -q '"evento":"retorno"' "$F" && ok "evento retorno" || bad "evento retorno"
+
+  bash "$SELF" "$D" 99 script "1 intencao" --kv script=confere-rotas.sh --kv exit=0 --kv resumo="rotas ok" >/dev/null
+  grep -q '"evento":"script".*"script":"confere-rotas.sh","exit":0,"resumo":"rotas ok"' "$F" \
+    && ok "auto-registro de script" || bad "auto-registro de script"
+
+  out=$(bash "$SELF" "$D" 99 checkpoint "3 construcao" 100000 25 "" 400000)
   echo "$out" | grep -q "compact-detectado" && grep -q '"evento":"compact"' "$F" \
     && ok "detector de compact" || bad "detector de compact"
 
-  bash "$SELF" "$D" 99 end '3.3 execucao (camada 2 retomada — plano 03)' "" "" 5555 >/dev/null
-  grep -q '"parent_etapa":"3.3"' "$F" && ok "parent_etapa no end órfão" || bad "parent_etapa no end órfão"
+  bash "$SELF" "$D" 99 end '3 construcao (camada 2 retomada — plano 03)' "" "" 5555 >/dev/null
+  grep -q '"parent_etapa":"3"' "$F" && ok "parent_etapa no end órfão" || bad "parent_etapa no end órfão"
 
-  out=$(bash "$SELF" "$D" 99 end "etapa-inventada qualquer" "" "" 1 2>/dev/null)
-  echo "$out" | grep -q "fora do vocabulário" && ok "aviso de vocabulário" || bad "aviso de vocabulário"
+  out=$(bash "$SELF" "$D" 99 end "0-B intencao" "" "" 1 2>/dev/null)
+  echo "$out" | grep -q "fora do vocabulário" && ok "vocabulário novo rejeita ID antigo (0-B)" || bad "vocabulário novo rejeita ID antigo"
+  out=$( { bash "$SELF" "$D" 99 end "1.5 contratos"; bash "$SELF" "$D" 99 checkpoint "4.2 code-review" 100 0 "" 400000; } 2>/dev/null )
+  echo "$out" | grep -q "fora do vocabulário" && bad "IDs novos 1.5/4.2 aceitos" || ok "IDs novos 1.5/4.2 aceitos"
 
-  bash "$SELF" "$D" 99 end "3.3 execucao" "" "" 42 >/dev/null
+  bash "$SELF" "$D" 99 end "4.2 code-review" "" "" 42 >/dev/null
   bash "$SELF" "$D" 99 stop "pausa" 320000 80 "" 400000 "" 'ship bloqueado — repo sem remote ("LGPD")' >/dev/null
   grep -q '"evento":"stop".*"motivo":"ship bloqueado' "$F" && ok "stop com medição + motivo (escapado)" || bad "stop com medição + motivo"
+
+  # flock: 6 appends concorrentes → 6 linhas, seq único e monotônico no arquivo inteiro
+  before=$(wc -l < "$F")
+  for i in 1 2 3 4 5 6; do bash "$SELF" "$D" 99 script "5 uat" --kv script=lane$i --kv exit=0 & done
+  wait
+  after=$(wc -l < "$F")
+  [ $((after-before)) -eq 6 ] && ok "flock: 6 appends concorrentes, 6 linhas" || bad "flock: appends concorrentes ($before -> $after)"
 
   out=$(bash "$SELF" "$D" 99 audit)
   echo "$out" | grep -q "janelas_abertas=0" && ok "audit: grade fechada" || bad "audit: grade fechada ($out)"
@@ -134,6 +175,7 @@ espelha() {
   # no teste do close — caso 02/08: sessão "morta0000" vazou 99-teste pra nuvem)
   [ -n "${RUNLOG_SEM_ESPELHO:-}" ] && return 0
   case "${CLAUDE_CODE_SESSION_ID:-}" in selftest*) return 0 ;; esac
+  # 9>&-: o subshell não pode herdar o fd do flock — a trava soltaria só depois do curl
   (
     _dir="$1"; _nn="$2"; _raw="$3"
     . "$HOME/.config/go-and-do/config" 2>/dev/null
@@ -165,7 +207,15 @@ espelha() {
       -H "Content-Type: application/json" \
       -H "Prefer: resolution=merge-duplicates" \
       -d "{\"projeto\":\"$_proj\",\"caminho\":\"$_caminho\",\"fase_atual\":$_fase,\"total_fases\":$_total_json,\"atualizado_em\":\"$(date -u +%FT%TZ)\"}"
-  ) >/dev/null 2>&1 &
+  ) >/dev/null 2>&1 9>&- &
+}
+
+# trava exclusiva no próprio JSONL (fd 9): o seq só é confiável se leitura+escrita forem
+# atômicas. flock ausente na plataforma → segue sem trava (degradação rara e declarada aqui).
+trava() {
+  exec 9>>"$1" 2>/dev/null || return 0
+  command -v flock >/dev/null 2>&1 && flock -x 9 2>/dev/null
+  return 0
 }
 
 # ───────────────────────────── modo close (administrativo) ─────────────────────────────
@@ -194,6 +244,7 @@ if [ "$3" = "close" ]; then
     if [ "$alvo" = "${cur:0:8}" ]; then
       echo "close: $alvo é a SESSÃO ATUAL — feche a janela pelo caminho normal (end/skip/stop)"; exit 0
     fi
+    trava "$f"
     ln=$(grep -n "\"sessao\":\"$alvo\"" "$f" | grep '"evento":"checkpoint"' | tail -n1 | cut -d: -f1)
     [ -n "$ln" ] || { echo "close: nenhuma janela da sessão $alvo neste run-log"; exit 0; }
     closed=$(tail -n +"$((ln+1))" "$f" | grep "\"sessao\":\"$alvo\"" | grep -c '"evento":"\(end\|skip\|stop\)"')
@@ -241,7 +292,7 @@ if [ "$3" = "audit" ]; then
         abertas=$((abertas+1))
       fi
     done
-    echo "audit: linhas=$(wc -l < "$f" | tr -d ' ') run=$(grep -c '"evento":"run"' "$f") checkpoint=$(grep -c '"evento":"checkpoint"' "$f") end=$(grep -c '"evento":"end"' "$f") skip=$(grep -c '"evento":"skip"' "$f") stop=$(grep -c '"evento":"stop"' "$f") compact=$(grep -c '"evento":"compact"' "$f") janelas_abertas=$abertas"
+    echo "audit: linhas=$(wc -l < "$f" | tr -d ' ') run=$(grep -c '"evento":"run"' "$f") checkpoint=$(grep -c '"evento":"checkpoint"' "$f") end=$(grep -c '"evento":"end"' "$f") despacho=$(grep -c '"evento":"despacho"' "$f") retorno=$(grep -c '"evento":"retorno"' "$f") script=$(grep -c '"evento":"script"' "$f") skip=$(grep -c '"evento":"skip"' "$f") stop=$(grep -c '"evento":"stop"' "$f") compact=$(grep -c '"evento":"compact"' "$f") janelas_abertas=$abertas"
     echo "audit: lembrete — todo passo que TERIA rodado e não rodou precisa de um evento skip (UI/AI/eval/secure com gate off etc.); o script não adivinha o que devia rodar, só cobra o que ficou aberto"
   } 2>/dev/null
   exit 0
@@ -249,8 +300,26 @@ fi
 
 # ───────────────────────────── escrita normal ─────────────────────────────
 {
-  dir="$1"; nn="$2"; evento="$3"; etapa="$4"; tokens="${5:-}"; pct="${6:-}"; subt="${7:-}"; lim="${8:-}"; c2="${9:-}"; motivo="${10:-}"
+  dir="$1"; nn="$2"; evento="$3"; etapa="$4"
   [ -n "$dir" ] && [ -n "$nn" ] && [ -n "$evento" ] || exit 0
+  shift 4 2>/dev/null || true
+  # posicionais legados (até 6, param no primeiro --flag)
+  _p=(); while [ $# -gt 0 ]; do case "$1" in --*) break ;; *) _p+=("$1"); shift ;; esac; done
+  tokens="${_p[0]:-}"; pct="${_p[1]:-}"; subt="${_p[2]:-}"; lim="${_p[3]:-}"; c2="${_p[4]:-}"; motivo="${_p[5]:-}"
+  # flags do esquema novo (G.1)
+  camada=""; modelo=""; effort=""; treais=""; custo=""; kvs=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --camada)       camada="${2:-}"; shift 2 ;;
+      --modelo)       modelo="${2:-}"; shift 2 ;;
+      --effort)       effort="${2:-}"; shift 2 ;;
+      --tokens-reais) treais="${2:-}"; shift 2 ;;
+      --custo)        custo="${2:-}";  shift 2 ;;
+      --kv)           kvs+=("${2:-}"); shift 2 ;;
+      *) shift ;;
+    esac
+  done
+
   # Caminho relativo é resolvido contra a raiz do repo, não contra o cwd — um subagente
   # parado na pasta errada criava uma árvore .planning/ DUPLICADA (caso real, F16.1).
   case "$dir" in
@@ -264,6 +333,9 @@ fi
   sess="${CLAUDE_CODE_SESSION_ID:-desconhecida}"
   sess="${sess:0:8}"
 
+  # daqui em diante a escrita é atômica: seq lido e linha gravada sob a mesma trava
+  trava "$f"
+
   # seq monotônico por arquivo (ordenação canônica; timestamps têm resolução de 1s e
   # colidem — 7 pares end/checkpoint no mesmo segundo na F20)
   last_seq=$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$f" 2>/dev/null | tail -n1)
@@ -274,23 +346,29 @@ fi
   etapa=$(printf '%s' "$etapa" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n\r\t')
   motivo=$(printf '%s' "$motivo" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n\r\t')
 
-  # Vocabulário canônico: a etapa começa com o ID do passo (aviso, nunca falha — texto
-  # livre sem ID inviabiliza agregação entre fases; caso real F20: 4 grafias distintas)
+  # Vocabulário canônico da numeração NOVA, validado na escrita (aviso, nunca falha —
+  # texto livre sem ID inviabiliza agregação entre fases; caso real F20: 4 grafias)
   case "$evento" in
-    checkpoint|end|skip)
+    checkpoint|end|skip|despacho|retorno|script)
       _id="${etapa%% *}"
       case "$_id" in
-        preparacao|probe|lateral|resumo|verificacao|0-A|0-B|1|1.[0-9]*|2.[0-9]*|3.[0-9]*|4.[0-9]*|5.[0-9]*|6.[0-9]*) : ;;
-        *) echo "aviso: etapa \"$_id\" fora do vocabulário canônico — prefixe com o ID do passo (ex.: \"3.3 execucao\", \"0-B intencao\", \"lateral pesquisa X\")" ;;
+        preparacao|probe|lateral|resumo|verificacao|0|1|1.5|2|2.5|3|3.[0-9]*|4|4.[0-9]*|5|5.[0-9]*|6|6.[0-9]*) : ;;
+        *) echo "aviso: etapa \"$_id\" fora do vocabulário canônico — prefixe com o ID da numeração nova (ex.: \"1 intencao\", \"2.5 convergencia\", \"4.2 code-review\", \"lateral pesquisa X\")" ;;
       esac ;;
   esac
+
+  # O campo autodeclarado morreu (G.1-d): o 9º posicional é aceito e descartado.
+  if [ -n "$c2" ]; then
+    echo "aviso: tokens_camada2 morreu no esquema major — valor descartado; tokens reais agora vêm do mede-tokens.py (--tokens-reais/--custo no end da etapa)"
+    c2=""
+  fi
 
   # Checkpoint sem medição não passa em silêncio (caso real, F16-ox 25/07: o checkpoint da
   # 5.4 nasceu sem tokens/pct e ninguém notou até a auditoria). O aviso vai pro stdout — é o
   # canal que o orquestrador lê; a regra de reação (re-rodar o context-check 1x) é da Sub-G.
   if [ "$evento" = "checkpoint" ]; then
     case "$tokens" in
-      (''|*[!0-9]*|0) echo "aviso: checkpoint sem tokens/pct — context-check falhou? re-rode o bloco da Sub-rotina A (1x) antes de seguir" ;;
+      (''|*[!0-9]*|0) echo "aviso: checkpoint sem tokens/pct — context-check falhou? re-rode o gate (1x) antes de seguir" ;;
     esac
   fi
 
@@ -346,16 +424,32 @@ fi
 
   linha="{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$sess\",\"evento\":\"$evento\",\"etapa\":\"$etapa\""
   [ -n "$ver" ] && linha="$linha,\"skill_version\":\"$ver\""
+  # camada: 0/1/2 viram número; "externa" (codex/agy) vira string
+  case "$camada" in ('') ;; (*[!0-9]*) camada=$(printf '%s' "$camada" | tr -cd 'a-z'); [ -n "$camada" ] && linha="$linha,\"camada\":\"$camada\"" ;; (*) linha="$linha,\"camada\":$camada" ;; esac
+  [ -n "$modelo" ] && linha="$linha,\"modelo\":\"$(printf '%s' "$modelo" | tr -cd 'A-Za-z0-9._-')\""
+  [ -n "$effort" ] && linha="$linha,\"effort\":\"$(printf '%s' "$effort" | tr -cd 'a-z')\""
   case "$tokens" in (*[!0-9]*|'') ;; (*) linha="$linha,\"tokens\":$tokens";; esac
   case "$pct" in (*[!0-9]*|'') ;; (*) linha="$linha,\"pct\":$pct";; esac
   case "$lim" in (*[!0-9]*|'') ;; (*) linha="$linha,\"limit\":$lim";; esac
   case "$subt" in (*[!0-9]*|'') ;; (*) linha="$linha,\"subagent_tokens\":$subt";; esac
-  # camada 2: número = soma reportada; `sem_report` = marcador verificável de ausência
-  case "$c2" in
-    (sem_report) linha="$linha,\"camada2\":\"sem_report\"" ;;
-    (*[!0-9]*|'') ;;
-    (*) linha="$linha,\"tokens_camada2\":$c2" ;;
+  # medição mecânica (mede-tokens.py) — só entra por flag, nunca por autodeclaração
+  case "$treais" in (*[!0-9]*|'') ;; (*) linha="$linha,\"tokens_reais\":$treais";; esac
+  case "$custo" in
+    ('') ;;
+    (*[!0-9.]*) ;;
+    (*) linha="$linha,\"custo_usd\":$custo" ;;
   esac
+  # campos extras --kv chave=valor (número/true/false = JSON cru; resto = string escapada)
+  for _kv in ${kvs[@]+"${kvs[@]}"}; do
+    _k="${_kv%%=*}"; _v="${_kv#*=}"
+    _k=$(printf '%s' "$_k" | tr -cd 'A-Za-z0-9_'); [ -n "$_k" ] || continue
+    case "$_v" in
+      (true|false) linha="$linha,\"$_k\":$_v" ;;
+      (''|*[!0-9]*) _v=$(printf '%s' "$_v" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n\r\t')
+                    linha="$linha,\"$_k\":\"$_v\"" ;;
+      (*) linha="$linha,\"$_k\":$_v" ;;
+    esac
+  done
   [ -n "$motivo" ] && linha="$linha,\"motivo\":\"$motivo\""
   # end órfão de camada 2 → atribuição determinística ao pai pelo ID canônico
   case "$etapa" in
