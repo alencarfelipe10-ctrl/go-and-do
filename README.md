@@ -73,6 +73,33 @@ Só nas versões **2.1.217 e 2.1.218** o aninhamento vinha desligado. Nelas, no
 Vale a partir da próxima sessão do Claude Code. `2` é o suficiente: orquestrador (0) →
 etapa despachada (1) → agentes GSD (2).
 
+### Hook de telemetria `gad-lifecycle` (recomendado)
+
+O run-log da fase registra o início/fim de **todo** despacho de subagente (com camada,
+modelo e effort) por um hook do Claude Code — sem depender do modelo lembrar de anotar.
+
+```bash
+ln -s "$(pwd)/go-and-do/hooks/gad-lifecycle.sh" ~/.claude/hooks/gad-lifecycle.sh
+```
+
+E registre no `~/.claude/settings.json`, dentro de `hooks`, nas duas listas
+(`PreToolUse` **e** `PostToolUse`):
+
+```json
+{
+  "matcher": "Agent|Task",
+  "hooks": [
+    { "type": "command", "command": "bash \"$HOME/.claude/hooks/gad-lifecycle.sh\"", "timeout": 5 }
+  ]
+}
+```
+
+O hook é global mas só age quando encontra uma rodada `/go-and-do` ativa **da própria
+sessão** (ponteiro `.planning/.gad-rodada-ativa.json`); fora disso é no-op em
+milissegundos. **Sem o hook a skill funciona normalmente** — a abertura detecta a
+ausência e declara a degradação (o run-log fica sem os eventos `despacho`/`retorno`,
+e as conferências que dependem deles viram informativas).
+
 ## Aviso no Telegram (opcional)
 
 Quando o Claude Code para e espera você — uma pergunta interativa (`AskUserQuestion`) ou um
