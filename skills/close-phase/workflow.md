@@ -124,11 +124,9 @@ promoção. Leia os campos por `grep` (não leia os arquivos inteiros — poupe 
    ' 2>/tmp/uat-detail.$$ )
    DETAIL=$(cat /tmp/uat-detail.$$ 2>/dev/null); rm -f /tmp/uat-detail.$$
    ```
-   > Por que o predicado nativo: é *markdown-aware* e *fail-closed* — varre **todos** os
-   > `*-UAT.md` (inclusive `*-HUMAN-UAT.md`), ignora `result:` dentro de code-block/comentário/
-   > citação, e conta como aprovado **só** `pass`/`passed`. O grep antigo desta sub-rotina olhava
-   > um arquivo só (`head -1`) e rejeitava só `pending|blocked`, deixando `result: skipped` passar —
-   > o que podia **shipar comportamento não-verificado** (ex.: teste pulado por faltar precondição).
+   > Por que o predicado nativo: markdown-aware e fail-closed — varre todos os `*-UAT.md`,
+   > ignora `result:` em code-block/citação e só aprova `pass`/`passed` (um grep caseiro
+   > deixava `skipped` passar e podia shipar comportamento não-verificado).
 
    Decida pelo `UAT_VERDICT` (mesmas rotas no nativo e no fallback):
    - **`CLEAN`** → `NEED_PROMOTE=true`, `SKIPPED_ACCEPTED=false`; segue (promoção na Etapa 2).
@@ -165,10 +163,9 @@ promoção. Leia os campos por `grep` (não leia os arquivos inteiros — poupe 
      ```
      Classifique e siga as **mesmas três rotas** (CLEAN / SKIPPED_ONLY / FAIL) acima.
 
-> **Por que a UAT é a prova.** O `/gsd-verify-work` não promove o `status` da
-> `VERIFICATION.md` (nem o `transition`/`verify-phase` o fazem) — `human_needed` fica
-> "grudado". Mas a UAT limpa é a verificação humana concluída. Então usamos a `UAT.md`
-> como fonte da verdade e promovemos na Etapa 2 com essa evidência registrada.
+> Por que a UAT é a prova: nenhum comando nativo promove o `human_needed` da
+> VERIFICATION — a UAT limpa é a verificação concluída; a Etapa 2 promove com essa
+> evidência registrada.
 
 </subroutine>
 
@@ -179,11 +176,9 @@ promoção. Leia os campos por `grep` (não leia os arquivos inteiros — poupe 
 Só roda se `NEED_PROMOTE=true`. Promova fora da sua janela, com um script (não leia o
 `VFILE` inteiro pra dentro do orquestrador).
 
-> **Honradez da evidência:** o UAT pode ter sido **humano** (`/gsd-verify-work`) ou **automatizado**
-> pela `/go-and-do` (subagente). Não afirme "verificação humana" quando foi a máquina. Detecte pelo
-> marcador `pre_uat: executed` no `UAT.md` (campo custom que só o UAT automatizado escreve) e ajuste
-> a linha de evidência. Quando automatizado, registre também que itens subjetivos podem ter sido
-> **assumidos** (estão no `NN-RESUMO-EXECUTIVO.md`).
+> **Honradez da evidência:** não afirme "verificação humana" quando foi a máquina — o
+> marcador `pre_uat: executed` denuncia o UAT automatizado da `/go-and-do` e a linha de
+> evidência muda de acordo (o script abaixo já detecta).
 
 ```bash
 DATE=$(date +%Y-%m-%d)
@@ -240,11 +235,8 @@ git diff --cached --quiet 2>/dev/null || \
   git commit -m "docs(${PADDED_PHASE}): close phase ${N} — learnings + verification" >/dev/null
 ```
 
-- O `git add ... 2>/dev/null` ignora arquivos que não existem; o `git diff --cached --quiet`
-  pula o commit se nada foi staged (ex.: `.planning/` está no `.gitignore` — nada a fazer).
-- `commit_docs` é falso → não commita. Avise no banner que, se o `.planning/` for trackeado,
-  o ship vai perguntar "commit ou stash" (comportamento esperado de quem desligou o
-  auto-commit de docs).
+- Nada staged → sem commit (ex.: `.planning/` gitignored). `commit_docs` falso → não
+  commita; avise no banner que o ship pode perguntar "commit ou stash".
 
 </subroutine>
 
@@ -339,14 +331,11 @@ gh pr merge <numero> --squash --delete-branch
 
 Banner e resumo dizem "mergeado" — nunca prometa revisão que o fluxo não tem. Falhou o
 merge (proteção de branch, CI obrigatório) → PR fica aberto, registre o motivo no banner.
-- **Bloqueio de ambiente** que não controlamos — sem `origin`, `gh` ausente/não autenticado,
-  ou branch errado → o ship reporta e sai. **Respeite o bloqueio**, mas antes de parar rode a
-  **reconciliação de estado (4.1)**: o bloqueio é de PUBLICAÇÃO; a fase está fechada
-  localmente (verificação promovida, learnings extraídos) e os marcadores têm que refletir
-  isso — foi exatamente assim que a Fase 17 ficou `- [ ]` no ROADMAP e `verifying` no STATE
-  com o trabalho todo pronto. Depois registre no banner o que faltou (ex.: "configure o
-  remote / `gh auth login` / mude de branch") e **pare** (sem 4.2 — não há PR). Esses são
-  pré-requisitos de ambiente que só o usuário resolve.
+- **Bloqueio de ambiente** — sem `origin`, `gh` ausente/não autenticado, branch errado → o
+  ship reporta e sai. **Respeite**, mas antes de parar rode a **reconciliação (4.1)**: o
+  bloqueio é de PUBLICAÇÃO e a fase está fechada localmente — os marcadores têm que refletir
+  isso. Depois registre no banner o que faltou e **pare** (sem 4.2 — não há PR). São
+  pré-requisitos que só o usuário resolve.
 
 </stage>
 
@@ -358,13 +347,10 @@ Só se chegou até aqui (se parou antes, já reportou o bloqueio e parou — com
 bloqueio de ambiente do ship roda a 4.1 antes de parar, ver 3.2).
 
 **4.1 — Reconciliação de estado (via SCRIPT — muta e assere).** O fecho não termina nos
-artefatos: os MARCADORES têm que dizer a mesma coisa. Esta etapa era prosa e falhou de três
-jeitos distintos em fechos reais (F19: a 4.1 inteira não rodou; F20: o `status: executing`
-do frontmatter ficou intocado — o comando usado escrevia o corpo e o motor do GSD preserva
-o frontmatter — e o `HANDOFF.json` da F19 sobreviveu porque a regra antiga era "aponta para
-outra fase → não toque"). Agora ela é um script com asserção final, que usa o comando
-NATIVO `phase complete` (escreve ROADMAP + REQUIREMENTS + STATE atomicamente, incl. o
-frontmatter `status`; idempotente — validado em sandbox 27/07/2026):
+artefatos: os MARCADORES têm que dizer a mesma coisa — e como prosa esta etapa falhou de
+três jeitos distintos em fechos reais, virou script com asserção final, usando o comando
+NATIVO `phase complete` (ROADMAP + REQUIREMENTS + STATE atômicos, incl. o frontmatter
+`status`; idempotente):
 
 ```bash
 bash $HOME/.claude/skills/close-phase/scripts/reconciliar-marcadores.sh "<project_root>" ${N} --sweep

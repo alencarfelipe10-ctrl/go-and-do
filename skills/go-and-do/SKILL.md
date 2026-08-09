@@ -69,7 +69,7 @@ orquestração longa, então a skill separa **camada 0** (esta conversa: decide,
 pausa e fala com o usuário) de **camada 1** (subagentes com janela própria e descartável que
 hospedam o trabalho verboso) e **camada 2** (os agentes internos que os comandos GSD spawnam —
 intocados). Descem para a camada 1: a intenção inteira (Etapa 1 — `prompts/intent.md`), o
-planejamento (2.3 — `prompts/plan.md`), a convergência do plano (3.2 —
+planejamento (2.3 — `prompts/plan.md`), a convergência do plano (2.5 —
 `prompts/convergence.md`), a execução (3.3 — `prompts/execute.md`; **exceção**: com plano
 `autonomous: false` pendente o execute roda inline, porque ação humana provável pede a
 interação nativa da camada 0), o code review (4.1 — `prompts/code-review.md`), o eval review
