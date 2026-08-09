@@ -1,14 +1,23 @@
 {
-  "etapa": "5", "nome": "uat", "runlog_etapa": "5 uat",
+  "etapa": "5",
+  "nome": "uat",
+  "runlog_etapa": "5 uat",
   "asserts": [
-    { "id": "pre_uat_executado", "tipo": "grep", "arquivo": "{fase}/{nn}-UAT.md",
-      "regex": "^pre_uat: executed", "min": 1,
-      "desc": "frontmatter pre_uat: executed (marcador promovido só por este script, 5.C)" },
-    { "id": "cenarios_gravados", "tipo": "grep", "arquivo": "{fase}/{nn}-UAT.md",
-      "regex": "result: *(pass|issue|blocked|assumed)", "min": 1,
-      "desc": ">=1 cenário com result: gravado" },
-    { "id": "evidencia_presente", "tipo": "glob", "padrao": "{fase}/uat-evidencia/*", "min": 1,
-      "nivel": "informativo",
-      "desc": "pasta de evidência não-vazia (5.E-b; vira falha dura no Bloco H — incidentes F19-ox/F21-ins)" }
+    {
+      "id": "pre_uat_executado",
+      "tipo": "grep",
+      "arquivo": "{fase}/{nn}-UAT.md",
+      "regex": "^pre_uat: (generated|executed)",
+      "min": 1,
+      "desc": "pre_uat presente (a promoção generated→executed é DESTE script — 5.C)"
+    },
+    {
+      "id": "cenarios_gravados",
+      "tipo": "grep",
+      "arquivo": "{fase}/{nn}-UAT.md",
+      "regex": "result: *(pass|issue|blocked|assumed)",
+      "min": 1,
+      "desc": ">=1 cenário com result: gravado"
+    }
   ]
 }

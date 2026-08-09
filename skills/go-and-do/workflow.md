@@ -131,16 +131,15 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 
 **Etapa 5 — UAT interativo automatizado** *(retomada por ESTADO do `NN-UAT.md`, não mera existência)*
 27. ⏭️ Retomada por estado (5.1): ausente → 28 · `pre_uat` ≠ `executed` → 29 · `executed` + `issue` sem marcador de fix → 30 · `executed` + `issue` com marcador → ⏸️ D · `executed`, sem `issue` em aberto → Etapa 6 (que roteia: balde 3 → hand-back · senão → ship).
-28. 🔒 Gera o `NN-UAT.md` via subagente (find_summaries → extract_tests + cold-start → create_uat_file); frontmatter `pre_uat: generated`.
-29. 🔒 Sobe o dev server (Sub-rotina B; fase sem server → pula DECLARANDO) → despacha o **subagente de UAT** (Sonnet 4.6 + `uat-playbook.md`) — **sempre, com ou sem GUI** (sem GUI ele usa `<non_gui_surfaces>`; UAT inline pela camada 0 é proibido): dirige browser/bash, classifica nos 4 baldes (1 pass · 2 issue · 3 não-pude-verificar · 4 assumed), aplica `<push_on_it>` no balde 1, escreve resultados, gera o teste do caminho feliz → derruba o server. Devolve só o resumo compacto (com `probes_executados`). Frontmatter → `pre_uat: executed`.
-29b. *(balde 3 com prova objetiva plausível)* Conversão via **subagente de investigação** (5.4b): a caça à prova roda em janela descartável (nunca inline — proteção da janela do orquestrador); `provado` → o MESMO subagente de UAT reclassifica com a evidência; `não-provável` → fica balde 3, registra a tentativa.
-30. *(balde 2)* 🔒 1 ciclo de conserto: despacho da 2.3 (args `N --gaps`) → re-execução pela regra da 3.3 (args `... --gaps-only`) → despacho da 4.1 (args `N --fix --auto --files=<arquivos do fix>`, sem a checagem de retomada) → reinicia o server → re-despacha o subagente de UAT **só** nos cenários `issue` → marca `pre_uat_fix_cycle: done`. Persistiu → ⏸️ Sub-rotina D.
+28. 🔒 Gera o `NN-UAT.md` via subagente (classify-coverage MECÂNICO primeiro — `gsd_run query uat.classify-coverage --summary`: deliverable coberto por teste automatizado passando entra `pass, source: automated` sem virar cenário de browser (5.D) → find_summaries → extract_tests + cold-start → create_uat_file); frontmatter `pre_uat: generated`.
+29. 🔒 Despacha o **subagente de UAT** (Sonnet + `uat-playbook.md`) — **sempre, com ou sem GUI** (sem GUI ele usa `<non_gui_surfaces>`; UAT inline é proibido). A JANELA dele sobe e derruba o server (`dev-server.sh up|down`, 5.A); dirige browser/bash, classifica nos 4 baldes, aplica `<push_on_it>` no balde 1, grava results/gaps/evidências e devolve só o QUALITATIVO (números morreram do autorreporte). Ao voltar: `confere-etapa.sh 5` reconcilia baldes/probes/evidência do disco, linta os gaps, roda o predicado nativo `uat-passed`, varre SEGREDOS e — só ele — promove `pre_uat: executed` (5.C/5.E).
+30. *(balde 2)* 🔒 1 ciclo de conserto: despacho da 2.3 (args `N --gaps`) → re-execução pela regra da 3.3 (args `... --gaps-only`) → despacho da 4.1 (`iteracao: 2+`, `--files` do `calcula-files.sh`) → re-despacha o subagente de UAT **só** nos cenários `issue` (a janela nova sobe o server sozinha) → `confere-etapa.sh 5 --fix-cycle` valida e carimba `pre_uat_fix_cycle: done`. Persistiu → ⏸️ Sub-rotina D.
 
 **Etapa 6 — Encerramento + ship** *(roteamento por balde)*
 31. **Roteia o desfecho:** sobrou balde 2 → ⏸️ D (pause-work) · sobrou balde 3 **ou** flag `--no-ship` → **hand-back** ao `/gsd-verify-work` (não shipa) · só baldes 1+4 → segue pro ship.
 32. Consolida o "🔔 O que precisa de você agora" + os itens do **bloco de transparência** (balde 4 assumidos / balde 3 não-verificados / decisões de intenção adotadas por recomendação do revisor, Etapa 1 / passos que não rodaram — config off ou ferramenta indisponível, com o motivo).
 33. Resumo executivo (modo final, com o bloco de transparência no topo): **Sub-rotina F**. ⏭️ idempotente (`go_and_do_resumo: final`).
-34. Commita os artefatos do UAT (`NN-UAT.md` + `tests/uat-fase-NN.spec.ts` + evidências) pra árvore ficar limpa pro preflight do ship (6.3b). 🔒 **Ship** (só na rota de ship): via **subagente** (Sub-rotina H + `prompts/close.md`, hospedando `close-phase N` — extract-learnings → promove a verificação → abre o PR). ⏸️ Bloqueio de ambiente (sem remote/`gh`) → sobe como `blocked`; respeita e reporta. Depois do retorno (shipado ou blocked): **emenda factual** da seção "Desfecho do ship" no resumo (6.4c) + commit.
+34. Commita os artefatos do UAT (`NN-UAT.md` + evidências — a varredura de segredos do `confere-etapa.sh 5` já barrou vazamento; `.spec.ts` não existe mais, 5.F/6.B) pra árvore ficar limpa pro preflight do ship (6.3b). 🔒 **Ship** (só na rota de ship): via **subagente** (Sub-rotina H + `prompts/close.md`, hospedando `close-phase N` — extract-learnings → promove a verificação → abre o PR). ⏸️ Bloqueio de ambiente (sem remote/`gh`) → sobe como `blocked`; respeita e reporta. Depois do retorno (shipado ou blocked): **emenda factual** da seção "Desfecho do ship" no resumo (6.4c) + commit.
 35. Self-check (rede: sobrou plano sem SUMMARY → Sub-rotina D) + banner final (PR + bloco de transparência + add-tests como passo **pós-PR**) + evento `stop` na telemetria (Sub-rotina G) e devolve o controle.
 
 </master_checklist>
@@ -1467,6 +1466,11 @@ Se todos os planos têm `SUMMARY.md`, leia o status do `VERIFICATION.md`:
 
 Despache um `Agent` (`model: sonnet`, `run_in_background: false` — despacho síncrono, mesma
 regra da Sub-rotina H) para reusar a lógica de derivação do `verify-work`:
+- (a0) **Classificador mecânico primeiro (5.D):** rode `gsd_run query
+  uat.classify-coverage --summary` — deliverable coberto por teste automatizado passando
+  entra como `pass, source: automated` SEM virar cenário de browser; só o resto vira
+  checkpoint (fail-safe canônico: never drop a deliverable; sem bloco `coverage:` →
+  extração por prosa como antes).
 - (a) **find_summaries** — lista os `SUMMARY.md` da fase.
 - (b) **extract_tests** — comportamentos **user-observáveis** (pular refactors / mudanças de tipo);
   cenários visuais derivados do `NN-UI-SPEC.md` (ou do `SUMMARY.md` quando não há `--ui`).
@@ -1505,55 +1509,38 @@ O subagente retorna: `uat_path`, `total`, e por cenário o tipo `{logic|api|cli|
 > ao usuário se precisar) e o SUBAGENTE roda o wrapper — a condução, os baldes, os probes e a
 > escrita do `NN-UAT.md` continuam sendo dele.
 
-1. **Sobe o dev server** (Sub-rotina B) — o orquestrador é dono do ciclo de vida do server.
-   Fase sem server: pule DECLARANDO (linha ao usuário + a nota no prompt do subagente).
-   > **Cold-start primeiro:** se há cenário de cold-start (boot do zero), o orquestrador roda esse
-   > **antes** de subir o server persistente (eles brigam pela porta) e grava o resultado dele;
-   > depois sobe o server persistente pros demais cenários.
+1. **O server é da JANELA do UAT (5.A):** o subagente sobe e derruba via `dev-server.sh
+   up|down` — você não gerencia processo nenhum. Fase sem server: declare no prompt
+   ("fase sem UI — use `<non_gui_surfaces>`").
+   > **Cold-start:** se há cenário de cold-start (boot do zero), o subagente o roda ANTES
+   > de subir o server persistente (brigam pela porta).
 2. **Despacha o subagente de UAT.** `Agent` com `model: sonnet`, `subagent_type: general-purpose`
    e `run_in_background: false` (despacho síncrono — mesma regra da Sub-rotina H; o UAT é o
    despacho mais longo da fase, e em background a volta dele não retomaria o roteiro)
    (precisa de Bash + tools `browser_*` via MCP + Read/Write). Prompt mínimo:
    > "Leia `$HOME/.claude/skills/go-and-do/uat-playbook.md` e conduza o UAT da fase NN seguindo-o à
-   > risca. O `NN-UAT.md` está em `<uat_path>`. [Com server:] O dev server está rodando em
-   > `http://localhost:<PORT>` — **não** gerencie esse processo. Use a sessão `uat-fase-NN`.
+   > risca. O `NN-UAT.md` está em `<uat_path>`. Sua janela é dona do dev server
+   > (`dev-server.sh up|down`, seção lifecycle do playbook). Use a sessão `uat-fase-NN`.
    > [Sem GUI/server:] Esta fase não tem UI — os cenários são `api`/`logic`/`cli`; use a tabela
-   > `<non_gui_surfaces>` do playbook e prove por saída objetiva. [Com wrapper de segredos:]
+   > `<non_gui_surfaces>` e prove por saída objetiva. [Com wrapper de segredos:]
    > rode a prova ao vivo via `<caminho absoluto do wrapper>` — ele injeta as credenciais no
-   > processo; não leia nem ecoe segredos. [Se `--vault <profile>`:] há um
-   > profile de vault `<profile>` pra fluxos com login. Classifique cada cenário nos 4 baldes do
-   > playbook, aplique o `<push_on_it>` nos cenários de balde 1, escreva os `result:` e os Gaps
-   > YAML no `NN-UAT.md`, e — se o caminho feliz passar limpo — gere o teste Playwright (fases com
-   > GUI). Devolva só o resumo compacto do `<return_contract>` (inclui `probes_executados`)."
-3. **Derruba o dev server** (cleanup — Sub-rotina B).
-4. **Lê o resumo compacto** do subagente (contagens por balde + os itens balde 3/balde 4 + caminho
-   do teste gerado). **Não** ingira o `NN-UAT.md` inteiro.
-5. Confirme que o subagente virou o frontmatter `pre_uat: generated` → `pre_uat: executed`. Se ele
-   não conseguiu processar tudo (resumo incompleto), trate como retomável (5.1 re-despacha).
+   > processo; não leia nem ecoe segredos. [Se `--vault <profile>`:] há um profile de vault
+   > `<profile>` pra fluxos com login. Classifique cada cenário nos 4 baldes, aplique o
+   > `<push_on_it>` no balde 1, escreva os `result:`/Gaps/evidências no `NN-UAT.md`. Devolva
+   > só o qualitativo do `<return_contract>` — os números são contados por script."
+3. **Cancela mecânica:** `confere-etapa.sh 5` — reconcilia baldes/probes/evidência do
+   disco, linta o gap-YAML, roda o predicado nativo `phase uat-passed`, varre SEGREDOS
+   (padrão-gitleaks, NUNCA PII genérica) e, no pass, promove `pre_uat: executed` e
+   `status:` (escritor único — 5.C/5.E). Exit 1 → devolva ao MESMO subagente o que
+   falta. **Não** ingira o `NN-UAT.md` inteiro.
 
 > O subagente **nunca** carimba `pass` no ambíguo (regra cardeal do playbook): incerteza → balde 3.
 > Um `pass` falso é a surpresa que este UAT existe pra evitar.
 
-**5.4b — Conversão de balde 3 por prova objetiva (via SUBAGENTE de investigação).** Um cenário
-balde 3 às vezes é provável sem o humano — a limitação era do AMBIENTE do driver, não do
-comportamento (caso real, F17: o dataset sintético do UAT não continha o caso R$ 1,2M/802426,
-mas os goldens contra o dataset canônico provavam exatamente aquilo). Quando você enxergar uma
-prova objetiva plausível (teste existente, golden, oráculo independente):
-1. **Não investigue inline.** A caça à prova (ler testes, rodar suítes, analisar outputs) é
-   leitura verbosa — exatamente o que a janela do orquestrador não pode pagar no fim da fase
-   (caso real: a investigação inline da F17 empurrou o contexto a 99% do teto). Despache um
-   `Agent` descartável (genérico, `run_in_background: false`) com este contrato: "Cenário
-   balde-3: <descrição + por que o driver não pôde verificar>. Hipótese de prova: <onde você
-   acha que ela mora>. Encontre e EXECUTE a prova objetiva (teste/golden/oráculo); vale
-   reforçá-la com guardas (ex.: asserção do valor exato, espião anti-regressão). Devolva SÓ:
-   veredito (provado/não-provável) + o comando executado + resultado + caminhos-ponteiro,
-   ≤10 linhas. Não devolva output de teste nem conteúdo de arquivo. Se a prova depender de
-   gosto/conteúdo ou de credencial ausente, devolva não-provável — isso é balde 3 legítimo."
-2. Veredito `provado` → **continue o MESMO subagente de UAT** (Sub-rotina H) com a evidência
-   compacta para ele reclassificar o cenário (ele reescreve o `NN-UAT.md`; a regra cardeal se
-   mantém — quem carimba é o UAT, com prova em mãos, nunca você por conveniência).
-3. Veredito `não-provável` → o cenário FICA balde 3 (rota de hand-back). Registre a tentativa
-   numa linha (transparência: "tentei provar X por Y; não dava sem humano").
+> O antigo 5.4b (subagente de conversão de balde 3) MORREU (5.B): zero exercícios em 6
+> oportunidades — o balde 3 real é parede de login/2FA, que vault ou humano resolvem. O
+> próprio subagente de UAT pode tentar prova alternativa DENTRO do cenário (regra cardeal
+> segue: na dúvida, recua).
 
 **5.5 — Ciclo de conserto (1× só) quando há balde 2 (`issue`).**
 > 1 ciclo só: mesma disciplina do fechamento de gaps da Construção (3.5) — evita loop caro de contexto.
@@ -1564,21 +1551,20 @@ prova objetiva plausível (teste existente, golden, oráculo independente):
    (`prompts/execute.md`, args `N --auto --no-transition --gaps-only`); senão inline.
    > `--gaps-only` roda só os planos `gap_closure: true` — escopo estrito do conserto.
 4. **Re-roda o code review** nos arquivos do fix: despacho da 4.1
-   (`prompts/code-review.md`) com args `N --fix --auto --files=<arquivos alterados>` —
+   (`prompts/code-review.md`, `iteracao: 2+` — o subagente estreita via
+   `calcula-files.sh`) —
    **sem a checagem de retomada da 4.1** (o `NN-REVIEW.md` existente aqui é esperado, a
    4.1 já rodou; pular por causa dele furaria em silêncio a garantia "auditado antes do
    ship" pro código do fix).
    > O conserto mudou código **depois** dos gates da Etapa 4 — re-revisar restaura a garantia
    > "auditado antes do ship" pro código novo.
-5. **Garante que a superfície re-testada reflete o código pós-fix.** Fase com server: reinicia
-   (Sub-rotina B: derruba + sobe) — um server sem hot-reload serviria o código pré-fix, dando
-   veredito falso. Fase sem server: nada a reiniciar, mas o mesmo risco existe em outra forma —
-   se a superfície depende de artefato buildado (CLI compilado, pacote instalado), re-rode o
-   passo de build/install antes do re-teste.
-6. **Re-despacha o subagente de UAT (5.4 passo 2) só nos cenários `issue`.** Mesmo prompt, com a
-   instrução extra de processar apenas os cenários que estavam `issue`.
-7. **Grava `pre_uat_fix_cycle: done`** no frontmatter — a retomada (5.1) usa isso pra nunca disparar
-   um 2º ciclo.
+5. **Re-despacha o subagente de UAT (5.4 passo 2) só nos cenários `issue`.** Mesmo
+   prompt, com a instrução extra de processar apenas os que estavam `issue` — a janela
+   NOVA sobe o server sozinha (código pós-fix garantido: server velho morreu com a
+   janela velha; superfície buildada → o prompt manda re-rodar build/install antes).
+6. **`confere-etapa.sh 5 --fix-cycle`** valida o estado real e carimba
+   `pre_uat_fix_cycle: done` (escritor único — a retomada 5.1 usa isso pra nunca
+   disparar um 2º ciclo).
 - Fechou (viraram pass/assumed) → Etapa 6.
 - Persistiu → **Sub-rotina D** (parada graciosa), motivo `bug de UAT persistente`.
 

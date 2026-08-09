@@ -35,12 +35,13 @@ shopt -s nullglob
 
 ETAPA="${1:-}"; shift || true
 [ -n "$ETAPA" ] || { echo "uso: confere-etapa.sh <etapa> [--fase N] [--projeto DIR] [--dry-run]" >&2; exit 2; }
-FASE=""; PROJ=""; DRY=0
+FASE=""; PROJ=""; DRY=0; FIXCYCLE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --fase)    FASE="${2:-}"; shift 2 ;;
     --projeto) PROJ="${2:-}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
+    --fix-cycle) FIXCYCLE=1; shift ;;
     *) echo "flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
@@ -174,6 +175,58 @@ while IFS= read -r x; do
       EXTRAI=$(jq -c --arg id "$xid" --arg v "$val" '. + {($id): (if $v=="" then null else $v end)}' <<<"$EXTRAI") ;;
   esac
 done < <(jq -c '.extrai[]?' "$MANIFEST")
+
+# ── etapa 5 (UAT): pacote de mecanização 5.E — reconciliação, evidência, gaps,
+# predicado nativo, segredos; marcadores promovidos SÓ por este script (5.C) ──
+if [ "$ETAPA" = "5" ]; then
+  UAT="$PHASE_DIR/$NN-UAT.md"
+  if [ -f "$UAT" ]; then
+    conta() { { grep -cE "$1" "$UAT" || true; } | head -1; }
+    n_pass=$(conta 'result: *pass'); n_issue=$(conta 'result: *issue')
+    n_pend=$(conta 'result: *(\[pending\]|blocked|pending)'); n_assumed=$(conta 'result: *assumed')
+    n_probes=$(conta '🔍')
+    n_evid=0; for ev in "$PHASE_DIR"/uat-evidencia/*; do [ -f "$ev" ] && n_evid=$((n_evid+1)); done
+    EXTRAI=$(jq -c --argjson p "$n_pass" --argjson i "$n_issue" --argjson pe "$n_pend" \
+      --argjson a "$n_assumed" --argjson pr "$n_probes" --argjson ev "$n_evid" \
+      '. + {reconciliacao:{pass:$p, issue:$i, pending:$pe, assumed:$a, probes:$pr, evidencias:$ev}}' <<<"$EXTRAI")
+    # 5.E-b: evidência dura — arquivos >= cenários GUI de balde 1+2 (F19-ox: pasta
+    # VAZIA; F21-ins: path inexistente). Fase sem browser (só cli/logic/judgment/api)
+    # não gera prova visual — esperado 0.
+    n_nao_gui=$(conta 'tipo: *(cli|logic|judgment|api)')
+    esperado=$((n_pass + n_issue - n_nao_gui)); [ "$esperado" -lt 0 ] && esperado=0
+    grep -qE 'localhost|gsd-browser|browser_' "$UAT" || esperado=0
+    if [ "$esperado" -gt 0 ] && [ "$n_evid" -lt "$esperado" ]; then
+      RES=$(jq -c --arg d "evidências ($n_evid) < cenários pass+issue ($esperado) — 5.E-b" \
+        '. + [{id:"evidencia_por_cenario", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+    # 5.E-c: lint do gap-YAML — todo issue precisa de entrada em ## Gaps (alimenta o --gaps)
+    n_gaps=$(conta '^ *- truth:')
+    if [ "$n_issue" -gt 0 ] && [ "$n_gaps" -lt "$n_issue" ]; then
+      RES=$(jq -c --arg d "issues=$n_issue mas só $n_gaps gap-YAML em ## Gaps" \
+        '. + [{id:"gap_yaml", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+    # 5.E-d: predicado nativo (o freio que desmentiu a camada 0 na F21-ins)
+    UP=$( (cd "$ROOT" && gsd_run phase uat-passed "$FASE" 2>/dev/null) | tr -d ' \n\r' || true )
+    EXTRAI=$(jq -c --arg u "${UP:-indisponivel}" '. + {uat_passed_nativo:$u}' <<<"$EXTRAI")
+    # 5.E-g: varredura de SEGREDOS (restrita, padrão-gitleaks — NUNCA PII genérica)
+    VAZOU=$( { grep -rhIoE 'AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{36,}|sk-[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY|SUPABASE_SERVICE_ROLE_KEY *[=:] *[A-Za-z0-9._-]{20,}|eyJ[A-Za-z0-9_-]{20,}\.eyJ' \
+        "$UAT" "$PHASE_DIR/uat-evidencia" 2>/dev/null || true; } | head -3 )
+    if [ -n "$VAZOU" ]; then
+      RES=$(jq -c --arg d "padrão de segredo no artefato/evidência: $(head -c 60 <<<"$VAZOU")…" \
+        '. + [{id:"segredo_no_artefato", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+    # 5.C: promoção dos marcadores — escritor único; modelo reporta, ESTE script promove
+    if [ "$FALHAS" = 0 ] && [ "$DRY" = 0 ]; then
+      grep -q '^pre_uat: generated' "$UAT" && sed -i 's/^pre_uat: generated/pre_uat: executed/' "$UAT"
+      if [ "$FIXCYCLE" = 1 ] && ! grep -q '^pre_uat_fix_cycle:' "$UAT"; then
+        sed -i '/^pre_uat: executed/a pre_uat_fix_cycle: done' "$UAT"
+      fi
+      if [ "$n_issue" = 0 ] && [ "$n_pend" = 0 ] && [ "$n_pass" -gt 0 ]; then
+        grep -q '^status: testing' "$UAT" && sed -i 's/^status: testing/status: complete/' "$UAT"
+      fi
+    fi
+  fi
+fi
 
 # ── veredito + eventos + medição ─────────────────────────────────────────────
 if [ "$FALHAS" = 0 ]; then VEREDITO=pass; else VEREDITO=fail; fi

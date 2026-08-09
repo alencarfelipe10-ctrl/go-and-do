@@ -176,6 +176,10 @@ Cada tipo de superfície tem um lugar de observação e uma prova objetiva próp
 | Prompt / agente | o próprio agente | roda o agente e captura o comportamento observado |
 | CI / workflow | Actions | dispara o workflow e lê o run |
 
+**Blindagem RTK nos comandos de prova:** com o hook RTK instalado, comandos bash de
+prova rodam via `rtk proxy <cmd>` — saída CRUA (o filtro do RTK capou um `| wc -l` e
+derrubou um UAT inteiro; prova truncada = veredito errado).
+
 **Regra-âncora: função interna não é superfície.** Se o cenário aponta para uma função, siga até
 o CLI / a requisição / o render que a *alcança* — é lá que se verifica. Se a fase não tem nenhuma
 superfície de runtime alcançável (só docs/tipos/config), o cenário é **balde 3**
@@ -193,23 +197,15 @@ malformado — o golpe adversarial se aplica igual) e a mesma escrita no `NN-UAT
 
 ## Camadas de interação — semântico primeiro, ref como precisão
 
-A recomendação dos autores do gsd-browser: comece no mais simples; só desça quando precisar.
+1. **`browser_act { intent }`** — primeira escolha para padrões comuns (submit, login,
+   busca, paginação…): rápido, self-healing, sem snapshot prévio.
+2. **`browser_act_instruction { instruction, min_confidence: 0.7 }`** — linguagem
+   natural para campos/ações arbitrários; `dry_run: true` na 1ª vez em tela ambígua.
+3. **`browser_snapshot` + `*_ref`** — o determinístico, para widget complexo (refs
+   versionadas `@vN:eM`).
 
-1. **`browser_act { intent }`** — mais rápido, self-healing, **sem snapshot prévio**. Cobre 15
-   intents embutidos: `submit_form, close_dialog, primary_cta, search_field, next_step, dismiss,
-   auth_action, back_navigation, fill_email, fill_password, fill_username, accept_cookies,
-   main_content, pagination_next, pagination_prev`. **Primeira escolha** para esses padrões.
-2. **`browser_act_instruction { instruction, min_confidence: 0.7, dry_run? }`** — executor de
-   linguagem natural real, para campos/ações **arbitrários** ("enter 'maria@x.com' into Email",
-   "choose São Paulo from Estado"). Planeja contra o DOM vivo. Use `min_confidence: 0.7` para
-   **bloquear** ação incerta; `dry_run: true` na 1ª vez numa tela ambígua para ver o plano antes.
-3. **`browser_snapshot` + `browser_click_ref`/`browser_fill_ref`** — o mais **determinístico**,
-   para widget complexo. O snapshot atribui refs versionadas `@vN:eM`. `browser_fill_ref` aceita
-   `clear_first`, `submit`, `slowly`.
-
-> ⚠️ **Armadilha:** `browser_goal` **NÃO executa nada** — é só um banner de texto no live-viewer
-> para humanos. O executor de linguagem natural é o `browser_act_instruction`. Nunca use
-> `browser_goal` para automação.
+> ⚠️ `browser_goal` NÃO executa nada (é banner do live-viewer) — o executor de
+> linguagem natural é o `browser_act_instruction`.
 
 </interaction_layers>
 
@@ -219,19 +215,13 @@ A recomendação dos autores do gsd-browser: comece no mais simples; só desça 
 
 ## Toolkit de verificação objetiva
 
-- **`browser_assert { checks }`** — asserções estruturadas. `kind` ∈ `url_contains`,
-  `text_visible`, `selector_visible`, `value_equals`, **`no_console_errors`**,
-  **`no_failed_requests`**. Prefira isto a "torcer pra tela estar certa".
-- **`browser_wait_for { condition, value?, timeout?(10000), threshold? }`** — espere ANTES de
-  assertar. Condições úteis: `request_completed` (um POST/GET terminou — case por URL no `value`),
-  `selector_visible`/`selector_hidden`, `url_contains`, `network_idle`, `text_visible`,
-  `element_count` (com `threshold` ex. `">=3"`), `region_stable` (animação acabou).
-- **`browser_console { clear? }`** — mensagens recentes do console; pega erro de JavaScript.
-- **`browser_network { filter? }`** — requests/responses com **status HTTP**; `filter:"errors"`
-  isola 4xx/5xx.
-- **`browser_extract { schema, selector?, multiple? }`** — lê dado estruturado da página
-  (schema JSON com `_selector`/`_attribute`). Use para **confirmar o estado persistido** após uma
-  ação. Bem mais confiável que pedir ao modelo pra parsear HTML.
+- **`browser_assert { checks }`** — a prova estruturada (a tríade: no_failed_requests ·
+  no_console_errors · um check positivo). Prefira a "torcer pra tela estar certa".
+- **`browser_wait_for`** — espere ANTES de assertar (request_completed, seletor,
+  network_idle…).
+- **`browser_console` / `browser_network { filter:"errors" }`** — erro de JS e 4xx/5xx.
+- **`browser_extract { schema }`** — lê dado estruturado da página; confirme o estado
+  PERSISTIDO após a ação (mais confiável que parsear HTML de cabeça).
 
 </objective_toolkit>
 
@@ -261,17 +251,18 @@ A recomendação dos autores do gsd-browser: comece no mais simples; só desça 
 
 ## Sessão e ciclo de vida
 
-- **Use uma sessão nomeada:** passe `session: "uat-fase-NN"` em toda tool. Isso isola
-  cookies/storage e — importante — persiste o **action-cache** (mapa intent→seletor) entre
-  re-execuções, deixando re-rodadas mais baratas e confiáveis.
-- **NÃO gerencie o dev server.** Quem sobe e derruba o servidor é o **orquestrador** (ele passou a
-  URL/porta no seu despacho). Você só navega contra `http://localhost:PORT`. Nunca mate o processo
-  do servidor — você derrubaria o que o orquestrador montou.
-- **Daemon stale (pós-suspensão):** se uma tool falhar com "receiver is gone" / daemon morto,
-  recupere com `gsd-browser daemon stop --session uat-fase-NN` (bash) e deixe reabrir no próximo
-  uso — **não** reinicie o MCP.
-- **Viewport:** se o cenário pede mobile, `browser_emulate_device { device:"iPhone 15" }` ou
-  `browser_resize` antes de navegar.
+- **Use uma sessão nomeada:** `session: "uat-fase-NN"` em toda tool — isola
+  cookies/storage e persiste o action-cache entre re-execuções.
+- **A SUA janela é dona do dev server** (decisão 5.A): suba com
+  `$HOME/.claude/skills/go-and-do/scripts/dev-server.sh up` no início (o JSON devolve a
+  porta) e derrube com `down` no fim — sempre, mesmo em falha (o PID em disco garante o
+  kill limpo do que VOCÊ subiu). `up` falhou → cenários de UI viram balde 3 com o
+  motivo do JSON.
+- **Daemon stale (pós-suspensão):** tool falhou com "receiver is gone" → recupere com
+  `gsd-browser daemon stop --session uat-fase-NN` (bash) e deixe reabrir — não
+  reinicie o MCP.
+- **Viewport:** cenário mobile → `browser_emulate_device`/`browser_resize` antes de
+  navegar.
 
 </lifecycle>
 
@@ -314,29 +305,9 @@ No resumo final, **liste explicitamente** cada item `assumed` — eles viram o b
 
 </subjective>
 
----
-
-<recording>
-
-## Teste de regressão de brinde (caminho feliz limpo)
-
-Quando o conjunto de cenários do **caminho feliz** passou todo limpo (balde 1), deixe um teste
-Playwright reutilizável:
-```
-1. (no início do fluxo feliz) browser_record_start { name: "uat-fase-NN" }
-2. ... execute os cenários do caminho feliz ...
-3. browser_record_stop
-4. browser_generate_test { name:"uat-fase-NN", output:"tests/uat-fase-NN.spec.ts",
-                           include_assertions: true }
-```
-> ⚠️ O teste gerado vem com refs `@vN:eM`. **Antes de considerá-lo pronto**, troque-as por
-> locators estáveis (`getByRole`, `getByText`) — deixe isso anotado num comentário no topo do
-> arquivo gerado, para o humano finalizar. Não bloqueie o UAT por causa disso.
-
-Se a gravação ou geração falhar, **não pare o UAT** — registre numa linha e siga. O teste é bônus;
-a verificação é o que importa.
-
-</recording>
+<!-- seção <recording> removida (decisão 5.F): em 13 fases só 4 .spec.ts nasceram,
+     nenhum projeto tem Playwright como dependência. Regressão legítima = /gsd-add-tests
+     pós-PR, ofertado no banner final. -->
 
 ---
 
@@ -373,12 +344,11 @@ sua janela — que é descartável; numa fase real a pasta `uat-evidencia/` term
 humano do verify-work ficou sem ver o que o robô viu. Falhou ao salvar → registre numa linha
 e siga (a verificação é o que importa; a evidência não vira gate).
 
-**Frontmatter (campos custom que o verify-work ignora):**
-- Ao **terminar de processar todos os cenários**, vire `pre_uat: generated` → `pre_uat: executed`.
-- O **`status:`** do frontmatter só vira `complete` (com `issues: 0`, `pending: 0` no Summary)
-  quando **não sobrou nenhum balde 2 nem balde 3** — ou seja, só `pass` + `assumed`. Os `assumed`
-  **não** contam como `pending`. (É esse estado limpo que autoriza o ship lá na ponta.) Se sobrou
-  balde 2 ou 3, deixe `status: testing` e o Summary refletindo os números reais.
+**Frontmatter — NÃO toque nos marcadores de estado (regra do escritor único, 5.C):**
+`pre_uat: generated→executed` e `status: testing→complete` são promovidos pelo
+`confere-etapa.sh 5`, que valida o estado real antes de carimbar. Você grava os
+`result:`/gaps/probes/evidências; o script promove. Marcador escrito à mão é
+fabricação de evidência.
 
 </writing_results>
 
@@ -386,24 +356,18 @@ e siga (a verificação é o que importa; a evidência não vira gate).
 
 <return_contract>
 
-## O que devolver ao orquestrador — compacto, nunca verboso
+## O que devolver ao orquestrador — qualitativo e compacto
 
-Responda **apenas** com um resumo estruturado curto (o orquestrador NÃO pode receber DOM/snapshot):
+Os NÚMEROS (baldes, probes, evidências) não se reportam — o `confere-etapa.sh 5` os
+conta do disco e reconcilia (contagem autorreportada morreu na reformulação major).
+Responda **apenas** com o qualitativo que o script não extrai (nunca DOM/snapshot):
 
 ```
 uat_path: <caminho do NN-UAT.md>
-total: N
-balde_1_pass: <n>
-balde_2_issue: <n>   (+ os números dos cenários)
-balde_3_pending: <n> (+ o motivo de cada: login/2FA/browser indisponível/...)
-balde_4_assumed: <n> (+ a descrição curta de cada item subjetivo — vira o aviso de transparência)
-probes_executados: <n>  (golpes adversariais 🔍 — a cobertura além do caminho feliz)
-status_uat: <complete | testing>
-teste_gerado: <caminho do .spec.ts | nenhum>
-evidencias: <uat-evidencia/ — n de arquivos salvos (esperado: 1 por cenário de balde 1 e 2)>
+balde_3_motivos: [<1 linha por cenário não-verificável: login/2FA/sem superfície/…; ausente se nenhum>]
+balde_4_descricoes: [<1 linha por item subjetivo — vira o aviso "shipei assumindo"; ausente se nenhum>]
+incidentes: [<OBRIGATÓRIO — todo desvio entre o anunciado e o executado; sem desvio: nenhum>]
+sinos: [<ex.: "dev server não subiu — cenários de UI em balde 3"; ausente se vazio>]
 ```
-
-Nada além disso. O orquestrador decide o roteamento (shipar / consertar / devolver) a partir
-desses números.
 
 </return_contract>
