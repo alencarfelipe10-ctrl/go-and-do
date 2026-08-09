@@ -1,14 +1,60 @@
 {
-  "etapa": "1", "nome": "intencao", "runlog_etapa": "1 intencao",
+  "etapa": "1",
+  "nome": "intencao",
+  "runlog_etapa": "1 intencao",
   "asserts": [
-    { "id": "spec", "tipo": "glob", "padrao": "{fase}/{nn}-SPEC.md", "min": 1,
-      "desc": "SPEC da fase existe" },
-    { "id": "context", "tipo": "glob", "padrao": "{fase}/{nn}-CONTEXT.md", "min": 1,
-      "desc": "CONTEXT (discuss) existe" },
-    { "id": "intent_review_fechada", "tipo": "grep", "arquivo": "{fase}/{nn}-INTENT-REVIEW.md",
-      "regex": "^intent_review: (done|skipped)", "min": 1,
-      "desc": "revisão adversarial fechada (needs_decision/blocked NÃO concluem)" },
-    { "id": "chain_flag_zerada", "tipo": "sdk", "query": "config-get workflow._auto_chain_active", "espera": "false",
-      "desc": "flag de chain do discuss zerada (decisão 1.4 — crash entre discuss e plan não dispara chain fantasma)" }
+    {
+      "id": "spec",
+      "tipo": "glob",
+      "padrao": "{fase}/{nn}-SPEC.md",
+      "min": 1,
+      "desc": "SPEC da fase existe"
+    },
+    {
+      "id": "context",
+      "tipo": "glob",
+      "padrao": "{fase}/{nn}-CONTEXT.md",
+      "min": 1,
+      "desc": "CONTEXT (discuss) existe"
+    },
+    {
+      "id": "intent_review_fechada",
+      "tipo": "grep",
+      "arquivo": "{fase}/{nn}-INTENT-REVIEW.md",
+      "regex": "^intent_review: (done|skipped)",
+      "min": 1,
+      "desc": "revisão adversarial fechada (needs_decision/blocked NÃO concluem)"
+    },
+    {
+      "id": "chain_flag_zerada",
+      "tipo": "sdk",
+      "query": "config-get workflow._auto_chain_active",
+      "espera": "false",
+      "desc": "flag de chain do discuss zerada (decisão 1.4 — crash entre discuss e plan não dispara chain fantasma)"
+    },
+    {
+      "id": "limpeza_intent",
+      "tipo": "glob",
+      "padrao": "{fase}/.intent/.sinos-*.txt",
+      "min": 0,
+      "max": 0,
+      "desc": "sinos apagados no fecho (política 1.5 — conteúdo sobrevive no INTENT-REVIEW)"
+    },
+    {
+      "id": "limpeza_briefings",
+      "tipo": "glob",
+      "padrao": "{fase}/.intent/briefing-c*.md",
+      "min": 0,
+      "max": 0,
+      "desc": "briefings apagados no fecho (política 1.5)"
+    },
+    {
+      "id": "evidencia_tabelas",
+      "tipo": "glob",
+      "padrao": "{fase}/.intent/.tabela-c*.txt",
+      "min": 1,
+      "nivel": "informativo",
+      "desc": "tabelas de ciclo preservadas (evidência de auditoria; ausente em fase pré-major ou revisão pulada)"
+    }
   ]
 }

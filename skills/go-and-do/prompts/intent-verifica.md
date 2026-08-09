@@ -7,8 +7,9 @@
 O despacho te entrega: `project_root` e `phase_dir` (absolutos), o número do ciclo `C`,
 os caminhos dos pareceres deste ciclo (`<phase_dir>/pareceres/NN-parecer-*-c<C>.md`),
 os caminhos de `NN-SPEC.md` e `NN-CONTEXT.md`, e — do ciclo 2 em diante — o caminho do
-`NN-INTENT-REVIEW.md` parcial com a tabela dos achados já triados. Comece todo bloco
-Bash com `cd "<project_root>"`.
+`NN-INTENT-REVIEW.md` parcial com a tabela dos achados já triados. Os arquivos de
+trabalho do ciclo (marcadores `.done-c<C>-*`, tabela, vereditos) vivem em
+`<phase_dir>/.intent/`. Comece todo bloco Bash com `cd "<project_root>"`.
 
 ## Trabalho
 
@@ -53,13 +54,22 @@ Bash com `cd "<project_root>"`.
      evita re-litigar o mesmo falso achado no ciclo seguinte).
    - `ja_coberto` — os artefatos já cobrem a alegação; ponteiro para a seção do
      SPEC/CONTEXT (ou achado anterior) onde está coberto.
+4b. **Revalide a categoria de cada achado** pela régua canônica de
+   `$HOME/.claude/skills/go-and-do/prompts/categorias-achados.md` (a MESMA que o
+   revisor recebeu): confirme a tag `[A-E]-*` que o revisor pôs ou reclassifique.
+   **Regra fail-up obrigatória:** na dúvida entre A/B e C/D, classifique para cima —
+   a parada por custo marginal do loop (`decide-ciclo.sh`) só olha A/B, e um achado A
+   fantasiado de C encerraria a revisão cedo demais. Achado sem tag → você classifica.
 5. Você **não** decide destino (correção factual × pausa de negócio × transparência) —
    isso é alçada de quem te despachou. Seu produto termina no veredito.
-6. **Prova de máquina de que você rodou (v1.8.2):** como último ato antes do retorno,
-   `touch <pareceres_dir>/.verificador-c<C>.done` — é este marcador que o
+6. **Vereditos em disco (insumo do decide-ciclo.sh):** grave
+   `<phase_dir>/.intent/.vereditos-c<C>.txt` — uma linha por achado, formato exato:
+   `id | classe | veredito | categoria` (ex.: `c2-03 | novo | confirmado | A-produto`).
+7. **Prova de máquina de que você rodou:** como último ato antes do retorno,
+   `touch <phase_dir>/.intent/.verificador-c<C>.done` — é este marcador que o
    `confere-rotas.sh` cruza com a `.tabela-c<C>.txt` no fecho da etapa para provar que
    a rota de verificação independente foi respeitada. Só grave DEPOIS de os vereditos
-   estarem prontos; marcador sem trabalho é fabricação de evidência.
+   estarem em disco; marcador sem trabalho é fabricação de evidência.
 
 ## Retorno (obrigatório, sem prosa antes ou depois)
 
@@ -76,6 +86,7 @@ achados:
     classe: novo | reformulado | reaberto
     ref_anterior: <id do achado original — só p/ reformulado/reaberto>
     veredito: confirmado | nao_sustentado | ja_coberto   ← ausente p/ reformulado
+    categoria: A-produto | B-viabilidade | C-instrumentacao | D-documental | E-decisao-do-dono   ← revalidada por você (fail-up)
     evidencia: <arquivo:linha própria da SUA verificação, ou o porquê da queda, ou o ponteiro do já-coberto>
     severidade: <a estimada pelo revisor, mantida para a triagem>
     toca_requisito_ou_criterio: sim | nao   ← sim = candidato a pausa de negócio na triagem

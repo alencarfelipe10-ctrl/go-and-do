@@ -21,11 +21,19 @@
 
 set -u
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null && trap 'gad_autoregistro "confere-rotas.sh" "$?"' EXIT || true
-DIR="${1:?uso: confere-rotas.sh <pareceres_dir>}"
+DIR="${1:?uso: confere-rotas.sh <dir de trabalho da revisão (.intent/; aceita pareceres/ legado)>}"
 [ -d "$DIR" ] || { echo "ERRO: diretório não encontrado: $DIR" >&2; exit 2; }
 
 ciclos=$(ls "$DIR"/.done-c*-* "$DIR"/.tabela-c*.txt 2>/dev/null \
   | grep -oE '\.(done|tabela)-c[0-9]+' | grep -oE '[0-9]+' | sort -un)
+# Fase anterior à pasta .intent/ (gad-major): trabalho morava em pareceres/ — fallback
+# declarado para retomada/auditoria de fase antiga (PC-2).
+if [ -z "$ciclos" ] && [ "$(basename "$DIR")" = ".intent" ] && [ -d "$(dirname "$DIR")/pareceres" ]; then
+  DIR="$(dirname "$DIR")/pareceres"
+  echo "aviso: nada em .intent/ — usando layout legado $DIR"
+  ciclos=$(ls "$DIR"/.done-c*-* "$DIR"/.tabela-c*.txt 2>/dev/null \
+    | grep -oE '\.(done|tabela)-c[0-9]+' | grep -oE '[0-9]+' | sort -un)
+fi
 [ -n "$ciclos" ] || { echo "nenhum ciclo detectado em $DIR"; exit 0; }
 
 falha=0
@@ -44,5 +52,9 @@ for N in $ciclos; do
   else
     echo "ok c$N ($brutos brutos$([ -f "$DIR/.verificador-c$N.done" ] && echo ', verificador rodou'))"
   fi
+  # Coluna categoria (decisão 1.7): achado sem tag [A-E]-* na tabela é aviso, não falha
+  # — o verificador revalida com fail-up; sem tag, a parada por custo marginal degrada.
+  sem_cat=$(grep -E '^\| [a-z]+ \| L?[0-9]+ \|' "$tabela" | grep -cvE '\[(A|B|C|D|E)-' || true)
+  [ "$sem_cat" -gt 0 ] 2>/dev/null && echo "aviso: c$N tem $sem_cat achado(s) sem categoria [A-E] na tabela (fail-up aplicado rio abaixo)"
 done
 exit $falha

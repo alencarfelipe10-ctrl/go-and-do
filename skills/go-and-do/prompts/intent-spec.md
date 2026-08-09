@@ -23,8 +23,10 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
 - Dimensões de ambiguidade abaixo do mínimo (log `[auto] Max rounds reached…`).
 - Edges `unclassified` que o probe deixou como pergunta nomeada (log
   `[auto] unclassified — RN…`).
-Registre-os verbatim em `sinos` — quem os leva ao briefing do revisor é quem te
-despachou.
+Grave-os verbatim em `<phase_dir>/.intent/.sinos-spec.txt` (1 por linha; crie a pasta
+com `mkdir -p`) E repita-os em `sinos` no retorno. O briefing do revisor lê do ARQUIVO
+(`briefing-build.sh`) — o retorno é só roteamento; sino que não está no arquivo não
+chega ao revisor.
 
 ## Pausa
 

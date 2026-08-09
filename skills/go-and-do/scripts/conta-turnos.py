@@ -36,11 +36,20 @@ def main() -> None:
         die(f"pareceres_dir não encontrado: {pareceres}")
 
     fronteiras = []  # (ciclo, ts_inicio)
-    for f in pareceres.glob(".prova-leitura-c*.txt"):
-        m = re.match(r"\.prova-leitura-c(\d+)\.txt$", f.name)
-        if m:
-            ts = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
-            fronteiras.append((int(m.group(1)), ts))
+
+    def coleta(d: Path) -> None:
+        for f in d.glob(".prova-leitura-c*.txt"):
+            m = re.match(r"\.prova-leitura-c(\d+)\.txt$", f.name)
+            if m:
+                ts = datetime.fromtimestamp(f.stat().st_mtime, tz=timezone.utc)
+                fronteiras.append((int(m.group(1)), ts))
+
+    coleta(pareceres)
+    # Fase anterior à pasta .intent/ (gad-major): as provas moravam em pareceres/ —
+    # fallback declarado para fase antiga (PC-2).
+    if not fronteiras and pareceres.name == ".intent" and (pareceres.parent / "pareceres").is_dir():
+        print(f"aviso: nada em .intent/ — usando layout legado {pareceres.parent / 'pareceres'}")
+        coleta(pareceres.parent / "pareceres")
     if not fronteiras:
         print("nenhum ciclo detectado (sem .prova-leitura-c*.txt) — nada a medir")
         sys.exit(0)

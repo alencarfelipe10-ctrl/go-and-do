@@ -101,7 +101,7 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 6. ⏭️ `has_plans` (ou `has_verification`) → pula pra Etapa 1.5 (a intenção já virou plano).
 7. 🔒 ⏭️ Despacha o **subagente de intenção** (Sub-rotina H + `prompts/intent.md`) — um único despacho cobre os itens 7–9; a retomada fina por arquivo é do subagente, que é um COORDENADOR: o trabalho verboso desce para filhos descartáveis de camada 2 (agentes `gad-*`, modelo/effort nas definições em `~/.claude/agents/`). Dentro dele: SPEC (sem `NN-SPEC.md`): filho `gad-spec` hospeda `gsd-spec-phase N --auto` (auto-decide e loga `[auto]`; termina no SPEC, sem auto-advance).
 8. ↳ *(filho `gad-discuss`)* CONTEXT (sem `NN-CONTEXT.md`): `gsd-discuss-phase N --auto`, **sem executar o `auto_advance`** dele (o encadeamento é desta skill), zerando `workflow._auto_chain_active` na volta e aplicando a fronteira anti-duplicação (decisão mora no SPEC; o CONTEXT referencia por ponteiro).
-9. ↳ *(no subagente de intenção)* Revisão adversarial de intenção (sem `NN-INTENT-REVIEW.md` `done`): Codex + agy criticam (pareceres em `<phase_dir>/pareceres/`) ↔ filho `gad-verificador` funde, deduplica, classifica (novo/reformulado/reaberto) e verifica; a triagem de destino fica na camada 1. Loop por convergência: continua enquanto os achados NOVOS confirmados caem e > 0; teto duro de 5 ciclos; estagnação → `needs_decision`. Factual → corrige no lugar · requisito/critério/oráculo → `needs_decision` sobe → ⏸️ a pergunta chega a você e a resposta continua o MESMO subagente (1.3) · tradeoff → adota + transparência. Escreve `NN-INTENT-REVIEW.md`. UM revisor indisponível/falhou → segue com o outro, sino declarado; os DOIS instalados-mas-falhos → `blocked` sobe → ⏸️ **para** (grava `intent_review: blocked`; a retomada re-tenta); NENHUM instalado (pré-check) → revisão **pulada** com sino gritante (`intent_review: skipped`) e a fase segue — ausência de ferramenta degrada declarado; só falha de runtime bloqueia.
+9. ↳ *(no subagente de intenção)* Revisão adversarial de intenção (sem `NN-INTENT-REVIEW.md` `done`): Codex + agy criticam (pareceres em `<phase_dir>/pareceres/`) ↔ filho `gad-verificador` funde, deduplica, classifica (novo/reformulado/reaberto) e verifica; a triagem de destino fica na camada 1. Loop com parada por custo marginal (`decide-ciclo.sh`): continua só com achado novo A-produto/B-viabilidade confirmado; teto duro de 4 ciclos; só C/D/E → lote único de correção na saída. Factual → corrige no lugar · requisito/critério/oráculo → `needs_decision` sobe → ⏸️ a pergunta chega a você e a resposta continua o MESMO subagente (1.3) · tradeoff → adota + transparência. Escreve `NN-INTENT-REVIEW.md`. UM revisor indisponível/falhou → segue com o outro, sino declarado; os DOIS instalados-mas-falhos → `blocked` sobe → ⏸️ **para** (grava `intent_review: blocked`; a retomada re-tenta); NENHUM instalado (pré-check) → revisão **pulada** com sino gritante (`intent_review: skipped`) e a fase segue — ausência de ferramenta degrada declarado; só falha de runtime bloqueia.
 9b. **Gate de rota + medição de turnos (camada 0, v1.8.2 — ao receber o `done` da Etapa 1, ANTES de marcar a tarefa concluída):** rode `scripts/confere-rotas.sh <phase_dir>/pareceres`. Exit 1 → o `done` NÃO é aceito: devolva ao MESMO subagente (SendMessage) a lista de `VIOLACAO`/`SEM-TABELA` com a ordem de executar o passo 7b do `intent.md` (verificação retroativa) — o gate é fail-closed e a dupla checagem é deliberada: o subagente roda o script no fecho dele, a camada 0 confere de novo com custo ~zero. Exit 0 → rode `scripts/conta-turnos.py <transcript-do-subagente> <phase_dir>/pareceres` (o transcript é `agent-<id>.jsonl` no diretório `subagents/` da sessão — o `<id>` vem do retorno do harness; se não localizar, registre sino `conta-turnos sem transcript` e siga): cada ciclo com estouro vira evento `incidente` no run-log (`turnos c<N>: <T> > 4`). Medição, não bloqueio — o freio estrutural do teto é a rota do verificador, que o gate acima garante.
 
 **Etapa 1.5 — Contratos de design** *(🎌 só com a flag · retomada por existência de arquivo)*
@@ -889,7 +889,8 @@ Sub-rotina F) seguem os próprios blocos; esta sub-rotina generaliza o padrão d
 etapas que descem.
 
 **Despacho.** Uma etapa cujo bloco manda despachar roda num subagente `general-purpose`
-(modelo herdado da sessão, salvo onde o bloco da etapa disser outro), **sempre síncrono:
+(modelo herdado da sessão, salvo onde o bloco da etapa disser outro — exceção pinada: a
+intenção despacha o agente `gad-intent`, Opus 5 effort medium), **sempre síncrono:
 `run_in_background: false` explícito na chamada do `Agent`** — o harness despacha em
 background por padrão, e um despacho background quebra o fluxo (a notificação de término não
 retoma o roteiro e a ida-e-volta de pergunta não se completa; caso real: um despacho
@@ -1245,15 +1246,17 @@ Abaixo da caixa, uma linha solta: o usuário pode sair de perto.
   **despache** (1.2). A retomada fina — o que re-rodar e o que pular, arquivo a arquivo — é
   do subagente, que decide pelo disco (`prompts/intent.md`, seção de chegada).
 
-**1.2 — Despacho do subagente de intenção.** Gate de contexto (Sub-rotina A). Despache pela
-**Sub-rotina H** com `prompts/intent.md`: um único subagente COORDENA, na própria janela, o
+**1.2 — Despacho do subagente de intenção.** Gate de contexto (Sub-rotina A). Despache o
+agente **`gad-intent`** (def própria: Opus 5, effort medium — o coordenador é roteador; o
+julgamento pesado mora nos filhos e nos revisores) com `prompts/intent.md`: um único
+subagente COORDENA, na própria janela, o
 SPEC (filho `gad-spec` hospeda `gsd-spec-phase N --auto`) → o CONTEXT (filho `gad-discuss`
 hospeda `gsd-discuss-phase N --auto`, sem executar o `auto_advance` e zerando
 `workflow._auto_chain_active` — a neutralização dos 2 efeitos colaterais do `--auto`) → a
 revisão adversarial cross-AI (Codex + agy criticam; filho `gad-verificador` verifica cada
-achado contra o código antes de aceitar; loop por convergência — continua enquanto os achados
-novos confirmados caem e > 0, teto duro de 5 ciclos — fail-closed no piso
-de "pelo menos um revisor"). O
+achado contra o código antes de aceitar; loop com parada por custo marginal via
+`decide-ciclo.sh`, teto duro de 4 ciclos — fail-closed no piso de "pelo menos um revisor";
+a retomada fina de chegada é mecânica: `setup-intencao.sh`). O
 despacho leva `N`, `NN`, `phase_dir` e `project_root` — caminhos absolutos — e, numa
 continuação de pausa, a resposta do usuário verbatim.
 > Por que um subagente: o bloco de intenção media ~140–165k tokens de eco de orquestração na

@@ -46,6 +46,6 @@ estado: done | pausa
 context: <caminho absoluto do NN-CONTEXT.md, ou ausente se pausa antes de nascer>
 chain_flag_zerada: sim | nao — <porquê>
 dedup_aplicada: <n parágrafos substituídos por ponteiro; 0 se o passe já saiu limpo>
-sinos: [<um item por linha; ausente se vazio>]
+sinos: [<um item por linha; ausente se vazio — grave também em <phase_dir>/.intent/.sinos-discuss.txt (1 por linha): o briefing do revisor lê do arquivo, não do retorno>]
 pergunta: <só no estado pausa — a decisão pendente com opções e sua recomendação primeiro>
 ```
