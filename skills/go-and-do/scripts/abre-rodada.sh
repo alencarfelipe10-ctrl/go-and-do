@@ -14,7 +14,8 @@
 # `run` e o ponteiro só nascem se tudo antes passou):
 #   1. parse fail-closed dos argumentos (0.1: flag desconhecida/número ausente = erro)
 #   2. portões de entrada (gsd-tools resolvível · .planning existe · fase no ROADMAP)
-#   3. retrato do disco (init.phase-op N)
+#   3. retrato do disco (init.phase-op N) + detecção do NN-PRE-SPEC.md (insumo
+#      pré-travado pelo usuário → campo `pre_spec` no JSON, repassado à Etapa 1)
 #   4. gate de contexto embutido (adendo 0.2: a Etapa 1 NÃO roda gate próprio;
 #      status=stop → exit 3 com instrução de retomar fresh)
 #   5. decisões de retomada mecânicas: `etapa_1` = pular|despachar|continuar_pergunta
@@ -89,6 +90,12 @@ RETRATO=$(cd "$ROOT" && gsd_run query init.phase-op "$FASE" 2>/dev/null | jq -c 
 PHASE_DIR=$(jq -r '.phase_dir // empty' <<<"$RETRATO")
 NN=$(jq -r '.padded_phase // empty' <<<"$RETRATO")
 [ -n "$PHASE_DIR" ] || PHASE_DIR="$ROOT/.planning/phases/$NN-nova"
+
+# PRE-SPEC: insumo pré-travado pelo usuário (sessão interativa anterior à rodada).
+# Detecção por existência exata, sem glob — se existe, a Etapa 1 o usa como insumo
+# do spec/discuss e a camada 0 o declara no sumário executivo.
+PRE_SPEC=""
+[ -f "$PHASE_DIR/$NN-PRE-SPEC.md" ] && PRE_SPEC="$PHASE_DIR/$NN-PRE-SPEC.md"
 
 # ── 4. gate de contexto embutido ─────────────────────────────────────────────
 linha=$("$GAD_SCRIPTS_DIR/context-check.sh" 2>/dev/null || echo "tokens=0 limit=0 pct=0 status=unknown reason=context-check-falhou")
@@ -184,7 +191,8 @@ if [ "$DRY" = 0 ]; then
     > "$ROOT/.planning/.gad-rodada-ativa.json"
   gad_runlog "$PHASE_DIR" "$NN" run "0 abertura" \
     ${MODELO:+--modelo "$MODELO"} --camada 0 \
-    --kv hook_instalado=$HOOK --kv etapa_1="$ETAPA1" --kv etapa_2="$ETAPA2"
+    --kv hook_instalado=$HOOK --kv etapa_1="$ETAPA1" --kv etapa_2="$ETAPA2" \
+    --kv pre_spec="$([ -n "$PRE_SPEC" ] && echo detectado || echo ausente)"
   ABERTA=true
 fi
 
@@ -195,8 +203,10 @@ gad_json_out abre-rodada "$(jq -cn \
   --arg e1 "$ETAPA1" --arg e2 "$ETAPA2" \
   --argjson valerta "$VAULT_ALERTA" --arg vtermos "$VAULT_TERMOS" \
   --argjson anin "$ANIN" --argjson hook "$HOOK" --argjson tasks "$TASKS" --argjson aberta "$ABERTA" \
+  --arg ps "$PRE_SPEC" \
   '{args:{fase:$fase, ui:$ui, ai:$ai, no_ship:$ns, vault:$va, obs:$obs},
     retrato:$retrato, contexto:$ctx,
+    pre_spec:(if $ps != "" then $ps else null end),
     etapa_1:$e1, etapa_2:$e2,
     vault_alerta:(if $valerta then {alerta:true, termos:$vtermos,
       pergunta:"A fase parece ter UI autenticada e a rodada veio SEM --vault — sem credenciais o UAT queima a fase (24/31 balde-3 da série eram login). Confirmar vault antes de começar?"} else false end),

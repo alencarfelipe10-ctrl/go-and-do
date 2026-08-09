@@ -10,6 +10,12 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
 
 1. Se `<phase_dir>/NN-CONTEXT.md` já existe → não re-rode nada; pule ao passo 4
    (a neutralização da flag é idempotente e barata) e devolva `done`.
+1b. **PRE-SPEC (insumo pré-travado).** Se o despacho trouxe `pre_spec: <caminho>`,
+   `Read` o arquivo INTEIRO antes de invocar o workflow. Decisões registradas ali são
+   **travadas pelo usuário**: gray area que o PRE-SPEC já responde não é re-decidida —
+   adote a resposta dele com a marca `[pre-spec]` (em vez de `[auto]`) no CONTEXT.
+   Conflito irreconciliável entre PRE-SPEC e SPEC → sino em `.sinos-discuss.txt`,
+   nunca resolução silenciosa.
 2. Invoque `Skill` → `gsd-discuss-phase` com args `N --auto`. Ele carrega o SPEC.md,
    seleciona todas as gray areas, escolhe a opção recomendada em cada decisão (logando
    `[auto]` no CONTEXT.md) e escreve+commita o `NN-CONTEXT.md` em passe único.

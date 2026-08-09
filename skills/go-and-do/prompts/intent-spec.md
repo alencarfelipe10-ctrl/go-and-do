@@ -10,6 +10,16 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
 
 1. Se `<phase_dir>/NN-SPEC.md` já existe → não re-rode nada; vá direto ao retorno
    (`estado: done`, relendo os sinos do próprio artefato).
+1b. **PRE-SPEC (insumo pré-travado).** Se o despacho trouxe `pre_spec: <caminho>`,
+   `Read` o arquivo INTEIRO antes de invocar o workflow — ele nasceu numa sessão
+   interativa com o usuário e suas decisões são **travadas**:
+   - O workflow não re-decide nem contraria o que está lá; escolha `[auto]` que
+     conflite com o PRE-SPEC → o PRE-SPEC vence.
+   - Rastreabilidade: cada decisão do SPEC que veio do PRE-SPEC recebe a marca
+     `[pre-spec]` na mesma linha (análogo ao `[auto]` — o briefing do revisor enumera
+     as duas marcas e o revisor sabe que `[pre-spec]` tem dono).
+   - Conflito irreconciliável entre PRE-SPEC e ROADMAP/REQUIREMENTS → **sino**, nunca
+     resolução silenciosa (grave em `.sinos-spec.txt` como os demais).
 2. Invoque `Skill` → `gsd-spec-phase` com args `N --auto`. Ele deriva requisitos
    falsificáveis do ROADMAP/REQUIREMENTS, escolhe os defaults recomendados logando cada
    escolha `[auto]`, e escreve+commita o `NN-SPEC.md` com o score de ambiguidade.

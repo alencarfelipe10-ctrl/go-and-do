@@ -22,7 +22,9 @@
 #   spec                 — sem NN-SPEC.md
 #   discuss              — sem NN-CONTEXT.md
 #
-# Também garante a pasta de trabalho .intent/ (decisão 1.5). Saída: JSON 1 linha +
+# Também detecta NN-PRE-SPEC.md (campo `pre_spec`: insumo pré-travado pelo usuário —
+# não muda a `entrada`, roteia o insumo aos filhos spec/discuss) e garante a pasta de
+# trabalho .intent/ (decisão 1.5). Saída: JSON 1 linha +
 # espelho PC-5. Exit 0 sempre que decidir; 2 = uso inválido.
 
 set -euo pipefail
@@ -60,5 +62,13 @@ elif [ ! -f "$PD/$NN-CONTEXT.md" ]; then  ENTRADA=discuss
 else                                      ENTRADA=revisao
 fi
 
+# PRE-SPEC: insumo pré-travado pelo usuário (existência exata, sem glob). Não muda a
+# `entrada` — o SPEC continua sendo gerado; o coordenador repassa o caminho no despacho
+# dos filhos spec/discuss, que o leem como insumo com decisões travadas.
+PRE_SPEC=""
+[ -f "$PD/$NN-PRE-SPEC.md" ] && PRE_SPEC="$PD/$NN-PRE-SPEC.md"
+
 gad_json_out setup-intencao "$(jq -cn --arg ch "$CHAIN" --arg e "$ENTRADA" --arg est "${ESTADO:-ausente}" \
-  '{chain_flag_zerada:$ch, entrada:$e, intent_review:$est}')"
+  --arg ps "$PRE_SPEC" \
+  '{chain_flag_zerada:$ch, entrada:$e, intent_review:$est,
+    pre_spec:(if $ps != "" then $ps else null end)}')"

@@ -579,7 +579,10 @@ resposta · `despachar` → 1.2. A retomada fina por arquivo é do subagente
 **1.2 — Despacho.** `pre-despacho.sh 1` → despache o agente **`gad-intent`** (def própria:
 Opus 5 medium — coordenador roteia; o julgamento pesado mora nos filhos e nos revisores) com
 `prompts/intent.md`, levando `N`, `NN`, `phase_dir`, `project_root` absolutos e, numa
-continuação, a resposta verbatim. Dentro dele: filho `gad-spec` (SPEC `--auto`) → filho
+continuação, a resposta verbatim. Se o abre-rodada reportou `pre_spec` não-nulo
+(`NN-PRE-SPEC.md` detectado no diretório da fase — decisões pré-travadas pelo usuário numa
+sessão interativa anterior), repasse o caminho no despacho e declare o uso no sumário
+executivo. Dentro dele: filho `gad-spec` (SPEC `--auto`) → filho
 `gad-discuss` (CONTEXT `--auto`, auto_advance neutralizado) → revisão adversarial (Codex +
 agy ↔ `gad-verificador`; loop por `decide-ciclo.sh`, teto 4; fail-closed no piso "≥1
 revisor").

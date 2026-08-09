@@ -185,6 +185,14 @@ Phase number + flags: $ARGUMENTS
 - `--vault <profile>` — pass a pre-configured gsd-browser vault profile so the UAT subagent can log in and verify authenticated flows (moves login flows from basket 3 to verifiable). 2FA/captcha stay basket 3.
 - `--obs "<texto livre>"` — a free-text note for this run (e.g. "check file X", "see continue-here.md"). Captured once in Etapa 0.1 and carried as a standing note to **every** stage dispatched in this invocation (Sub-rotina H prefixes it onto each subagent's dispatch message) — each stage judges for itself whether it's relevant. Not persisted across sessions: repeat the flag on a resume if you want it applied again.
 
+**PRE-SPEC (convention, not a flag):** if the phase directory already contains
+`NN-PRE-SPEC.md` (decisions locked in an interactive session before the run — exact name,
+zero-padded NN), the opening detects it automatically (`abre-rodada.sh` → `pre_spec` field)
+and Etapa 1 uses it as input: spec and discuss adopt its decisions as user-locked (marked
+`[pre-spec]`, never re-asked or overridden; irreconcilable conflicts ring a bell), the
+adversarial briefing discloses their origin, and the executive summary declares the file was
+used. `--obs` is no longer the vehicle for this.
+
 Phases without a flag skip those gates (UI/AI contracts and audits). Everything else always
 runs. A step that does not run (config gate off, tool unavailable) is announced and disclosed
 in the summary.

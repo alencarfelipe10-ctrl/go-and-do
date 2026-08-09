@@ -98,6 +98,10 @@ Despache **`gad-spec`** (protocolo do `<environment>`) com o arquivo de instruç
 devolve o caminho do `NN-SPEC.md` + score de ambiguidade e grava os sinos em
 `.intent/.sinos-spec.txt`.
 
+Se o `setup-intencao.sh` reportou `pre_spec` não-nulo, inclua no despacho a linha
+`pre_spec: <caminho>` — o filho lê o arquivo como insumo com decisões **travadas pelo
+usuário** antes de invocar o workflow.
+
 - `estado: done` → siga (os sinos já estão no disco; o briefing-build os injeta no
   briefing e você os repete no seu retorno à camada 0).
 - `estado: pausa` → siga o `<business_pause>` com a pergunta que o filho devolveu.
@@ -110,6 +114,9 @@ Despache **`gad-discuss`** com o arquivo de instruções `prompts/intent-discuss
 filho hospeda o `gsd-discuss-phase N --auto`, neutraliza os dois efeitos colaterais do
 `--auto` (não encadeia o plan; zera a flag de chain) e aplica a fronteira
 anti-duplicação SPEC↔CONTEXT.
+
+Se o `setup-intencao.sh` reportou `pre_spec` não-nulo, repasse `pre_spec: <caminho>` no
+despacho — decisões travadas ali não são re-perguntadas nem contrariadas no CONTEXT.
 
 - `estado: done` com `chain_flag_zerada: nao` → re-rode o `setup-intencao.sh` (a
   higiene é idempotente) e confira `chain_flag_zerada: zerada` antes de seguir.
@@ -291,7 +298,7 @@ trabalho do ciclo vive em `.intent/`).
    (passe TODAS as raízes citadas). Ponteiro quebrado → conserte antes de commitar.
    ```bash
    cd "<project_root>"
-   git add "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-CONTEXT.md" "<phase_dir>/NN-INTENT-REVIEW.md" "<phase_dir>/pareceres/"NN-parecer-*.md 2>/dev/null
+   git add "<phase_dir>/NN-PRE-SPEC.md" "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-CONTEXT.md" "<phase_dir>/NN-INTENT-REVIEW.md" "<phase_dir>/pareceres/"NN-parecer-*.md 2>/dev/null
    git diff --cached --quiet 2>/dev/null || \
      git commit -m "docs(fase NN): revisão adversarial de intenção (M ciclos, K achados)" >/dev/null
    ```

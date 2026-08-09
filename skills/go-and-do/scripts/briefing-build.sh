@@ -77,6 +77,12 @@ echo "Token de prova de leitura do ciclo $C: $NONCE" > "$PROVA"
   echo
   echo "- \`$PD/$NN-SPEC.md\`"
   echo "- \`$PD/$NN-CONTEXT.md\`"
+  if [ -f "$PD/$NN-PRE-SPEC.md" ]; then
+    echo "- \`$PD/$NN-PRE-SPEC.md\` — decisões PRÉ-TRAVADAS pelo usuário numa sessão"
+    echo "  interativa anterior. Decisão marcada \`[pre-spec]\` nos artefatos tem dono:"
+    echo "  não a ataque como \"decisão não justificada\" — ataque, se for o caso, a"
+    echo "  consequência técnica dela."
+  fi
   [ -f "$ROOT/.planning/REQUIREMENTS.md" ] && echo "- \`$ROOT/.planning/REQUIREMENTS.md\`"
   echo "- Repositório sob revisão: \`$ROOT\`"
   echo
@@ -103,8 +109,8 @@ echo "Token de prova de leitura do ciclo $C: $NONCE" > "$PROVA"
     fi
     echo
   fi
-  # Livro-razão mecânico: enumeração 1:1 das decisões [auto]
-  echo "## Livro-razão de decisões automáticas (enumeração mecânica 1:1)"
+  # Livro-razão mecânico: enumeração 1:1 das decisões [auto] e [pre-spec]
+  echo "## Livro-razão de decisões automáticas e pré-travadas (enumeração mecânica 1:1)"
   echo
   n_auto=0
   for f in "$PD/$NN-SPEC.md" "$PD/$NN-CONTEXT.md"; do
@@ -112,9 +118,9 @@ echo "Token de prova de leitura do ciclo $C: $NONCE" > "$PROVA"
     while IFS= read -r l; do
       echo "- \`$(basename "$f"):${l%%:*}\` — ${l#*:}"
       n_auto=$((n_auto+1))
-    done < <(grep -n '\[auto\]' "$f" || true)
+    done < <(grep -n '\[auto\]\|\[pre-spec\]' "$f" || true)
   done
-  [ "$n_auto" = 0 ] && echo "*(nenhuma linha \`[auto]\` nos artefatos)*"
+  [ "$n_auto" = 0 ] && echo "*(nenhuma linha \`[auto]\`/\`[pre-spec]\` nos artefatos)*"
   echo
   # Varredura reversa (insumo de modelo)
   if [ -n "$VARREDURA" ] && [ -f "$VARREDURA" ]; then
