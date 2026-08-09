@@ -1,11 +1,34 @@
 {
-  "etapa": "2.5", "nome": "convergencia", "runlog_etapa": "2.5 convergencia",
-  "pre": { "revisores": true },
+  "etapa": "2.5",
+  "nome": "convergencia",
+  "runlog_etapa": "2.5 convergencia",
+  "pre": {
+    "revisores": true,
+    "config_gate": "workflow.plan_review_convergence",
+    "retomada": {
+      "arquivo": "{fase}/{nn}-CONVERGENCE.md",
+      "regex": "^convergence: done"
+    }
+  },
   "asserts": [
-    { "id": "convergencia_fechada", "tipo": "ou", "de": [
-        { "tipo": "grep", "arquivo": "{fase}/{nn}-CONVERGENCE.md", "regex": "^convergence: done", "min": 1 },
-        { "tipo": "sdk", "query": "init.phase-op {n}", "jq": ".has_verification", "espera": "true" }
+    {
+      "id": "convergencia_fechada",
+      "tipo": "ou",
+      "de": [
+        {
+          "tipo": "grep",
+          "arquivo": "{fase}/{nn}-CONVERGENCE.md",
+          "regex": "^convergence: done",
+          "min": 1
+        },
+        {
+          "tipo": "sdk",
+          "query": "init.phase-op {n}",
+          "jq": ".has_verification",
+          "espera": "true"
+        }
       ],
-      "desc": "CONVERGENCE.md com convergence: done (ou fase anterior ao marcador, já verificada)" }
+      "desc": "CONVERGENCE.md com convergence: done (ou fase anterior ao marcador, já verificada)"
+    }
   ]
 }

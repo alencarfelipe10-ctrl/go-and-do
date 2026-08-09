@@ -80,6 +80,28 @@ case "$hora" in 23|00|01|02|03|04|05|06) silencio=true ;; esac
 
 # ── extras da etapa (declarados no manifest, executados aqui) ────────────────
 extras="{}"
+# retomada por marcador (2.5-C: grep de frontmatter — artefato presente = etapa já feita)
+RET_ARQ=$(jq -r '.pre.retomada.arquivo // empty' "$MANIFEST")
+if [ -n "$RET_ARQ" ]; then
+  RET_ARQ=$(printf '%s' "$RET_ARQ" | sed "s|{fase}|$PHASE_DIR|; s|{nn}|$NN|")
+  RET_RE=$(jq -r '.pre.retomada.regex' "$MANIFEST")
+  if [ -f "$RET_ARQ" ] && grep -qE "$RET_RE" "$RET_ARQ"; then
+    gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" \
+      '{etapa:$e, despacho:"pular", motivo:"marcador de retomada presente — etapa já concluída em rodada anterior"}')"
+    exit 0
+  fi
+fi
+# gate de config (2.5-C: config off → skip declarado na origem, evento no run-log)
+CFG_KEY=$(jq -r '.pre.config_gate // empty' "$MANIFEST")
+if [ -n "$CFG_KEY" ]; then
+  CFG_VAL=$(cd "$ROOT" && gsd_run query config-get "$CFG_KEY" 2>/dev/null | tr -d ' \n\r' || true)
+  if [ "$CFG_VAL" = "false" ]; then
+    [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" skip "$RUNLOG_ETAPA (config $CFG_KEY off)"
+    gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" --arg k "$CFG_KEY" \
+      '{etapa:$e, despacho:"skip_config", motivo:("config " + $k + " = false — degradação declarada, siga sem despachar")}')"
+    exit 0
+  fi
+fi
 if [ "$(jq -r '.pre.revisores // false' "$MANIFEST")" = "true" ]; then
   cx=false; ag=false
   command -v codex >/dev/null 2>&1 && cx=true

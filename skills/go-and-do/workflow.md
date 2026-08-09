@@ -116,7 +116,7 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 
 **Etapa 3 — Construção**
 16. ⏭️ `has_verification` → pula a Etapa 3 inteira.
-18. 🔒 ⏭️ Convergência via **subagente** (com `NN-CONVERGENCE.md` `done` → pula; Sub-rotina H + `prompts/convergence.md`, hospedando `gsd-plan-review-convergence --codex --agy --max-cycles 4`). Config off (checada na camada 0, antes do despacho) → degrada declarado (`skip`) e segue. Não convergiu (`escalou`) → ⏸️ para.
+18. 🔒 ⏭️ `pre-despacho.sh 2.5` decide (pular · skip_config declarado · ⏸️ bloqueio_sem_revisor = fail-closed PC-6 · ok) → Convergência via **subagente** (Sub-rotina H + `prompts/convergence.md`, hospedando `gsd-plan-review-convergence --codex --agy --max-cycles 3`; lanes por `roda-codex.sh`/`roda-agy.sh`). Não convergiu (`escalou`) → ⏸️ para.
 18b. **Pré-flight de paralelismo** (só quando `use_worktrees: true` no `.planning/config.json` e a fase tem onda com ≥2 planos): ANTES do despacho da execução, cheque se o worktree degradaria — `gsd_run worktree base-check` se existir; senão compare `git rev-parse HEAD` × `git rev-parse origin/HEAD`. (a) Degradaria por **base mismatch** (HEAD ≠ origin/HEAD): esse é o estado NORMAL de uma fase — a skill commita dezenas de vezes e só empurra no ship — então aplique você mesma o antídoto: `"worktree": {"baseRef": "head"}` no `.claude/settings.local.json` do projeto, re-cheque, e registre como auto-decisão no `NN-DECISOES.md` (conduta de pipeline, 1 linha, reversível). (b) Degradaria por **qualquer outra causa** (env ausente, fixture gitignored, causa nova): **investigue a solução** (o que falta, o que copiar/configurar, custo e reversibilidade) e ⏸️ suba **AskUserQuestion** com o diagnóstico + as opções (aplicar o fix investigado / aceitar serial nesta fase / outra rota) — decisão do dono, sempre; a degradação nunca vira fato consumado, nem mesmo declarado. O porquê: 3 fases de projetos diferentes serializaram pelo mesmo padrão (F16-ox por env, F19-ox e F2 rl-representation por base mismatch — nesta última o fix existia desde a F19-ox e nunca fora replicado ao projeto; 16 planos rodaram seriais com disclosure e sem antídoto).
 19. 🔒 Execução via **subagente** (Sub-rotina H + `prompts/execute.md`) — o fecho 2.4b flipou os planos; sobrou `autonomous: false` (exceção rara: checkpoint surgido depois do fecho) → **inline** (`Skill gsd-execute-phase --auto --no-transition` — a interação humana é nativa na camada 0).
 20. Checa completude: sobrou plano sem SUMMARY (ação humana travou ondas) → ⏸️ Sub-rotina D (pause-work). Senão lê o status: passed → segue · human_needed → anota (vira insumo da Etapa 5) e segue · gaps_found → 21.
@@ -1301,58 +1301,31 @@ ondas por checkpoint antecipável.
 > UAT) — os planos chegam flipados.
 
 **2.5 — Convergência do plano (via subagente).**
-- **Retomada (por arquivo):** existe `<phase_dir>/NN-CONVERGENCE.md` com
-  `convergence: done` (cheque só o frontmatter)? → a revisão cruzada já convergiu numa
-  rodada anterior: pule a 2.5 inteira (a retomada da Etapa 3 só enxerga
-  `has_verification`, que vira `true` bem depois — sem este marcador, um crash entre a
-  convergência e o fim do execute re-pagaria a revisão inteira).
-- **Gate de config (camada 0 — barato, sem gastar um subagente à toa):** rode Bash
-  (shim da Sub-rotina E no mesmo bloco)
-  `gsd_run query config-get workflow.plan_review_convergence`. Veio `false` ou vazio →
-  registre o `skip` com motivo `config` (fecha a medição da etapa no JSONL), siga com o
-  plano da Etapa 2 (degradação declarada) e **não despache**.
-- **Pré-check de revisores (camada 0 — mesmo bloco Bash):** `command -v codex; command -v agy`.
-  **Nenhum dos dois instalado** → registre o `skip` com motivo `ferramenta indisponível:
-  nenhum revisor externo (codex/agy)`, declare numa linha ao usuário, carregue o item para
-  os `itens_nao_rodados` da 6.2 e **não despache** — mesma degradação declarada do gate de
-  config (despachar a revisão cruzada sem nenhum revisor externo só queimaria um subagente
-  para voltar `blocked`). Um instalado → despache normal (o comando degrada mono-revisor
-  sozinho e reporta em `revisores_efetivos`).
-- Gate de contexto (Sub-rotina A). Despache pela **Sub-rotina H** com
-  `prompts/convergence.md` (leva `N`, `NN`, `phase_dir`, `project_root` absolutos): o
-  subagente hospeda o `gsd-plan-review-convergence --codex --agy --max-cycles 4` — o
-  plano já existe, então ele vai direto pra revisão cruzada; ao convergir, ele grava e
-  commita o marcador `NN-CONVERGENCE.md`.
-  > Por que `--max-cycles 4`: o default do comando é 3, e estourar o teto com pendências
-  > dispara uma pergunta interativa ("proceed anyway / manual review") que, à noite,
-  > deixava o workflow pendurado num AskUserQuestion (caso real: fase 15 do oxmuscle-v2,
-  > 2h30 da madrugada). O 4º ciclo é a margem que o usuário sempre autorizava — agora
-  > pré-concedida. Se nem o 4º convergir, o subagente devolve `escalou` (nunca
-  > `needs_decision` para a pergunta de teto — regra no `convergence.md`) e a parada é
-  > graciosa: impasse mastigado, sem pergunta pendurada.
-  > Por que um subagente: a convergência é risco de cauda — em fases reais ela matou uma
-  > sessão por estouro de contexto e levou ~68min/3 ciclos em outra; o eco dos ciclos agora
-  > fica numa janela descartável.
-  > Por que `--codex --agy`: dois revisores independentes desde 2026-07-22 (o GSD 1.8.0
-  > destravou a whitelist para `--agy` — o gap upstream que segurava a convergência
-  > Codex-only fechou). Flags explícitas de propósito, não a invocação sem flags que lê
-  > `review.default_reviewers` — a skill não depende de config que instaladores editam.
-  > Um revisor falho no ciclo → segue com o outro, degradação em `sinos`, nunca
-  > silenciosa (disciplina completa no `prompts/convergence.md`).
+- **Pré-passos mecânicos:** rode `pre-despacho.sh 2.5` e obedeça `despacho`:
+  `pular` (marcador `convergence: done` presente) → siga pra 3.3 · `skip_config`
+  (config `workflow.plan_review_convergence` off — o skip já foi gravado) → degradação
+  declarada: anote para os `itens_nao_rodados` e siga · `bloqueio_sem_revisor` (exit 4:
+  NENHUM revisor externo instalado) → ⏸️ a fase NÃO continua sem revisão adversarial
+  (decisão do dono 09/08) — repasse a `pergunta_ao_dono` e pare · `ok` → despache
+  (um revisor ausente = segue com o outro; o campo `revisores` diz quais).
+- Despache pela **Sub-rotina H** com `prompts/convergence.md` (leva `N`, `NN`,
+  `phase_dir`, `project_root` absolutos): o subagente monta o briefing direcionado
+  (trilha do plan-checker como "não re-litigue" + ênfase A-domínio/B-mundo-externo),
+  hospeda o `gsd-plan-review-convergence --codex --agy --max-cycles 3` com as lanes
+  externas rodando por `roda-codex.sh`/`roda-agy.sh` (frescor, evidência de modelo e
+  canário em exit code), registra cada ciclo (`registra-ciclo.sh`) e, ao convergir,
+  grava o marcador via `grava-convergence.sh`.
+  > Por que `--max-cycles 3`: o prompt converte estouro de teto em `escalou` gracioso
+  > (nunca a pergunta interativa pendurada), então a margem do 4º ciclo só gastava
+  > ~15–20min sem comprar nada; com briefing direcionado, o alvo é convergir em 1.
 - Roteamento do retorno:
-  - `done · convergiu` → `end` com `subagent_tokens` (Sub-rotina G); anote
-    `revisores_efetivos`/`sinos` (degradação de revisor — ex.: agy com stdout vazio —
-    vira item de transparência, nunca silêncio) e siga.
-  - `done · config_off` (não deveria acontecer — o gate acima checa antes) → trate como o
-    gate: registre o `skip` com motivo `config`, declare e siga.
-  - `done · escalou` → registre o `end` (a etapa rodou; o desfecho é impasse) e o evento
-    `stop` (etapa `pausa: convergência escalou`), **pare** e entregue o impasse (o retorno já
-    o traz mastigado).
-  - `needs_decision` → pergunta ao usuário + **continuação do MESMO subagente** com a
-    resposta (Sub-rotina H); roteie o novo retorno por esta lista.
-  - `blocked` → registre o evento `stop` (Sub-rotina G, etapa `pausa: convergência
-    indisponível`), **pare** e reporte o motivo: a revisão cruzada não aconteceu; você
-    decide re-tentar (`/go-and-do N` retoma aqui) ou desligar o gate na config do projeto.
+  - `done · convergiu` → `confere-etapa.sh 2.5` (cancela); anote
+    `revisores_efetivos`/`sinos` (degradação de revisor vira transparência) e siga.
+  - `done · escalou` → evento `stop` (etapa `pausa: convergência escalou`), **pare** e
+    entregue o impasse (o retorno já o traz mastigado).
+  - `needs_decision` → pergunta ao usuário + **continuação do MESMO subagente**.
+  - `blocked` → evento `stop`, **pare** e reporte (re-rodar `/go-and-do N` retoma; a
+    revisão cruzada não aconteceu — você decide re-tentar ou desligar o gate).
 
 **3.3 — Execução.** Gate de contexto (Sub-rotina A). Rota padrão = subagente (o fecho 2.4b
 da Etapa 2 flipou os não-autônomos; re-confira com `nao_autonomos` do retorno da 2.3):
