@@ -738,134 +738,52 @@ e siga (o arquivo no disco é o que importa).
 
 ## Sub-rotina G — telemetria da rodada (`NN-RUN-LOG.jsonl`)
 
-Mede o custo real de cada etapa (tokens, tempo, paradas). É ela que dá dado real às decisões
-de custo do fluxo — foi esta telemetria que mediu o custo por etapa em fases reais e embasou
-decisões de design da própria skill. O registro é um JSONL por fase:
-`<phase_dir>/NN-RUN-LOG.jsonl` (uma linha por evento; sessões/retomadas distintas se distinguem
-pelo campo `sessao`).
+Retrato fiel da linha do tempo da fase: 1 linha JSONL por evento em
+`<phase_dir>/NN-RUN-LOG.jsonl`, com camada/modelo/effort/custo por etapa. Desde o
+esquema major, a grade nasce COMPLETA por escrita mecânica — o run-log é a fonte
+primária de custo (o ledger da /audit-gad vira conferência).
+
+**Regra do escritor único (T.2)** — cada tipo de evento tem exatamente um escritor;
+você (camada 0) NÃO grava o que já tem dono:
+
+| Evento | Escritor | Quando |
+|---|---|---|
+| `run` | `abre-rodada.sh` | abertura da rodada (com session_id, skill_version, modelo) |
+| `checkpoint` | `pre-despacho.sh` | abre a janela da etapa, com a fotografia do contexto |
+| `end` | `confere-etapa.sh` | fecha a janela no pass, com `tokens_reais`/`custo_usd` medidos pelo `mede-tokens.py` (transcript, nunca autodeclaração — o campo `tokens_camada2` MORREU; subagente não reporta token nenhum) |
+| `despacho`/`retorno` | hook `gad-lifecycle.sh` | início/fim de todo `Agent()`, com camada de origem (0→1 vs 1→2), agente, modelo/effort da def |
+| `script` | cada script da skill | auto-registro nome+exit+resumo ao rodar em rodada ativa |
+| `stop` | `pre-despacho.sh` (teto de contexto) ou você (pausa/fim de rodada) | desfecho |
+| `compact` | o próprio `run-log.sh` | detector mecânico (queda >100k na sessão) — você só reage (Sub-rotina A: anunciar + re-ancorar) |
+
+O que SOBRA para você gravar à mão (chamada direta, `<phase_dir>` sempre ABSOLUTO):
 
 ```bash
-bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> <evento> "<etapa>" [tokens] [pct] [subagent_tokens] [limit] [tokens_camada2] [motivo]
+bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> <skip|stop> "<etapa>" [tokens] [pct] "" [limit] "" "<motivo>"
 ```
 
-`<phase_dir>` sempre ABSOLUTO (o script resolve relativo contra a raiz do git como
-defesa, mas não confie no cwd — um subagente na pasta errada já criou uma árvore
-`.planning/` duplicada). `limit` (8º arg) = o `limit=` que o context-check emitiu no
-mesmo bloco — grava o denominador do `pct` e torna a linha autodescritiva.
-`tokens_camada2` (9º arg) = a soma que o host reportou na linha `tokens_camada2:` do
-contrato de retorno; host que devia reportar e não reportou → passe o literal
-`sem_report` (vira a chave `"camada2":"sem_report"` — a ausência fica distinguível de
-contagem completa). `motivo` (10º arg) = texto livre do `stop`/`skip` — vai em campo
-próprio, não dentro da etapa.
-
-**Vocabulário canônico da `etapa` (regra dura):** a string SEMPRE começa com o ID do
-passo (`1 intencao`, `2.3 planejamento`, `2.5 convergencia`, `3.3 execucao`,
-`3.4 verificacao`, `4.1 code review`, `4.1b re-review`, `4.4 secure`, `4.5 validate`,
-`5.3 gera-UAT`, `5.4 UAT`, `6.3 resumo`, `6.4 ship`) ou com um dos rótulos
-`preparacao` · `probe` · `resumo` · `lateral <descrição>` (despacho fora do fluxo, ex.:
-uma pesquisa pedida pelo dono). O script avisa quando o 1º token foge do vocabulário —
-sem ID estável, a agregação entre fases é inviável (caso real F20: 4 grafias distintas).
-
-O script também escreve sozinho (mecânico, sem disciplina): **`seq`** (contador
-monotônico — a ordenação canônica do arquivo; timestamps colidem no mesmo segundo) e o
-**auto-fechamento de janela** — um `checkpoint` novo com o anterior da mesma sessão ainda
-sem `end`/`skip`/`stop` grava antes um `end` sintético `"auto_fechado":true` e avisa no
-stdout (caso real F20: a 3.4 rodou e ficou sem janela; o custo caiu na etapa vizinha).
-Viu o aviso → a telemetria da etapa anterior se perdeu; anote o `subagent_tokens` dela
-num `end` corretivo se você o tiver.
-
-Os 4 eventos e onde cada um é registrado:
-- **`run`** — na Etapa 0.4, assim que o retrato entregou o `phase_dir` (marca o início ou a
-  retomada da rodada; etapa = `preparacao`). O script grava sozinho o campo `skill_version`
-  (`git describe` do clone da skill) nessa linha — é o que diz à auditoria qual versão regia
-  a rodada (caso real, F19: uma release saiu com a fase em voo e metade do pipeline rodou em
-  cada versão; a política associada — não publicar release com fase em voo — está no
-  CHANGELOG da v1.1.3).
-- **`checkpoint`** — no mesmo bloco Bash do context-check (Sub-rotina A, passo 1), com a etapa
-  que vem a seguir e os `tokens`/`pct` medidos. É o "início" daquela etapa. `tokens`/`pct`
-  saíram **vazios** (o context-check falhou — o `run-log.sh` avisa no stdout)? Re-rode o bloco
-  inteiro UMA vez antes de seguir; persistindo, siga com o checkpoint vazio e anuncie numa
-  linha a medição perdida (caso real, F16-ox 25/07: o checkpoint da 5.4 nasceu sem tokens em
-  silêncio e a etapa ficou sem custo de contexto na auditoria).
-- **`end`** — logo depois que o comando principal da etapa terminar (junto do `TaskUpdate` para
-  `completed`, Sub-rotina C). A duração da etapa = `end.ts − checkpoint.ts`. Se a etapa rodou
-  num subagente (Sub-rotina H), passe os tokens que o harness reportou pra ele como 7º
-  argumento (`subagent_tokens`) — é o que mantém a telemetria de custo honesta quando o
-  trabalho desce da camada 0; se o harness não reportar o número, omita o argumento (nunca
-  estime). Subagente continuado (needs_decision → resposta → novo retorno): some os números
-  que o harness reportou em cada volta; se só a última volta reporta (acumulado), use-a. Um
-  despacho cujo desfecho roteia pra uma parada (`escalou`) ainda fecha com `end` — a etapa
-  rodou e terminou; a parada em si é outro evento.
-  **Camada 2 conta:** se o host despachado spawna agentes próprios (ex.: a convergência
-  hospedando revisores/replans), o usage que o harness reporta à camada 0 cobre SÓ o host —
-  os filhos ficam de fora e a etapa sai subcontada (caso real F16-ox 23/07: 2 replans Opus
-  invisíveis no RUN-LOG). Regra: o prompt de **todo** host de etapa (os 8 de `prompts/`)
-  exige, no retorno, a linha `tokens_camada2: <soma reportada pelo harness aos seus
-  despachos>` — a camada 0 grava o valor como **9º argumento** do `end` (campo próprio
-  `tokens_camada2`, separado do `subagent_tokens` do host). Host que não reportar a linha →
-  registre só o host (nunca estime) e passe o literal `sem_report` no 9º argumento — a
-  chave `"camada2":"sem_report"` marca a subcontagem de forma verificável.
-  **Papel dos números (não re-aprenda da pior forma):** `subagent_tokens`/`tokens_camada2`
-  são usage CUMULATIVO reportado pelo harness (input+cache+output de todos os turnos) —
-  servem de **conferência e ordem de grandeza**, nunca de métrica de custo; a métrica é o
-  ledger da /audit-gad, medido dos transcripts (o run-log superconta ~3-4x — caso real F20).
-  **Notificação órfã de camada 2:** quando um agente de camada 2 pausado num checkpoint é
-  retomado, o harness pode entregar a notificação de conclusão dele — com o total de tokens —
-  à camada 0, e não ao pai que o despachou; o pai então reporta só o que viu antes da pausa,
-  e nem uma `tokens_camada2` perfeita cobre o delta (caso real, F19: o executor do plano
-  fechou em 261k, o pai só viu 188k, e os 73k da retomada sumiram da conta). Regra: chegou
-  notificação de subagente que você NÃO despachou diretamente, com total de tokens → some-o
-  ao `subagent_tokens` do `end` da etapa a que ele pertence; se o `end` daquela etapa já foi
-  gravado, grave um `end` adicional só com o delta e etapa = `"<etapa> (camada 2 retomada)"`.
-  Nunca descarte o número — a camada 0 é a única que o recebeu.
-  **Vale também para as rotas inline e híbridas** (execute inline da 3.3, verificação 3.4,
-  resumo parcial/final da Sub-F, gera-UAT 5.3, UAT 5.4): TODA etapa aberta
-  por um `checkpoint` fecha com `end` (ou `skip`/`stop`) — etapa inline sem `end` fica "aberta"
-  no JSONL e some da conta de custo (caso real: numa fase auditada, só as etapas despachadas
-  tinham par run/end limpo). No `end` de uma etapa inline que spawnou agentes camada-2, some os
-  usage que o harness reportou e passe como `subagent_tokens` (mesma regra de nunca estimar).
-  Forma da chamada com `subagent_tokens` sem tokens/pct próprios — os args 5/6 vão VAZIOS
-  (senão os tokens do subagente caem no campo `tokens` e poluem o detector de compact):
-  ```bash
-  bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> end "<etapa>" "" "" <subagent_tokens>
-  ```
-- **`stop`** — no desfecho da rodada: na Sub-rotina D (passo 2), no banner final da 6.5 e em
-  qualquer parada por `blocked` ou impasse de um despacho (2.3, 2.5, 3.3, 4.1, 4.3, 4.4,
-  4.5 ou 6.4). Etapa = `pausa` | `ship` | `handback`; o texto do motivo vai no **10º
-  argumento** (campo `motivo`), não dentro da etapa. E o `stop` leva **medição final**:
-  rode o mesmo context-check do checkpoint no mesmo bloco — sem isso o custo final de
-  contexto da rodada fica desconhecido (caso real F20: último ponto medido 20min e um
-  despacho de 354k antes do fim). Bloco canônico:
-  ```bash
-  out=$(bash $HOME/.claude/skills/go-and-do/scripts/context-check.sh); echo "$out"
-  t=$(printf '%s' "$out" | sed -n 's/.*tokens=\([0-9]*\).*/\1/p')
-  p=$(printf '%s' "$out" | sed -n 's/.*pct=\([0-9]*\).*/\1/p')
-  l=$(printf '%s' "$out" | sed -n 's/.*limit=\([0-9]*\).*/\1/p')
-  bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> stop "pausa" "$t" "$p" "" "$l" "" "<motivo em 1 linha>"
-  ```
-  Parada sem `stop` deixa a rodada "aberta" no JSONL. (Forma antiga — motivo dentro da
-  etapa — continua aceita pelo script, mas não a use em registro novo.)
-  **Antes do `stop` de fim de rodada (6.5 ou pausa), rode a auditoria da grade:**
+- **`skip`** — todo passo que TERIA rodado e não roda (gate off, ferramenta
+  indisponível): etapa = `"<id> (<motivo>)"` (ex.: `"2.5 (config
+  plan_review_convergence off)"`). Fecha o buraco do checkpoint-sem-`end`.
+- **`stop`** de pausa/fim de rodada — com medição final (mesmo bloco do
+  context-check: `tokens`/`pct`/`limit` preenchidos) e o motivo no 10º argumento.
+  Antes do stop de fim de rodada, rode a auditoria da grade e feche janelas abertas:
   ```bash
   bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> audit
   ```
-  Ela lista janelas abertas (checkpoint sem end/skip) — feche cada uma (`end` ou `skip`
-  honesto) antes de fechar a rodada; e confira que todo passo pulado tem seu `skip`.
+  Sessão MORTA deixou janela aberta → `run-log.sh <dir> <NN> close --sessao <id>`.
 
-O script nunca falha o pipeline (sai 0 sempre; valida os campos numéricos; append puro). Se o
-log não escrever, siga — telemetria é instrumento, não gate.
+**Vocabulário canônico da `etapa` (regra dura):** a string começa com o ID da
+numeração nova (`0 abertura` · `1 intencao` · `1.5 contratos` · `2 planejamento` ·
+`2.5 convergencia` · `3 construcao` · `4.1 code-review` … `4.5 validate` · `5 uat` ·
+`6 encerramento`) ou `preparacao` · `probe` · `resumo` · `lateral <descrição>`. O
+script avisa quando o 1º token foge do vocabulário — sem ID estável, a agregação
+entre fases é inviável.
 
-**Dois eventos adicionais:**
-- **`skip`** — sempre que um passo que TERIA rodado não roda (gate de config off, ferramenta
-  indisponível), com etapa = `"<id do passo> (<motivo>)"` (ex.:
-  `"2.5 (config plan_review_convergence off)"`). Isso fecha o buraco do checkpoint-sem-`end`:
-  um passo pulado depois do checkpoint termina em `skip`, não fica "aberto" no JSONL.
-- **`compact`** — gravado AUTOMATICAMENTE pelo próprio `run-log.sh` quando um `checkpoint`
-  registra queda > 100k vs o último valor da mesma sessão (detector mecânico — a detecção
-  saiu da disciplina do modelo depois que um compact real foi percebido e não logado). Você
-  não o grava na mão; seu papel é reagir quando ele aparecer (Sub-rotina A, passo 2:
-  anunciar + re-ancorar). Sem este evento, um compact no meio de uma etapa fica invisível
-  no JSONL e a queda de tokens do checkpoint seguinte parece erro de medição.
+O script nunca falha o pipeline (exit 0 sempre; `flock` no append; `seq` monotônico;
+auto-fechamento de janela órfã com `"auto_fechado":true` + aviso no stdout — viu o
+aviso, a telemetria da etapa anterior se perdeu: anote o que souber num `end`
+corretivo). Telemetria é instrumento, não gate.
 
 </subroutine>
 

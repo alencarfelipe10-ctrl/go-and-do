@@ -223,7 +223,6 @@ planos: <com SUMMARY>/<total>
 verification: passed | human_needed | gaps_found | ausente
 acao_humana_pendente: <só no incompleto: a ação exata + planos travados; senão omita>
 human_needed_itens: [<1 linha por item, se verification=human_needed; senão omita>]
-tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (executores, checkers); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
 incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido — ex.: "despacho serial no lugar de waves paralelas"; sem desvio, escreva literalmente: nenhum>]
 sinos: [<ex.: "regressão consertada no plano 03-04 durante a onda 2"; ausente se vazio>]
 ```

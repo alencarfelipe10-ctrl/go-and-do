@@ -82,7 +82,6 @@ veredito: planejado | sem_plano
 planos: <n> (<w> ondas)
 planos_nao_autonomos: [<ids, ex.: 03-03, 03-05>; ausente se nenhum]
 correcoes_do_checker: <n iterações do loop de verificação, se o output disser; senão omita>
-tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (agentes aninhados); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
 incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido; sem desvio, escreva literalmente: nenhum>]
 sinos: [<ex.: "coverage gate desligado por config neste projeto"; ausente se vazio>]
 ```

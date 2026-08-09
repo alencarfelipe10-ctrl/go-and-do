@@ -221,7 +221,6 @@ veredito: convergiu | escalou | config_off
 ciclos: <n>
 correcoes: [<1 linha por correção relevante aplicada ao plano; ausente se nenhuma>]
 revisores_efetivos: [codex, agy]   ← só os que revisaram de fato
-tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (replans, checkers); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
 impasse: <só no escalou: o travamento em ≤5 linhas — posições e o ponto de discórdia>
 incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido; sem desvio, escreva literalmente: nenhum>]
 sinos: [<ex.: "agy indisponível (stdout vazio) — revisão Codex-only"; ausente se vazio>]

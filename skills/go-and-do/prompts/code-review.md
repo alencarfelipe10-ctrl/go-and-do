@@ -84,7 +84,6 @@ veredito: clean | criticals_restantes
 iteracoes_fixer: <n>
 achados: critical <encontrados>/<corrigidos>/<restantes> · warning <e>/<c>/<r>
 uat_humano: [<1 linha por item "requires human verification"; ausente se nenhum>]
-tokens_camada2: <soma dos tokens que o harness reportou aos SEUS despachos (agentes aninhados); 0 se não despachou; nunca estime — sem número reportado, escreva sem_report>
 incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido; sem desvio, escreva literalmente: nenhum>]
 sinos: [<ex.: "2 Criticals restantes: <resumo>"; ausente se vazio>]
 ```
