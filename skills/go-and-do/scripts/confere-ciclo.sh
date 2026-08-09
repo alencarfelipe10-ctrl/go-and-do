@@ -38,7 +38,7 @@ RUIDO='^[0-9]+:(prova_leitura:|.*\*\*Token de Leitura|.*PROVA-)|n[íi]vel (geral
 
 extrai_achados() {
   local f="$1" h
-  h=$(grep -nE '^#{3,4} +(Achado +)?([0-9]+[.:][^0-9]|[Cc][0-9]+-[0-9]+)' "$f" \
+  h=$(grep -nE '^#{2,4} +(Achado +)?([0-9]+[.:][^0-9]|[Cc][0-9]+-[0-9]+)' "$f" \
     | grep -viE '^[0-9]+:#{3,4} +[0-9.]*\s*(pontos? fortes|strengths|sugest|suggestion)' \
     | grep -viE "$RUIDO")
   if [ -n "$h" ]; then printf '%s\n' "$h"; return; fi
