@@ -1,0 +1,14 @@
+{
+  "atualizado_em": "2026-08-09",
+  "nota": "Tabela de preços por 1M de tokens lida pelo mede-tokens.py (decisão G.1-e; PC-7: preço é DADO, não código — mudou o preço, edite só este arquivo e o campo atualizado_em). Match do modelo por prefixo mais longo do id; 'default' cobre o resto. cache_write = escrita de cache (cache_creation_input_tokens); cache_read = leitura.",
+  "anthropic_por_1m": {
+    "default":       { "input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50 },
+    "claude-opus":   { "input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50 },
+    "claude-fable":  { "input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50 },
+    "claude-sonnet": { "input": 3.0, "output": 15.0, "cache_write": 3.75, "cache_read": 0.30 },
+    "claude-haiku":  { "input": 1.0, "output": 5.0,  "cache_write": 1.25, "cache_read": 0.10 }
+  },
+  "clis_externas_por_1m": {
+    "nota": "Codex/Antigravity rodam em assinatura das próprias CLIs — custo marginal por rodada = 0 para o dono. Se um dia rodarem por API, cadastre aqui (mesmo formato) e os scripts roda-codex/roda-agy passam a reportar custo."
+  }
+}
