@@ -2,6 +2,52 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.1.2] — 2026-08-10
+
+Pendências 2–9 da auditoria da F24 do grupo-inspired (1ª fase real inteira sob a v2.x):
+a arquitetura passou, a telemetria nova falhou por inteiro — este patch conserta a
+telemetria e os três casos de "guarda cega reportando verde".
+
+### Corrigido
+
+- **Camada real nos eventos `despacho`/`retorno`** (`hooks/gad-lifecycle.sh`). O
+  `transcript_path` que o hook recebe é SEMPRE o da sessão principal — a detecção por
+  `*/subagents/*` nunca acendia (F24: 34/34 eventos com `camada: 0`, inclusive filhos
+  de spawnDepth 2). Agora o `retorno` casa o `tool_use_id` com o `meta.json` do
+  subagente (camada = `spawnDepth − 1`, `modelo` real do meta) e o `despacho` usa a
+  contagem de hosts abertos com `Agent` nas tools. Retomadas por `SendMessage` entram
+  no run-log (`despacho`/`retorno` com `"retomada":true`; matcher do hook vira
+  `Agent|Task|SendMessage` — atualize o `settings.json`).
+- **Caminho de interrupção agora mede**: novo `confere-etapa.sh pausa` (Sub-rotina D)
+  fecha a janela com `tokens_reais`/`custo_usd` do mede-tokens, rótulo CANÔNICO do
+  checkpoint e `"interrompida":true` — na F24 a pausa ficou sem medição e o rótulo
+  fragmentou em 3 grafias. A etapa 0 ganhou janela própria (mede desde o evento `run`)
+  e o crash do `confere-etapa.sh 0` (grep vazio sob `set -euo pipefail`, espelho
+  stale) foi corrigido.
+- **Piso anti-omissão destravado** (`confere-ciclo.sh`/`registra-ciclo.sh`/
+  `confere-rotas.sh`): pareceres da convergência (`NN-planrev-parecer-*-cN.md`)
+  entram no glob e na extração de lane; headings `### Achado N [tag]` sem `.`/`:`
+  são detectados; ruído ("Confiança: alta", headings de seção) filtrado; contagem de
+  brutos passa a ler a linha-total da tabela. Sem parecer legível = **SEM MEDIÇÃO**
+  explícito (nunca "0 verde"); `confere-rotas.sh` vira fail-closed no "nenhum ciclo
+  detectado".
+- **`conta-turnos.py` finalmente roda** (3ª fase seguida sem execução): novo modo
+  `--auto` localiza sozinho o transcript do `gad-intent` pelos meta.json da sessão, e
+  o `confere-etapa.sh 1` o chama mecanicamente. Estouro do teto grava evento
+  `incidente`; rodada pausada é guard (não escreve pós-`stop`). Medição real da F24:
+  25/15/26/17 turnos/ciclo contra um autorrelato de 5–6.
+
+### Adicionado
+
+- **Evento `incidente` no contrato do `run-log.sh`** (+ selftest) — fonte mecânica da
+  régua 27(a); na F24 os 10 incidentes desviaram para `DECISOES.md` por falta dele.
+
+### Documentado
+
+- **Caveat do flush lag no `mede-tokens.py`** (investigação da divergência de 5,3%
+  da F24): medir no instante do fecho subconta ~4–5% porque o usage final dos
+  subagentes ainda está sendo gravado; a re-medição a posteriori bate o ledger exato.
+
 ## [2.1.1] — 2026-08-09
 
 ### Corrigido
