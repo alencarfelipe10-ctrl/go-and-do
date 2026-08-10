@@ -28,6 +28,13 @@ Política de falha: medição indisponível (sem transcript, sem jq… não há 
 aqui — sem arquivo) = FAIL-OPEN DECLARADO — exit 0 com status="sem_medicao" e
 reason; quem consome decide seguir sem os campos. Argumento inválido = defeito
 de LÓGICA = exit 2.
+
+Caveat conhecido (investigação da falha 5 da F24, 10/08): medir NO INSTANTE do
+fecho da etapa subconta — o usage das últimas respostas dos subagentes ainda está
+sendo descarregado no JSONL (flush lag; F24 etapa 2: 2.822.326 no fecho vs
+2.959.862 re-medindo a mesma janela depois, −4,6%). A re-medição a posteriori
+(auditoria) é a mais fiel; a divergência fecho×ledger até ~5% tem essa causa
+mecânica antes de ser suspeita de bug.
 """
 import argparse
 import glob

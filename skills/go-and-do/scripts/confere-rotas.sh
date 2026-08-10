@@ -34,7 +34,11 @@ if [ -z "$ciclos" ] && [ "$(basename "$DIR")" = ".intent" ] && [ -d "$(dirname "
   ciclos=$(ls "$DIR"/.done-c*-* "$DIR"/.tabela-c*.txt 2>/dev/null \
     | grep -oE '\.(done|tabela)-c[0-9]+' | grep -oE '[0-9]+' | sort -un)
 fi
-[ -n "$ciclos" ] || { echo "nenhum ciclo detectado em $DIR"; exit 0; }
+# Fail-closed (fix F24, 10/08): "nenhum ciclo detectado" com exit 0 era guarda cega
+# reportando verde — na F24 a limpeza apagou o insumo e o gate passou sem medir.
+# A política 1.5 preserva .done-cN/.tabela-cN de propósito: se não há NADA, ou a
+# revisão não rodou ou alguém apagou evidência — os dois casos são para o chamador ver.
+[ -n "$ciclos" ] || { echo "SEM-INSUMO: nenhum ciclo detectado em $DIR — a guarda não pode confirmar a rota (fail-closed)"; exit 1; }
 
 falha=0
 for N in $ciclos; do
@@ -44,8 +48,10 @@ for N in $ciclos; do
     falha=1
     continue
   fi
-  # brutos = linhas de achado da tabela markdown (exclui header, separador e ILEGÍVEL)
-  brutos=$(grep -cE '^\| [a-z]+ \| L?[0-9]+ \|' "$tabela" || true)
+  # brutos = linha-total do confere-ciclo (fix F24: o grep exigia lane [a-z]+ pura e
+  # zerava com lanes fora do padrão); fallback = linhas de achado com lane livre
+  brutos=$(sed -n 's/^achados_estruturais_total: *//p' "$tabela" | head -1 | tr -cd '0-9')
+  [ -n "$brutos" ] || brutos=$(grep -acE '^\| [^|]+ \| L?[0-9]+ \|' "$tabela" || true)
   if [ "$brutos" -ge 3 ] && [ ! -f "$DIR/.verificador-c$N.done" ]; then
     echo "VIOLACAO c$N ($brutos brutos sem gad-verificador — rota inline fora do teto de 2)"
     falha=1
@@ -54,7 +60,7 @@ for N in $ciclos; do
   fi
   # Coluna categoria (decisão 1.7): achado sem tag [A-E]-* na tabela é aviso, não falha
   # — o verificador revalida com fail-up; sem tag, a parada por custo marginal degrada.
-  sem_cat=$(grep -E '^\| [a-z]+ \| L?[0-9]+ \|' "$tabela" | grep -cvE '\[(A|B|C|D|E)-' || true)
+  sem_cat=$(grep -aE '^\| [^|]+ \| L?[0-9]+ \|' "$tabela" | grep -cvE '\[(A|B|C|D|E)-' || true)
   [ "$sem_cat" -gt 0 ] 2>/dev/null && echo "aviso: c$N tem $sem_cat achado(s) sem categoria [A-E] na tabela (fail-up aplicado rio abaixo)"
 done
 exit $falha

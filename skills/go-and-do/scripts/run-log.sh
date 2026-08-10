@@ -12,7 +12,8 @@
 #                                      autodeclarados)
 #           --custo <usd>              custo da etapa calculado por mede-tokens.py (precos.json)
 #           --kv <chave=valor>         campo extra (repetível; número/true/false viram JSON cru)
-#   evento ∈ {run, checkpoint, end, stop, skip, compact, despacho, retorno, script}
+#   evento ∈ {run, checkpoint, end, stop, skip, compact, despacho, retorno, script,
+#             incidente}
 #     run        — abertura da rodada (escrito pelo abre-rodada.sh)
 #     checkpoint — fotografia do contexto da camada 0 (abre janela de etapa)
 #     end        — fecha a janela de etapa (escrito pelo confere-etapa.sh no fecho)
@@ -23,6 +24,9 @@
 #     retorno    — fim de despacho (escrito pelo hook; par do despacho — não fecha janela
 #                  de etapa, que é do par checkpoint/end)
 #     script     — auto-registro de um script da skill (nome+exit+resumo via --kv)
+#     incidente  — desvio disclosed no meio da rodada (origem+detalhe via --kv). É a
+#                  fonte mecânica da régua 27(a) da auditoria; na F24 os 10 incidentes
+#                  foram parar em DECISOES.md por falta deste evento documentado.
 #
 # Modos:  run-log.sh <phase_dir> <NN> audit                    → audita a GRADE (não muta)
 #         run-log.sh <phase_dir> <NN> close --sessao <id> [m]  → fecho ADMINISTRATIVO de
@@ -104,6 +108,10 @@ if [ "$1" = "--selftest" ]; then
   bash "$SELF" "$D" 99 script "1 intencao" --kv script=confere-rotas.sh --kv exit=0 --kv resumo="rotas ok" >/dev/null
   grep -q '"evento":"script".*"script":"confere-rotas.sh","exit":0,"resumo":"rotas ok"' "$F" \
     && ok "auto-registro de script" || bad "auto-registro de script"
+
+  bash "$SELF" "$D" 99 incidente "1 intencao" --kv origem=conta-turnos.py --kv detalhe="teto estourado c1:5" >/dev/null
+  grep -q '"evento":"incidente".*"origem":"conta-turnos.py","detalhe":"teto estourado c1:5"' "$F" \
+    && ok "evento incidente" || bad "evento incidente"
 
   out=$(bash "$SELF" "$D" 99 checkpoint "3 construcao" 100000 25 "" 400000)
   echo "$out" | grep -q "compact-detectado" && grep -q '"evento":"compact"' "$F" \
@@ -349,7 +357,7 @@ fi
   # Vocabulário canônico da numeração NOVA, validado na escrita (aviso, nunca falha —
   # texto livre sem ID inviabiliza agregação entre fases; caso real F20: 4 grafias)
   case "$evento" in
-    checkpoint|end|skip|despacho|retorno|script)
+    checkpoint|end|skip|despacho|retorno|script|incidente)
       _id="${etapa%% *}"
       case "$_id" in
         preparacao|probe|lateral|resumo|verificacao|0|1|1.5|2|2.5|3|3.[0-9]*|4|4.[0-9]*|5|5.[0-9]*|6|6.[0-9]*) : ;;

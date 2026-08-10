@@ -35,11 +35,16 @@ SEV='HIGH|MEDIUM|LOW|CRITICAL|BLOCKER|ALTA|ALTO|M[ÉE]DIA|M[ÉE]DIO|BAIXA|BAIXO|
 # Linhas que NÃO são achado (fix F22, 04/08 — exit 1 falso-positivo no ciclo 4):
 # a linha do canário (prova_leitura:/PROVA-...) e rubricas de classificação de risco
 # ("Nível Geral de Risco: LOW", "Overall Risk", "Risk Level") casavam nos padrões.
-RUIDO='^[0-9]+:(prova_leitura:|.*\*\*Token de Leitura|.*PROVA-)|n[íi]vel (geral )?de risco|risco geral|overall risk|risk level'
+# Fix F24 (10/08): "- **Confiança:** alta" casava na SEV ("alta") e headings de SEÇÃO
+# do parecer ("### 1. Parecer de Convergência...") casavam no padrão numerado —
+# inflavam a tabela com ruído e escondiam a subcontagem dos achados reais.
+RUIDO='^[0-9]+:(prova_leitura:|.*\*\*Token de Leitura|.*PROVA-)|n[íi]vel (geral )?de risco|risco geral|overall risk|risk level|confian[çc]a|^[0-9]+:#{2,4} +[0-9]+[.:] *(parecer|resumo|metodologia|conclus)'
 
 extrai_achados() {
   local f="$1" h
-  h=$(grep -nE '^#{2,4} +(Achado +)?([0-9]+[.:][^0-9]|[Cc][0-9]+-[0-9]+)' "$f" \
+  # "Achado N" vale com qualquer coisa depois do número — o formato real da F24
+  # ("### Achado 6 [B-viabilidade] — ...") não tinha `.`/`:` e escapava da detecção
+  h=$(grep -nE '^#{2,4} +(Achado +[0-9]+([ .:[]|$)|(Achado +)?([0-9]+[.:][^0-9]|[Cc][0-9]+-[0-9]+))' "$f" \
     | grep -viE '^[0-9]+:#{3,4} +[0-9.]*\s*(pontos? fortes|strengths|sugest|suggestion)' \
     | grep -viE "$RUIDO")
   if [ -n "$h" ]; then printf '%s\n' "$h"; return; fi
@@ -56,8 +61,10 @@ if [ "${1:-}" = "--tabela" ]; then
   TOTAL=0
   for P in "$@"; do
     [ -r "$P" ] || { echo "| $(basename "$P") | — | ILEGÍVEL |"; continue; }
-    # lane = último nome antes do -cN (fix F22: 22-parecer-plan-agy-c4.md → agy, não plan)
-    LANE=$(basename "$P" | sed -E 's/^[0-9]+-parecer-(.*-)?([a-z]+)-c[0-9]+\.md$/\2/; s/^[0-9]+-parecer-([a-z]+)[^a-z].*$/\1/; s/\.md$//')
+    # lane = último nome antes do -cN (fix F22: 22-parecer-plan-agy-c4.md → agy, não
+    # plan; fix F24: 24-planrev-parecer-codex-c1.md → codex — o padrão antigo exigia
+    # "NN-parecer-" no início e a lane virava o basename inteiro, zerando a contagem)
+    LANE=$(basename "$P" | sed -E 's/^.*[-_]([a-z]+)-c[0-9]+\.md$/\1/; s/^[0-9]+-parecer-([a-z]+)[^a-z].*$/\1/; s/\.md$//')
     LISTA=$(extrai_achados "$P")
     while IFS= read -r linha; do
       [ -n "$linha" ] || continue

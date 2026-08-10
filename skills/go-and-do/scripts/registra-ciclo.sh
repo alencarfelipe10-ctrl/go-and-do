@@ -21,16 +21,28 @@ REV="$PD/$NN-REVIEWS.md"
 
 # tabela anti-omissão do ciclo (piso mecânico; a contagem de brutos vem DAQUI)
 PARECERES=()
-for f in "$PAR/$NN-parecer-codex-c$K.md" "$PAR/$NN-parecer-agy-c$K.md"; do
+# aceita os dois batismos reais: NN-parecer-<lane>-cK.md (intenção) e
+# NN-planrev-parecer-<lane>-cK.md (convergência — F24 ficou de fora do glob antigo
+# e o registro saiu "0 brutos" verde com 11 achados nos pareceres)
+for f in "$PAR/$NN-parecer-codex-c$K.md"         "$PAR/$NN-parecer-agy-c$K.md" \
+         "$PAR/$NN-planrev-parecer-codex-c$K.md" "$PAR/$NN-planrev-parecer-agy-c$K.md"; do
   [ -s "$f" ] && PARECERES+=("$f")
 done
 TABELA="$PAR/.tabela-c$K.txt"
 if [ ${#PARECERES[@]} -gt 0 ]; then
   bash "$GAD_SCRIPTS_DIR/confere-ciclo.sh" --tabela "${PARECERES[@]}" > "$TABELA" 2>/dev/null || true
 fi
-BRUTOS=0
+BRUTOS=""
 if [ -f "$TABELA" ]; then
-  BRUTOS=$( { grep -cE '^\| [a-z]+ \| L?[0-9]+ \|' "$TABELA" || true; } | head -1 ); : "${BRUTOS:=0}"
+  # contagem pela linha-total do próprio confere-ciclo (o grep antigo exigia lane
+  # [a-z]+ pura e zerava quando a lane vinha com dígitos/hífens — guarda cega)
+  BRUTOS=$(sed -n 's/^achados_estruturais_total: *//p' "$TABELA" | head -1 | tr -cd '0-9')
+  [ -n "$BRUTOS" ] || BRUTOS=$( { grep -cE '^\| [^|]+ \| L?[0-9]+ \|' "$TABELA" || true; } | head -1 )
+fi
+: "${BRUTOS:=0}"
+# guarda anti-cega: registrar um ciclo SEM parecer legível não pode parecer verde
+if [ ${#PARECERES[@]} -eq 0 ]; then
+  echo "AVISO: nenhum parecer legível para o ciclo $K em $PAR — contagem de brutos SEM MEDIÇÃO (não é zero)" >&2
 fi
 
 {
@@ -49,9 +61,17 @@ fi
       jq -r '.sinos[]? | "  - 🔔 " + .' "$J"
     fi
   done
-  echo "- brutos na tabela do ciclo: $BRUTOS (\`pareceres/.tabela-c$K.txt\`)"
+  if [ ${#PARECERES[@]} -eq 0 ]; then
+    echo "- brutos na tabela do ciclo: **SEM MEDIÇÃO** (nenhum parecer legível — guarda não conta o que não leu)"
+  else
+    echo "- brutos na tabela do ciclo: $BRUTOS (\`pareceres/.tabela-c$K.txt\`)"
+  fi
 } >> "$REV"
 
-gad_autoregistro "registra-ciclo.sh" 0 "c$K registrado ($BRUTOS brutos)" || true
+if [ ${#PARECERES[@]} -eq 0 ]; then
+  gad_autoregistro "registra-ciclo.sh" 1 "c$K registrado SEM parecer legível (brutos sem medição)" || true
+else
+  gad_autoregistro "registra-ciclo.sh" 0 "c$K registrado ($BRUTOS brutos)" || true
+fi
 gad_json_out registra-ciclo "$(jq -cn --arg r "$REV" --arg t "$TABELA" --argjson b "$BRUTOS" \
   '{reviews:$r, tabela:$t, brutos:$b}')"

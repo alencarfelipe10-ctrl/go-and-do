@@ -11,6 +11,10 @@
 # Uso: confere-etapa.sh <etapa> [--fase N] [--projeto DIR] [--dry-run]
 #   <etapa> = nome do manifest (string opaca, PC-9): 0 · 1 · 1.5 · 2 · 2.5 · 3 ·
 #   4-code-review · 4-ui-review · 4-eval-review · 4-secure · 4-validate · 5 · 6.
+#   <etapa> = "pausa" (sem manifest): fecho de INTERRUPÇÃO (Sub-rotina D) — mede a
+#   janela aberta desta sessão com mede-tokens.py e grava o `end` com o rótulo
+#   CANÔNICO do checkpoint + "interrompida":true (fix da falha 2 da auditoria F24:
+#   o caminho de pausa não media e fragmentava o rótulo da etapa em 3 variantes).
 #   --dry-run: avalia e imprime, não grava evento nenhum (PC-12 — validação contra
 #   fases arquivadas sem sujar run-log real).
 #
@@ -46,10 +50,12 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-MANIFEST="$GAD_SCRIPTS_DIR/manifests/etapa-$ETAPA.json"
-[ -f "$MANIFEST" ] || { echo "ERRO: manifest inexistente para etapa \"$ETAPA\" ($MANIFEST)" >&2; exit 2; }
-jq -e . "$MANIFEST" >/dev/null || { echo "ERRO: manifest inválido: $MANIFEST" >&2; exit 2; }
-RUNLOG_ETAPA=$(jq -r '.runlog_etapa' "$MANIFEST")
+if [ "$ETAPA" != "pausa" ]; then
+  MANIFEST="$GAD_SCRIPTS_DIR/manifests/etapa-$ETAPA.json"
+  [ -f "$MANIFEST" ] || { echo "ERRO: manifest inexistente para etapa \"$ETAPA\" ($MANIFEST)" >&2; exit 2; }
+  jq -e . "$MANIFEST" >/dev/null || { echo "ERRO: manifest inválido: $MANIFEST" >&2; exit 2; }
+  RUNLOG_ETAPA=$(jq -r '.runlog_etapa' "$MANIFEST")
+fi
 
 ROOT="$(gad_project_root "${PROJ:-$PWD}")"
 PONTEIRO="$ROOT/.planning/.gad-rodada-ativa.json"
@@ -63,6 +69,36 @@ fi
 [ -n "$PHASE_DIR" ] && [ -d "$PHASE_DIR" ] || PHASE_DIR=$(gad_phase_dir "$ROOT" "$FASE") \
   || { echo "ERRO: fase $FASE não encontrada em $ROOT/.planning/phases/" >&2; exit 2; }
 [ -n "$NN" ] || NN=$(basename "$PHASE_DIR" | grep -o '[0-9][0-9.]*' | head -1)
+
+# ── modo pausa: fecho medido da etapa interrompida (Sub-rotina D) ────────────
+if [ "$ETAPA" = "pausa" ]; then
+  sid="${CLAUDE_CODE_SESSION_ID:-}"
+  RL="$PHASE_DIR/$NN-RUN-LOG.jsonl"
+  [ -n "$sid" ] && [ -f "$RL" ] || { echo "pausa: sem sessão ou sem run-log — nada a fechar" >&2; exit 0; }
+  lnum=$(grep -n "\"sessao\":\"${sid:0:8}\"" "$RL" | grep '"evento":"checkpoint"' | tail -n1 | cut -d: -f1 || true)
+  [ -n "$lnum" ] || { echo "pausa: nenhuma janela desta sessão no run-log — nada a fechar"; exit 0; }
+  fechada=$(tail -n +"$((lnum+1))" "$RL" | grep "\"sessao\":\"${sid:0:8}\"" | { grep -c '"evento":"\(end\|skip\|stop\)"' || true; })
+  if [ "${fechada:-0}" -gt 0 ]; then echo "pausa: janela já fechada — nada a fazer"; exit 0; fi
+  et=$(sed -n "${lnum}p" "$RL" | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p' || true)
+  desde=$(sed -n "${lnum}p" "$RL" | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p' || true)
+  MEDICAO='{"status":"sem_medicao","reason":"janela sem ts"}'
+  if [ -n "$desde" ]; then
+    MEDICAO=$(python3 "$GAD_SCRIPTS_DIR/mede-tokens.py" --sessao "$sid" \
+      --desde "$desde" --ate "$(date -Is)" --sem-espelho 2>/dev/null || echo '{"status":"sem_medicao","reason":"mede-tokens falhou"}')
+  fi
+  if [ "$(jq -r '.status' <<<"$MEDICAO")" = ok ]; then
+    gad_runlog "$PHASE_DIR" "$NN" end "$et" \
+      --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens' <<<"$MEDICAO")" \
+      --custo "$(jq -r '.total.custo_usd // 0' <<<"$MEDICAO")" \
+      --kv interrompida=true
+  else
+    gad_runlog "$PHASE_DIR" "$NN" end "$et" --kv interrompida=true \
+      --kv medicao="$(jq -r '.reason // "indisponivel"' <<<"$MEDICAO")"
+  fi
+  gad_json_out confere-etapa "$(jq -cn --arg e "$et" --argjson m "$MEDICAO" \
+    '{etapa:"pausa", janela:$e, interrompida:true, medicao:$m}')"
+  exit 0
+fi
 
 subst() {
   local s="$1"
@@ -228,6 +264,16 @@ if [ "$ETAPA" = "5" ]; then
   fi
 fi
 
+# ── etapa 1: medição de turnos do coordenador (fix F24 — 3ª fase em que o
+# conta-turnos.py não rodava porque a prosa pedia um <transcript> que a camada 0
+# não sabia preencher; agora a cancela chama com --auto, sempre) ──────────────
+if [ "$ETAPA" = "1" ] && [ "$DRY" = 0 ]; then
+  CT=$(CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}" \
+    python3 "$GAD_SCRIPTS_DIR/conta-turnos.py" --auto "$PHASE_DIR/.intent" 2>&1 || true)
+  CT=$(printf '%s' "$CT" | tail -n 6 | tr '\n' ';')
+  EXTRAI=$(jq -c --arg t "$CT" '. + {conta_turnos:$t}' <<<"$EXTRAI")
+fi
+
 # ── etapa 6: self-check mecânico (6.A/6.5) ───────────────────────────────────
 if [ "$ETAPA" = "6" ]; then
   n_plans=0; n_sums=0
@@ -260,8 +306,14 @@ if [ "$DRY" = 0 ]; then
     RL="$PHASE_DIR/$NN-RUN-LOG.jsonl"
     desde=""
     if [ -n "$sid" ] && [ -f "$RL" ]; then
+      # || true: sob set -euo pipefail, grep sem match derrubava o script inteiro
+      # (caso real F24: a etapa 0 não tem checkpoint → exit 1 sem saída + espelho stale)
       desde=$(grep "\"sessao\":\"${sid:0:8}\"" "$RL" | grep '"evento":"checkpoint"' \
-        | grep -F "\"etapa\":\"$RUNLOG_ETAPA\"" | tail -n1 | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')
+        | grep -F "\"etapa\":\"$RUNLOG_ETAPA\"" | tail -n1 | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p' || true)
+      # etapa 0 não tem pre-despacho/checkpoint: a janela abre no evento `run`
+      if [ -z "$desde" ] && [ "$ETAPA" = "0" ]; then
+        desde=$(grep '"evento":"run"' "$RL" | tail -n1 | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p' || true)
+      fi
     fi
     if [ -n "$sid" ] && [ -n "$desde" ]; then
       MEDICAO=$(python3 "$GAD_SCRIPTS_DIR/mede-tokens.py" --sessao "$sid" \

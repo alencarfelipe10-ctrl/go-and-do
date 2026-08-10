@@ -86,7 +86,7 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 7. 🔒 ⏭️ `pre-despacho.sh 1` → despacha o agente **`gad-intent`** (Opus 5 medium) com `prompts/intent.md` — um único despacho cobre SPEC + CONTEXT + revisão adversarial; a retomada fina por arquivo é do subagente (`setup-intencao.sh`). Dentro dele: filho `gad-spec` hospeda `gsd-spec-phase N --auto` (termina no SPEC, sem auto-advance).
 8. ↳ *(filho `gad-discuss`)* CONTEXT: `gsd-discuss-phase N --auto`, sem executar o `auto_advance`, zerando `workflow._auto_chain_active` na volta.
 9. ↳ *(no subagente)* Revisão adversarial: Codex + agy criticam (pareceres em `<phase_dir>/pareceres/`) ↔ filho `gad-verificador` verifica cada achado; loop com parada por custo marginal (`decide-ciclo.sh`, teto duro 4); factual → corrige · requisito/critério/oráculo → `needs_decision` ⏸️ sobe · tradeoff → adota + transparência. UM revisor falho → segue com o outro, sino; os DOIS instalados-mas-falhos → `blocked` ⏸️; NENHUM instalado → `skipped` com sino gritante e segue.
-9b. **Gate de rota (camada 0, ao receber o `done`):** `confere-rotas.sh <phase_dir>/pareceres` — exit 1 → devolve ao MESMO subagente (passo 7b do intent.md, fail-closed). Exit 0 → `conta-turnos.py <transcript> <pareceres>` (estouro = evento `incidente`; medição, não bloqueio) → `confere-etapa.sh 1` (cancela + `end` medido).
+9b. **Gate de rota (camada 0, ao receber o `done`):** `confere-rotas.sh <phase_dir>/.intent` — exit 1 → devolve ao MESMO subagente (passo 7b do intent.md, fail-closed). Exit 0 → `confere-etapa.sh 1` (cancela + `end` medido; ela mesma roda `conta-turnos.py --auto` — estouro vira evento `incidente`; medição, não bloqueio).
 
 **Etapa 1.5 — Contratos de design** *(🎌 só com a flag · retomada por existência de arquivo)*
 10. ⏭️ `setup-contratos.sh <phase_dir> <NN> [--ui] [--ai]` decide: ambos `pular`/`sem-flag` → pula a etapa inteira; flag × config off → flip declarado (flag vence).
@@ -245,13 +245,17 @@ limpo:
 1. **Encerre o trabalho vivo — inclusive o que o TaskStop não mata.** `TaskStop` na árvore do
    subagente ativo; depois varra bash em background órfãos (waiters de disco, processos codex
    — um waiter já sobreviveu 55min ao TaskStop) e encerre o que era da árvore parada. Feche na
-   telemetria a etapa interrompida: último evento é `checkpoint` sem `end` → grave `end` com
-   etapa `"<etapa> (interrompida na pausa)"` (parcial vale; nunca estime).
+   telemetria a etapa interrompida: **`confere-etapa.sh pausa`** — mede a janela aberta com o
+   mede-tokens e grava o `end` com o rótulo CANÔNICO do checkpoint + `"interrompida":true`
+   (nunca invente variante de rótulo; nunca estime — F24: a pausa ficou sem medição e o
+   rótulo fragmentou em 3 grafias, quebrando a agregação).
 2. **Resumo executivo (modo parcial):** Sub-rotina F com `modo: parcial` e o `motivo`. Falhou
    ao gerar → não pare por isso; registre numa linha e siga (o handoff técnico é o que garante
    a retomada).
 3. `Skill gsd-pause-work` — handoff durável (HANDOFF.json + `.continue-here.md`) + commit WIP.
-   Registre o evento `stop` (etapa `pausa: <motivo>`). **Reconciliação-lite do STATE.md:**
+   Registre o evento `stop` com a etapa CANÔNICA em curso (ex.: `"2.5 convergencia"`) e o
+   motivo no campo próprio (10º posicional do run-log.sh) — nunca `pausa: <motivo>` no
+   rótulo da etapa. **Reconciliação-lite do STATE.md:**
    confira que `stopped_at`/`Resume file` apontam o ponto REAL desta parada (o pause-work não
    corrige um stopped_at herdado — quem retoma pelo STATE seria enganado); divergiu → emende
    as duas linhas no commit WIP.
@@ -589,7 +593,7 @@ revisor").
 
 **1.3 — Roteamento do retorno.**
 - **`done`** → gate de rota 9b (`confere-rotas.sh`; exit 1 devolve ao MESMO subagente) +
-  `conta-turnos.py` (estouro = evento `incidente`) + `confere-etapa.sh 1` (cancela mecânica —
+  `confere-etapa.sh 1` (que roda `conta-turnos.py --auto`; estouro = evento `incidente`) (cancela mecânica —
   SPEC/CONTEXT/review fechado/chain zerada/limpeza `.intent/` — e o `end` medido; exit 1
   devolve ao MESMO subagente). Guarde do retorno: `transparencia`
   (insumo da 6.2), `sinos` (pro banner) e anuncie `pausas_de_negocio` numa linha. Sinos com
