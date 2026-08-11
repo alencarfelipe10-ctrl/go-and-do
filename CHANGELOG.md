@@ -2,12 +2,11 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
-## [2.2.0] — não publicada
+## [2.1.4] — 2026-08-11
 
-Pendências 2 e 4 da auditoria do FECHO da F24 do grupo-inspired (11/08 — 1ª rodada
-100% autônoma da v2.x), mais a remoção do conta-turnos.py. MINOR porque remove um
-script e muda o contrato do `end` (antes: telemetria nunca bloqueia; agora: o `end`
-honra o lock do gate).
+Pendências 2, 3 e 4 da auditoria do FECHO da F24 do grupo-inspired (11/08 — 1ª rodada
+100% autônoma da v2.x), mais a remoção do conta-turnos.py. Nota de contrato: o `end`
+do run-log agora honra o lock do gate (antes, telemetria nunca bloqueava nada).
 
 ### Adicionado
 
@@ -25,6 +24,16 @@ honra o lock do gate).
 
 ### Corrigido
 
+- **Campo `modelo` do run-log: regressão de 72% na F24 fechada** (46/64
+  despachos/retornos sem o campo). Quatro causas, quatro fixes no
+  `gad-lifecycle.sh`: (1) o hook nunca lia o `model` EXPLÍCITO da chamada do Agent
+  tool — e é assim que os `gsd-*` recebem modelo (as defs deles não têm `model:`);
+  (2) `meta.json` com `"model":null` agora cai para o transcript do próprio
+  subagente (último `message.model` — fonte mecânica); (3) retomada por SendMessage
+  cujo `to` é o id hex do agente acha o meta pelo nome do arquivo; (4) despacho que
+  herda o modelo do pai (sem `model`, sem def) ganha `"modelo_herdado":true` em vez
+  de campo silenciosamente ausente — o retorno preenche o id real. Replay sintético
+  das 4 classes da F24 + regressão da def com `model:`: 5/5.
 - **`mede-tokens.py`: janela vazia deixou de ser "total 0"** (fail-open da falha
   "end da etapa 0 mediu 0" — 100% de desvio contra o ledger da auditoria). Janela
   sem nenhum request (camada 0 e subagentes) agora retorna

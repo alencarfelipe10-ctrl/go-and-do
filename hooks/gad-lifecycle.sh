@@ -118,6 +118,14 @@ camada_heuristica() {
 
 CAM=""; MODELO=""; EFFORT=""
 
+# modelo do transcript do subagente: último request tem message.model — cobre o
+# meta.json com "model":null (caso real F24: 12 retornos de general-purpose sem campo)
+modelo_do_jsonl() {
+  local j="$1"
+  [ -f "$j" ] && grep -o '"model":"[^"]*"' "$j" 2>/dev/null | tail -n1 \
+    | sed 's/.*:"\(.*\)"/\1/'
+}
+
 # retorno: meta.json do subagente é a fonte autoritativa (tool_use_id ↔ toolUseId)
 if [ "$TIPO" = retorno ] && [ -n "$TUID" ] && [ -d "$SUBDIR" ]; then
   META=$(grep -l "\"toolUseId\":\"$TUID\"" "$SUBDIR"/*.meta.json 2>/dev/null | head -n1)
@@ -125,15 +133,23 @@ if [ "$TIPO" = retorno ] && [ -n "$TUID" ] && [ -d "$SUBDIR" ]; then
     SD=$(jq -r '.spawnDepth // empty' "$META" 2>/dev/null)
     case "$SD" in (''|*[!0-9]*) ;; (*) CAM=$((SD-1)) ;; esac
     MODELO=$(jq -r '.model // empty' "$META" 2>/dev/null)
+    [ -n "$MODELO" ] || MODELO=$(modelo_do_jsonl "${META%.meta.json}.jsonl")
   fi
 fi
-# retomada por SendMessage: acha o meta mais recente do agentType alvo
+# retomada por SendMessage: meta do agentType alvo, ou — quando o `to` é o id hex do
+# agente (retomada de subagente sem nome, F24: 5 pares aXXXX… sem campo) — pelo arquivo
 if [ -z "$CAM" ] && [ "$RETOMADA" = 1 ] && [ -d "$SUBDIR" ]; then
   META=$(grep -l "\"agentType\":\"${AG%% *}\"" "$SUBDIR"/*.meta.json 2>/dev/null | tail -n1)
+  if [ -z "$META" ]; then
+    case "${AG%% *}" in
+      (a[0-9a-f]*) META=$(ls "$SUBDIR/agent-${AG%% *}"*.meta.json 2>/dev/null | head -n1) ;;
+    esac
+  fi
   if [ -n "$META" ]; then
     SD=$(jq -r '.spawnDepth // empty' "$META" 2>/dev/null)
     case "$SD" in (''|*[!0-9]*) ;; (*) CAM=$((SD-1)) ;; esac
     MODELO=$(jq -r '.model // empty' "$META" 2>/dev/null)
+    [ -n "$MODELO" ] || MODELO=$(modelo_do_jsonl "${META%.meta.json}.jsonl")
   fi
 fi
 # despacho (ou fallback do retorno sem meta): heurística dos hosts abertos
@@ -141,9 +157,15 @@ if [ -z "$CAM" ]; then
   if [ "$TIPO" = retorno ]; then CAM=$(camada_heuristica "$AG"); else CAM=$(camada_heuristica); fi
 fi
 
-# modelo/effort da def do agente quando o meta não trouxe (def ausente = campos omitidos)
+# model explícito da chamada (fix da regressão 72% da F24: os gsd-* recebem o modelo
+# por parâmetro do orquestrador — as defs deles NÃO têm `model:` — e o hook não lia)
+if [ -z "$MODELO" ] && [ "$TOOL" != "SendMessage" ]; then
+  MODELO=$(jq -r '.tool_input.model // empty' <<<"$IN")
+fi
+
+# modelo/effort da def do agente quando meta/chamada não trouxeram
 if [ -z "$MODELO" ]; then
-  for DEF in "$HOME/.claude/agents/$AG.md" "$CWD/.claude/agents/$AG.md"; do
+  for DEF in "$HOME/.claude/agents/${AG%% *}.md" "$CWD/.claude/agents/${AG%% *}.md"; do
     if [ -f "$DEF" ]; then
       MODELO=$(grep -m1 -E '^model:' "$DEF" | sed 's/^model:[[:space:]]*//' | tr -d ' \r')
       EFFORT=$(grep -m1 -E '^(effort|reasoning_effort):' "$DEF" | sed 's/^[a-z_]*:[[:space:]]*//' | tr -d ' \r')
@@ -151,6 +173,11 @@ if [ -z "$MODELO" ]; then
     fi
   done
 fi
+
+# ainda vazio num despacho = herança do pai (Agent sem `model`, sem def com model:) —
+# rastro explícito em vez de campo ausente; o retorno preenche o id real via meta/jsonl
+HERDADO=0
+if [ -z "$MODELO" ] && [ "$TIPO" = despacho ]; then HERDADO=1; fi
 
 # etapa = janela aberta (último checkpoint do run-log); sem janela = abertura
 ET=$(grep '"evento":"checkpoint"' "$RL" 2>/dev/null | tail -n1 \
@@ -162,6 +189,7 @@ bash "$RUNLOG_SH" "$PD" "$NN" "$TIPO" "$ET" \
   ${MODELO:+--modelo "$MODELO"} ${EFFORT:+--effort "$EFFORT"} \
   --kv agente="$AG" --kv origem=hook \
   $([ "$RETOMADA" = 1 ] && echo '--kv retomada=true') \
+  $([ "$HERDADO" = 1 ] && echo '--kv modelo_herdado=true') \
   ${DESC:+--kv descricao="$DESC"} >/dev/null 2>&1
 
 exit 0
