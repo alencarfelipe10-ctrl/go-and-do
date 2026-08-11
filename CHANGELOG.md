@@ -2,6 +2,20 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.1.5] — 2026-08-11
+
+Só dado, sem código (PC-7): tabela de preços.
+
+### Corrigido
+
+- **`precos.json`: Sonnet 5 a $2/$10 permanente.** A Anthropic anunciou em 11/08 que o
+  preço introdutório do Sonnet 5 (input $2 · output $10 · cache write $2,50 · cache
+  read $0,20 por 1M) vira permanente — o aumento para $3/$15 de 1º/09 foi cancelado.
+  Entrada nova `claude-sonnet-5` com esses valores; a genérica `claude-sonnet` segue
+  em $3/$15 (correta para Sonnet 4.5/4.6). O match por prefixo mais longo do
+  mede-tokens.py roteia sozinho. Nota: até aqui a tabela superestimava o custo do
+  Sonnet 5 em 50% (usava o preço padrão, não o introdutório).
+
 ## [2.1.4] — 2026-08-11
 
 Pendências 2, 3 e 4 da auditoria do FECHO da F24 do grupo-inspired (11/08 — 1ª rodada
