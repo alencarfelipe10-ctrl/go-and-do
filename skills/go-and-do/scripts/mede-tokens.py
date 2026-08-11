@@ -20,7 +20,7 @@ Uso (normalmente chamado pelo confere-etapa.sh no fecho de cada etapa):
   --transcript/--subagents  sobrescrevem a descoberta (teste/aceite).
 
 Saída: JSON compacto em 1 linha no stdout + espelho em
-<root>/.planning/.gad-last-mede-tokens.json (PC-5: o RTK capa o stdout).
+<root>/.planning/.gad/last-mede-tokens.json (PC-5: o RTK capa o stdout).
 Campos: camada0/subagentes/total (4 campos de usage + custo_usd), n_requests,
 n_subagentes, precos_de (proveniência da tabela — PC-7), avisos.
 
@@ -241,8 +241,9 @@ def main():
         d = os.getcwd()
         while d != os.path.dirname(d):
             if os.path.isdir(os.path.join(d, ".planning")):
-                with open(os.path.join(d, ".planning",
-                                       ".gad-last-mede-tokens.json"),
+                os.makedirs(os.path.join(d, ".planning", ".gad"), exist_ok=True)
+                with open(os.path.join(d, ".planning", ".gad",
+                                       "last-mede-tokens.json"),
                           "w", encoding="utf-8") as fh:
                     fh.write(compacto + "\n")
                 break

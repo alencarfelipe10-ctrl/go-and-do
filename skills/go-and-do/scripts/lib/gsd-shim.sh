@@ -16,7 +16,7 @@
 #                             no início do nome, com ou sem prefixo de projeto: "20-...",
 #                             "INS-20-...", "RLR-02-..."). Vazio + exit 1 se não achar.
 #   gad_json_out <slug> <json> — contrato de saída PC-5: imprime o JSON COMPACTO em 1
-#                             linha no stdout E espelha em <root>/.planning/.gad-last-
+#                             linha no stdout E espelha em <root>/.planning/.gad/last-
 #                             <slug>.json (o RTK capa stdout em ~50 linhas; o modelo lê
 #                             do espelho se a linha vier truncada). Requer jq.
 #   gad_runlog <args...>    — chama o run-log.sh do mesmo diretório de scripts (caminho
@@ -85,7 +85,10 @@ gad_json_out() {
   [ -n "$compact" ] || {
     echo "ERRO: gad_json_out recebeu JSON inválido ou vazio ($slug)" >&2; return 1; }
   root="$(gad_project_root)"
-  [ -d "$root/.planning" ] && printf '%s\n' "$compact" > "$root/.planning/.gad-last-$slug.json"
+  if [ -d "$root/.planning" ]; then
+    mkdir -p "$root/.planning/.gad"
+    printf '%s\n' "$compact" > "$root/.planning/.gad/last-$slug.json"
+  fi
   printf '%s\n' "$compact"
 }
 

@@ -29,7 +29,7 @@
 # Escritor único (T.2): este script grava o CHECKPOINT da etapa (fotografia do contexto +
 # abertura da janela; kv despacho=autorizado). O ciclo de vida fino de cada Agent() é do
 # hook gad-lifecycle.sh (eventos despacho/retorno) — nunca daqui.
-# Saída: JSON 1 linha + espelho .planning/.gad-last-pre-despacho.json (PC-5). Exit 0=ok.
+# Saída: JSON 1 linha + espelho .planning/.gad/last-pre-despacho.json (PC-5). Exit 0=ok.
 
 set -euo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"

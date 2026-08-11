@@ -35,7 +35,7 @@
 #      ponteiro leve .planning/.gad-rodada-ativa.json (PC-3 — é como o hook global acha
 #      o run-log em ms; o stop/fecho da rodada o remove)
 #
-# Saída: JSON 1 linha + espelho .planning/.gad-last-abre-rodada.json (PC-5).
+# Saída: JSON 1 linha + espelho .planning/.gad/last-abre-rodada.json (PC-5).
 # Exit: 0 ok · 2 argumento/portão · 3 contexto stop · 4 fase não encontrada.
 
 set -euo pipefail

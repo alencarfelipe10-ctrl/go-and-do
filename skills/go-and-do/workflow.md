@@ -63,7 +63,7 @@ Operating rules — read once, apply throughout:
   `rtk proxy <cmd>`. Vale para TODAS as camadas e vai repassada nos briefings com
   comandos-gate (caso real F22: 3 golpes na mesma rodada). Leitura exploratória continua
   filtrada; só o comando-gate é cru. Os scripts da skill leem espelhos
-  `.planning/.gad-last-*.json` quando o stdout for capado (PC-5).
+  `.planning/.gad/last-*.json` quando o stdout for capado (PC-5).
 </operating_rules>
 
 ---
@@ -530,7 +530,7 @@ e `obs_text` (nota a todo despacho da rodada — Sub-rotina H).
 
 **0.2 — Abertura atômica.** Rode
 `$HOME/.claude/skills/go-and-do/scripts/abre-rodada.sh N [flags]` e obedeça o JSON (espelho em
-`.planning/.gad-last-abre-rodada.json`): portões de entrada, retrato da fase
+`.planning/.gad/last-abre-rodada.json`): portões de entrada, retrato da fase
 (`phase_dir`/`padded_phase`/`has_plans`/`has_verification`), gate de contexto, decisões de
 retomada (`etapa_1`/`etapa_2`), `vault_alerta`, `aninhamento`, `hook_instalado`, retrato da
 TaskList, evento `run` + ponteiro da rodada. Exit ≠ 0 → **pare** com o motivo do script (exit

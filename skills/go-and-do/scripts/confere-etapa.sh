@@ -30,7 +30,7 @@
 # No pass (fora do --dry-run): mede a etapa com mede-tokens.py (janela desde o
 # checkpoint aberto pelo pre-despacho) e grava o evento `end` com tokens_reais/custo —
 # números só de fonte mecânica (G.1). No fail: grava evento `script` com o resumo.
-# Saída: JSON 1 linha + espelho .planning/.gad-last-confere-etapa.json (PC-5).
+# Saída: JSON 1 linha + espelho .planning/.gad/last-confere-etapa.json (PC-5).
 # Exit: 0 pass · 1 fail · 2 erro de uso/manifest.
 
 set -euo pipefail
