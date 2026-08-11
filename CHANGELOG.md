@@ -2,6 +2,16 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.1.3] — 2026-08-11
+
+### Alterado
+
+- **Espelhos PC-5 agrupados em pasta única.** Os JSONs de última execução dos scripts
+  agora vivem em `.planning/.gad/last-<script>.json`, em vez de nove dotfiles
+  `.gad-last-*.json` soltos na raiz do `.planning/` do projeto alvo. Sem mudança de
+  conteúdo nem de contrato — só o caminho. Recomendado ignorar a pasta no projeto
+  alvo: `.planning/.gad/` no `.gitignore`.
+
 ## [2.1.2] — 2026-08-10
 
 Pendências 2–9 da auditoria da F24 do grupo-inspired (1ª fase real inteira sob a v2.x):
