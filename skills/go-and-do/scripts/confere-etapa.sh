@@ -264,16 +264,6 @@ if [ "$ETAPA" = "5" ]; then
   fi
 fi
 
-# ── etapa 1: medição de turnos do coordenador (fix F24 — 3ª fase em que o
-# conta-turnos.py não rodava porque a prosa pedia um <transcript> que a camada 0
-# não sabia preencher; agora a cancela chama com --auto, sempre) ──────────────
-if [ "$ETAPA" = "1" ] && [ "$DRY" = 0 ]; then
-  CT=$(CLAUDE_CODE_SESSION_ID="${CLAUDE_CODE_SESSION_ID:-}" \
-    python3 "$GAD_SCRIPTS_DIR/conta-turnos.py" --auto "$PHASE_DIR/.intent" 2>&1 || true)
-  CT=$(printf '%s' "$CT" | tail -n 6 | tr '\n' ';')
-  EXTRAI=$(jq -c --arg t "$CT" '. + {conta_turnos:$t}' <<<"$EXTRAI")
-fi
-
 # ── etapa 6: self-check mecânico (6.A/6.5) ───────────────────────────────────
 if [ "$ETAPA" = "6" ]; then
   n_plans=0; n_sums=0
@@ -298,9 +288,15 @@ fi
 
 # ── veredito + eventos + medição ─────────────────────────────────────────────
 if [ "$FALHAS" = 0 ]; then VEREDITO=pass; else VEREDITO=fail; fi
+# dente do gate (auditorias F21-ox/F24-pausa/F24-fecho — 3ª ocorrência de "guarda cega
+# reporta verde"): o fail deixa um lock que o run-log.sh HONRA — nenhum `end` desta
+# etapa é gravável enquanto o lock existir. Só ESTE script, ao dar pass, remove o lock.
+LOCK="$PHASE_DIR/.gate-fail-${RUNLOG_ETAPA%% *}.json"
 MEDICAO=null
 if [ "$DRY" = 0 ]; then
   if [ "$VEREDITO" = pass ]; then
+    POS_FAIL=0
+    if [ -f "$LOCK" ]; then POS_FAIL=1; rm -f "$LOCK"; fi
     # janela da etapa: do checkpoint aberto pelo pre-despacho até agora
     sid="${CLAUDE_CODE_SESSION_ID:-}"
     RL="$PHASE_DIR/$NN-RUN-LOG.jsonl"
@@ -321,17 +317,21 @@ if [ "$DRY" = 0 ]; then
     else
       MEDICAO='{"status":"sem_medicao","reason":"sem sessão ou sem checkpoint da etapa no run-log"}'
     fi
+    POSFLAG=(); [ "$POS_FAIL" = 1 ] && POSFLAG=(--kv pos_gate_fail=true)
     if [ "$(jq -r '.status' <<<"$MEDICAO")" = ok ]; then
       gad_runlog "$PHASE_DIR" "$NN" end "$RUNLOG_ETAPA" \
         --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens' <<<"$MEDICAO")" \
         --custo "$(jq -r '.total.custo_usd // 0' <<<"$MEDICAO")" \
-        --kv veredito=pass
+        --kv veredito=pass ${POSFLAG[@]+"${POSFLAG[@]}"}
     else
       gad_runlog "$PHASE_DIR" "$NN" end "$RUNLOG_ETAPA" --kv veredito=pass \
-        --kv medicao="$(jq -r '.reason // "indisponivel"' <<<"$MEDICAO")"
+        --kv medicao="$(jq -r '.reason // "indisponivel"' <<<"$MEDICAO")" \
+        ${POSFLAG[@]+"${POSFLAG[@]}"}
     fi
   else
     resumo=$(jq -r '[.[] | select(.resultado=="FALHA") | .id] | join(",")' <<<"$RES")
+    printf '{"etapa":"%s","ts":"%s","resumo":"falhas: %s"}\n' \
+      "${RUNLOG_ETAPA%% *}" "$(date -Is)" "$resumo" > "$LOCK"
     gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
       --kv script=confere-etapa.sh --kv exit=1 --kv resumo="falhas: $resumo"
   fi

@@ -2,6 +2,43 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.2.0] — não publicada
+
+Pendências 2 e 4 da auditoria do FECHO da F24 do grupo-inspired (11/08 — 1ª rodada
+100% autônoma da v2.x), mais a remoção do conta-turnos.py. MINOR porque remove um
+script e muda o contrato do `end` (antes: telemetria nunca bloqueia; agora: o `end`
+honra o lock do gate).
+
+### Adicionado
+
+- **Gate com dente** (3ª ocorrência do padrão "guarda cega reporta verde", desta vez
+  com prova no run-log: `confere-etapa.sh` exit 1 → `end` pass 18 segundos depois).
+  No fail, o `confere-etapa.sh` grava `.gate-fail-<id>.json` na phase_dir; o
+  `run-log.sh` RECUSA qualquer `end` dessa etapa enquanto o lock existir — grava um
+  evento `incidente` (`origem: gate-dente`) e instrui no stdout a re-rodar o gate
+  até pass (só o próprio confere-etapa, ao passar, remove o lock) ou abrir
+  `needs_decision`. Exceções que fecham janela sem gate: pausa (`interrompida=true`),
+  `stop`/`skip`, fecho administrativo. Um pass que sucede um fail fica rastreável:
+  o `end` ganha `"pos_gate_fail":true`. 3 casos novos no `--selftest`; validado
+  ponta a ponta contra cópia da fase F24 real (fail → end recusado + incidente →
+  fix → pass limpa o lock e grava o end).
+
+### Corrigido
+
+- **`mede-tokens.py`: janela vazia deixou de ser "total 0"** (fail-open da falha
+  "end da etapa 0 mediu 0" — 100% de desvio contra o ledger da auditoria). Janela
+  sem nenhum request (camada 0 e subagentes) agora retorna
+  `status:"sem_medicao"` com reason explícita, e o `end` sai com
+  `medicao=janela vazia…` em vez de `tokens_reais:0` fingindo medida válida.
+
+### Removido
+
+- **`conta-turnos.py`** — 4ª fase seguida com 0 execuções mesmo depois do modo
+  `--auto` da v2.1.2. Decisão (11/08): turnos do coordenador são dado 100%
+  recuperável do transcript — viram régua da auditoria (/audit-gad), não medição
+  em sessão. O teto de ≤4 turnos/ciclo continua declarado no intent.md como
+  disciplina; a cobrança é retroativa.
+
 ## [2.1.3] — 2026-08-11
 
 ### Alterado

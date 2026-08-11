@@ -86,7 +86,7 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 7. 🔒 ⏭️ `pre-despacho.sh 1` → despacha o agente **`gad-intent`** (Opus 5 medium) com `prompts/intent.md` — um único despacho cobre SPEC + CONTEXT + revisão adversarial; a retomada fina por arquivo é do subagente (`setup-intencao.sh`). Dentro dele: filho `gad-spec` hospeda `gsd-spec-phase N --auto` (termina no SPEC, sem auto-advance).
 8. ↳ *(filho `gad-discuss`)* CONTEXT: `gsd-discuss-phase N --auto`, sem executar o `auto_advance`, zerando `workflow._auto_chain_active` na volta.
 9. ↳ *(no subagente)* Revisão adversarial: Codex + agy criticam (pareceres em `<phase_dir>/pareceres/`) ↔ filho `gad-verificador` verifica cada achado; loop com parada por custo marginal (`decide-ciclo.sh`, teto duro 4); factual → corrige · requisito/critério/oráculo → `needs_decision` ⏸️ sobe · tradeoff → adota + transparência. UM revisor falho → segue com o outro, sino; os DOIS instalados-mas-falhos → `blocked` ⏸️; NENHUM instalado → `skipped` com sino gritante e segue.
-9b. **Gate de rota (camada 0, ao receber o `done`):** `confere-rotas.sh <phase_dir>/.intent` — exit 1 → devolve ao MESMO subagente (passo 7b do intent.md, fail-closed). Exit 0 → `confere-etapa.sh 1` (cancela + `end` medido; ela mesma roda `conta-turnos.py --auto` — estouro vira evento `incidente`; medição, não bloqueio).
+9b. **Gate de rota (camada 0, ao receber o `done`):** `confere-rotas.sh <phase_dir>/.intent` — exit 1 → devolve ao MESMO subagente (passo 7b do intent.md, fail-closed). Exit 0 → `confere-etapa.sh 1` (cancela + `end` medido). Turnos do coordenador viraram régua de auditoria (transcript), não medição em sessão — o conta-turnos.py foi removido na v2.2.0 (4 fases sem disparar).
 
 **Etapa 1.5 — Contratos de design** *(🎌 só com a flag · retomada por existência de arquivo)*
 10. ⏭️ `setup-contratos.sh <phase_dir> <NN> [--ui] [--ai]` decide: ambos `pular`/`sem-flag` → pula a etapa inteira; flag × config off → flip declarado (flag vence).
@@ -593,7 +593,7 @@ revisor").
 
 **1.3 — Roteamento do retorno.**
 - **`done`** → gate de rota 9b (`confere-rotas.sh`; exit 1 devolve ao MESMO subagente) +
-  `confere-etapa.sh 1` (que roda `conta-turnos.py --auto`; estouro = evento `incidente`) (cancela mecânica —
+  `confere-etapa.sh 1` (cancela mecânica —
   SPEC/CONTEXT/review fechado/chain zerada/limpeza `.intent/` — e o `end` medido; exit 1
   devolve ao MESMO subagente). Guarde do retorno: `transparencia`
   (insumo da 6.2), `sinos` (pro banner) e anuncie `pausas_de_negocio` numa linha. Sinos com

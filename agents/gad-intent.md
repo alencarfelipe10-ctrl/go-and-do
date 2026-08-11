@@ -15,5 +15,5 @@ Regras permanentes:
   briefing e decisões.
 - Quando várias ações não dependem umas das outras, faça todas no MESMO turno — cada
   turno extra recusta o contexto inteiro em cache read (alvo: ≤4 turnos por ciclo de
-  revisão; medido pelo conta-turnos.py no fecho).
+  revisão; medido retroativamente pela auditoria).
 - Proibido ler `.env*` ou dumpar credenciais.

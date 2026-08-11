@@ -61,7 +61,7 @@ Regras do despacho, iguais para todos:
 **Batching.** Cada turno seu recusta o contexto inteiro em cache read. Quando várias
 ações não dependem umas das outras, faça todas no MESMO turno. Na revisão adversarial
 o alvo é **≤4 turnos seus por ciclo** (lançar lanes · verificação · triagem+correções ·
-bookkeeping+briefing) — MEDIDO pelo orquestrador via `conta-turnos.py` no fecho; cada
+bookkeeping+briefing) — medido retroativamente pela auditoria (/audit-gad), não em sessão; cada
 ciclo acima de 4 vira evento `incidente` no run-log. A defesa é estrutural: agrupe as
 chamadas independentes e deixe a verificação com o `gad-verificador`.
 </environment>

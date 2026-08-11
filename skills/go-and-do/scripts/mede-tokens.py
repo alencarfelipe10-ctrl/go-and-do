@@ -215,6 +215,12 @@ def main():
                 totS[c] += usage.get(c, 0) or 0
             custoS += custo_de(usage, modelo, tabela)
 
+    # janela vazia = medição indisponível, NÃO um total 0 (fix fail-open F24: o end
+    # da etapa 0 gravou tokens_reais=0 como se fosse medida válida — 100% de desvio)
+    if n0 == 0 and nS == 0:
+        sem_medicao(f"janela vazia — nenhum request entre {args.desde or '-inf'} "
+                    f"e {args.ate or '+inf'}; medição indisponível, não zero")
+
     def fmt(u, custo, extra=None):
         d = {SAIDA[c]: u[c] for c in CAMPOS}
         d["custo_usd"] = round(custo, 4) if precos_de else None

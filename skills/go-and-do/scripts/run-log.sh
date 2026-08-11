@@ -109,9 +109,24 @@ if [ "$1" = "--selftest" ]; then
   grep -q '"evento":"script".*"script":"confere-rotas.sh","exit":0,"resumo":"rotas ok"' "$F" \
     && ok "auto-registro de script" || bad "auto-registro de script"
 
-  bash "$SELF" "$D" 99 incidente "1 intencao" --kv origem=conta-turnos.py --kv detalhe="teto estourado c1:5" >/dev/null
-  grep -q '"evento":"incidente".*"origem":"conta-turnos.py","detalhe":"teto estourado c1:5"' "$F" \
+  bash "$SELF" "$D" 99 incidente "1 intencao" --kv origem=confere-rotas.sh --kv detalhe="teto estourado c1:5" >/dev/null
+  grep -q '"evento":"incidente".*"origem":"confere-rotas.sh","detalhe":"teto estourado c1:5"' "$F" \
     && ok "evento incidente" || bad "evento incidente"
+
+  # dente do gate: lock de fail do confere-etapa recusa o end (vira incidente);
+  # pausa (interrompida=true) passa; lock removido (só o confere-etapa faz) libera
+  printf '{"etapa":"5","ts":"x","resumo":"falhas: pre_uat_executado"}\n' > "$D/.gate-fail-5.json"
+  out=$(bash "$SELF" "$D" 99 end "5 uat" 2>/dev/null)
+  echo "$out" | grep -q "GATE-EM-FAIL" && grep -q '"origem":"gate-dente"' "$F" \
+    && ! grep -q '"evento":"end","etapa":"5 uat"' "$F" \
+    && ok "gate-dente: end recusado com lock vivo" || bad "gate-dente: end recusado com lock vivo"
+  bash "$SELF" "$D" 99 end "5 uat" --kv interrompida=true >/dev/null
+  grep -q '"evento":"end","etapa":"5 uat".*"interrompida":true' "$F" \
+    && ok "gate-dente: pausa fecha janela mesmo com lock" || bad "gate-dente: pausa fecha janela mesmo com lock"
+  rm -f "$D/.gate-fail-5.json"
+  bash "$SELF" "$D" 99 end "5 uat" --kv veredito=pass >/dev/null
+  grep -q '"etapa":"5 uat".*"veredito":"pass"' "$F" \
+    && ok "gate-dente: lock removido libera o end" || bad "gate-dente: lock removido libera o end"
 
   out=$(bash "$SELF" "$D" 99 checkpoint "3 construcao" 100000 25 "" 400000)
   echo "$out" | grep -q "compact-detectado" && grep -q '"evento":"compact"' "$F" \
@@ -364,6 +379,29 @@ fi
         *) echo "aviso: etapa \"$_id\" fora do vocabulário canônico — prefixe com o ID da numeração nova (ex.: \"1 intencao\", \"2.5 convergencia\", \"4.2 code-review\", \"lateral pesquisa X\")" ;;
       esac ;;
   esac
+
+  # Dente do gate (fix da 3ª ocorrência de "guarda cega reporta verde", F24-fecho:
+  # confere-etapa exit 1 → end pass 18s depois). O confere-etapa.sh em fail grava
+  # .gate-fail-<id>.json na phase_dir e SÓ ele, ao dar pass, remove. Um `end` com o
+  # lock vivo é recusado: vira evento `incidente` + instrução no stdout. Exceções que
+  # fecham janela sem passar pelo gate: interrompida=true (pausa) e stop/skip.
+  if [ "$evento" = "end" ]; then
+    _id="${etapa%% *}"
+    _lock="$dir/.gate-fail-$_id.json"
+    _interr=0
+    for _kv in ${kvs[@]+"${kvs[@]}"}; do [ "$_kv" = "interrompida=true" ] && _interr=1; done
+    if [ -f "$_lock" ] && [ "$_interr" = 0 ]; then
+      _res=$(sed -n 's/.*"resumo":"\([^"]*\)".*/\1/p' "$_lock" | head -1)
+      trava "$f"
+      last_seq=$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$f" 2>/dev/null | tail -n1)
+      case "$last_seq" in (''|*[!0-9]*) last_seq=0 ;; esac
+      _linha_inc="{\"ts\":\"$ts\",\"seq\":$((last_seq+1)),\"sessao\":\"$sess\",\"evento\":\"incidente\",\"etapa\":\"$etapa\",\"origem\":\"gate-dente\",\"detalhe\":\"end recusado: confere-etapa.sh em fail ($_res)\"}"
+      printf '%s\n' "$_linha_inc" >> "$f"
+      espelha "$dir" "$nn" "$_linha_inc"
+      echo "GATE-EM-FAIL: end da etapa \"$_id\" RECUSADO — o último confere-etapa.sh falhou ($_res). Corrija e re-rode confere-etapa.sh $_id até pass (só ele remove o lock); se a falha pedir julgamento do dono, abra needs_decision. Incidente gravado."
+      exit 0
+    fi
+  fi
 
   # O campo autodeclarado morreu (G.1-d): o 9º posicional é aceito e descartado.
   if [ -n "$c2" ]; then
