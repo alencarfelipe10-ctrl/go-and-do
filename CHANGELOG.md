@@ -2,6 +2,18 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.1.7] — 2026-08-20
+
+### Alterado
+
+- **Convergência do plano pede `--agy-revisor`, não `--agy`.** A lane declarada
+  `agy-revisor` (capability do gen5-patches, agente `revisor-gsd` sem shell) passou a ser
+  invocável pelo runner do GSD (#2927 corrigido na 1.10.0) e foi provada em 20/08 no
+  runner 1.11.0 **sem patch**: `ok · stubbed:false · model pinned`, canário e citações;
+  controle com a lane stock `antigravity` no mesmo runner → `stubbed:true` (soft-deny).
+  Com isso o patch local do `review-lane-runner.cjs` foi aposentado; a flag antiga
+  voltaria a depender dele. `convergence.md` + `workflow.md`; nota no `roda-agy.sh`.
+
 ## [2.1.6] — 2026-08-20
 
 Adaptação ao GSD 1.11.0 (tarefa 29 e/f do go-and-do-evolucao). Nenhuma mudança de contrato

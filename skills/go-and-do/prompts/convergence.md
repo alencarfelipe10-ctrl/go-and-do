@@ -33,9 +33,12 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
      runtime, semântica de banco vivo, env de deploy. Classificação pela taxonomia de
      `prompts/categorias-achados.md`.
 2. Invoque `Skill` → `gsd-plan-review-convergence` com args
-   `--codex --agy --max-cycles 3`.
+   `--codex --agy-revisor --max-cycles 3`.
    *(Dois revisores pinados — decisão do usuário 2026-07-22; flags explícitas, não a
-   config `review.default_reviewers` que instaladores editam. Teto 3 = default do
+   config `review.default_reviewers` que instaladores editam. `--agy-revisor` é a lane
+   declarada `capabilities/agy-revisor` do gen5-patches (agente `revisor-gsd` sem shell),
+   não a stock `--agy`: provado em 20/08 que a stock morre por soft-deny no runner sem
+   patch e a declarada responde com citações e modelo resolvido. Teto 3 = default do
    comando: o prompt já converte estouro em `escalou` gracioso, então margem extra só
    gastava um ciclo.)*
    **As lanes externas rodam pelos scripts** — quando o workflow hospedado mandar

@@ -699,7 +699,7 @@ humanas MORREU aqui — o fecho 2.4b já resolveu; os planos chegam flipados.)
   `revisores` diz quais).
 - Despache pela Sub-rotina H com `prompts/convergence.md`: o subagente monta o briefing
   direcionado (trilha do plan-checker como "não re-litigue" + ênfase A-domínio/B-mundo),
-  hospeda `gsd-plan-review-convergence --codex --agy --max-cycles 3` (lanes por
+  hospeda `gsd-plan-review-convergence --codex --agy-revisor --max-cycles 3` (lanes por
   `roda-codex.sh`/`roda-agy.sh` — frescor, evidência de modelo e canário em exit code),
   registra ciclos (`registra-ciclo.sh`) e grava o marcador (`grava-convergence.sh`).
 - Roteamento: `done · convergiu` → `confere-etapa.sh 2.5`; anote `revisores_efetivos`/`sinos`

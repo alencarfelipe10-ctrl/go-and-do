@@ -21,7 +21,10 @@
 # tarefa 29e): o GSD 1.11.0 resolve o modelo do agy nativamente (#2295, lê o
 # transcript_full.jsonl) — mas só quando a lane roda pelo review-lane-runner. Aqui o agy é
 # invocado por ESTE script, fora do runner, logo `models:` nativo não nasce; a prova
-# durável segue sendo o log fixado. Reavaliar quando a 29(a) migrar o agy para lane.
+# durável segue sendo o log fixado. 29(a) FEITA em 20/08: a lane declarada `agy-revisor`
+# (gen5-patches/capabilities) roda no runner sem patch e resolve o modelo como `pinned`;
+# este script continua como rota paralela (é ele que a convergence.md manda rodar) — se um
+# dia a rota passar a ser só o runner, a evidência nativa (`models:`) substitui esta.
 #
 # JSON: {parecer, evidencia, prova_leitura, degradado, log, vazio, citacoes_fonte} + espelho
 # pareceres/.roda-agy-c<k>.json. Exit: 0 = parecer válido · 5 = agy NÃO INSTALADO
