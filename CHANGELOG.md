@@ -14,6 +14,13 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento:
   Com isso o patch local do `review-lane-runner.cjs` foi aposentado; a flag antiga
   voltaria a depender dele. `convergence.md` + `workflow.md`; nota no `roda-agy.sh`.
 
+### Corrigido
+
+- **`registra-ciclo.sh`: 3 achados do próprio agy** (parecer da lane `agy-revisor` no
+  teste de 20/08, todos confirmados): JSON `.roda-*` de 0 bytes abortava o script sob
+  `set -e` (`-f` → `-s`); caminho do parecer passado ao `grep` sem `--`; frontmatter
+  CRLF fazia o `awk` do `models:` sair sem ler nada (`sub(/\r$/,"")`).
+
 ## [2.1.6] — 2026-08-20
 
 Adaptação ao GSD 1.11.0 (tarefa 29 e/f do go-and-do-evolucao). Nenhuma mudança de contrato

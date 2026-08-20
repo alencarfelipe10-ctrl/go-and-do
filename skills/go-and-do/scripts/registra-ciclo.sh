@@ -53,7 +53,7 @@ fi
 # modelo nativo do GSD (#2295): frontmatter `models:` do NN-REVIEWS.md, quando existe
 nativo_modelo() { # <slug-gsd> → valor ou vazio
   [ -f "$REV" ] || return 0
-  awk -v k="$1" 'NR==1&&$0!="---"{exit} NR>1&&$0=="---"{exit}
+  awk -v k="$1" '{sub(/\r$/,"")} NR==1&&$0!="---"{exit} NR>1&&$0=="---"{exit}
     /^models:/{m=1;next} /^[a-z_]+:/{m=0} m&&$1==k":"{sub(/^[^:]+: */,"");gsub(/"/,"");print;exit}' "$REV"
 }
 SEM_CITACAO=()
@@ -63,7 +63,7 @@ SEM_CITACAO=()
   echo
   for lane in codex agy; do
     J="$PAR/.roda-$lane-c$K.json"
-    [ -f "$J" ] || continue
+    [ -s "$J" ] || continue   # -s, não -f: JSON de 0 bytes quebraria o jq sob set -e
     if [ "$lane" = codex ]; then
       echo "- **codex**: modelo_efetivo=\`$(jq -r '.modelo_efetivo' "$J")\` · fresco=$(jq -r '.fresco' "$J") · vazio=$(jq -r '.vazio' "$J")"
       b=$(jq -r '.banner // ""' "$J"); [ -n "$b" ] && echo "  - codex_model_evidencia: \`$b\`"
@@ -81,7 +81,7 @@ SEM_CITACAO=()
     # aterramento (GSD #3194): JSON do roda-* (nossa régua) OU carimbo do runner no parecer
     P=$(jq -r '.parecer // ""' "$J")
     CITA=$(jq -r 'if has("citacoes_fonte") then .citacoes_fonte else "n/a" end' "$J")
-    if [ -s "$P" ] && grep -q "^> \\[reviewed-without-source-citations\\]" "$P"; then CITA=false; fi
+    if [ -s "$P" ] && grep -q "^> \\[reviewed-without-source-citations\\]" -- "$P"; then CITA=false; fi
     echo "  - ${lane}_citacoes_fonte: $CITA"
     if [ "$CITA" = false ]; then
       SEM_CITACAO+=("$lane")
