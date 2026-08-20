@@ -68,8 +68,15 @@ if [ -s "$OUT" ]; then
   fi
 fi
 
+# aterramento (#3194 upstream): sem citação arquivo:linha = revisou o texto colado,
+# não o repositório → não é falha (exit 0), é rebaixamento no consenso (sino).
+CITA=false; gad_tem_citacao_fonte "$OUT" && CITA=true
+SINOS=()
+[ "$VAZIO" = false ] && [ "$CITA" = false ] \
+  && SINOS+=("codex sem citação arquivo:linha ($GAD_CARIMBO_SEM_CITACAO) — parecer rebaixado a corroboração")
+SJ=$(printf '%s\n' ${SINOS[@]+"${SINOS[@]}"} | jq -R . | jq -cs 'map(select(length>0))')
 jq -cn --arg p "$OUT" --arg b "$BANNER" --arg m "$MODELO" \
-  --argjson f "$FRESCO" --argjson r "$RETRY" --argjson v "$VAZIO" \
-  '{parecer:$p, banner:$b, modelo_efetivo:$m, fresco:$f, retry:$r, vazio:$v}' | tee "$ESPELHO"
-gad_autoregistro "roda-codex.sh" 0 "c$K modelo=$MODELO fresco=$FRESCO vazio=$VAZIO" || true
+  --argjson f "$FRESCO" --argjson r "$RETRY" --argjson v "$VAZIO" --argjson c "$CITA" --argjson s "$SJ" \
+  '{parecer:$p, banner:$b, modelo_efetivo:$m, fresco:$f, retry:$r, vazio:$v, citacoes_fonte:$c, sinos:$s}' | tee "$ESPELHO"
+gad_autoregistro "roda-codex.sh" 0 "c$K modelo=$MODELO fresco=$FRESCO vazio=$VAZIO citacoes=$CITA" || true
 if [ "$VAZIO" = true ] || [ "$FRESCO" = false ]; then exit 6; fi

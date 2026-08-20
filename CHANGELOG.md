@@ -2,6 +2,33 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.1.6] — 2026-08-20
+
+Adaptação ao GSD 1.11.0 (tarefa 29 e/f do go-and-do-evolucao). Nenhuma mudança de contrato
+de roteamento; dois sinais novos nos JSONs e uma parada herdada nova reconhecida.
+
+### Adicionado
+
+- **Aterramento por citação (GSD #3194).** `gad_tem_citacao_fonte` no shim reproduz a
+  `SOURCE_CITATION_RE` do `review-lane-runner` upstream; `roda-codex.sh`/`roda-agy.sh`
+  devolvem `citacoes_fonte: true|false` (+ sino, nunca exit 6 — é rebaixamento, não
+  falha); `registra-ciclo.sh` grava o veredito por lane no apêndice do `NN-REVIEWS.md`,
+  reconhece o carimbo `[reviewed-without-source-citations]` do runner e devolve
+  `sem_citacao_fonte: [lanes]`. `convergence.md` e `intent-verifica.md`/`intent.md`
+  rebaixam a lane não-aterrada a corroboração (`pareceres_sem_citacao` no retorno do
+  verificador; `sem_citacao_fonte:` no frontmatter do INTENT-REVIEW).
+- **Modelo nativo do GSD (#2295).** `registra-ciclo.sh` lê `models:` do frontmatter do
+  `NN-REVIEWS.md` quando existe e o põe ao lado da nossa evidência; `unknown` vira sino
+  ("vale a evidência própria"). Avaliação registrada no cabeçalho do `roda-agy.sh`: a
+  evidência via `--log-file` CONTINUA necessária — o resolvedor nativo só roda dentro do
+  review-lane-runner, e nossas lanes rodam fora dele (reavaliar na 29a).
+- **`Gate: blocking-human` (GSD #3210).** `execute.md` 2b: precondição não atendida →
+  rota da ação humana (`done · incompleto`, precondição verbatim); verificação de pacote
+  → `needs_decision` irreversível. `workflow.md`: parada herdada listada; critério 6 da
+  Sub-rotina I (a triagem não carimba o que o executor se recusou a carimbar); janela de
+  silêncio trata como ação pendente, não pergunta; 2.4b ganha a rota (d) — varrer
+  `<precondition>` dos PLAN.md e antecipar as checáveis no `NN-ACAO-HUMANA.md`.
+
 ## [2.1.5] — 2026-08-11
 
 Só dado, sem código (PC-7): tabela de preços.

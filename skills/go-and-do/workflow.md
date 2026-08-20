@@ -152,7 +152,12 @@ muda o transporte.
 - **`gsd-execute-phase`** (o `--auto` da 3.3 não silencia estes): falha de teste de
   regressão · schema drift · conflito pós-merge · checkpoint `human-action` (auth/2FA/
   migrations que só o dono roda — nunca se automatizam; se ele defere, a 3.4 detecta a
-  execução incompleta e fecha pela Sub-rotina D em vez de deixar preso no prompt).
+  execução incompleta e fecha pela Sub-rotina D em vez de deixar preso no prompt) ·
+  **`Gate: blocking-human`** (GSD 1.11.0, #3210: `<precondition>` de task não atendida
+  — env var, passo de `user_setup`, artefato de fase anterior — ou verificação de pacote
+  antes de instalar). Gate duro por definição: nunca é carimbável; precondição → mesma
+  rota da ação humana (`done · incompleto` → 3.4 → Sub-rotina D); pacote →
+  `needs_decision` irreversível → gate duro da Sub-rotina I.
 
 Regra de ouro: stop de decisão de design/escopo ou portão de realidade (regressão/schema/auth)
 é legítimo — pausa, anota no banner, e o usuário decide. A Sub-rotina I formaliza a régua.
@@ -486,6 +491,10 @@ classifique:
    categoria.
 5. **Fail-closed existentes** — ameaça aberta, balde 2 persistente, balde 3, gaps, `blocked`,
    gate de contexto, bloqueio_sem_revisor: a triagem não afrouxa nenhum.
+6. **`blocking-human` herdado do GSD** (1.11.0, #3210) — o próprio `--auto` do GSD já se
+   recusa a aprová-lo; a triagem respeita a recusa (um orquestrador que carimba o que o
+   executor se recusou a carimbar anula a guarda uma camada acima). Precondição não
+   atendida é critério 1 (informação/ação externa); verificação de pacote é critério 3.
 
 **Auto-decisão — decide, registra e segue** quando NENHUM critério vale E há recomendada com
 convicção E o erro é barato de desfazer. Desempate: a opção **mais rigorosa** (quando o
@@ -506,7 +515,9 @@ o resumo e a auditoria releem).
 dentro dela não pendura pergunta de madrugada — feche com **parada graciosa** (Sub-rotina D,
 motivo `gate duro em janela de silêncio`), com a pergunta pendente (opções + recomendação) no
 handoff e no resumo parcial; a retomada re-apresenta. Não se aplica à auto-decisão (que nunca
-para) nem muda os fail-closed.
+para) nem muda os fail-closed. Um `blocking-human` de precondição na janela não é pergunta —
+é ação pendente: segue a rota 3.4 → Sub-rotina D com a precondição verbatim no handoff
+(`NN-ACAO-HUMANA.md` se houver passo a passo a dar).
 
 A transparência fecha o ciclo: o resumo executivo narra toda auto-decisão lendo o
 `NN-DECISOES.md` — a supervisão que era síncrona vira revisão assíncrona com rota de desfazer.
@@ -664,6 +675,11 @@ ele alegou.
   flipe o plano e **apague o arquivo** (o fato vira 1 linha no `NN-DECISOES.md`).
 - **(c) verificação de runtime** (`human-verify`) → deferida ao UAT (redundante com ele):
   flipe e o item entra na pauta da Etapa 5.
+- **(d) `<precondition>` antecipável** — além dos `autonomous: false`, varra os PLAN.md por
+  `<precondition>` (GSD 1.11.0: env var, passo de `user_setup`, artefato de fase anterior).
+  Precondição que você consegue checar AGORA e está falsa → é uma (b): entra no
+  `NN-ACAO-HUMANA.md` antes da execução, em vez de virar `blocking-human` no meio de uma
+  onda. Verdadeira ou incheckável → deixe (o executor checa na hora).
 Efeito: a rota inline da Etapa 3 vira exceção raríssima.
 
 </stage>
@@ -701,8 +717,8 @@ humanas MORREU aqui — o fecho 2.4b já resolveu; os planos chegam flipados.)
 - **Sobrou `autonomous: false` → inline** (`Skill gsd-execute-phase --auto --no-transition`
   na camada 0 — a interação humana é nativa aqui). `--auto` auto-aprova checkpoints de
   verificação e pega a 1ª opção nos de decisão; `--no-transition` impede o auto-avanço. ✋
-  `--auto` NÃO silencia regressão/schema/conflito/`human-action` (ver Paradas herdadas); se o
-  dono defere uma ação, a 3.4 fecha pela Sub-rotina D na volta.
+  `--auto` NÃO silencia regressão/schema/conflito/`human-action`/`blocking-human` (ver
+  Paradas herdadas); se o dono defere uma ação, a 3.4 fecha pela Sub-rotina D na volta.
 
 > ⚖️ Trade-off do `--auto` (consciente): decisões de arquitetura saem no automático (1ª
 > opção). Aceitável porque a skill manda toda "lógica" pro UAT e trata `human_needed`.

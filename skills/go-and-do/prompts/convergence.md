@@ -60,6 +60,16 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    `NAO-COBERTO` no resumo do ciclo, OU o resumo REDUZ a contagem vs o parecer — o
    script é piso, não teto (um HIGH real já sumiu de resumo de ciclo). Omissão
    recuperada entra em `incidentes:`.
+   **Aterramento e modelo (GSD 1.11.0 — #3194/#2295):** o JSON do `registra-ciclo.sh`
+   devolve `sem_citacao_fonte: [lanes]` — parecer sem UMA citação `arquivo:linha` (ou
+   carimbado `[reviewed-without-source-citations]` pelo runner) revisou o texto colado,
+   não o repositório: seus achados valem como **corroboração**, não sustentam ciclo novo
+   de replan sozinhos — só viram correção se você confirmar no bruto/código ou se o outro
+   revisor (aterrado) concordar. Anote a lane em `sinos`. O frontmatter `models:` que o
+   workflow hospedado escreve no `NN-REVIEWS.md` é informativo: como as lanes rodam pelos
+   roda-*.sh (fora do runner), ele vem `unknown`/ausente e a evidência de modelo que
+   conta é a dos JSONs (`banner`/`evidencia`) — não devolva `unknown` como "modelo
+   desconhecido" quando o espelho tem a prova.
 4. **Critério de materialidade (julgamento seu — não recicle por tooling):** achado que
    não toca requisito, critério de aceite, segurança ou código de produção (tooling de
    smoke, encanamento de teste) não sustenta ciclo novo de replan+re-review. Rota: fix

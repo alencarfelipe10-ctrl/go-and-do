@@ -45,7 +45,12 @@ trabalho do ciclo (marcadores `.done-c<C>-*`, tabela, vereditos) vivem em
    parecer — ele confere se cada citação `arquivo:linha` existe e devolve as quebradas.
    Ponteiro quebrado não mata o achado sozinho (o revisor pode ter errado a linha e
    acertado a tese) — mas rebaixa a confiança e obriga você a localizar a evidência
-   real antes de confirmar.
+   real antes de confirmar. **Sumário `OK 0/0` (nenhuma citação) = parecer não
+   aterrado** — mesma régua do carimbo `[reviewed-without-source-citations]` do GSD
+   1.11.0 (#3194): o revisor leu o texto colado, não o repositório. Não descarte (a tese
+   pode estar certa), mas TODO achado dessa lane só vira `confirmado` com evidência sua,
+   e a lane entra em `pareceres_sem_citacao` no retorno — quem te despachou rebaixa o
+   peso dela na triagem.
 4. **Verifique cada achado `novo`/`reaberto` contra o código/dados** (Read/Grep
    pontuais; nunca aceite sem conferir — em fase real o mesmo parecer acertou uma
    lacuna que 4 planos não viram E errou uma atribuição de dados). Vereditos:
@@ -79,6 +84,7 @@ achados_brutos: <n no(s) parecer(es), antes da fusão>
 achados_fundidos: <n após dedup entre revisores>
 convergencias: <n achados com fontes: [codex, agy]>
 ponteiros_quebrados: <n reportados pelo spot-check; 0 se nenhum>
+pareceres_sem_citacao: [<lanes cujo parecer não tem nenhuma citação arquivo:linha; [] se todas citam>]
 achados:
   - id: c<C>-<seq>
     alegacao: <1-2 linhas>

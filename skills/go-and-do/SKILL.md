@@ -158,7 +158,8 @@ UAT). See "Paradas herdadas" in workflow.md.
 
 **Human action vs. couldn't-verify (the two graceful hand-backs):** when `execute-phase` blocks on
 a `human-action` gate — a migration you must run (`npx supabase db push`), a login, a key to
-paste — and that work is deferred, the skill detects the incomplete execution on return (Etapa 3.4
+paste — or on a `blocking-human` gate (GSD 1.11.0: an unmet task `<precondition>` such as a
+missing env var or `user_setup` step; never auto-approved, not even by `--auto`) and that work is deferred, the skill detects the incomplete execution on return (Etapa 3.4
 checks for plans missing `SUMMARY.md`) and closes with a clean handoff via `gsd-pause-work`
 (Sub-rotina D), so you resolve the action and resume with `/go-and-do N`. The second hand-back is at
 the UAT: a **basket-3** scenario (login wall without a vault, 2FA, captcha, no browser) means the
@@ -211,7 +212,7 @@ back), and the recurring context gate (absolute token ceiling → checkpoint + p
 anti-false-ship floor: ship only when the UAT is objectively clean (no basket 2, no basket 3). Route
 every would-be `AskUserQuestion` — inherited stops included (ui-phase BLOCKED / revision stall;
 ai-integration framework-selector interview / validation; plan-phase coverage/split;
-execute-phase regression/schema/auth) — through the decision triage (Sub-rotina I): what the user
+execute-phase regression/schema/auth/`blocking-human`) — through the decision triage (Sub-rotina I): what the user
 would merely rubber-stamp is auto-decided and logged to `NN-DECISOES.md`; what is genuinely his
 (external info, scope/intent, irreversible beyond the PR, no confident recommendation) reaches him —
 or, in the night quiet window, becomes a graceful pause with the pending question in the handoff.

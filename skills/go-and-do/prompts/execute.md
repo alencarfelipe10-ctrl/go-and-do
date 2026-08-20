@@ -53,6 +53,21 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    relato passa por decisão (carimbo invertido), ou uma decisão legítima é re-disputada
    camada a camada (caso real, F19: ~1h e 3 commits re-provando uma decisão já tomada
    pelo dono).
+2b. **`Gate: blocking-human` — nunca auto-aprove (GSD 1.11.0, #3210).** O
+   `gsd-execute-phase` em `--auto` agora PARA, mesmo automático, quando um executor
+   devolve checkpoint com `**Gate:** blocking-human` (o workflow loga `⛔ blocking-human
+   gate — auto-mode suspended`). Duas origens, duas rotas:
+   - **`Blocked by: Precondition not met: <texto>`** — uma `<precondition>` da task
+     falhou (variável de ambiente ausente, passo de `user_setup` não feito, artefato de
+     fase anterior inexistente). É fato que só o dono estabelece → trate como
+     **ação humana** (item 3): `done · incompleto` com o texto da precondição verbatim
+     em `acao_humana_pendente`. Não responda "approved" nem contorne a precondição.
+   - **Verificação de pacote** (`Package verification required before install` /
+     `Package install failed — human verification required`) — confiança que um humano
+     precisa ver → `needs_decision` com `reversivel: nao` (força o gate duro da camada
+     0); a `recomendacao` pode ser "não instalar", nunca "aprovar sem olhar".
+   Em ambos, registre em `incidentes:` que o `--auto` foi suspenso por `blocking-human`
+   e em qual plano/task.
 3. **Ação humana ≠ decisão.** Um checkpoint `human-action` (rodar uma migration, login,
    2FA, colar uma chave) não se resolve com uma resposta em texto — não devolva
    `needs_decision` para ele. Termine o que for executável, e devolva `done` com

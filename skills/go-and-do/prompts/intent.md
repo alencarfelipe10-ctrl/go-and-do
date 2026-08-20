@@ -224,6 +224,11 @@ trabalho do ciclo vive em `.intent/`).
    devolveu o token exato na linha `prova_leitura:` → prova mecânica de leitura do
    disco. Não devolveu → o parecer conta como **corroboração**, não verificação
    independente: `agy_prova_leitura: ausente` no frontmatter + sino.
+   **Aterramento por citação (GSD 1.11.0, #3194):** lane devolvida pelo verificador em
+   `pareceres_sem_citacao` (nenhum `arquivo:linha` no parecer) recebe o MESMO
+   tratamento — corroboração, não verificação independente: `sem_citacao_fonte: [lanes]`
+   no frontmatter + sino; um achado só dela não sustenta pausa de negócio nem ciclo
+   novo sem evidência própria do verificador.
 
    **Falha de UM revisor** (indisponível, timeout, parecer vazio/ilegível) → siga com
    o outro, degradação em `sinos`. **Falha dos DOIS antes de qualquer ciclo completo**

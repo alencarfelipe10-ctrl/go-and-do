@@ -17,7 +17,13 @@
 # Provado na F22 (8/9 ciclos com nonce transcrito); a falha que detecta — parecer-
 # paráfrase sem leitura de disco — é indetectável por qualquer outro meio.
 #
-# JSON: {parecer, evidencia, prova_leitura, degradado, log, vazio} + espelho
+# Por que a evidência de modelo via --log-file CONTINUA necessária (avaliação 20/08,
+# tarefa 29e): o GSD 1.11.0 resolve o modelo do agy nativamente (#2295, lê o
+# transcript_full.jsonl) — mas só quando a lane roda pelo review-lane-runner. Aqui o agy é
+# invocado por ESTE script, fora do runner, logo `models:` nativo não nasce; a prova
+# durável segue sendo o log fixado. Reavaliar quando a 29(a) migrar o agy para lane.
+#
+# JSON: {parecer, evidencia, prova_leitura, degradado, log, vazio, citacoes_fonte} + espelho
 # pareceres/.roda-agy-c<k>.json. Exit: 0 = parecer válido · 5 = agy NÃO INSTALADO
 # (revisor_ausente) · 6 = rodou e FALHOU (stdout vazio, modelo errado = degradado,
 # ou parecer não-fresco) · 2 = uso.
@@ -94,10 +100,15 @@ PROVA_OK=ausente
 [ -s "$OUT" ] && grep -q "prova_leitura: *$NONCE" "$OUT" && PROVA_OK=ok
 [ "$PROVA_OK" = ausente ] && [ "$VAZIO" = false ] \
   && SINOS+=("agy sem prova de leitura (canário) — parecer ponderado como corroboração")
+# aterramento (#3194 upstream): sem citação arquivo:linha = revisou o texto colado,
+# não o repositório → não é falha (exit 0), é rebaixamento no consenso (sino).
+CITA=false; gad_tem_citacao_fonte "$OUT" && CITA=true
+[ "$VAZIO" = false ] && [ "$CITA" = false ] \
+  && SINOS+=("agy sem citação arquivo:linha ($GAD_CARIMBO_SEM_CITACAO) — parecer rebaixado a corroboração")
 
 SJ=$(printf '%s\n' ${SINOS[@]+"${SINOS[@]}"} | jq -R . | jq -cs 'map(select(length>0))')
 jq -cn --arg p "$OUT" --arg ev "$EVID" --arg pl "$PROVA_OK" --arg lg "$LOG" \
-  --argjson d "$DEGRADADO" --argjson v "$VAZIO" --argjson f "$FRESCO" --argjson s "$SJ" \
-  '{parecer:$p, evidencia:$ev, prova_leitura:$pl, degradado:$d, vazio:$v, fresco:$f, log:$lg, sinos:$s}' | tee "$ESPELHO"
-gad_autoregistro "roda-agy.sh" 0 "c$K vazio=$VAZIO degradado=$DEGRADADO prova=$PROVA_OK" || true
+  --argjson d "$DEGRADADO" --argjson v "$VAZIO" --argjson f "$FRESCO" --argjson s "$SJ" --argjson c "$CITA" \
+  '{parecer:$p, evidencia:$ev, prova_leitura:$pl, degradado:$d, vazio:$v, fresco:$f, log:$lg, citacoes_fonte:$c, sinos:$s}' | tee "$ESPELHO"
+gad_autoregistro "roda-agy.sh" 0 "c$K vazio=$VAZIO degradado=$DEGRADADO prova=$PROVA_OK citacoes=$CITA" || true
 if [ "$VAZIO" = true ] || [ "$DEGRADADO" = true ] || [ "$FRESCO" = false ]; then exit 6; fi

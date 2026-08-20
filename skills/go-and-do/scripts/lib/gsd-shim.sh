@@ -92,6 +92,17 @@ gad_json_out() {
   printf '%s\n' "$compact"
 }
 
+# Aterramento por citação (GSD 1.11.0, #3194): o runner upstream carimba
+# `[reviewed-without-source-citations]` todo parecer sem UMA citação `arquivo:linha` e
+# manda rebaixá-lo no consenso. Como nossas lanes rodam pelos roda-*.sh (fora do runner),
+# reproduzimos a MESMA regex (SOURCE_CITATION_RE do review-lane-runner.cjs) aqui.
+# Uso: gad_tem_citacao_fonte <parecer.md> → exit 0 = tem ≥1 citação · 1 = nenhuma.
+gad_tem_citacao_fonte() {
+  [ -s "${1:-}" ] || return 1
+  grep -qP '(?<![/:])(?:[^\s:]*[/\\][^\s:]*|[^\s:]*\.[A-Za-z0-9]{1,16}):[0-9]+' "$1"
+}
+GAD_CARIMBO_SEM_CITACAO='[reviewed-without-source-citations]'
+
 # Telemetria nunca derruba o caller (mesma política do próprio run-log.sh).
 gad_runlog() {
   bash "$GAD_SCRIPTS_DIR/run-log.sh" "$@" || true

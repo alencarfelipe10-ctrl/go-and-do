@@ -8,6 +8,11 @@
 #
 # Uso: registra-ciclo.sh <phase_dir> <NN> <ciclo>
 # Lê:  pareceres/.roda-codex-c<k>.json · pareceres/.roda-agy-c<k>.json (os que existirem)
+#      + o frontmatter `models:`/`model_sources:` do NN-REVIEWS.md, se o workflow do GSD
+#        o escreveu (1.11.0 #2295 — só nasce quando a lane rodou pelo review-lane-runner;
+#        nas nossas lanes via roda-*.sh ele vem `unknown` ou ausente, e a evidência é a nossa)
+#      + aterramento por citação (1.11.0 #3194): `citacoes_fonte` do JSON ou o carimbo
+#        `[reviewed-without-source-citations]` no topo do parecer (quando o runner rodou)
 # Grava: apêndice em <phase_dir>/NN-REVIEWS.md · pareceres/.tabela-c<k>.txt
 # Exit 0 sempre que registrar; 2 = uso inválido.
 
@@ -45,6 +50,13 @@ if [ ${#PARECERES[@]} -eq 0 ]; then
   echo "AVISO: nenhum parecer legível para o ciclo $K em $PAR — contagem de brutos SEM MEDIÇÃO (não é zero)" >&2
 fi
 
+# modelo nativo do GSD (#2295): frontmatter `models:` do NN-REVIEWS.md, quando existe
+nativo_modelo() { # <slug-gsd> → valor ou vazio
+  [ -f "$REV" ] || return 0
+  awk -v k="$1" 'NR==1&&$0!="---"{exit} NR>1&&$0=="---"{exit}
+    /^models:/{m=1;next} /^[a-z_]+:/{m=0} m&&$1==k":"{sub(/^[^:]+: */,"");gsub(/"/,"");print;exit}' "$REV"
+}
+SEM_CITACAO=()
 {
   echo
   echo "## Ciclo $K — registro mecânico (gad, $(date -Is))"
@@ -55,11 +67,27 @@ fi
     if [ "$lane" = codex ]; then
       echo "- **codex**: modelo_efetivo=\`$(jq -r '.modelo_efetivo' "$J")\` · fresco=$(jq -r '.fresco' "$J") · vazio=$(jq -r '.vazio' "$J")"
       b=$(jq -r '.banner // ""' "$J"); [ -n "$b" ] && echo "  - codex_model_evidencia: \`$b\`"
+      NAT=$(nativo_modelo codex)
     else
       echo "- **agy**: prova_leitura=$(jq -r '.prova_leitura' "$J") · degradado=$(jq -r '.degradado' "$J") · vazio=$(jq -r '.vazio' "$J")"
       e=$(jq -r '.evidencia // ""' "$J"); [ -n "$e" ] && echo "  - agy_model_evidencia: \`$e\`"
-      jq -r '.sinos[]? | "  - 🔔 " + .' "$J"
+      NAT=$(nativo_modelo antigravity)
     fi
+    # modelo nativo (GSD #2295) × nossa evidência — o nativo só é informativo fora do runner
+    if [ -n "$NAT" ]; then
+      echo "  - ${lane}_modelo_nativo_gsd: \`$NAT\` (frontmatter models:, #2295)"
+      [ "$NAT" = unknown ] && echo "  - 🔔 GSD não resolveu o modelo do $lane (unknown) — vale a evidência própria acima"
+    fi
+    # aterramento (GSD #3194): JSON do roda-* (nossa régua) OU carimbo do runner no parecer
+    P=$(jq -r '.parecer // ""' "$J")
+    CITA=$(jq -r 'if has("citacoes_fonte") then .citacoes_fonte else "n/a" end' "$J")
+    if [ -s "$P" ] && grep -q "^> \\[reviewed-without-source-citations\\]" "$P"; then CITA=false; fi
+    echo "  - ${lane}_citacoes_fonte: $CITA"
+    if [ "$CITA" = false ]; then
+      SEM_CITACAO+=("$lane")
+      echo "  - ⚠️ [reviewed-without-source-citations] — revisou o texto colado, não o repositório: achados deste parecer são CORROBORAÇÃO, não sustentam ciclo novo sozinhos"
+    fi
+    jq -r '.sinos[]? | "  - 🔔 " + .' "$J"
   done
   if [ ${#PARECERES[@]} -eq 0 ]; then
     echo "- brutos na tabela do ciclo: **SEM MEDIÇÃO** (nenhum parecer legível — guarda não conta o que não leu)"
@@ -73,5 +101,6 @@ if [ ${#PARECERES[@]} -eq 0 ]; then
 else
   gad_autoregistro "registra-ciclo.sh" 0 "c$K registrado ($BRUTOS brutos)" || true
 fi
-gad_json_out registra-ciclo "$(jq -cn --arg r "$REV" --arg t "$TABELA" --argjson b "$BRUTOS" \
-  '{reviews:$r, tabela:$t, brutos:$b}')"
+SC=$(printf '%s\n' ${SEM_CITACAO[@]+"${SEM_CITACAO[@]}"} | jq -R . | jq -cs 'map(select(length>0))')
+gad_json_out registra-ciclo "$(jq -cn --arg r "$REV" --arg t "$TABELA" --argjson b "$BRUTOS" --argjson sc "$SC" \
+  '{reviews:$r, tabela:$t, brutos:$b, sem_citacao_fonte:$sc}')"
