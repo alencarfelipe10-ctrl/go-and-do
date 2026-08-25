@@ -121,6 +121,12 @@ despacho — decisões travadas ali não são re-perguntadas nem contrariadas no
 - `estado: done` com `chain_flag_zerada: nao` → re-rode o `setup-intencao.sh` (a
   higiene é idempotente) e confira `chain_flag_zerada: zerada` antes de seguir.
 - `estado: pausa` → siga o `<business_pause>`.
+- `estado: falha` → **parada disclosed, sem pergunta ao dono**: a guarda estrutural do
+  discuss rejeitou o CONTEXT (corrupção determinística — não é juízo de qualidade). Não
+  despache a revisão adversarial nem o plan-phase; devolva à camada 0 `estado: blocked`
+  com o `motivo:` do filho e o caminho do `NN-CONTEXT.rejected.md` no relatório. O
+  checkpoint foi preservado — a retomada é `gsd-discuss-phase N --auto` de novo após o
+  conserto do renderer/guarda, nunca edição manual do `.rejected.md`.
 </discuss>
 
 <adversarial_review>

@@ -2,6 +2,25 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.1.8] — 2026-08-25
+
+### Adicionado
+
+- **`estado: falha` no contrato do `gad-discuss`** (`prompts/intent-discuss.md`): quando a
+  guarda estrutural do discuss-phase forkado (`context-guard.sh`, gen5-patches tarefa 3b)
+  rejeita o CONTEXT 2× por corrupção determinística, o filho devolve `falha` com o `motivo:`
+  literal e o caminho do `NN-CONTEXT.rejected.md`. `prompts/intent.md` ganha o branch:
+  parada disclosed sem pergunta ao dono, sem revisão adversarial nem plan-phase, `blocked`
+  para a camada 0. Sino deixou de ser a única barreira — sino não é controle de fluxo.
+
+### Alterado
+
+- **Marcas `[auto]`/`[pre-spec]` viram campo `origin` do checkpoint.** O discuss forkado
+  persiste cada decisão via `checkpoint-write.py add-decision --origin auto|pre-spec` e o
+  renderizador emite `- **D-NN [origin, R-n]:**` no CONTEXT (com a âncora ao requisito). O
+  prompt do filho instrui o campo, não a prosa. Nota: `--auto` puro não lê mais `chain.md`
+  nem encadeia — o passo 4 (zerar a flag) continua como defesa em profundidade.
+
 ## [2.1.7] — 2026-08-20
 
 ### Alterado

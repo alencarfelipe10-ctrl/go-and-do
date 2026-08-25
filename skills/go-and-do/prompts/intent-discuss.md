@@ -13,12 +13,18 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
 1b. **PRE-SPEC (insumo pré-travado).** Se o despacho trouxe `pre_spec: <caminho>`,
    `Read` o arquivo INTEIRO antes de invocar o workflow. Decisões registradas ali são
    **travadas pelo usuário**: gray area que o PRE-SPEC já responde não é re-decidida —
-   adote a resposta dele com a marca `[pre-spec]` (em vez de `[auto]`) no CONTEXT.
+   adote a resposta dele e persista-a com `--origin pre-spec` (em vez de `--origin auto`)
+   na chamada do `checkpoint-write.py add-decision`; o renderizador emite a marca
+   `[pre-spec, R-n]` no bullet do CONTEXT (a marca em prosa não existe mais — o campo
+   `origin` do checkpoint é a fonte, e a âncora `R-n` vem junto).
    Conflito irreconciliável entre PRE-SPEC e SPEC → sino em `.sinos-discuss.txt`,
    nunca resolução silenciosa.
 2. Invoque `Skill` → `gsd-discuss-phase` com args `N --auto`. Ele carrega o SPEC.md,
-   seleciona todas as gray areas, escolhe a opção recomendada em cada decisão (logando
-   `[auto]` no CONTEXT.md) e escreve+commita o `NN-CONTEXT.md` em passe único.
+   seleciona todas as gray areas ancoradas em R-n, escolhe a opção recomendada em cada
+   decisão (persistida com `--origin auto` → bullet `- **D-NN [auto, R-n]:**` no CONTEXT),
+   renderiza o CONTEXT por script, passa pela guarda estrutural e commita em 1 commit
+   (CONTEXT + DECISIONS-INDEX + for-humans + STATE). Em `--auto` o workflow **não** lê
+   `modes/chain.md` (fork 3b) — o passo 4 abaixo continua como defesa em profundidade.
 3. **Fronteira de conteúdo (anti-duplicação):** decisão, requisito e critério moram no
    SPEC — o CONTEXT **referencia por ponteiro** (`NN-SPEC.md §seção`), nunca copia o
    parágrafo. O CONTEXT carrega só o que é dele: o *como* (abordagens escolhidas,
@@ -45,11 +51,21 @@ Decisão que as regras do workflow mandam levar ao usuário → NÃO contorne co
 devolva `estado: pausa` com a pergunta mastigada. Antes de devolver, execute o passo 4
 mesmo assim (a flag não pode ficar armada no disco).
 
+## Falha (guarda estrutural)
+
+Se o workflow terminar com `[guard] CONTEXT rejected: …` (a guarda `context-guard.sh`
+falhou 2× por corrupção estrutural — tag ausente/desbalanceada, parser `could-not-parse`),
+ele **não commita**, preserva o checkpoint e deixa `NN-CONTEXT.rejected.md`. Não tente
+"consertar na mão" o arquivo rejeitado: devolva `estado: falha` com o `motivo:` técnico
+literal da guarda e o caminho do `.rejected.md`. Execute o passo 4 mesmo assim. Sino não é
+controle de fluxo — só este estado para o pai.
+
 ## Retorno (obrigatório, sem prosa antes ou depois)
 
 ```
-estado: done | pausa
-context: <caminho absoluto do NN-CONTEXT.md, ou ausente se pausa antes de nascer>
+estado: done | pausa | falha
+context: <caminho absoluto do NN-CONTEXT.md, ou ausente se pausa/falha antes de nascer>
+motivo: <só no estado falha — as linhas [guard] FAIL literais + caminho do NN-CONTEXT.rejected.md>
 chain_flag_zerada: sim | nao — <porquê>
 dedup_aplicada: <n parágrafos substituídos por ponteiro; 0 se o passe já saiu limpo>
 sinos: [<um item por linha; ausente se vazio — grave também em <phase_dir>/.intent/.sinos-discuss.txt (1 por linha): o briefing do revisor lê do arquivo, não do retorno>]
