@@ -19,6 +19,10 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    `origin` do checkpoint é a fonte, e a âncora `R-n` vem junto).
    Conflito irreconciliável entre PRE-SPEC e SPEC → sino em `.sinos-discuss.txt`,
    nunca resolução silenciosa.
+   ⚠️ **`--chosen-option` é 0-indexado** (`context-render.py`/`checkpoint-write.py` do
+   fork): a 1ª opção listada é `0`, a 2ª é `1`. Na F24.3 o agente passou `1` querendo a
+   1ª e marcou a opção errada nas 12 decisões (autocorrigido, 6 turnos perdidos). Conte a
+   partir de zero.
 2. Invoque `Skill` → `gsd-discuss-phase` com args `N --auto`. Ele carrega o SPEC.md,
    seleciona todas as gray areas ancoradas em R-n, escolhe a opção recomendada em cada
    decisão (persistida com `--origin auto` → bullet `- **D-NN [auto, R-n]:**` no CONTEXT),

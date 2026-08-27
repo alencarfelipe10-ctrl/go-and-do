@@ -73,7 +73,8 @@ para mostrar.
 <transparencia>
 **BLOCO DE TRANSPARÊNCIA (modo `final`, SEMPRE no topo, antes de tudo):**
 - **`ship` + `itens_assumidos`** → abra com:
-  > **⚠️ Shipei assumindo estes pontos — confira antes de dar merge:**
+  > **⚠️ Shipei assumindo estes pontos — confira (o merge é automático nesta rota; se
+  > discordar de algum, o caminho de desfazer está na seção "Desfecho do ship"):**
   > [cada item balde 4: o que é, e por que depende do olho do dono]
   >
   > O sistema passou em tudo que dá pra verificar objetivamente. Estes pontos são de

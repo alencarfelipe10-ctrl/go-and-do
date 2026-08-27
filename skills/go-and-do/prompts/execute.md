@@ -94,7 +94,7 @@ camada 0.
 Agentes aninhados (camada 2): você **não recebe notificações** de trabalho em
 background — nunca fique "aguardando" um retorno que não vai chegar. Precisa de
 background (trabalho >10min, o teto real do `timeout` da tool)? Só com waiter de
-disco: o trabalho escreve um arquivo combinado e a espera é um único
+disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`); nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia). Teto = duração esperada + 5 min; estourou → decida pelo disco na hora e a espera é um único
 `timeout <Ns> bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` — nunca polling
 picado, nunca espera de notificação. Depois decida pelo disco: `SUMMARY.md`
 esperado existe → siga; não existe → trate como falha do passo (não como sucesso).
@@ -238,7 +238,7 @@ planos: <com SUMMARY>/<total>
 verification: passed | human_needed | gaps_found | ausente
 acao_humana_pendente: <só no incompleto: a ação exata + planos travados; senão omita>
 human_needed_itens: [<1 linha por item, se verification=human_needed; senão omita>]
-incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido — ex.: "despacho serial no lugar de waves paralelas"; sem desvio, escreva literalmente: nenhum>]
+incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido — ex.: "despacho serial no lugar de waves paralelas"; UM item por incidente (a camada 0 grava 1 evento por item — não agregue 9 numa frase); sem desvio, escreva literalmente: nenhum>]
 sinos: [<ex.: "regressão consertada no plano 03-04 durante a onda 2"; ausente se vazio>]
 ```
 

@@ -82,7 +82,9 @@ subagente sobe como `needs_decision` e passa pela **triagem de decisão** (Sub-r
 ligada): o que o usuário só carimbaria — condução do pipeline, decisão reversível com
 recomendação clara — a camada 0 decide sozinha, registra no `NN-DECISOES.md` (com rota de
 desfazer) e anuncia numa linha; o que é da alçada do dono — informação que só ele tem,
-escopo/intenção, irreversível além do PR, ou qualquer pergunta sem recomendada — vira
+escopo/intenção, irreversível além do PR (o **merge** do PR — inclusive o automático da rota
+clean-room — é parte do trilho sancionado, não gate: decisão do dono 27/08), ou qualquer
+pergunta sem recomendada — vira
 `AskUserQuestion` e **continua o mesmo subagente** com a resposta — nada re-executa. Na janela
 de silêncio (23h–07h locais) um gate duro vira parada graciosa com a pergunta no handoff, em
 vez de prompt pendurado até de manhã. A varredura desce; a decisão sobe
@@ -214,7 +216,8 @@ every would-be `AskUserQuestion` — inherited stops included (ui-phase BLOCKED 
 ai-integration framework-selector interview / validation; plan-phase coverage/split;
 execute-phase regression/schema/auth/`blocking-human`) — through the decision triage (Sub-rotina I): what the user
 would merely rubber-stamp is auto-decided and logged to `NN-DECISOES.md`; what is genuinely his
-(external info, scope/intent, irreversible beyond the PR, no confident recommendation) reaches him —
+(external info, scope/intent, irreversible beyond the PR — merging the PR itself, including the
+clean-room auto-merge, is on the sanctioned track and never asks; no confident recommendation) reaches him —
 or, in the night quiet window, becomes a graceful pause with the pending question in the handoff.
 Never skip a stop point to "keep going", and never auto-decide across a hard-gate criterion. When
 execution ends incomplete because

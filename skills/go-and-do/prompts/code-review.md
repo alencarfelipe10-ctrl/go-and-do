@@ -74,7 +74,9 @@ retomada antes de te despachar — não re-cheque. Scripts em
    - não confirmado → apêndice "descartados (codex)" com a razão, nunca silencioso;
    - reconte o frontmatter (`critical:`/`warning:`/`total:`) — fixer e cancela do 4.A
      consomem 1:1 sem saber quem achou. Criticals novos do Codex → mais uma passada do
-     fixer neles (mesmo loop).
+     fixer neles (mesmo loop). Timestamps do frontmatter (`reviewed:`, `fixed_at:`) são
+     `date -Is` REAL do momento — nunca placeholder/exemplo (F24.3: o REVIEW.md nasceu
+     com datas de modelo e foi corrigido à mão).
    Sem loop de negociação: no código o árbitro é o repo (confirma ou descarta por
    evidência).
 2c. *(Experimento 4.C-c, a validar em fase real:)* quando o model profile do GSD
@@ -104,7 +106,7 @@ com a resposta. Você não mexe em TaskList nem em telemetria — são da camada
 Agentes aninhados (camada 2): você **não recebe notificações** de trabalho em
 background — nunca fique "aguardando" um retorno que não vai chegar. Precisa de
 background (trabalho >10min, o teto real do `timeout` da tool)? Só com waiter de
-disco: o trabalho escreve um arquivo combinado e a espera é um único
+disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`); nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia). Teto = duração esperada + 5 min; estourou → decida pelo disco na hora e a espera é um único
 `timeout <Ns> bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` — nunca polling
 picado, nunca espera de notificação. Depois decida pelo disco: o `NN-REVIEW.md`
 existe e está completo → siga; não existe → trate como falha do passo (não como

@@ -2,6 +2,86 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.1.9] — 2026-08-27
+
+Pacote da auditoria de fecho da F24.3 (grupo-inspired, 2 sessões, 26/08 —
+`gsd-optimize/go-and-do-evolucao/auditorias/260826-inspired-f24.3-fecho.md`, tarefa 34).
+Treze correções aprovadas pelo dono em 27/08; a 34(e) (regra do conserto pós-gate) ficou de
+fora por decisão dele — o caso foi pontual, fica em vigilância.
+
+### Adicionado
+
+- **`scripts/reconcilia-docs.sh`** — reconcilia os espelhos de estado depois do ship
+  (tarefa 32e, 3ª reincidência F24→F24.3): STATE.md `executing → between_phases` (+
+  `stopped_at`, progresso incremental do milestone), checkbox `[x]` da fase no ROADMAP.md,
+  `NN-REVIEW.md` `status: clean` quando o último `REVIEW.iter<k>.md` está clean, frontmatter
+  do `NN-REVIEWS.md` derivado do `NN-CONVERGENCE.md`. Idempotente, best-effort (`pendentes`
+  no JSON). Roda na 6.5 antes da cancela, nas duas rotas — a rota B (clean-room) não roda o
+  gsd-ship e a rota A só toca 2 campos do STATE.md. Validado contra a cópia pré-reconciliação
+  da F24.3 (mesmo resultado da reconciliação manual: 8/10 fases, 59/59 planos, 80%).
+- **`confere-etapa.sh 6`**: dois asserts novos — `ac_parcial_x_verification` (AC marcado
+  PARCIAL/bloqueador em algum SUMMARY com VERIFICATION `passed`; falha 5 da F24.3, em que a
+  promoção precedeu a medição do AC em 47 min) e `state_reconciliado` (STATE.md ainda
+  `executing` para a fase = reconciliação não rodou). Dry-run contra a F24.3 real reproduz
+  a falha 5.
+- **`run-log.sh`**: (a) janela órfã fechada automaticamente é **medida** pelo
+  `mede-tokens.py` (do checkpoint até agora) — a construção da S2 da F24.3 (7,05M
+  tokens_reais) saiu sem custo e o "end corretivo" à mão gravou 251.511 (contexto da camada
+  0) como custo; (b) `end` da etapa 5 com `veredito=pass` é **recusado** enquanto o
+  `NN-UAT.md` tiver cenário `[pending]`/`blocked`; (c) 2º `end` da mesma etapa na mesma
+  sessão declara `substitui:<seq>` (o UAT da F24.3 foi somado em dobro: 504k vs 260k);
+  (d) o detector de `compact` só compara checkpoints (o 251.511 de um `end` gerou compact
+  falso). Selftest +3 casos (31/31).
+- **`registra-ciclo.sh <pd> <NN> <k> [intencao|convergencia]`** — 4º argumento escolhe a
+  família de pareceres (na F24.3 o c1 da convergência contou 10 brutos onde eram 2, por
+  colisão com o c1 da intenção); sem o argumento, compat + aviso quando as duas existem.
+  `convergence.md` passa `convergencia`.
+- **`confere-etapa.sh`**: o pass que destrava um fail grava evento `script` (`exit=0`, "pass
+  pós-fail") — só a reprovação aparecia no run-log (F24.3 4.4).
+
+### Alterado
+
+- **Merge automático é rota normal** (decisão do dono 27/08: a skill automatiza de ponta a
+  ponta; ele não revisa PR e confia nas etapas). `SKILL.md`, `workflow.md` (critério 3 da
+  Sub-rotina I, 6.4-SHIP rota B, 6.5): o merge — inclusive `ship.py --merge` do clean-room —
+  está no trilho sancionado e não pergunta; o que a rota DEVE é o aviso (banner com `PR #N —
+  mergeado`, 6.4c). `resumo.md`: "confira antes de dar merge" → "o merge é automático nesta
+  rota; o desfazer está no Desfecho do ship".
+- **Waiter em disco** (8 prompts: `execute`, `secure`, `plan`, `validate`, `code-review`,
+  `close`, `eval-review`, `convergence`): o marcador esperado é criado pelo **próprio comando
+  de fundo** (`( … ; touch <arq> ) &`); nunca esperar por um arquivo que "o harness" deveria
+  criar (F24.3 4.4: ~40 min esperando um `.done` que ninguém escrevia); teto = duração
+  esperada + 5 min, estourou → decide pelo disco. *(Diferente do que o relatório de 27/08
+  sugeriu — "o harness avisa" — porque um host de camada 1 NÃO recebe notificação de
+  background; o waiter continua sendo o único mecanismo, o bug era o contrato do arquivo.)*
+- **`hooks/gad-lifecycle.sh`**: semântica do campo `camada` = camada do agente DESPACHADO
+  (= `spawnDepth`: filho da camada 0 → 1, neto → 2). Até a 2.1.8 era "camada de origem"
+  (spawnDepth−1) e nunca chegava a 2 (tarefa 34d). Despacho `general-purpose` sem `model` e
+  sem def grava o modelo do transcript principal + `modelo_herdado:true` em vez de campo
+  ausente (34j — 8/42 despachos cegos na F24.3).
+- **`workflow.md`** Sub-rotina G: proibido `end` corretivo à mão com número do harness;
+  caminho certo = `mede-tokens.py` na janela. Contrato de retorno: **um evento `incidente`
+  por item** (F24.3: 1 evento para 9 incidentes, 5 sem registro). `execute.md`: um item por
+  incidente na lista.
+- **`plan.md`**: critério do pattern-mapper lê os artefatos que LISTAM arquivos (SPEC/RESEARCH/
+  PLAN), não uma impressão do CONTEXT (F24.3: mapper suprimido com o plano 02 criando
+  arquivo novo); todo `skip` leva o motivo no 10º argumento do `run-log.sh` (o campo já
+  existia; o gad-plan não usava).
+- **`close.md`** passo 0: commit de código depois do `verified:` do VERIFICATION → suíte
+  completa no HEAD antes da promoção `human_needed → passed` (`EXEC-NN-SUITE-HEAD-FINAL`
+  no DECISOES); AC parcial em SUMMARY não promove.
+- **`intent-discuss.md`**: `--chosen-option` é 0-indexado (12 decisões marcadas erradas na
+  F24.3, autocorrigidas em 6 turnos). **`code-review.md`**: timestamps do frontmatter são
+  `date -Is` real, nunca placeholder.
+
+### Corrigido
+
+- **`roda-codex.sh`**: o retry (gpt-5.6-terra) sobrescrevia um parecer VÁLIDO do gpt-5.6-sol
+  quando o stderr acusava "at capacity" mas o parecer saía — agora só há retry com parecer
+  vazio, e o stderr do 1º modelo fica em `-sol.err`. E `K` não-numérico (`review`, modo
+  code-review) abortava o script sob `set -u` em `$((K-1))` — "review: variável não
+  associada" (F24.3 4.1, parecer órfão sem `.json`).
+
 ## [2.1.8] — 2026-08-25
 
 ### Adicionado

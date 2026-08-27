@@ -128,9 +128,21 @@ if [ "$1" = "--selftest" ]; then
   grep -q '"etapa":"5 uat".*"veredito":"pass"' "$F" \
     && ok "gate-dente: lock removido libera o end" || bad "gate-dente: lock removido libera o end"
 
+  # v2.1.9: UAT pendente recusa end pass; 2º end da mesma etapa declara `substitui`
+  printf 'scenarios:\n  - id: 1\n    result: pass\n  - id: 3\n    result: [pending]\n' > "$D/99-UAT.md"
+  out=$(bash "$SELF" "$D" 99 end "5 uat" --kv veredito=pass 2>/dev/null)
+  echo "$out" | grep -q "UAT-PENDENTE" && ok "uat: end pass recusado com cenário pendente" || bad "uat: end pass recusado com cenário pendente"
+  sed -i 's/\[pending\]/pass/' "$D/99-UAT.md"
+  bash "$SELF" "$D" 99 end "5 uat" --kv veredito=pass >/dev/null
+  tail -n1 "$F" | grep -q '"substitui":[0-9]' && ok "2º end da mesma etapa declara substitui" || bad "2º end da mesma etapa declara substitui"
+  rm -f "$D/99-UAT.md"
+
+  # v2.1.9: um end com `tokens` posicional (número do harness) NÃO alimenta o detector
+  bash "$SELF" "$D" 99 end "3 construcao" 251511 >/dev/null
   out=$(bash "$SELF" "$D" 99 checkpoint "3 construcao" 100000 25 "" 400000)
   echo "$out" | grep -q "compact-detectado" && grep -q '"evento":"compact"' "$F" \
     && ok "detector de compact" || bad "detector de compact"
+  grep -q 'queda 251511' "$F" && bad "detector de compact ignora tokens de end" || ok "detector de compact ignora tokens de end"
 
   bash "$SELF" "$D" 99 end '3 construcao (camada 2 retomada — plano 03)' "" "" 5555 >/dev/null
   grep -q '"parent_etapa":"3"' "$F" && ok "parent_etapa no end órfão" || bad "parent_etapa no end órfão"
@@ -403,6 +415,25 @@ fi
     fi
   fi
 
+  # UAT (v2.1.9, F24.3 falha 6): `end` da etapa 5 com veredito=pass enquanto o NN-UAT.md
+  # ainda tem cenário [pending]/blocked é RECUSADO (pendência bloqueia o ship — o 1º end da
+  # F24.3 saiu pass com o cenário 3 pendente e a etapa foi somada em dobro). E um 2º `end`
+  # da MESMA etapa na MESMA sessão declara `substitui:<seq>` — quem soma (audit-gad,
+  # dashboard) conta só o último; o 1º vira histórico, não custo.
+  if [ "$evento" = "end" ]; then
+    _id="${etapa%% *}"
+    _pass=0; for _kv in ${kvs[@]+"${kvs[@]}"}; do [ "$_kv" = "veredito=pass" ] && _pass=1; done
+    if [ "$_id" = "5" ] && [ "$_pass" = 1 ] && [ -f "$dir/$nn-UAT.md" ] \
+       && grep -qE 'result: *(\[pending\]|blocked|pending)' "$dir/$nn-UAT.md"; then
+      echo "UAT-PENDENTE: end da etapa 5 com veredito=pass RECUSADO — o $nn-UAT.md ainda tem cenário [pending]/blocked. Resolva o cenário (ou grave o end sem veredito=pass) e re-rode."
+      exit 0
+    fi
+    _prev_end=$(grep "\"sessao\":\"$sess\"" "$f" 2>/dev/null | grep '"evento":"end"' \
+                | grep -F "\"etapa\":\"$etapa\"" | grep -v '"auto_fechado":true' | tail -n1 \
+                | sed -n 's/.*"seq":\([0-9]*\).*/\1/p')
+    case "$_prev_end" in (''|*[!0-9]*) ;; (*) kvs+=("substitui=$_prev_end") ;; esac
+  fi
+
   # O campo autodeclarado morreu (G.1-d): o 9º posicional é aceito e descartado.
   if [ -n "$c2" ]; then
     echo "aviso: tokens_camada2 morreu no esquema major — valor descartado; tokens reais agora vêm do mede-tokens.py (--tokens-reais/--custo no end da etapa)"
@@ -427,10 +458,30 @@ fi
       closed=$(tail -n +"$((ln+1))" "$f" | grep "\"sessao\":\"$sess\"" | grep -c '"evento":"\(end\|skip\|stop\)"')
       if [ "$closed" -eq 0 ] 2>/dev/null; then
         prev_etapa=$(sed -n "${ln}p" "$f" | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
-        _linha_auto="{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$sess\",\"evento\":\"end\",\"etapa\":\"$prev_etapa\",\"auto_fechado\":true}"
+        prev_ts=$(sed -n "${ln}p" "$f" | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')
+        # v2.1.9 (F24.3 falha 2): a janela órfã é MEDIDA pelo mede-tokens.py (do checkpoint
+        # até agora) em vez de nascer sem tokens — a construção da S2 (7,05M tokens_reais)
+        # saiu do run-log sem custo e o "end corretivo" à mão gravou o contexto da camada 0
+        # (251.511) como se fosse custo. Falhou a medição → campo `medicao` com o motivo.
+        _med='{"status":"sem_medicao","reason":"sem ts do checkpoint"}'
+        _mt="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/mede-tokens.py"
+        if [ -n "$prev_ts" ] && [ -f "$_mt" ] && [ -z "${RUNLOG_SEM_MEDICAO:-}" ]; then
+          _med=$(python3 "$_mt" --sessao "${CLAUDE_CODE_SESSION_ID}" --desde "$prev_ts" \
+                 --ate "$ts" --sem-espelho 2>/dev/null || echo '{"status":"sem_medicao","reason":"mede-tokens falhou"}')
+        fi
+        _linha_auto="{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$sess\",\"evento\":\"end\",\"etapa\":\"$prev_etapa\",\"auto_fechado\":true"
+        if [ "$(printf '%s' "$_med" | sed -n 's/.*"status": *"\([a-z_]*\)".*/\1/p' | head -1)" = ok ]; then
+          _tr=$(printf '%s' "$_med" | python3 -c 'import json,sys; t=json.load(sys.stdin)["total"]; print(t["input_tokens"]+t["output_tokens"]+t["cache_creation_tokens"]); ' 2>/dev/null)
+          _cu=$(printf '%s' "$_med" | python3 -c 'import json,sys; print(json.load(sys.stdin)["total"].get("custo_usd",0))' 2>/dev/null)
+          case "$_tr" in (''|*[!0-9]*) ;; (*) _linha_auto="$_linha_auto,\"tokens_reais\":$_tr,\"custo_usd\":${_cu:-0},\"medicao\":\"auto (mede-tokens.py, janela do checkpoint)\"" ;; esac
+        else
+          _rz=$(printf '%s' "$_med" | sed -n 's/.*"reason": *"\([^"]*\)".*/\1/p' | head -1 | tr -d '\\"')
+          _linha_auto="$_linha_auto,\"medicao\":\"indisponivel: ${_rz:-desconhecido}\""
+        fi
+        _linha_auto="$_linha_auto}"
         printf '%s\n' "$_linha_auto" >> "$f"
         espelha "$dir" "$nn" "$_linha_auto"
-        echo "janela-fechada-automaticamente: etapa \"$prev_etapa\" estava sem end/skip — end sintético gravado; se houve subagente, o custo dele NÃO foi registrado (anote se souber)"
+        echo "janela-fechada-automaticamente: etapa \"$prev_etapa\" estava sem end/skip — end sintético gravado COM medição do mede-tokens.py quando disponível; NÃO grave um 'end corretivo' com número do harness (contexto ≠ custo)"
         seq=$((seq+1))
       fi
     fi
@@ -444,7 +495,10 @@ fi
     case "$tokens" in
       (''|*[!0-9]*|0) ;;
       (*)
-        prev=$(grep "\"sessao\":\"$sess\"" "$f" 2>/dev/null \
+        # só CHECKPOINTS entram na comparação (v2.1.9): um `end`/`stop` com `tokens`
+        # posicional (F24.3: end corretivo com 251.511 = contexto, não custo) gerava
+        # compact falso — fotografia compara com fotografia
+        prev=$(grep "\"sessao\":\"$sess\"" "$f" 2>/dev/null | grep '"evento":"checkpoint"' \
                | sed -n 's/.*"tokens":\([0-9]*\).*/\1/p' | awk '$0+0 > 0' | tail -n1)
         if [ -n "$prev" ] && [ "$prev" -gt 0 ] 2>/dev/null && [ $(( prev - tokens )) -gt 100000 ]; then
           _linha_cpt="{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$sess\",\"evento\":\"compact\",\"etapa\":\"auto-detectado: queda ${prev} -> ${tokens} tokens\"}"

@@ -19,18 +19,31 @@
 set -euo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
 
-PD="${1:-}"; NN="${2:-}"; K="${3:-}"
-[ -n "$PD" ] && [ -n "$NN" ] && [ -n "$K" ] || { echo "uso: registra-ciclo.sh <phase_dir> <NN> <ciclo>" >&2; exit 2; }
+PD="${1:-}"; NN="${2:-}"; K="${3:-}"; ETAPA_SEL="${4:-}"
+[ -n "$PD" ] && [ -n "$NN" ] && [ -n "$K" ] || { echo "uso: registra-ciclo.sh <phase_dir> <NN> <ciclo> [intencao|convergencia]" >&2; exit 2; }
 PAR="$PD/pareceres"
 REV="$PD/$NN-REVIEWS.md"
 
 # tabela anti-omissão do ciclo (piso mecânico; a contagem de brutos vem DAQUI)
 PARECERES=()
-# aceita os dois batismos reais: NN-parecer-<lane>-cK.md (intenção) e
-# NN-planrev-parecer-<lane>-cK.md (convergência — F24 ficou de fora do glob antigo
-# e o registro saiu "0 brutos" verde com 11 achados nos pareceres)
-for f in "$PAR/$NN-parecer-codex-c$K.md"         "$PAR/$NN-parecer-agy-c$K.md" \
-         "$PAR/$NN-planrev-parecer-codex-c$K.md" "$PAR/$NN-planrev-parecer-agy-c$K.md"; do
+# dois batismos reais: NN-parecer-<lane>-cK.md (intenção) e NN-planrev-parecer-<lane>-cK.md
+# (convergência — F24 ficou de fora do glob antigo e o registro saiu "0 brutos" verde).
+# v2.1.9: o 4º argumento escolhe a FAMÍLIA — na F24.3 o c1 da convergência contou 10 brutos
+# onde eram 2 porque o glob pegou também os pareceres do c1 da intenção (colisão de
+# numeração). Sem o argumento: as duas famílias (compat) + aviso se ambas existirem.
+FAM_INT=("$PAR/$NN-parecer-codex-c$K.md"         "$PAR/$NN-parecer-agy-c$K.md")
+FAM_CONV=("$PAR/$NN-planrev-parecer-codex-c$K.md" "$PAR/$NN-planrev-parecer-agy-c$K.md")
+case "$ETAPA_SEL" in
+  intencao)     CANDIDATOS=("${FAM_INT[@]}") ;;
+  convergencia) CANDIDATOS=("${FAM_CONV[@]}") ;;
+  '')           CANDIDATOS=("${FAM_INT[@]}" "${FAM_CONV[@]}")
+                _ni=0; _nc=0
+                for f in "${FAM_INT[@]}";  do [ -s "$f" ] && _ni=1; done
+                for f in "${FAM_CONV[@]}"; do [ -s "$f" ] && _nc=1; done
+                [ "$_ni" = 1 ] && [ "$_nc" = 1 ] && echo "AVISO: c$K existe na intenção E na convergência — passe o 4º argumento (intencao|convergencia) para não misturar os brutos" >&2 ;;
+  *) echo "uso: 4º argumento deve ser intencao|convergencia" >&2; exit 2 ;;
+esac
+for f in "${CANDIDATOS[@]}"; do
   [ -s "$f" ] && PARECERES+=("$f")
 done
 TABELA="$PAR/.tabela-c$K.txt"

@@ -364,8 +364,13 @@ bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> <skip|st
 `lateral <descrição>`. Sem ID estável, a agregação entre fases é inviável.
 
 O script nunca falha o pipeline (exit 0 sempre; `flock`; `seq` monotônico; auto-fechamento de
-janela órfã com aviso — viu o aviso, anote o que souber num `end` corretivo). Telemetria é
-instrumento, não gate.
+janela órfã **medido** pelo `mede-tokens.py` — v2.1.9). Viu o aviso de janela fechada
+automaticamente? **Não grave um `end` corretivo à mão**: o número que você tem (contexto da
+sua janela) não é custo — na F24.3 isso registrou 251.511 como tokens de subagente e gerou
+um `compact` falso. Se a medição automática veio `indisponivel`, meça:
+`mede-tokens.py --sessao $CLAUDE_CODE_SESSION_ID --desde <ts do checkpoint> --ate <agora>`
+e só então um `end` com `--tokens-reais/--custo`. Um 2º `end` da mesma etapa declara
+`substitui:<seq>` (quem soma conta só o último). Telemetria é instrumento, não gate.
 
 </subroutine>
 
@@ -416,9 +421,11 @@ conteúdo verboso (o retorno é dado de roteamento; corpo vive no disco):
 
 - **`done`** — veredito, caminhos, contagens. **Seção `incidentes:` obrigatória (regra 24a):**
   todo desvio entre o anunciado e o executado, ou literalmente `nenhum`. Ausente → retorno
-  fora do contrato (reconciliação); item ≠ `nenhum` → evento `incidente` no run-log + repasse
-  ao despacho da Sub-rotina F (o resumo os narra — incidente declarado numa camada e não
-  repassado já enganou o dono 2×).
+  fora do contrato (reconciliação); item ≠ `nenhum` → **UM evento `incidente` no run-log POR
+  ITEM** (`--kv origem=<etapa/agente> --kv detalhe="<o item>"`; v2.1.9 — na F24.3 um evento
+  agregou 9 incidentes e 5 ficaram sem registro individual) + repasse ao despacho da
+  Sub-rotina F (o resumo os narra — incidente declarado numa camada e não repassado já
+  enganou o dono 2×).
 - **`needs_decision`** — o subagente gravou o progresso em disco e devolveu a pergunta
   mastigada (opções + tradeoffs + `recomendacao` + `reversivel`). Roteie pela **Sub-rotina I**;
   a resposta **continua o MESMO subagente** (não redespache: a continuação preserva o contexto
@@ -486,7 +493,9 @@ classifique:
    a pausa da revisão de intenção). Auto-aprovar aqui é o carimbo invertido.
 3. **Irreversível fora do trilho** — rotacionar/expor credencial, apagar dado, gastar
    dinheiro, produção. (O trilho sancionado — fase verde até o merge do PR pós-UAT-limpo,
-   6.D — é o default e não pergunta.)
+   6.D, **inclusive o merge automático da rota B clean-room** (`ship.py --merge`; decisão do
+   dono 27/08: ele não revisa PR, confia nas etapas) — é o default e não pergunta. O que a
+   rota deve é o AVISO: o resumo/banner diz "mergeado", nunca deixa o dono descobrir.)
 4. **Sem recomendada** — sem convicção real, a confissão de incerteza sobe em qualquer
    categoria.
 5. **Fail-closed existentes** — ameaça aberta, balde 2 persistente, balde 3, gaps, `blocked`,
@@ -895,7 +904,9 @@ auditável).
   projeto, CLAUDE.md) e **execute com autorização prévia** (decisão do dono 09/08 — sem
   perguntar nem hand-back), registrando escolha e porquê no `NN-DECISOES.md`. Não achou
   caminho → `blocked` honesto. NENHUMA config canônica nova — a fonte é o projeto, o juiz é
-  você.
+  você. **Merge automático** do caminho próprio (ex.: `ship.py --merge`) é rota aprovada
+  (dono, 27/08) — não pergunte; mas guarde o nº/URL do PR e o fato "mergeado" para a 6.4c
+  e o banner (o que faltou na F24.3 foi o aviso, não a ação).
 - **Rota A (com remote) — via subagente** com `prompts/close.md`: hospeda a skill
   `close-phase N` (learnings → promoção com evidência "UAT automatizado" → commit docs → PR →
   revisão auto-"Skip" carimbada → merge direto, 6.D). Freio herdado: só promove/shipa com o
@@ -926,11 +937,19 @@ pronta para o seu UAT`, campos `Balde 3` (quantos) e `Resumo` (caminho) — e as
 2. `/gsd-add-tests N` — suíte ampla.
 3. `/close-phase N` depois do UAT limpo *(ou re-rode `/go-and-do N` sem `--no-ship`)*.
 
-**6.5 — Self-check + banner final.** `confere-etapa.sh 6` — PLAN×SUMMARY (plano sem SUMMARY
-= falha) + anti-placeholder de timestamps; 🔔 em divergência (ts divergente → corrija para o
-ts real do git e registre em `incidentes:`). Reconcilie a TaskList (anti-órfã S.C). Depois:
-- **Ship:** moldura com título `— shipada`, campos `PR` e `Resumo`; abaixo: URL do PR, bloco
-  de transparência e add-tests como passo **pós-PR**. Encerre.
+**6.5 — Reconciliação + self-check + banner final.** Na rota ship, ANTES da cancela:
+`reconcilia-docs.sh --pr "#N <url>" [--proxima M]` (v2.1.9, tarefa 32e — 3 fases seguidas
+terminaram com STATE.md `executing`, ROADMAP `[ ]`, REVIEW.md `issues_found` com re-review
+clean e REVIEWS.md sem frontmatter; a rota B não roda o gsd-ship e a rota A só toca 2 campos).
+Leia `acoes`/`pendentes` do JSON; pendente = anote no banner. Commite (best-effort:
+`docs(fase NN): reconcilia espelhos de estado pós-ship`). Então `confere-etapa.sh 6` —
+PLAN×SUMMARY (plano sem SUMMARY = falha) + anti-placeholder de timestamps + **AC parcial no
+SUMMARY × VERIFICATION `passed`** (falha 5 da F24.3) + **STATE.md ainda `executing`** (a
+reconciliação não rodou); 🔔 em divergência (ts divergente → corrija para o ts real do git e
+registre em `incidentes:`). Reconcilie a TaskList (anti-órfã S.C). Depois:
+- **Ship:** moldura com título `— shipada`, campos `PR` (com o estado REAL: `#N — mergeado`
+  ou `#N — aberto`) e `Resumo`; abaixo: URL do PR, bloco de transparência e add-tests como
+  passo **pós-PR**. Encerre.
 - **Hand-back:** a moldura da 6.4-HB (não duplique a caixa) + itens balde 3 + pendências.
 Em ambas: evento `stop` (etapa `ship`/`handback`), **remova o ponteiro**
 `.planning/.gad-rodada-ativa.json` (PC-3) e `commita-artefatos.sh <phase_dir> <NN> runlog`

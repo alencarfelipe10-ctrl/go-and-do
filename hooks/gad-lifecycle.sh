@@ -23,14 +23,18 @@
 # é um subagente (F24: 34/34 eventos saíram camada 0, incluindo 12 filhos de spawnDepth
 # 2). A detecção real:
 #   retorno  — o meta.json do subagente (subagents/agent-*.meta.json) casa pelo
-#              tool_use_id e traz spawnDepth (camada = spawnDepth-1) e model. Fonte
-#              autoritativa, mecânica.
+#              tool_use_id e traz spawnDepth e model. Fonte autoritativa, mecânica.
 #   despacho — o meta ainda não existe no PreToolUse; a camada vem da contagem de
 #              despachos ABERTOS (sem retorno) no run-log cujo agente tem capacidade de
-#              despachar (def com `Agent` em tools:, ou general-purpose). Camada 0
-#              despacha com 0 hosts abertos; um host de camada 1 aberto ⇒ o novo
-#              despacho nasce dele (camada 1). Heurística: colide só se dois hosts
-#              rodarem em paralelo (a camada 1 é serial por construção).
+#              despachar (def com `Agent` em tools:, ou general-purpose). Heurística:
+#              colide só se dois hosts rodarem em paralelo (camada 1 é serial).
+#   SEMÂNTICA (v2.1.9, tarefa 34d): `camada` = camada do AGENTE DESPACHADO = spawnDepth
+#   (filho da camada 0 → 1; filho de um host de camada 1 → 2). Até a 2.1.8 o campo era
+#   "camada de origem" (spawnDepth-1) e nunca chegava a 2 — reincidência do "camada:0 em
+#   34/34" da F24 na F24.3. Despacho sem host aberto ⇒ 1; um host aberto ⇒ 2.
+#   MODELO HERDADO (34j): despacho `general-purpose` sem `model` e sem def → grava o
+#   modelo do transcript da sessão principal (camada 0) + modelo_herdado:true, em vez
+#   de campo ausente (8/42 despachos cegos na F24.3).
 
 IN=$(cat 2>/dev/null) || exit 0
 [ -n "$IN" ] || exit 0
@@ -112,8 +116,8 @@ camada_heuristica() {
     | map(select(([.[] | select(.evento=="despacho")] | length)
                > ([.[] | select(.evento=="retorno")]  | length)))
     | .[][0].agente' "$RL" 2>/dev/null)
-  [ "$n" -gt 2 ] && n=2
-  echo "$n"
+  [ "$n" -gt 1 ] && n=1
+  echo $((n+1))   # camada do despachado = hosts abertos + 1 (v2.1.9)
 }
 
 CAM=""; MODELO=""; EFFORT=""
@@ -131,7 +135,7 @@ if [ "$TIPO" = retorno ] && [ -n "$TUID" ] && [ -d "$SUBDIR" ]; then
   META=$(grep -l "\"toolUseId\":\"$TUID\"" "$SUBDIR"/*.meta.json 2>/dev/null | head -n1)
   if [ -n "$META" ]; then
     SD=$(jq -r '.spawnDepth // empty' "$META" 2>/dev/null)
-    case "$SD" in (''|*[!0-9]*) ;; (*) CAM=$((SD-1)) ;; esac
+    case "$SD" in (''|*[!0-9]*) ;; (*) CAM=$SD ;; esac
     MODELO=$(jq -r '.model // empty' "$META" 2>/dev/null)
     [ -n "$MODELO" ] || MODELO=$(modelo_do_jsonl "${META%.meta.json}.jsonl")
   fi
@@ -147,7 +151,7 @@ if [ -z "$CAM" ] && [ "$RETOMADA" = 1 ] && [ -d "$SUBDIR" ]; then
   fi
   if [ -n "$META" ]; then
     SD=$(jq -r '.spawnDepth // empty' "$META" 2>/dev/null)
-    case "$SD" in (''|*[!0-9]*) ;; (*) CAM=$((SD-1)) ;; esac
+    case "$SD" in (''|*[!0-9]*) ;; (*) CAM=$SD ;; esac
     MODELO=$(jq -r '.model // empty' "$META" 2>/dev/null)
     [ -n "$MODELO" ] || MODELO=$(modelo_do_jsonl "${META%.meta.json}.jsonl")
   fi
@@ -177,7 +181,13 @@ fi
 # ainda vazio num despacho = herança do pai (Agent sem `model`, sem def com model:) —
 # rastro explícito em vez de campo ausente; o retorno preenche o id real via meta/jsonl
 HERDADO=0
-if [ -z "$MODELO" ] && [ "$TIPO" = despacho ]; then HERDADO=1; fi
+if [ -z "$MODELO" ] && [ "$TIPO" = despacho ]; then
+  HERDADO=1
+  # v2.1.9 (34j): o herdado é o modelo de quem despacha — para a camada 0 é o último
+  # request do transcript principal; host de camada 1 herda o mesmo (o pai dele é a
+  # camada 0). Fica como rastro mecânico, com a marca modelo_herdado ao lado.
+  MODELO=$(modelo_do_jsonl "$TP")
+fi
 
 # etapa = janela aberta (último checkpoint do run-log); sem janela = abertura
 ET=$(grep '"evento":"checkpoint"' "$RL" 2>/dev/null | tail -n1 \

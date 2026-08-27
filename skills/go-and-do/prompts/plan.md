@@ -49,12 +49,19 @@ as duas condições fechadas com convicção — custo de pesquisar à toa = ~50
 descartável; custo de pular errado = fixture mentirosa (caso RLR-02).
 
 **2. Pattern-mapper (2.E).** Critério ex-ante: *a fase cria ≥1 arquivo novo de
-produção?* (lido do CONTEXT/SPEC/RESEARCH). Cria → o mapper roda (não faça nada).
+produção?* — **leia dos artefatos que LISTAM arquivos** (SPEC `files:`/AC de "criar",
+RESEARCH "Files to create", e — se já houver — os PLAN.md `files_modified`/`creates`),
+não de uma impressão do CONTEXT: na F24.3 o mapper foi suprimido "porque nenhum plano
+cria arquivo novo" e o plano 02 criava `src/comparison/roteamento_responsavel.py`; o
+checker rodou sem PATTERNS. Na dúvida, o mapper roda. Cria → o mapper roda (não faça nada).
 Só modifica existentes → **suprima o passo do pattern-mapper do workflow hospedado**
 (ele roda na SUA janela — ao chegar no passo que despacha `gsd-pattern-mapper`,
 pule-o e siga; PATTERNS de fase só-modifica é tautológico e custa 13–53KB de include
 por plano). A cancela da camada 0 cruza sua decisão com os planos gerados — erro de
-triagem vira sino, não retrabalho.
+triagem vira sino, não retrabalho. Todo passo que você pula (pesquisa, mapper) entra no
+run-log como `skip` **com o motivo no campo próprio** (10º argumento posicional do
+`run-log.sh`, não embutido na etapa):
+`run-log.sh <phase_dir> <NN> skip "2 planejamento (pattern-mapper)" "" "" "" "" "" "<motivo>"`.
 
 **3. Granularidade (2.G).** Matriz dependência×tamanho → `--granularity`:
 trabalho sequencial/pequeno → `coarse` (menos planos = menos despachos; nada perde —
@@ -94,7 +101,7 @@ Você não mexe em TaskList nem em telemetria — são da camada 0.
 Agentes aninhados (camada 2): você **não recebe notificações** de trabalho em
 background — nunca fique "aguardando" um retorno que não vai chegar. Precisa de
 background (trabalho >10min)? Só com waiter de disco:
-`timeout <Ns> bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` — nunca polling
+`timeout <Ns> bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` — nunca polling; o marcador é criado pelo PRÓPRIO comando de fundo (`( … ; touch <arq> ) &`), nunca um arquivo que "o harness" deveria criar (F24.3: 40 min de espera vazia); estourou o teto → decida pelo disco
 picado. Depois decida pelo disco: artefato existe → siga; não existe → falha do passo.
 Saída vazia com exit 0 também é falha. E devolva sempre o bloco do contrato — prosa de
 espera no lugar do bloco é retorno inválido.

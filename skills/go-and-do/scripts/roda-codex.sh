@@ -52,8 +52,16 @@ T0=$(date +%s)
 MODELO=gpt-5.6-sol; RETRY=false
 roda "$MODELO"
 if grep -qiE "at capacity|not supported" "$ERR" 2>/dev/null; then
-  RETRY=true; MODELO=gpt-5.6-terra
-  roda "$MODELO"
+  # v2.1.9 (F24.3 c1): o retry sobrescrevia um parecer VÁLIDO do 1º modelo (o stderr
+  # acusou "at capacity" e o parecer saiu mesmo assim). Parecer presente → sem retry;
+  # parecer vazio → retry, com o stderr do 1º modelo preservado em `-sol.err`.
+  if [ -s "$OUT" ]; then
+    echo "aviso: stderr acusou capacidade/suporte mas o parecer do $MODELO saiu — sem retry (parecer preservado)" >&2
+  else
+    cp -f "$ERR" "${ERR%.err}-sol.err" 2>/dev/null || true
+    RETRY=true; MODELO=gpt-5.6-terra
+    roda "$MODELO"
+  fi
 fi
 
 BANNER=$(head -8 "$ERR" 2>/dev/null | grep -E 'model:|provider:|workdir:' | tr '\n' ' ' | head -c 300)
@@ -62,10 +70,15 @@ FRESCO=false
 if [ -s "$OUT" ]; then
   MT=$(stat -c %Y "$OUT" 2>/dev/null || echo 0)
   [ "$MT" -ge "$T0" ] && FRESCO=true
-  ANT="$PD/pareceres/$NN-parecer-codex-c$((K-1)).md"
-  if [ -f "$ANT" ] && [ "$(md5sum < "$OUT")" = "$(md5sum < "$ANT")" ]; then
-    FRESCO=false   # idêntico ao ciclo anterior = parecer reciclado, não novo
-  fi
+  # K não-numérico ("review" no modo code-review) não tem ciclo anterior — o $((K-1))
+  # abortava o script sob set -u ("review: variável não associada", F24.3 4.1)
+  case "$K" in
+    (*[!0-9]*|'') ;;
+    (*) ANT="$PD/pareceres/$NN-parecer-codex-c$((K-1)).md"
+        if [ -f "$ANT" ] && [ "$(md5sum < "$OUT")" = "$(md5sum < "$ANT")" ]; then
+          FRESCO=false   # idêntico ao ciclo anterior = parecer reciclado, não novo
+        fi ;;
+  esac
 fi
 
 # aterramento (#3194 upstream): sem citação arquivo:linha = revisou o texto colado,

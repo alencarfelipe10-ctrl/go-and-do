@@ -56,7 +56,9 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    "sem achados". Os JSONs dos scripts (`pareceres/.roda-*-c<k>.json`) carregam
    banner/evidência/canário — você não coleta evidência à mão.
 3. **Fecho de CADA ciclo:** rode
-   `$HOME/.claude/skills/go-and-do/scripts/registra-ciclo.sh "<phase_dir>" "<NN>" <k>`
+   `$HOME/.claude/skills/go-and-do/scripts/registra-ciclo.sh "<phase_dir>" "<NN>" <k> convergencia`
+   (o 4º argumento escolhe a família de pareceres — sem ele o c1 da convergência misturava
+   os brutos do c1 da intenção: 10 contados onde eram 2, F24.3)
    — ele grava o apêndice de evidências no `NN-REVIEWS.md` e a tabela anti-omissão
    (`pareceres/.tabela-c<k>.txt`). A contagem de brutos do ciclo vem da tabela, nunca
    da sua leitura. **Leitura do bruto obrigatória** quando: a tabela acusa
@@ -111,7 +113,7 @@ com o impasse; a camada 0 para graciosamente.
 
 Agentes aninhados (camada 2): você **não recebe notificações** de background — espera
 só com waiter de disco (`timeout <Ns> bash -c 'until [ -s <arq> ]; do sleep 15; done'`)
-e decisão pelo estado do disco. **Revisor estagnado sem parecer novo:** os achados do
+e decisão pelo estado do disco; o `<arq>` esperado é criado pelo PRÓPRIO comando de fundo (`( … ; touch <arq> ) &`), nunca um marcador que "o harness" deveria escrever (F24.3: 40 min de espera vazia). **Revisor estagnado sem parecer novo:** os achados do
 ciclo anterior já incorporados no replan E verificados (plan-checker `VERIFICATION
 PASSED`), sem achado novo sustentável → isso É convergência (`convergiu` + sino do
 ciclo estagnado); senão → `escalou`.

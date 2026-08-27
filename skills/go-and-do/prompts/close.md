@@ -26,6 +26,14 @@ artefatos pendentes — a árvore deve estar limpa para o preflight do ship.
 </inputs>
 
 <mission>
+0. **Prova antes da promoção (v2.1.9, falha 5 da F24.3).** Antes de promover
+   `human_needed → passed`: se houver commit de código (`src/`, `tests/`) DEPOIS do
+   `verified:` do `NN-VERIFICATION.md` (fixer do code review, conserto pós-gate), a suíte
+   completa roda no HEAD atual e o resultado entra no `NN-DECISOES.md` como
+   `EXEC-NN-SUITE-HEAD-FINAL` (medido, com contagem e duração) — a promoção vem depois da
+   prova, não 47 min antes. E se algum `NN-*-SUMMARY.md` marca um AC como
+   PARCIAL/bloqueador, esse AC não pode estar `passed` no VERIFICATION: meça-o ou
+   devolva `needs_decision`.
 1. Invoque `Skill` → `close-phase` com args `N`.
 2. Deixe a skill trabalhar (ela é resumível por si — re-invocá-la continua de onde
    parou). Dois prompts herdados, tratamentos DIFERENTES:
@@ -74,7 +82,7 @@ com a resposta. Você não mexe em TaskList nem em telemetria — são da camada
 Agentes aninhados (camada 2): você **não recebe notificações** de trabalho em
 background — nunca fique "aguardando" um retorno que não vai chegar. Precisa de
 background (trabalho >10min, o teto real do `timeout` da tool)? Só com waiter de
-disco: o trabalho escreve um arquivo combinado e a espera é um único
+disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`); nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia). Teto = duração esperada + 5 min; estourou → decida pelo disco na hora e a espera é um único
 `timeout <Ns> bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` — nunca polling
 picado, nunca espera de notificação. Depois decida pelo disco: o artefato esperado
 (LEARNINGS, PR via `gh pr view`) existe → siga; não existe → trate como falha do

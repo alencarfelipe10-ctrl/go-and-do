@@ -281,6 +281,27 @@ if [ "$ETAPA" = "6" ]; then
     RES=$(jq -c --arg d "placeholder de timestamp em: $(basename $PLACE | tr '\n' ' ')" \
       '. + [{id:"ts_placeholder", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
   fi
+  # v2.1.9 (F24.3 falha 5): AC marcado PARCIAL/bloqueador em algum SUMMARY não pode estar
+  # `passed` no VERIFICATION — a declaração precedeu a prova em 47 min na F24.3
+  VER="$PHASE_DIR/$NN-VERIFICATION.md"
+  if [ -f "$VER" ] && grep -qE '^status: *passed' "$VER"; then
+    # linha de aceite/critério com a marca PARCIAL/bloqueador (F24.3-07-SUMMARY:225 —
+    # "item 4 (suíte completa) PARCIAL … bloqueador"); reporta a linha, não um id inferido
+    PARC=$( { grep -hE '(\b(AC|REQ|SC)-[0-9]+|[Cc]rit[ée]rio|[Aa]ceite|su[íi]te completa).*(PARCIAL|bloqueador)' \
+              "$PHASE_DIR"/*-SUMMARY.md 2>/dev/null || true; } | head -1 | tr -d '"' | cut -c1-100)
+    if [ -n "$PARC" ]; then
+      RES=$(jq -c --arg d "VERIFICATION passed mas um SUMMARY marca PARCIAL/bloqueador: «$PARC» — meça o AC antes de promover" \
+        '. + [{id:"ac_parcial_x_verification", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+  fi
+  # v2.1.9 (F24.3 falha 3 / 32e — 3ª reincidência): espelhos de estado reconciliados?
+  # reconcilia-docs.sh roda antes desta cancela; aqui só se confere que ele agiu.
+  ST="$ROOT/.planning/STATE.md"
+  if [ -f "$ST" ] && grep -qE '^status: *executing' "$ST" \
+     && grep -qE "^current_phase: *${FASE}\$" "$ST"; then
+    RES=$(jq -c --arg d "STATE.md ainda diz status: executing para a fase $FASE — rode reconcilia-docs.sh" \
+      '. + [{id:"state_reconciliado", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+  fi
   # varredura anti-órfã da TaskList (S.C): sinal p/ camada 0 reconciliar
   EXTRAI=$(jq -c --argjson p "$n_plans" --argjson s "$n_sums" \
     '. + {plans:$p, summaries:$s}' <<<"$EXTRAI")
@@ -296,7 +317,13 @@ MEDICAO=null
 if [ "$DRY" = 0 ]; then
   if [ "$VEREDITO" = pass ]; then
     POS_FAIL=0
-    if [ -f "$LOCK" ]; then POS_FAIL=1; rm -f "$LOCK"; fi
+    if [ -f "$LOCK" ]; then
+      POS_FAIL=1; rm -f "$LOCK"
+      # v2.1.9: o pass que destrava um fail também fica no run-log como evento `script`
+      # (F24.3 4.4: só a reprovação aparecia; a re-cancela verde só existia no transcript)
+      gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
+        --kv script=confere-etapa.sh --kv exit=0 --kv resumo="pass pós-fail (lock removido)"
+    fi
     # janela da etapa: do checkpoint aberto pelo pre-despacho até agora
     sid="${CLAUDE_CODE_SESSION_ID:-}"
     RL="$PHASE_DIR/$NN-RUN-LOG.jsonl"
