@@ -60,6 +60,10 @@ nao_casa "SPEC com a limitação declarada citando PS-01 → sem RESSALVA-SEM-LI
      'RESSALVA-SEM-LIMITACAO' -- "$F/ok-SPEC.md" "$F/ok-PRE-SPEC.md"
 nao_casa "AC legítimo (com corpo) não vira AC-POR-PONTEIRO" \
      'AC-POR-PONTEIRO' -- "$F/ok-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "as 5 formas de ponteiro (seta, 'ver §', sem arquivo, sem seta) → 5× AC-POR-PONTEIRO (S4)" 1 \
+     'AC-POR-PONTEIRO=5' -- "$F/ponteiros-SPEC.md" "$F/ok-PRE-SPEC.md"
+nao_casa "AC que só TERMINA com a citação (corpo próprio) não é acusado" \
+     'AC-POR-PONTEIRO .*ponteiros-SPEC.md:1[4-6] ' -- "$F/ponteiros-SPEC.md" "$F/ok-PRE-SPEC.md"
 roda "PRE-SPEC sem bloco no modo completo → exit 1 e BLOCO-AUSENTE" 1 'BLOCO-AUSENTE' -- \
      "$F/ok-SPEC.md" "$F/sem-bloco-PRE-SPEC.md"
 roda "uma limitação declarada não absolve a outra ressalva (cobertura por linha, R7)" 1 \

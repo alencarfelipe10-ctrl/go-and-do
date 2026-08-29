@@ -2,46 +2,324 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
-## [2.2.0] — em andamento
+## [2.2.0] — 2026-08-30
+
+Pacote dos **27 ajustes da etapa de intenção** (triagem do dono em 28/08 sobre a auditoria
+fina da F24.3 — *Onde foram os 23 milhões*, `260827-inspired-f24.3-intencao-tokens.html`):
+E1–E5, E7 · D1–D6 · S1–S4 · R1–R9 · T1, T3 · A1–A2. Plano em
+`gsd-optimize/go-and-do-evolucao/intencao-ajustes/PLANO-execucao.md` (v11.1, fechada após 11
+rodadas de revisão adversarial Codex + agy). **T2 foi descartado** por decisão do dono (SPEC e
+CONTEXT vão sempre juntos aos revisores) e **E6 virou a `/gad-prefix`**, publicada à parte.
+Execução em ondas (0 scripts puros · 0.5 contrato do PRE-SPEC · 1 ativação na skill · 2 fork do
+GSD · 3 bancadas condicionais), por subagentes com escopo de arquivos exclusivo.
+
+Régua da próxima fase real, medida pela `/audit-gad` e nunca em sessão: intenção 23,1 M →
+~11 M tokens · US$ 31 → ~15 · 79 → ~50 min · **achados originais confirmados** (T3)
+7 originais/13 confirmados/4 ciclos → 2–3 em 2 ciclos.
+
+**Fase descartável (30/08)** — clone do grupo-inspired em scratchpad, fase sintética com
+PRE-SPEC de 3 entradas (`R-1`, `none`, `SC-1`), Sonnet 5 sem MCPs, US$ 3,5: ondas 1+2 provadas
+ponta a ponta (1 `spec-init.sh` e 0 `init` cru, PRE-SPEC autodetectado nos dois workflows,
+`map-pre-spec` casando e fechando áreas, `[pre-spec:PS-nn, Rn]` no CONTEXT, hooks filtrados,
+`finalize` commitando). Ela sozinha pegou **3 bugs de fiação que nenhuma suíte pegaria**:
+normalização `R-n`→`Rn` ausente (o `map-pre-spec` nunca casaria), `discuss-phase.md` chamando
+`discuss-init.sh` sem `--pre-spec` (o §0.5 era código morto) e `env.sh` sem `export` (o
+`discuss-hooks-filter.sh` falhava fechado). Corrigidos com testes.
 
 ### Adicionado
 
-- **Skill `/gad-pre-spec`** (`skills/gad-pre-spec/`) — sessão interativa que produz o
-  `NN-PRE-SPEC.md` de uma fase, o insumo que a `/go-and-do` entrega ao `gsd-spec-phase` e ao
-  `gsd-discuss-phase`. Nasce de um levantamento dos 9 PRE-SPECs reais (grupo-inspired,
-  oxmuscle-v2, rl-representation): nunca houve molde — cada documento copiava o anterior, o que
-  produziu 3 linhagens divergentes, 4 convenções de nome e **zero** blocos `gad:decisoes` (ou
-  seja, toda fase caía na rota legado do `intent.md`). A skill fixa as três coisas:
-  - **molde único** em `templates/PRE-SPEC.md` — 11 seções (leigo · origem · código ·
-    medições · decisões do dono · hipóteses falsificadas · regras do cliente · fora de escopo ·
-    aberto deliberadamente · ressalvas · referências) + as marcas do bloco. Seção vazia fica
-    com `— nada —`, nunca é removida.
-  - **nome canônico**: `<phase_dir>/<padded_phase>-PRE-SPEC.md`, com `padded_phase` vindo do
-    `init.phase-op` — é o caminho exato que o `abre-rodada.sh` procura (fase 2 → `02-…`).
-  - **bloco gerado, não escrito à mão**: `scripts/gera-bloco.py` traduz as respostas da
-    entrevista (JSON com nomes em português) para o contrato v1, numera `PS-01…PS-99`, insere
-    entre as marcas e chama o `confere-pre-spec.sh --so-bloco`; reprovou, o arquivo é
-    restaurado e o exit é ≠ 0.
-  - `scripts/abre-fase.sh` envolve `init.phase-op` (e `phase.insert` + espelhos de estado
-    quando o dono autoriza a inserção) e devolve `{phase_found, dir, padded, alvo, existe}` —
-    `dir` cai em `expected_phase_dir` quando o diretório ainda não existe, **nunca** no
-    `$NN-nova`. `--inserir` exige `--apos <M>` porque quem calcula o número decimal é o GSD, e
-    o script reporta `numero_atribuido`/`aviso_numero` quando ele diverge do pedido.
-  - `scripts/confere-pii.sh` (+ `scripts/nomes-permitidos.txt`) — gate de PII em duas camadas:
-    lista dura dos nomes vistos nos insumos (vale em qualquer contexto) e heurística
-    "Nome Sobrenome" fora de heading, código, caminho e URL. Fecha a dívida da fase 24, em que
-    a PII foi corrigida a posteriori com `sed`.
-  - Regra permanente escrita no molde, na skill e no gerador: **número sem fonte executada na
-    sessão é `[herdado]`** e não vira `fato_medido`. Precedente: uma fase montada sobre números
-    de auditoria velha teve os números reprovados quando foram re-derivados.
-  - 4 suítes em `skills/gad-pre-spec/tests/` (`roda.sh` + `test-fase.sh`, `test-molde.sh`,
-    `test-gera-bloco.sh`, `test-pii.sh`), com bancada `.planning/` sintética no scratchpad e
-    `init.phase-op` real. **Não** são recolhidas pelo runner da raiz (`tests/roda.sh`), que só
-    varre `tests/test-*.sh`.
-  - Comportamento documentado, contrário ao que o plano supunha: `confere-pre-spec.sh
-    --so-bloco` **aprova** bloco vazio (`[]` → exit 0, `entradas=0`); não existe código
-    `BLOCO-VAZIO`. O gate de conteúdo é a revisão com o dono (passo 6 da skill), e o
-    `test-molde.sh` trava esse comportamento.
+**Coordenador da intenção — `prompts/intent.md`, hook e lanes (E1, E3, E4, E7)**
+
+- **`scripts/roda-lanes.sh` (E4)** — despacha as lanes adversariais em **supervisores de
+  background** e devolve em < 1 s, para o `gad-verificador` sair no mesmo turno (na F24.3 as
+  lanes eram síncronas e o turno morria esperando). Cada invocação tem `run_id` e escreve tudo
+  em `.intent/runs/c<C>/<run_id>/`; os caminhos canônicos (`.intent/pareceres/…`, `.status-c<C>-<lane>.json`)
+  são promovidos por cópia + rename atômico, sob lock por ciclo, **só pelo supervisor que ainda
+  é dono do ponteiro** `.intent/.run-atual-c<C>` — dois runs sobrepostos deixaram de reescrever
+  os arquivos fixos que o `roda-agy.sh`/`roda-codex.sh` usavam. O status separa **dois eixos**:
+  `usable` (parecer não vazio, fresco e legível) × `independent` (`nonce_ok && modelo_ok`), com
+  `mirror_valid` à parte — parecer íntegro com espelho ausente **não some**, entra como
+  corroboração não-independente. `usable:false` vira `sem_parecer` imediato, sem os 12 min de
+  espera. 76 testes.
+- **`scripts/correcoes-commit.sh` (E2b)** — tira do script gerado por LLM a parte git do commit
+  por ciclo: índice temporário semeado do HEAD (`read-tree` → `apply --cached` → `update-index`
+  → `write-tree` → `commit-tree`), **validação por blobs antes de mover a ref** e só então
+  `update-ref` + `update-index`. Inclui `ROADMAP.md`/`REQUIREMENTS.md` quando o ciclo resolveu
+  issue R6 ou reconciliou o Goal (a 24.3 precisou dos dois), preservando o trabalho que já
+  estava sujo no worktree do usuário; alvo staged, sobreposição real ou artefato que continua
+  sujo → **exit 3 sem promover nada**. Grava `.intent/.correcoes-c<C>.aplicado` (ids, commit e
+  a lista exata de caminhos commitados), insumo do R1 e do T3.
+- **Gate de override de modelo e de retomada de filho no `hooks/gad-lifecycle.sh` (E7, E3)** —
+  a checagem roda **antes** de gravar qualquer evento (senão sobrava `despacho` órfão) e nega
+  via `hookSpecificOutput.permissionDecision: deny`, gravando só `incidente`: `model`/`effort`
+  no `Agent` de um `gad-*` que já pina no frontmatter; `SendMessage` cujo `to` **resolvido** pelo
+  `agent-*.meta.json` é um `gad-spec`/`gad-discuss` (retomar filho que devolveu `done` custou
+  203 k na F24.3); 2º `Agent(gad-discuss)` na mesma fase com `NN-CONTEXT.md` já existente (idem
+  `gad-spec` × `NN-SPEC.md`). Restrito a `gad-*` — `gsd-mempalace-curator` pina modelo
+  legitimamente. `tool_input.effort` não existe no `Agent` do CC: coberto só em teste sintético.
+- **`experimental.cacheTtl: 1h` (E1)** no frontmatter do `gad-intent` — provado em bancada de
+  28/08 (escritas no balde `ephemeral_1h`, cache reaproveitado após 10 min; o controle em 5m
+  reescreveu 5,9 k). Filhos de camada 2 ficam em 5m.
+- **`prompts/intent-releitura.md` (R1)** — modo `releitura` do `gad-verificador`: relê o `git diff`
+  do commit do ciclo antes do briefing seguinte e devolve `{contradiz, prescreve_mecanismo,
+  omissoes_novas}`. Não é filtro de erro factual — erro novo continua sendo trabalho dos
+  revisores externos.
+
+**Gates e scripts da etapa 1**
+
+- **`scripts/confere-pre-spec.sh` (R2, R7, S4)** — gate mecânico do SPEC contra o bloco
+  `gad:decisoes` do PRE-SPEC: falhas `MARCA-SEM-ID`, `ID-INEXISTENTE`, `ID-DUPLICADO`,
+  `FATO-SEM-EVIDENCIA`, `RESSALVA-SEM-LIMITACAO`, `AC-POR-PONTEIRO`; aviso `EXTENSAO-SUSPEITA`
+  (número, identificador ou literal na linha marcada `[pre-spec:PS-nn]` e ausente no span do PS —
+  o revisor recebe a lista, o coordenador decide). Roda no `setup-intencao.sh` e no
+  `confere-etapa.sh 1`.
+- **Gates de cadeia no `scripts/briefing-build.sh` (E2c, R1, R3)** — o briefing do ciclo C ≥ 2
+  **recusa (exit 4)** sem `.correcoes-c<C−1>.aplicado` (ou um `.vazio` explícito) e sem
+  `.releitura-c<C−1>.json` válido; C = 1 recusa sem `.intent/.ciclo0.json` com schema versionado
+  (arrays vazios explícitos; `{}` não basta). A validação é por conteúdo: `releitura.commit` ==
+  commit do `.aplicado`, conjunto de caminhos **idêntico**, e cada `blob` == `git rev-parse
+  <commit>:<path>` == worktree atual — editar o artefato depois da releitura reprova. Novo: seção
+  **"Revalidação dirigida (ciclo 0)"** (R3) — toda correção feita a partir dos sinos entra no
+  briefing como "sino → correção → evidência: confirme ou derrube"; **nenhum sino sai do briefing**.
+- **Perguntas dirigidas (R8)** — o briefing emite `.intent/.perguntas-c<C>.json` (manifesto de
+  Q-ids) e exige resposta estruturada `- Q<n>: sim|não|incerto — evidência`. `confere-ciclo.sh
+  --tabela --perguntas --vereditos` conta `sim`/`incerto` como **brutos** (`elicitacao=dirigida`),
+  trata `não` como `nao_provisorio` — só sai da conta com veredito `supported_no` do verificador,
+  gravado em `runs/c<C>/<run_id>/vereditos-dirigidos.json` — e transforma Q ausente, duplicada ou
+  malformada em bruto `incerto`. Nenhum texto de revisor sai da contagem por decisão de formato.
+- **`VIOLACAO-INVERSA` no `scripts/confere-rotas.sh` (E5)** — o coordenador grava
+  `.intent/.rota-verificacao-c<C>.json` `{run_id, mode: inline|child, brutos_pre_rota}` **antes**
+  de verificar (o marcador `.done` não distinguia as rotas); ciclo ≥ 3 com `mode: child` e ≤ 2
+  brutos pré-rota é violação. **Severidade decidida pelo dono (28/08): `exit 1` desde a 1ª fase**,
+  a mesma dureza da violação original — o coordenador registra `incidente` e re-roda o gate.
+- **`setup-intencao.sh`: §0.5 fail-closed, `req_ids_ausentes` e salvaguarda do T3** — PRE-SPEC
+  presente sem bloco `gad:decisoes` (ou com bloco inválido) emite `pre_spec_bloco: ausente|invalido`
+  e o coordenador devolve `needs_decision` ("migrar ou autorizar a rota antiga com sino"), nunca
+  "zero decisões em silêncio"; a resposta fica durável em `.intent/pre-spec-route.json` com hash.
+  R6: `issues: [{tipo: missing_requirement, id}, {tipo: phase_without_req_id}]` + `goal_roadmap`,
+  com assert exato no `confere-etapa.sh 1` (menção em prosa não conta). T3: snapshot imutável do
+  SPEC/CONTEXT via `git hash-object -w`, gravado **pelo filho que cria o artefato**; sem prova
+  durável de que nenhuma revisão começou, o T3 sai `não_medido` em vez de promover artefato já
+  corrigido a "original".
+- **Suíte na raiz do repo** — `tests/roda.sh` + 13 suítes (`test-roda-lanes.sh`,
+  `test-correcoes-commit.sh`, `test-gad-lifecycle.sh`, `test-briefing-build.sh`,
+  `test-confere-ciclo.sh`, `test-confere-rotas.sh`, `test-confere-etapa.sh`,
+  `test-setup-intencao.sh`, `test-confere-pre-spec.sh`, `test-pre-spec-migra.sh`,
+  `test-spot-check.sh`, `test-registra-ciclo.sh`, `test-abre-rodada.sh`) com fixtures da 24.3.
+
+**Fork do `gsd-discuss-phase` (D1, D3, D4, D5b, D6, R5) — `gen5-patches`**
+
+- **Contrato §0.5 no `bin/nosso/checkpoint-write.py`** — `init --area "nome|R2,R3"` persiste
+  `areas: [{name, anchors, anchors_remaining}]` (antes eram strings puras) e o campo `source_id`
+  (`PS-\d\d`); novo subcomando **`map-pre-spec`**, dono único das entradas do PRE-SPEC: casa cada
+  PS contra a estrutura de âncoras — 1 casamento → insere e só fecha a área quando todos os
+  anchors estão cobertos; `req_anchor: none` ou 0 casamentos → área dedicada criada e fechada na
+  hora; **≥ 2 → sino, nenhuma área fecha** (ramo confirmado pelo dono em 29/08). `context-render.py`
+  emite `[pre-spec:PS-nn, R-n]` e `[medido:PS-nn]`.
+- **`add-decision --batch <arquivo.json>` (D3)** — aplica N decisões atomicamente (validação
+  completa antes de qualquer gravação, ids na ordem, `save` único, `complete-area` por área
+  marcada). Sequência fixa no `modes/auto.md`: `init` → `map-pre-spec` → `--batch`.
+- **`bin/nosso/discuss-hooks-filter.sh` (D1)** — filtro mecânico do envelope de
+  `loop render-hooks discuss:post`: em `--auto` com `features.mempalace_capture_on_auto_discuss`
+  ≠ `true`, remove **só** a entrada `mempalace-capture` e devolve o resto **inteiro**; o despacho
+  continua no modelo, com todos os `kind` do contrato upstream. `ref.agent` sai em
+  `nao_despachaveis` (o host `gad-discuss` não tem `Agent`) e vira sino `hook_nao_despachado` +
+  incidente, nunca silêncio; `agentVerdict` é sempre não-bloqueante; `gate` malformado falha fechado.
+- **`discuss-render-guard.sh` + `discuss-finalize.sh` (D4)** — dois scripts, um ponto de invocação
+  cada: render → guarda → `check.decision-coverage-plan` em `write_context`; e FH-render →
+  `decisions-index.py` → `state.record-session` → commit → limpeza no `finalize`. A releitura do
+  CONTEXT pelo modelo sai — a guarda é a prova.
+- **`blocks/finish.md` (D6)** — `write_context` em diante saiu do arquivo principal, lido em toda
+  borda que entre no bloco (fim do loop de áreas, skip do `--auto`, `reconcile_existing`).
+  `discuss-phase.md` 37,4 → 25,9 KB (o teto de 20 KB não fechou: o resto é o cabeçalho da
+  entrevista, mantido de propósito).
+- **`bin/nosso/pre-spec-batch.py` + `discuss-init.sh --pre-spec` (D5b)** — o init lê **só o bloco**
+  do PRE-SPEC e gera `pre-spec-batch.json` com filtro estrito `kind == decisao_dono` (`fato_medido`
+  nunca trava decisão; vai só para a lista do briefing/SPEC). O PRE-SPEC inteiro não entra mais na
+  janela do filho.
+- **`bin/nosso/artefatos-novos.py` + guarda (R5)** — a seção "Artefatos novos commitados" do SPEC
+  vira gray area obrigatória por artefato no `discuss-init.sh`, e o `context-guard.sh` sai com
+  `GUARD_EXIT=2` se a seção é não-vazia e falta um `D-NN` por artefato.
+
+**Fork do `gsd-spec-phase` (S1, S2a, S3, R4, R5a, R7)**
+
+- **`bin/nosso/spec-init.sh` (S1)** — uma chamada de `init phase-op` no lugar de ~12 leituras:
+  devolve num resultado só a entrada do ROADMAP, a fatia do REQUIREMENTS, os cabeçalhos do STATE,
+  os cabeçalhos do SPEC anterior como molde e (R6) Goal + `req_ids_ausentes`, gravando
+  `.planning/.spec-tmp/env.sh`. O glob passou a excluir `AI-SPEC`/`PRE-SPEC` — o PRE-SPEC era
+  tomado por SPEC existente.
+- **`blocks/probes.md` (S3)** — passos 5.5/5.6 saem do arquivo principal, lidos ao chegar no 5.5.
+  `spec-phase.md` 41 → 18,9 KB.
+- **`references/edge-probe-digest.md` (S2a)** — substitui o `@edge-probe.md` de 17,7 KB. Ficou em
+  5,9 KB (não os 3–4 KB do cartão, aceito pelo dono) porque preserva o que o motor **não** faz:
+  "floor, not ceiling", a taxonomia de 8 em tabela compacta, o filtro de relevância com dismissal
+  por razão, o aumento manual de categorias perdidas pelo classificador, `unclassified` e os
+  estados de resolução. Sai só o didatismo.
+- **`references/prohibition-probe-digest.md` (S2b)** — substitui o `prohibition-probe.md` de
+  20,1 KB por um digest de 6,0 KB (−70 % por turno do spec-phase). Entrou **só depois do A/B**
+  previsto no plano (`intencao-ajustes/bancadas/S2b-ab.md`): 3 SPEC-bases reais (24.2, 24.3 e
+  RLR-02) × referência inteira × digest × 2 repetições, adjudicação cega com rubrica travada
+  antes de abrir as saídas. Digest ≥ inteira em recall nas 6/6 células (a inteira recuperou
+  12 %/25 %/0 % das proibições do gabarito; o digest 50 %/50 %/12 %), empate em falsos positivos
+  (0), vazamento de canon (0), completude status×verificação e ACs promovidos, e saída zero
+  num spec limpo inédito (0×0). A bateria de fixtures oficiais saiu do ledger: a referência
+  inteira devolvia a frase da fixture *verbatim* (cópia, não competência). US$ 11,29.
+  `blocks/probes.md` passo 5.6 aponta para o digest; `test-spec-workflow.sh` trocou o tripwire
+  "fica inteiro" por 13 assertivas de invariantes do digest.
+- **Três seções novas no `templates/spec.md`** (headings = contrato de máquina): "Consistência
+  interna" (R4 — cada `MUST NOT` × os ACs que precisam do recurso proibido; na 24.3 o par
+  AC-16 × AC-10/AC-42 era insatisfazível e dois gates deixaram passar), "Artefatos novos
+  commitados" (R5a) e "Limitações declaradas" (R7 — toda `ressalva:` do bloco do PRE-SPEC precisa
+  de linha citando `PS-nn`, ou `descartada: porquê`).
+- **`workflows/plan-phase.md` entrou no fork** (36 entradas no `manifesto.json`, `triar.sh` 🟢)
+  por uma linha: o planner lia `NN-PRE-SPEC.md` como se fosse o SPEC.
+
+**`/audit-gad` v1.2.0 (A1, A2, T3)**
+
+- **`scripts/turnos-por-ciclo.py`** — turnos por ciclo do `gad-intent` (ciclos delimitados pelos
+  `tool_use` do `briefing-build.sh`), marcação de `releitura_corrigiu` como 5º turno legítimo e
+  detecção de expirações de cache; `--gaps` distribui os intervalos entre requests por agente
+  `gad-*` (insumo da decisão E1). Na 24.3: 11·6·8·6 turnos e 6 expirações = 916 k.
+- **`scripts/etiqueta-achados.py` (T3)** — proveniência de achado em **dois eixos**,
+  `origem_artefato = original|derivado` e `elicitacao = livre|dirigida`, medida pela `proposicao`
+  gravada na triagem (artefato, span, fingerprint por âncora `AC-n/D-nn > R-n > heading`) contra o
+  blob-base — nunca `git blame`. Sem `proposicao` ou sem blob → `não_medido`, e com `não_medido > 0`
+  o relatório **não pode** concluir melhora ou piora comparativa (o cético reprova). A régua nova
+  ("originais confirmados / confirmados / ciclos", "dos quais dirigidos", cobertura) entrou no
+  `templates/relatorio.md`, com a fixture histórica 7/6 obrigatória na suíte.
+
+**Skill `/gad-pre-spec`** (`skills/gad-pre-spec/`) — sessão interativa que produz o
+`NN-PRE-SPEC.md` de uma fase, o insumo que a `/go-and-do` entrega ao `gsd-spec-phase` e ao
+`gsd-discuss-phase`. Nasce de um levantamento dos 9 PRE-SPECs reais (grupo-inspired,
+oxmuscle-v2, rl-representation): nunca houve molde — cada documento copiava o anterior, o que
+produziu 3 linhagens divergentes, 4 convenções de nome e **zero** blocos `gad:decisoes` (ou
+seja, toda fase caía na rota legado do `intent.md`). A skill fixa as três coisas:
+
+- **molde único** em `templates/PRE-SPEC.md` — 11 seções (leigo · origem · código ·
+  medições · decisões do dono · hipóteses falsificadas · regras do cliente · fora de escopo ·
+  aberto deliberadamente · ressalvas · referências) + as marcas do bloco. Seção vazia fica
+  com `— nada —`, nunca é removida.
+- **nome canônico**: `<phase_dir>/<padded_phase>-PRE-SPEC.md`, com `padded_phase` vindo do
+  `init.phase-op` — é o caminho exato que o `abre-rodada.sh` procura (fase 2 → `02-…`).
+- **bloco gerado, não escrito à mão**: `scripts/gera-bloco.py` traduz as respostas da
+  entrevista (JSON com nomes em português) para o contrato v1, numera `PS-01…PS-99`, insere
+  entre as marcas e chama o `confere-pre-spec.sh --so-bloco`; reprovou, o arquivo é
+  restaurado e o exit é ≠ 0.
+- `scripts/abre-fase.sh` envolve `init.phase-op` (e `phase.insert` + espelhos de estado
+  quando o dono autoriza a inserção) e devolve `{phase_found, dir, padded, alvo, existe}` —
+  `dir` cai em `expected_phase_dir` quando o diretório ainda não existe, **nunca** no
+  `$NN-nova`. `--inserir` exige `--apos <M>` porque quem calcula o número decimal é o GSD, e
+  o script reporta `numero_atribuido`/`aviso_numero` quando ele diverge do pedido.
+- `scripts/confere-pii.sh` (+ `scripts/nomes-permitidos.txt`) — gate de PII em duas camadas:
+  lista dura dos nomes vistos nos insumos (vale em qualquer contexto) e heurística
+  "Nome Sobrenome" fora de heading, código, caminho e URL. Fecha a dívida da fase 24, em que
+  a PII foi corrigida a posteriori com `sed`.
+- Regra permanente escrita no molde, na skill e no gerador: **número sem fonte executada na
+  sessão é `[herdado]`** e não vira `fato_medido`. Precedente: uma fase montada sobre números
+  de auditoria velha teve os números reprovados quando foram re-derivados.
+- 4 suítes em `skills/gad-pre-spec/tests/` (`roda.sh` + `test-fase.sh`, `test-molde.sh`,
+  `test-gera-bloco.sh`, `test-pii.sh`), com bancada `.planning/` sintética no scratchpad e
+  `init.phase-op` real. **Não** são recolhidas pelo runner da raiz (`tests/roda.sh`), que só
+  varre `tests/test-*.sh`.
+- Comportamento documentado, contrário ao que o plano supunha: `confere-pre-spec.sh
+  --so-bloco` **aprova** bloco vazio (`[]` → exit 0, `entradas=0`); não existe código
+  `BLOCO-VAZIO`. O gate de conteúdo é a revisão com o dono (passo 6 da skill), e o
+  `test-molde.sh` trava esse comportamento.
+
+### Alterado
+
+**Coordenador e prompts dos filhos**
+
+- **`prompts/intent.md` reescrito nos passos 2b–5** (25,5 → 32,8 KB): triagem do **ciclo 0** dos
+  sinos com regra explícita de fonte-de-verdade (fato de código citado > SPEC > CONTEXT; requisito
+  manda o SPEC, *como* manda o CONTEXT); correções factuais de um ciclo **num único script**
+  `.intent/.correcoes-c<C>` escrito e executado num turno só; correção escreve **invariante**
+  (AC `MUST NOT` + modo de falha observável), **nunca mecanismo**, com os anti-exemplos da 24.3 no
+  prompt; passo 4 vira "rode o `roda-lanes.sh` e, **no mesmo turno**, despache o `gad-verificador`"
+  — a frase "sempre síncrono" e os comandos crus das lanes saíram; filho que devolveu `done` não é
+  acordado (correção de decisão = coordenador via `checkpoint-write.py`; pergunta de código nova =
+  `gad-explore`).
+- **`prompts/intent-spec.md`** (R2, R4, R5a, R7, R8) — toda regra que compara, ordena, itera ou lê
+  um campo cita o `arquivo:linha` do **tipo** e diz o **comportamento nulo**; decisão do PRE-SPEC
+  entra marcada `[pre-spec:PS-nn]` e o que o spec acrescenta em cima vai em frase/AC separado
+  `[auto]`; passe de consistência `MUST NOT` × AC antes do commit; as três seções novas do SPEC
+  passam a ser preenchidas; lições viram checklist respondido no `.sinos-spec.txt` em vez de peso
+  no briefing.
+- **`prompts/intent-discuss.md`** — **proibido ler SPEC, código ou PRE-SPEC antes da Skill** (na
+  24.3 o filho foi de 35 k a 81 k assim); o PRE-SPEC é **autodetectado pelo workflow forkado**, o
+  filho não passa flag nem abre o arquivo.
+- **`prompts/intent-verifica.md`** — o passo 0 espera o **status com o mesmo `run_id` e nonce**, não
+  o `.done`; `usable:false` → `sem_parecer` na hora; achado de lane sem nonce continua na tabela
+  marcado `independente=false` (corroboração, nunca descarte); seção nova dos vereditos dirigidos.
+- **`briefing-build.sh`**: o ROADMAP entra com **só a entrada da fase** (antes vinham as vizinhas),
+  as lições saem do briefing e o ciclo ≥ 2 ganha "o que mudou" logo após a Missão — briefing c1 da
+  24.3 **−52 % em bytes**.
+- **`SKILL.md` e `workflow.md`** — §0.5 do PRE-SPEC (bloco obrigatório, rota `legacy` com sino),
+  etapa 1 reescrita com os gates novos, e a `/gad-pre-spec` apontada como a rota de criação do
+  `NN-PRE-SPEC.md`.
+
+**Lane do agy (T1) e citações (R9)**
+
+- **Modelo esperado da lane `agy-revisor` passa a `Gemini 3.7 Flash`** (`roda-agy.sh`,
+  `convergence.md`, `capabilities/agy-revisor/capability.json`) — A/B cego em 3 projetos
+  (28/08): **Flash 3.7 High venceu 3×0** (9 brutos → 6 confirmados, 0 falsos, 1,7–2,2 min) contra
+  o Gemini 3.1 Pro High (5 brutos → **0** confirmados, 4,9–6,3 min). Reverter é uma linha, e a
+  régua de reversão está declarada: 2 fases com Flash abaixo do histórico do Pro.
+  Relatório: `auditorias/260828-bench-cachettl-ab-agy.md`.
+- **`spot-check-ponteiros.sh` normaliza links markdown antes do grep** — `[t](file:///abs/x.py#L12)`
+  e `[x.py:12](/abs/x.py:12)` colapsam no mesmo alvo `/abs/x.py:12` (`#L<n>` → `:<n>`), com dedup
+  depois e saída `referencias_vistas=N · alvos_unicos=M · OK M'/M`. Vai no mesmo commit do T1: o
+  Flash cita nesse formato e sem isso os `MISSING-FILE` seriam falsos em massa (180 → 27 nos 12
+  pareceres reais).
+
+**Bancadas e decisões tomadas por dado (onda 3)**
+
+- **E1 — TTL de cache por agente.** O `gad-plan` passa a `experimental.cacheTtl: 1h`. A medição
+  (`turnos-por-ciclo.py --gaps`, com decomposição do `cache_creation` pós-gap em *prefixo reescrito*
+  × *sufixo novo*) nas 3 últimas fases reais do grupo-inspired mostra o `gad-plan` reescrevendo
+  281,8 k / 2 701,8 k / 689,1 k tokens de prefixo em 20 gaps de 5–10 min — todos expirações totais
+  (`cache_read = 0`) com sufixo novo de 0,3–5 k: a assinatura do *waiter* esperando os filhos do
+  `gsd-plan-phase`. Saldo da desigualdade (benefício × 1,15 − custo × 0,75): **−0,39 / +3,82 /
+  +0,52 US$** → positivo em 2 de 3, entra. O `gad-intent` reconferido pela mesma régua confirma
+  (+0,90 / −0,28 / +0,89). O **`gad-contratos` fica em 5m por falta de dado** (0 instâncias nas
+  3 fases). Em *overage* o balde de 1h é ignorado; a auditoria reporta o balde **efetivo**.
+  Bancada: `intencao-ajustes/bancadas/E1-gaps.md`.
+- **S4 — a convenção de ponteiro NÃO entra.** `bancadas/mede-repeticao-spec.py` mediu 4 pares
+  SPEC × PRE-SPEC reais: **0,5 % dos parágrafos** repetidos (limiar 0,8; Jaccard-3 concorda com
+  0,1 %), contra os ≥ 30 % que o S4 exigia — o SPEC condensa o PRE-SPEC, não o copia. O
+  `intent-spec.md` diz isso explicitamente para ninguém "otimizar" trocando corpo por
+  `→ NN-PRE-SPEC.md §x`. O que sobrou do S4 é a guarda, **alargada**: `AC-POR-PONTEIRO` agora
+  pega `ver §x`, `→ §x` e `conforme PRE-SPEC §x` além da forma original, e continua deixando
+  passar o AC que apenas **termina** com a citação (corpo próprio). Bancada:
+  `intencao-ajustes/bancadas/S4-medicao.md`.
+
+**Outros**
+
+- **`abre-rodada.sh`** usa `expected_phase_dir` e sai com **exit 5** quando a fase não existe — fim
+  do diretório fantasma `$NN-nova`.
+- **`registra-ciclo.sh`** e **`confere-etapa.sh`** absorvem os asserts novos da etapa 1 (R2/R6) e a
+  família de pareceres por ciclo.
+
+### Corrigido
+
+- **Canário duplicado da lane do agy.** O nonce nascia em dois lugares e o `grep -q prova_leitura`
+  do `roda-agy.sh` **sempre casava** — a prova de leitura saía `ausente` em 100 % dos ciclos, sem
+  ninguém notar. Agora o nonce nasce só no `briefing-build.sh`, o `roda-agy.sh` recebe
+  `--prova <arquivo>` e extrai o token com `grep -oE 'PROVA-[0-9a-f]+'`; o bloco local vira
+  fallback para quando o briefing não cita `prova_leitura`.
+- **`roda-agy.sh`/`roda-codex.sh` com caminhos fixos.** Parecer, espelho, `--log` e `--err` eram
+  gravados direto em `pareceres/`: dois runs do mesmo ciclo misturavam a evidência de modelo. Os
+  scripts ganharam `--out`, `--espelho`, `--log` e `--err`, e o supervisor só passa caminhos do
+  run-dir.
+- **`rc 6` por modelo divergente deixava o parecer inteiro de fora.** Passa a ser
+  `usable:true, independent:false` — degradação de independência, não perda de conteúdo.
+- **Três bugs de fiação pegos pela fase descartável de 30/08**: (i) `R-n`/`SC-n` não eram
+  normalizados para `Rn`/`SCn` — o `map-pre-spec` nunca casaria uma âncora real (corrigido em
+  `pre-spec-batch.py`, `checkpoint-write.py` e na regex do `context-guard.sh`); (ii) o
+  `discuss-phase.md` chamava o `discuss-init.sh` **sem `--pre-spec`**, deixando todo o §0.5 como
+  código morto (agora autodetecta o `NN-PRE-SPEC.md` da fase); (iii) o `env.sh` do `spec-init.sh`
+  era gravado sem `export`, o que fazia o `discuss-hooks-filter.sh` falhar fechado (5 turnos de
+  contorno na 1ª rodada).
 
 ## [2.1.9] — 2026-08-27
 

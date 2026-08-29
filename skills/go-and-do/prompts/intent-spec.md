@@ -35,10 +35,14 @@ PRE-SPEC, `pre_spec_mode: structured|legacy` + o insumo correspondente. Traz ain
 3. **Fronteira de conteúdo (anti-duplicação):** o SPEC é a fonte canônica de decisões,
    requisitos e critérios. Se o workflow te levar a repetir num segundo lugar um
    parágrafo que já está no SPEC, escreva a referência (seção/âncora), não a cópia.
-   <!-- S4: aguarda medição do bancadas/mede-repeticao-spec.py ≥ 30 % de repetição.
-        Quando ligar: levantamento já verificado no PRE-SPEC entra como ponteiro
-        `→ NN-PRE-SPEC.md §x`, MAS nenhum requisito, AC, MUST NOT ou decisão sai por
-        referência — corpo que é só ponteiro reprova como `AC-POR-PONTEIRO`. -->
+   **A convenção de ponteiro do S4 NÃO está ligada** — a bancada
+   `bancadas/mede-repeticao-spec.py` mediu 4 pares SPEC × PRE-SPEC reais (29/08/2026) e
+   achou **0,5 % dos parágrafos** repetidos (limiar 0,8; Jaccard-3 concorda, 0,1 %),
+   contra os 30 % exigidos: o SPEC condensa o PRE-SPEC, não o copia. Não troque corpo por
+   `→ NN-PRE-SPEC.md §x`. Registro: `go-and-do-evolucao/intencao-ajustes/bancadas/S4-medicao.md`.
+   O que vale sempre: **nenhum requisito, AC, MUST NOT ou decisão sai por referência** —
+   corpo que é só ponteiro (`→ §x`, `ver §x`, `conforme PRE-SPEC §x`) reprova como
+   `AC-POR-PONTEIRO` no passo 7.
 4. **Citação de tipo e comportamento nulo (R2).** Toda regra do SPEC que compara, ordena,
    itera ou lê um campo cita o `arquivo:linha` onde o **tipo** do campo está definido
    **e** diz o que acontece quando ele está ausente/nulo. Sem a citação a regra é palpite.

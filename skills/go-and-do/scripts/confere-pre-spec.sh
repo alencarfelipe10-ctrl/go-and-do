@@ -21,7 +21,9 @@
 #   FALHA   RESSALVA-SEM-LIMITACAO  PS com `ressalva` sem linha correspondente na seção
 #                                 "Limitações declaradas" do SPEC (citando PS-nn ou
 #                                 `descartada: porquê`)
-#   FALHA   AC-POR-PONTEIRO       AC/MUST NOT cujo corpo é só `→ NN-PRE-SPEC.md §x` (S4)
+#   FALHA   AC-POR-PONTEIRO       AC/MUST NOT cujo corpo é só um ponteiro (S4): `→ NN-PRE-SPEC.md §x`,
+#                                 `ver §x`, `→ §x`, `conforme PRE-SPEC §x`. AC que apenas
+#                                 TERMINA com a citação tem corpo próprio e passa.
 #   AVISO   EXTENSAO-SUSPEITA     números, identificadores snake_case/CamelCase e literais
 #                                 (None, default, …) presentes na linha marcada
 #                                 `[pre-spec:PS-nn…]` e ausentes no span/decisao do PS-nn.
@@ -217,8 +219,22 @@ for psid, e in sorted(ps.items()):
 
 # --- AC-POR-PONTEIRO (S4) --------------------------------------------------
 RE_AC       = re.compile(r'(?:\bAC-\d+\b|MUST\s+NOT)', re.I)
+_VERBO = r'(?:ver|veja|vide|cf\.?|conforme|consulte)'
+# Corpo que é SÓ um ponteiro, em qualquer das formas do S4 (`→` ou `ver §`):
+#   `→ 99-PRE-SPEC.md §5` · `ver §3.2` · `ver 99-PRE-SPEC.md §3.2` · `→ §3.2` ·
+#   `conforme PRE-SPEC §2`. Ancorado nas duas pontas: um AC que apenas TERMINA
+#   com uma citação ("… e o Δ fecha em zero, ver 99-PRE-SPEC.md §5.") tem corpo
+#   próprio e NÃO é acusado.
 RE_SO_PONTA = re.compile(
-    r'^(?:ver|veja|vide|cf\.?|conforme)?\s*(?:→|->)\s*[^\s]*PRE-SPEC\.md\s*(?:§|#)\S+\.?$', re.I)
+    r'^(?:' + _VERBO + r'\s*)?'                                   # verbo antes da seta
+    r'(?:(?:→|->|=>)\s*)?'                                        # seta
+    r'(?:' + _VERBO + r'\s+)?'                                    # ou verbo depois da seta
+    r'(?:'
+    r'\S*PRE-SPEC(?:\.md)?\s*(?:(?:§|#)\s*[\w.\-]+)?'             # arquivo PRE-SPEC [+ §x]
+    r'|'
+    r'(?:\S*\.md\s*)?(?:§|#)\s*[\w.\-]+'                          # [arquivo.md] §x
+    r')'
+    r'[\s.,;]*$', re.I)
 
 def corpo_do_ac(l):
     c = RE_MARCA_ID.sub("", RE_MARCA_NUA.sub("", l))
