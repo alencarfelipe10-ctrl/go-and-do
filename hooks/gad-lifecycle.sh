@@ -88,6 +88,110 @@ else
   DESC=$(jq -r '.tool_input.description // ""' <<<"$IN" | head -c 120)
 fi
 
+# etapa = janela aberta (último checkpoint do run-log); sem janela = abertura.
+# Calculada AQUI (e não mais junto da escrita) porque os gates abaixo também gravam.
+ET=$(grep '"evento":"checkpoint"' "$RL" 2>/dev/null | tail -n1 \
+     | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
+: "${ET:=0 abertura}"
+
+# ══ GATES DE PREVENÇÃO (E7 + E3 — v2.2.0, plano dos 27 ajustes da intenção) ═══════════
+# Rodam ANTES de qualquer escrita no run-log. Um despacho negado NÃO pode deixar um
+# evento `despacho` órfão: a camada_heuristica() conta despachos sem retorno, e o órfão
+# jogaria o PRÓXIMO despacho legítimo para camada 2. Por isso a negativa grava só
+# `incidente` — evento que o filtro da heurística (despacho|retorno) ignora.
+#
+# Resposta = contrato do Claude Code 2.1.251: exit 0 + stdout
+#   {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny",
+#    "permissionDecisionReason":"…"}}
+# O `decision: block` de topo (usado pelo gsd-agent-isolation-guard.js:488-493) está
+# deprecado — não usar.
+#
+# FAIL-OPEN por herança: como todo o resto do hook, os gates só existem dentro de uma
+# rodada ativa da /go-and-do (ponteiro presente, sessão casando, rodada não parada,
+# run-log.sh instalado). Fora disso o hook já saiu em no-op lá em cima.
+
+AGN="${AG%% *}"   # nome puro do agente/alvo (o AG do SendMessage pode vir com sufixo)
+
+# caminho da def do agente, se existir (home primeiro, projeto depois)
+gad_def() {
+  local d
+  for d in "$HOME/.claude/agents/$1.md" "$CWD/.claude/agents/$1.md"; do
+    [ -f "$d" ] && { printf '%s' "$d"; return 0; }
+  done
+  return 1
+}
+# normalização mínima para comparar chamada × def: só espaço/aspas/caixa. NÃO se remove
+# o prefixo `claude-` — normalizar demais só faz valores DIFERENTES compararem iguais, e
+# o contrato do E7(a) é que `model`/`effort` sequer apareçam na chamada.
+gad_norm() { printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '[:space:]"'; }
+
+gad_nega() { # $1 = detalhe (vai para o incidente, o stderr e a razão do deny)
+  bash "$RUNLOG_SH" "$PD" "$NN" incidente "$ET" \
+    --kv origem=gad-lifecycle.sh --kv detalhe="$1" \
+    --kv agente="$AGN" --kv tool="$TOOL" >/dev/null 2>&1
+  printf 'gad-lifecycle: %s\n' "$1" >&2
+  jq -cn --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",
+    permissionDecision:"deny", permissionDecisionReason:$r}}'
+  exit 0
+}
+
+if [ "$TIPO" = despacho ]; then
+  if [ "$TOOL" = SendMessage ]; then
+    # ── E3(a): retomada de filho ENCERRADO da etapa de intenção ──────────────────
+    # O alvo é resolvido: nome literal, ou id `a<hex>` → agentType do meta.json (mesma
+    # fonte que o bloco de camada usa mais abaixo). A decisão usa o tipo RESOLVIDO.
+    ALVO="$AGN"
+    case "$ALVO" in
+      a[0-9a-f]*)
+        _m=$(ls "$SUBDIR/agent-$ALVO"*.meta.json 2>/dev/null | head -n1)
+        if [ -n "$_m" ]; then
+          _at=$(jq -r '.agentType // empty' "$_m" 2>/dev/null)
+          [ -n "$_at" ] && ALVO="$_at"
+        fi ;;
+    esac
+    case "$ALVO" in
+      gad-spec|gad-discuss)
+        gad_nega "filho_encerrado: SendMessage para $ALVO (to=$AGN). Filho que devolveu 'done' não é acordado — a janela dele já morreu e a retomada recusta o contexto inteiro (203 k na F24.3). Correção de decisão = coordenador via checkpoint-write.py/context-render.py; pergunta de código nova = Agent(gad-explore)." ;;
+    esac
+  else
+    # ── E7(b): model/effort na chamada divergindo da def que os pina ─────────────
+    # ESCOPO: só os `gad-*`. O plano diz "agentes com def que pina" E "general-purpose/
+    # gsd-* seguem livres" — e as duas cláusulas colidem: `gsd-mempalace-curator` pina
+    # `model:` e é despachado pela capability do GSD, fora do nosso controle. Prevalece a
+    # cláusula explícita: o gate cobre exatamente o que o E7(a) proíbe (`Agent` de gad-*
+    # com model/effort). Dos 43 defs em ~/.claude/agents, 10 pinam model; 6 são gad-*.
+    _cm=""; _ce=""
+    case "$AGN" in gad-*)
+      _cm=$(jq -r '.tool_input.model // empty' <<<"$IN")
+      _ce=$(jq -r '.tool_input.effort // empty' <<<"$IN") ;;
+    esac
+    if [ -n "$_cm" ] || [ -n "$_ce" ]; then
+      if _def=$(gad_def "$AGN"); then
+        _dm=$(grep -m1 -E '^model:' "$_def" | sed 's/^model:[[:space:]]*//' | tr -d ' \r')
+        _de=$(grep -m1 -E '^(effort|reasoning_effort):' "$_def" \
+              | sed 's/^[a-z_]*:[[:space:]]*//' | tr -d ' \r')
+        # só agentes cuja def PINA o modelo. `general-purpose` (sem def) e os `gsd-*`
+        # (def sem `model:`, recebem o modelo por parâmetro do orquestrador) ficam livres.
+        if [ -n "$_dm" ]; then
+          _viola=""
+          [ -n "$_cm" ] && [ "$(gad_norm "$_cm")" != "$(gad_norm "$_dm")" ] \
+            && _viola="model=$_cm≠$_dm"
+          [ -n "$_ce" ] && [ "$(gad_norm "$_ce")" != "$(gad_norm "$_de")" ] \
+            && _viola="${_viola:+$_viola }effort=$_ce≠${_de:-<ausente>}"
+          [ -n "$_viola" ] && gad_nega "modelo_override: chamada≠def em Agent($AGN) — $_viola. O modelo/effort dos agentes gad-* é pinado no frontmatter da def; passar model/effort na chamada é proibido (E7). Redespache sem os campos."
+        fi
+      fi
+    fi
+    # ── E3(b): 2º despacho do mesmo filho na mesma fase (artefato já existe) ─────
+    # phase_dir e NN vêm do ponteiro .gad-rodada-ativa.json (PD/NN) — 1 stat cada.
+    case "$AGN" in
+      gad-discuss) [ -f "$PD/$NN-CONTEXT.md" ] && gad_nega "filho_encerrado: 2º Agent(gad-discuss) na fase $NN — $NN-CONTEXT.md já existe. A etapa de discuss já produziu o artefato; reabrir o filho refaz o trabalho. Edite o CONTEXT e re-rode context-guard.sh." ;;
+      gad-spec)    [ -f "$PD/$NN-SPEC.md" ]    && gad_nega "filho_encerrado: 2º Agent(gad-spec) na fase $NN — $NN-SPEC.md já existe. A etapa de spec já produziu o artefato; reabrir o filho refaz o trabalho. Corrija o SPEC no coordenador." ;;
+    esac
+  fi
+fi
+# ══ fim dos gates ═════════════════════════════════════════════════════════════════════
+
 # def do agente tem capacidade de despacho? (tools: com Agent; sem def = general-purpose
 # ou agente desconhecido de tools irrestritas → capaz)
 despacha() {
@@ -189,10 +293,7 @@ if [ -z "$MODELO" ] && [ "$TIPO" = despacho ]; then
   MODELO=$(modelo_do_jsonl "$TP")
 fi
 
-# etapa = janela aberta (último checkpoint do run-log); sem janela = abertura
-ET=$(grep '"evento":"checkpoint"' "$RL" 2>/dev/null | tail -n1 \
-     | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
-: "${ET:=0 abertura}"
+# ET (etapa da janela aberta) já foi calculada antes dos gates.
 
 bash "$RUNLOG_SH" "$PD" "$NN" "$TIPO" "$ET" \
   --camada "$CAM" \

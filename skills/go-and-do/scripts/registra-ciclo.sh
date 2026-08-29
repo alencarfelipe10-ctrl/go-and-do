@@ -6,8 +6,11 @@
 # rodaram sem rastro de modelo em artefato. Junta as evidências mecânicas dos espelhos
 # dos roda-* + a tabela anti-omissão do confere-ciclo.sh.
 #
-# Uso: registra-ciclo.sh <phase_dir> <NN> <ciclo>
+# Uso: registra-ciclo.sh <phase_dir> <NN> <ciclo> [intencao|convergencia]
 # Lê:  pareceres/.roda-codex-c<k>.json · pareceres/.roda-agy-c<k>.json (os que existirem)
+#      + (intenção, v2.2.0) .intent/.perguntas-c<k>.json, .intent/.status-c<k>-*.json e
+#        .intent/runs/c<k>/<run do ponteiro>/vereditos-dirigidos.json — repassados ao
+#        confere-ciclo.sh --tabela para que os brutos daqui batam com os do coordenador
 #      + o frontmatter `models:`/`model_sources:` do NN-REVIEWS.md, se o workflow do GSD
 #        o escreveu (1.11.0 #2295 — só nasce quando a lane rodou pelo review-lane-runner;
 #        nas nossas lanes via roda-*.sh ele vem `unknown` ou ausente, e a evidência é a nossa)
@@ -47,8 +50,35 @@ for f in "${CANDIDATOS[@]}"; do
   [ -s "$f" ] && PARECERES+=("$f")
 done
 TABELA="$PAR/.tabela-c$K.txt"
+
+# v2.2.0 (R8/E4): a tabela do coordenador é montada com --perguntas/--status-dir/
+# --vereditos; sem essas flags o apêndice daqui contaria menos brutos que a tabela dele
+# (as respostas dirigidas ficariam de fora) — dois números para o mesmo ciclo.
+# As três entradas são da ETAPA DE INTENÇÃO e vivem em <phase_dir>/.intent/. Por isso:
+#   - nada é passado quando o ciclo pedido é o da convergência (`$PAR` tem as duas
+#     famílias e a numeração colide: o manifesto do c1 da intenção inventaria brutos
+#     no c1 da convergência);
+#   - cada flag entra só se o arquivo existir (fase antiga, ou ciclo antes do R8).
+FLAGS_TAB=()
+if [ "$ETAPA_SEL" != "convergencia" ] && [ -d "$PD/.intent" ]; then
+  _perg="$PD/.intent/.perguntas-c$K.json"
+  [ -s "$_perg" ] && FLAGS_TAB+=(--perguntas "$_perg")
+  if compgen -G "$PD/.intent/.status-c$K-*.json" >/dev/null 2>&1; then
+    FLAGS_TAB+=(--status-dir "$PD/.intent")
+  fi
+  # o run vencedor é o do ponteiro (`mv` atômico sob lock) — nunca um glob em runs/,
+  # que pegaria um run órfão sobreposto
+  _ptr="$PD/.intent/.run-atual-c$K"
+  if [ -s "$_ptr" ]; then
+    _run=$(tr -d ' \t\r\n' < "$_ptr")
+    _ver="$PD/.intent/runs/c$K/$_run/vereditos-dirigidos.json"
+    [ -n "$_run" ] && [ -s "$_ver" ] && FLAGS_TAB+=(--vereditos "$_ver")
+  fi
+fi
+
 if [ ${#PARECERES[@]} -gt 0 ]; then
-  bash "$GAD_SCRIPTS_DIR/confere-ciclo.sh" --tabela "${PARECERES[@]}" > "$TABELA" 2>/dev/null || true
+  bash "$GAD_SCRIPTS_DIR/confere-ciclo.sh" --tabela ${FLAGS_TAB[@]+"${FLAGS_TAB[@]}"} \
+    "${PARECERES[@]}" > "$TABELA" 2>/dev/null || true
 fi
 BRUTOS=""
 if [ -f "$TABELA" ]; then

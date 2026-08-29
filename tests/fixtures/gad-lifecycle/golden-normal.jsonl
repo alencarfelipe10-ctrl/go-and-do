@@ -1,0 +1,5 @@
+{"agente":"gad-intent","camada":1,"descricao":"caso de bancada","effort":"medium","etapa":"0 abertura","evento":"despacho","modelo":"claude-opus-5","origem":"hook","seq":1,"sessao":"bancada0"}
+{"agente":"gad-intent","camada":1,"descricao":"caso de bancada","etapa":"0 abertura","evento":"retorno","modelo":"claude-opus-5","origem":"hook","seq":2,"sessao":"bancada0"}
+{"agente":"gad-discuss","camada":1,"descricao":"caso de bancada","effort":"high","etapa":"0 abertura","evento":"despacho","modelo":"claude-opus-5","origem":"hook","seq":3,"sessao":"bancada0"}
+{"agente":"gad-discuss","camada":2,"descricao":"caso de bancada","etapa":"0 abertura","evento":"retorno","modelo":"claude-opus-5","origem":"hook","seq":4,"sessao":"bancada0"}
+{"agente":"gad-verificador","camada":1,"descricao":"continue","effort":"medium","etapa":"0 abertura","evento":"despacho","modelo":"claude-sonnet-5","origem":"hook","retomada":true,"seq":5,"sessao":"bancada0"}

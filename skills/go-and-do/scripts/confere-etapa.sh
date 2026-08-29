@@ -27,6 +27,13 @@
 #   ocorrências) · sdk (gsd_run query + jq + espera) · ou (passa se qualquer sub-assert
 #   passar). Placeholders: {fase}=phase_dir · {nn}=NN · {n}=fase · {root}=raiz.
 #
+# Blocos MECÂNICOS fora do manifest (a DSL só sabe glob/grep/sdk): etapa 1 = R2
+# (`confere-pre-spec.sh <SPEC> <PRE-SPEC>`: falhas reprovam, EXTENSAO-SUSPEITA vira aviso
+# em `extrai.r2_avisos`) + R6 (`setup-intencao.sh --r6`: cada issue estruturada exige id
+# no REQUIREMENTS.md OU sino `req_ausente: <id>` / `fase_sem_req` — nos `.sinos-*.txt` ou
+# no NN-INTENT-REVIEW.md, que é onde o conteúdo sobrevive à limpeza 1.5); etapa 5 = UAT;
+# etapa 6 = self-check.
+#
 # No pass (fora do --dry-run): mede a etapa com mede-tokens.py (janela desde o
 # checkpoint aberto pelo pre-despacho) e grava o evento `end` com tokens_reais/custo —
 # números só de fonte mecânica (G.1). No fail: grava evento `script` com o resumo.
@@ -305,6 +312,86 @@ if [ "$ETAPA" = "6" ]; then
   # varredura anti-órfã da TaskList (S.C): sinal p/ camada 0 reconciliar
   EXTRAI=$(jq -c --argjson p "$n_plans" --argjson s "$n_sums" \
     '. + {plans:$p, summaries:$s}' <<<"$EXTRAI")
+fi
+
+# ── etapa 1 (intenção): R2 (SPEC × PRE-SPEC) + R6 (ROADMAP × REQUIREMENTS) ───
+# Os dois asserts são MECÂNICOS e vivem aqui (não no manifest) porque dependem de rodar
+# outro script e de casar id a id — a DSL do manifest só sabe glob/grep/sdk.
+if [ "$ETAPA" = "1" ]; then
+  SETUP_I="$GAD_SCRIPTS_DIR/setup-intencao.sh"
+  CPS="$GAD_SCRIPTS_DIR/confere-pre-spec.sh"
+  SPEC_F="$PHASE_DIR/$NN-SPEC.md"; PRE_F="$PHASE_DIR/$NN-PRE-SPEC.md"
+  ROTA_F="$PHASE_DIR/.intent/pre-spec-route.json"
+
+  # ── R2: as falhas do confere-pre-spec.sh ((a) MARCA-SEM-ID, (b) ID-INEXISTENTE e as
+  # demais) REPROVAM; EXTENSAO-SUSPEITA (c) é AVISO — vai para `extrai.r2_avisos`, que o
+  # coordenador põe no briefing do revisor. Sem PRE-SPEC não há o que conferir.
+  R2_ST=nao_aplicavel; R2_AVISOS="[]"
+  if [ -f "$PRE_F" ] && [ -f "$SPEC_F" ] && [ -f "$CPS" ]; then
+    r2rc=0; r2out=$(bash "$CPS" "$SPEC_F" "$PRE_F" 2>&1) || r2rc=$?
+    R2_AVISOS=$(printf '%s\n' "$r2out" | { grep -E '^EXTENSAO-SUSPEITA ' || true; } | jq -R . | jq -cs .)
+    r2fal=$(printf '%s\n' "$r2out" | { grep -E '^(MARCA-SEM-ID|ID-INEXISTENTE|FATO-SEM-EVIDENCIA|RESSALVA-SEM-LIMITACAO|AC-POR-PONTEIRO|BLOCO-AUSENTE|BLOCO-INVALIDO) ' || true; })
+    ROTA_MODO=""; [ -f "$ROTA_F" ] && ROTA_MODO=$(jq -r '.mode // empty' "$ROTA_F" 2>/dev/null || true)
+    if [ -z "$r2fal" ]; then
+      R2_ST=ok
+      RES=$(jq -c --arg d "confere-pre-spec.sh sem falhas ($(printf '%s' "$R2_AVISOS" | jq 'length') aviso(s) EXTENSAO-SUSPEITA)" \
+        '. + [{id:"r2_pre_spec", resultado:"ok", detalhe:$d}]' <<<"$RES")
+    elif [ "$ROTA_MODO" = legacy ] && printf '%s' "$r2fal" | grep -q '^BLOCO-AUSENTE'; then
+      # rota antiga autorizada pelo dono (§0.5): o bloco não existe por decisão dele —
+      # a conferência não se aplica, e o sino `pre_spec_sem_bloco` é que carrega o custo.
+      R2_ST=pulado_legacy
+      RES=$(jq -c '. + [{id:"r2_pre_spec", resultado:"aviso", detalhe:"PRE-SPEC sem bloco com rota `legacy` autorizada pelo dono — R2 não se aplica (sino pre_spec_sem_bloco)"}]' <<<"$RES")
+    else
+      R2_ST=falha
+      RES=$(jq -c --arg d "confere-pre-spec.sh reprovou: $(printf '%s' "$r2fal" | head -3 | tr '\n' ' ' | cut -c1-300)" \
+        '. + [{id:"r2_pre_spec", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+  fi
+
+  # ── R6: cada issue estruturada emitida pelo setup tem de estar RESOLVIDA no disco —
+  # o id existe no REQUIREMENTS.md (o `--r6` já re-deriva contra ele) OU há sino
+  # ESTRUTURADO. Menção em prosa não conta. O sino é procurado nos `.intent/.sinos-*.txt`
+  # E no NN-INTENT-REVIEW.md: a limpeza 1.5 apaga os sinos no fecho (assert
+  # `limpeza_intent`, min/max 0) e a política diz que o conteúdo sobrevive no
+  # INTENT-REVIEW — sem esta 2ª fonte a escapatória seria insatisfazível nesta cancela.
+  R6=$( { bash "$SETUP_I" --r6 "$PHASE_DIR" "$NN" 2>/dev/null || echo '{}'; } | tail -1 )
+  jq -e . >/dev/null 2>&1 <<<"$R6" || R6='{}'
+  SINO_FONTES=("$PHASE_DIR/$NN-INTENT-REVIEW.md")
+  for sf in "$PHASE_DIR/.intent/".sinos-*.txt; do [ -f "$sf" ] && SINO_FONTES+=("$sf"); done
+  tem_sino() { # <regex>
+    local f; for f in "${SINO_FONTES[@]}"; do
+      [ -f "$f" ] || continue
+      grep -qE "$1" "$f" && return 0
+    done
+    return 1
+  }
+  while IFS= read -r iss; do
+    [ -n "$iss" ] || continue
+    itipo=$(jq -r '.tipo' <<<"$iss"); iid=$(jq -r '.id // ""' <<<"$iss")
+    case "$itipo" in
+      missing_requirement)
+        if tem_sino "(^|[^A-Za-z0-9_])req_ausente: *${iid}([^A-Za-z0-9_-]|$)"; then
+          RES=$(jq -c --arg d "REQ-ID $iid segue ausente do REQUIREMENTS.md, mas há sino estruturado \`req_ausente: $iid\`" \
+            '. + [{id:"r6_missing_requirement", resultado:"aviso", detalhe:$d}]' <<<"$RES")
+        else
+          RES=$(jq -c --arg d "o ROADMAP cita $iid e o REQUIREMENTS.md não o define; nem há sino estruturado \`req_ausente: $iid\` (menção em prosa não conta)" \
+            '. + [{id:"r6_missing_requirement", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+        fi ;;
+      phase_without_req_id)
+        if tem_sino "(^|[^A-Za-z0-9_])fase_sem_req([^A-Za-z0-9_-]|$)"; then
+          RES=$(jq -c '. + [{id:"r6_phase_without_req_id", resultado:"aviso", detalhe:"entrada do ROADMAP segue sem REQ-ID, com sino estruturado `fase_sem_req`"}]' <<<"$RES")
+        else
+          RES=$(jq -c --arg d "a entrada da fase no ROADMAP não cita REQ-ID na linha **Requirements** (\"$(jq -r '.requirements_line // "linha ausente"' <<<"$R6" | cut -c1-80)\") e não há sino \`fase_sem_req\`" \
+            '. + [{id:"r6_phase_without_req_id", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+        fi ;;
+    esac
+  done < <(jq -c '.issues[]?' <<<"$R6")
+
+  EXTRAI=$(jq -c --argjson r6 "$R6" --arg st "$R2_ST" --argjson av "$R2_AVISOS" \
+    '. + {goal_roadmap: ($r6.goal_roadmap // null),
+          issues: ($r6.issues // []),
+          req_ids: ($r6.req_ids // []),
+          r2_status: $st, r2_avisos: $av}' <<<"$EXTRAI")
 fi
 
 # ── veredito + eventos + medição ─────────────────────────────────────────────

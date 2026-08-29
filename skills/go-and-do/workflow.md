@@ -85,7 +85,7 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 6. ⏭️ `etapa_1: pular` → Etapa 1.5 (a intenção já virou plano ou o review está `done`/`skipped`).
 7. 🔒 ⏭️ `pre-despacho.sh 1` → despacha o agente **`gad-intent`** (Opus 5 medium) com `prompts/intent.md` — um único despacho cobre SPEC + CONTEXT + revisão adversarial; a retomada fina por arquivo é do subagente (`setup-intencao.sh`). Dentro dele: filho `gad-spec` hospeda `gsd-spec-phase N --auto` (termina no SPEC, sem auto-advance).
 8. ↳ *(filho `gad-discuss`)* CONTEXT: `gsd-discuss-phase N --auto`, sem executar o `auto_advance`, zerando `workflow._auto_chain_active` na volta.
-9. ↳ *(no subagente)* Revisão adversarial: Codex + agy criticam (pareceres em `<phase_dir>/pareceres/`) ↔ filho `gad-verificador` verifica cada achado; loop com parada por custo marginal (`decide-ciclo.sh`, teto duro 4); factual → corrige · requisito/critério/oráculo → `needs_decision` ⏸️ sobe · tradeoff → adota + transparência. UM revisor falho → segue com o outro, sino; os DOIS instalados-mas-falhos → `blocked` ⏸️; NENHUM instalado → `skipped` com sino gritante e segue.
+9. ↳ *(no subagente)* Revisão adversarial: Codex + agy criticam (lanes lançadas em background por `roda-lanes.sh`, pareceres em `<phase_dir>/pareceres/`, autoridade = `.intent/.status-c<C>-<lane>.json`) ↔ filho `gad-verificador` verifica cada achado **no mesmo turno do lançamento** e relê a emenda de cada ciclo antes do briefing seguinte (modo `releitura`); loop com parada por custo marginal (`decide-ciclo.sh`, teto duro 4); factual → corrige · requisito/critério/oráculo → `needs_decision` ⏸️ sobe · tradeoff → adota + transparência. UM revisor falho → segue com o outro, sino; os DOIS instalados-mas-falhos → `blocked` ⏸️; NENHUM instalado → `skipped` com sino gritante e segue.
 9b. **Gate de rota (camada 0, ao receber o `done`):** `confere-rotas.sh <phase_dir>/.intent` — exit 1 → devolve ao MESMO subagente (passo 7b do intent.md, fail-closed). Exit 0 → `confere-etapa.sh 1` (cancela + `end` medido). Turnos do coordenador viraram régua de auditoria (transcript), não medição em sessão — o conta-turnos.py foi removido na v2.2.0 (4 fases sem disparar).
 
 **Etapa 1.5 — Contratos de design** *(🎌 só com a flag · retomada por existência de arquivo)*
@@ -606,10 +606,31 @@ Opus 5 medium — coordenador roteia; o julgamento pesado mora nos filhos e nos 
 continuação, a resposta verbatim. Se o abre-rodada reportou `pre_spec` não-nulo
 (`NN-PRE-SPEC.md` detectado no diretório da fase — decisões pré-travadas pelo usuário numa
 sessão interativa anterior), repasse o caminho no despacho e declare o uso no sumário
-executivo. Dentro dele: filho `gad-spec` (SPEC `--auto`) → filho
+executivo — o `setup-intencao.sh` classifica o bloco de decisões (`pre_spec_bloco:
+ok|ausente|invalido`) e o `pre_spec_mode: structured|legacy` vai explícito no despacho dos dois
+filhos. Dentro dele: filho `gad-spec` (SPEC `--auto`) → filho
 `gad-discuss` (CONTEXT `--auto`, auto_advance neutralizado) → revisão adversarial (Codex +
-agy ↔ `gad-verificador`; loop por `decide-ciclo.sh`, teto 4; fail-closed no piso "≥1
-revisor").
+agy — **agy = Gemini 3.7 Flash** — ↔ `gad-verificador`; loop por `decide-ciclo.sh`, teto 4;
+fail-closed no piso "≥1 revisor").
+
+**Nunca passe `model` nem `effort` no `Agent` de um `gad-*`** (E7): a def pina os dois, e o
+`gad-lifecycle.sh` nega a chamada com `deny` + evento `incidente`. O mesmo hook nega a retomada
+de um `gad-spec`/`gad-discuss` que já devolveu `done` e o 2º despacho de um deles quando o
+artefato (`NN-SPEC.md`/`NN-CONTEXT.md`) já está no disco (E3). Negação traz a razão no
+`permissionDecisionReason` — **leia a razão e corrija a rota**, não re-tente.
+
+Por dentro da revisão (contrato que a camada 0 precisa saber para auditar, o detalhe é do
+`prompts/intent.md`): as lanes são lançadas em background por
+`scripts/roda-lanes.sh <phase_dir> <NN> <C> <briefing> --prova <arquivo>`, que retorna em < 1 s
+com `{run_id, pids, status_paths}`, e o `gad-verificador` é despachado **no mesmo turno** com
+esse `run_id` — nunca um turno só para esperar. A autoridade sobre a lane é o status
+`.intent/.status-c<C>-<lane>.json` (`usable` = o parecer serve · `independent` = nonce e modelo
+provados), **não** o marcador `.done`. Entre a triagem e o briefing do ciclo seguinte entra a
+**releitura** (R1): o `gad-verificador` em modo `releitura` (`prompts/intent-releitura.md`) relê
+a emenda commitada do ciclo e, se acusar item, a correção sai no mesmo turno antes do briefing.
+O orçamento — lanes+verificador · triagem+correções+commit · releitura · briefing = 4 turnos por
+ciclo (5 quando a releitura corrigiu) — é **régua de auditoria** medida pela `/audit-gad` no
+transcript, não contagem em sessão.
 
 **1.3 — Roteamento do retorno.**
 - **`done`** → gate de rota 9b (`confere-rotas.sh`; exit 1 devolve ao MESMO subagente) +
@@ -623,6 +644,14 @@ revisor").
   por definição — critério 2 da Sub-rotina I; janela de silêncio → parada graciosa) →
   `AskUserQuestion` (recomendação primeiro) e **continue o MESMO subagente** com as respostas
   verbatim; roteie o novo retorno por esta lista.
+  - **Sub-caso `pre_spec_bloco: ausente|invalido`** (fail-closed do §0.5 do SKILL.md — PRE-SPEC
+    presente sem o bloco `gad:decisoes` legível por máquina, ou com bloco inválido): a pergunta
+    tem duas saídas — **(a) migrar** o PRE-SPEC para o bloco (`scripts/pre-spec-migra.py` gera
+    um rascunho a partir da prosa **para o dono revisar** — ele não decide nada) ou **(b)
+    autorizar a rota antiga**, em que o filho lê o arquivo inteiro e o sino
+    `pre_spec_sem_bloco` é obrigatório no retorno e no INTENT-REVIEW. Nunca siga com "zero
+    decisões" em silêncio. A resposta é durável (`.intent/pre-spec-route.json`) e vale enquanto
+    o hash do PRE-SPEC não mudar.
 - **`blocked`** — os DOIS revisores instalados mas falhos sem nenhum ciclo completo
   (fail-closed, decisão de 02/07: sem segunda opinião a intenção não segue; UM falho desce
   degradado com sino; NENHUM instalado vira `skipped` no pré-check) → **Sub-rotina D**. O

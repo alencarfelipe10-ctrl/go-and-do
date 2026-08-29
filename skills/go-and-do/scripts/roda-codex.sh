@@ -6,7 +6,14 @@
 # classificador): monta e executa o `codex exec` com as garantias em exit code.
 #
 # Uso: roda-codex.sh <phase_dir> <NN> <ciclo> <briefing> [--out PATH]
+#                     [--espelho PATH] [--log PATH] [--err PATH]
 #   parecer default: <phase_dir>/pareceres/NN-parecer-codex-c<k>.md
+#   Sem as flags novas o comportamento é o de sempre (defaults idênticos). Elas existem
+#   para o `roda-lanes.sh` (E4) mandar tudo que o run produz para o run-dir dele — com
+#   caminhos fixos, dois runs sobrepostos do mesmo ciclo misturariam parecer e evidência.
+#   `--log` é aceito por simetria com o `roda-agy.sh` (o codex não escreve log próprio:
+#   a evidência dele é o banner do stderr) e serve só para o supervisor não precisar
+#   saber qual lane tem log.
 #
 # Garantias mecânicas:
 #   --model gpt-5.6-sol explícito (sem ele o run herda o default da config em silêncio)
@@ -27,15 +34,23 @@ set -euo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
 
 PD="${1:-}"; NN="${2:-}"; K="${3:-}"; BRIEF="${4:-}"; OUT=""
+ESPELHO=""; ERR=""; LOG=""
 [ -n "$PD" ] && [ -n "$NN" ] && [ -n "$K" ] && [ -f "${BRIEF:-/nao-existe}" ] \
-  || { echo "uso: roda-codex.sh <phase_dir> <NN> <ciclo> <briefing> [--out PATH]" >&2; exit 2; }
+  || { echo "uso: roda-codex.sh <phase_dir> <NN> <ciclo> <briefing> [--out PATH] [--espelho PATH] [--log PATH] [--err PATH]" >&2; exit 2; }
 shift 4
-while [ $# -gt 0 ]; do case "$1" in --out) OUT="${2:-}"; shift 2 ;; *) shift ;; esac; done
+while [ $# -gt 0 ]; do case "$1" in
+  --out)     OUT="${2:-}"; shift 2 ;;
+  --espelho) ESPELHO="${2:-}"; shift 2 ;;
+  --log)     LOG="${2:-}"; shift 2 ;;
+  --err)     ERR="${2:-}"; shift 2 ;;
+  *) shift ;;
+esac; done
 
 mkdir -p "$PD/pareceres"
 : "${OUT:=$PD/pareceres/$NN-parecer-codex-c$K.md}"
-ESPELHO="$PD/pareceres/.roda-codex-c$K.json"
-ERR="$PD/pareceres/.codex-c$K.err"   # não vai no git (evidência durável = banner copiado)
+: "${ESPELHO:=$PD/pareceres/.roda-codex-c$K.json}"
+: "${ERR:=$PD/pareceres/.codex-c$K.err}"   # não vai no git (evidência durável = banner copiado)
+for _d in "$OUT" "$ESPELHO" "$ERR" ${LOG:+"$LOG"}; do mkdir -p "$(dirname -- "$_d")"; done
 
 if ! command -v codex >/dev/null 2>&1; then
   jq -cn '{revisor_ausente:"codex"}' | tee "$ESPELHO"

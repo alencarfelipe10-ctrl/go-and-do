@@ -1,0 +1,2 @@
+[{"lane":"codex","qid":"Q2","raw":"NÃO — varri src/ inteiro","verdict":"supported_no","evidence":"grep -rn campo_novo src/ = 0"},
+ {"lane":"codex","qid":"Q3","raw":"não — N/A","verdict":"unsupported_no","evidence":""}]

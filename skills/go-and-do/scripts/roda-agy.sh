@@ -9,11 +9,21 @@
 # escrita do headless É a garantia de leitura-apenas).
 #
 # Uso: roda-agy.sh <phase_dir> <NN> <ciclo> <briefing> [--out PATH] [--root DIR]
+#                   [--espelho PATH] [--log PATH] [--err PATH] [--prova PATH]
 #   parecer default: <phase_dir>/pareceres/NN-parecer-agy-c<k>.md
 #   log:             <phase_dir>/pareceres/NN-agy-c<k>.log (não vai no git)
+#   Sem as quatro flags novas o comportamento é o de sempre (defaults idênticos). Elas
+#   existem para o `roda-lanes.sh` (E4) apontar TUDO que o run produz para o run-dir
+#   dele — com caminhos fixos, dois runs sobrepostos do mesmo ciclo misturariam parecer,
+#   espelho e, pior, a evidência de modelo lida do log.
 #
-# Canário: gera nonce em pareceres/.prova-leitura-c<k>.txt e garante no briefing a
-# instrução de transcrição (append idempotente — o VALOR nunca entra no briefing).
+# Canário ÚNICO (E4): o nonce nasce no `briefing-build.sh`. Com `--prova <arquivo>` este
+# script EXTRAI o token do arquivo (`grep -oE 'PROVA-[0-9a-f]+'`, que traz a frase
+# inteira) e confere esse token no parecer. O bloco local de geração de nonce virou
+# FALLBACK: só roda quando o briefing não cita `prova_leitura` e não veio `--prova`.
+# (Antes, o script gerava um 2º nonce que o revisor nunca via — como o briefing do
+# `briefing-build.sh` já contém a string `prova_leitura`, o append era pulado e a prova
+# dava `ausente` sempre. Bug latente fechado aqui.)
 # Provado na F22 (8/9 ciclos com nonce transcrito); a falha que detecta — parecer-
 # paráfrase sem leitura de disco — é indetectável por qualquer outro meio.
 #
@@ -35,33 +45,48 @@ set -euo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
 
 PD="${1:-}"; NN="${2:-}"; K="${3:-}"; BRIEF="${4:-}"; OUT=""; ROOT=""
+ESPELHO=""; LOG=""; ERR=""; PROVA_ARQ=""
 [ -n "$PD" ] && [ -n "$NN" ] && [ -n "$K" ] && [ -f "${BRIEF:-/nao-existe}" ] \
-  || { echo "uso: roda-agy.sh <phase_dir> <NN> <ciclo> <briefing> [--out PATH] [--root DIR]" >&2; exit 2; }
+  || { echo "uso: roda-agy.sh <phase_dir> <NN> <ciclo> <briefing> [--out PATH] [--root DIR] [--espelho PATH] [--log PATH] [--err PATH] [--prova PATH]" >&2; exit 2; }
 shift 4
 while [ $# -gt 0 ]; do case "$1" in
-  --out)  OUT="${2:-}"; shift 2 ;;
-  --root) ROOT="${2:-}"; shift 2 ;;
+  --out)     OUT="${2:-}"; shift 2 ;;
+  --root)    ROOT="${2:-}"; shift 2 ;;
+  --espelho) ESPELHO="${2:-}"; shift 2 ;;
+  --log)     LOG="${2:-}"; shift 2 ;;
+  --err)     ERR="${2:-}"; shift 2 ;;
+  --prova)   PROVA_ARQ="${2:-}"; shift 2 ;;
   *) shift ;;
 esac; done
 [ -n "$ROOT" ] || ROOT="$(gad_project_root "$PD")"
 
 mkdir -p "$PD/pareceres"
 : "${OUT:=$PD/pareceres/$NN-parecer-agy-c$K.md}"
-LOG="$PD/pareceres/$NN-agy-c$K.log"
-ERR="$PD/pareceres/.agy-c$K.err"   # 0 bytes é NORMAL do agy (glog vai pro log-file)
-ESPELHO="$PD/pareceres/.roda-agy-c$K.json"
-MODELO_ESPERADO="Gemini 3.1 Pro"
+: "${LOG:=$PD/pareceres/$NN-agy-c$K.log}"
+: "${ERR:=$PD/pareceres/.agy-c$K.err}"   # 0 bytes é NORMAL do agy (glog vai pro log-file)
+: "${ESPELHO:=$PD/pareceres/.roda-agy-c$K.json}"
+for _d in "$OUT" "$LOG" "$ERR" "$ESPELHO"; do mkdir -p "$(dirname -- "$_d")"; done
+MODELO_ESPERADO="Gemini 3.7 Flash"
 
 if ! command -v agy >/dev/null 2>&1; then
   jq -cn '{revisor_ausente:"agy"}' | tee "$ESPELHO"
   exit 5
 fi
 
-# ── canário: nonce só no arquivo; instrução (com o PATH, sem o valor) no briefing ──
-PROVA="$PD/pareceres/.prova-leitura-c$K.txt"
-NONCE="PROVA-$(od -An -N3 -tx1 /dev/urandom | tr -d ' ')"
-echo "Token de prova de leitura do ciclo $K: $NONCE" > "$PROVA"
-if ! grep -q "prova_leitura" "$BRIEF"; then
+# ── canário ÚNICO: o token vem do briefing-build.sh via --prova ─────────────────
+# Fallback (sem --prova E sem `prova_leitura` no briefing): gera nonce local e faz o
+# append da instrução — o VALOR nunca entra no briefing.
+PROVA=""; NONCE=""
+if [ -n "$PROVA_ARQ" ] && [ -f "$PROVA_ARQ" ]; then
+  PROVA="$PROVA_ARQ"
+  NONCE="$(grep -oE 'PROVA-[0-9a-f]+' "$PROVA_ARQ" 2>/dev/null | head -1 || true)"
+  [ -n "$NONCE" ] || SINOS_PRE=("--prova sem token PROVA-… — canário inerte neste run")
+elif grep -q "prova_leitura" "$BRIEF"; then
+  : # briefing já traz canário próprio, mas ninguém passou --prova: sem token a conferir
+else
+  PROVA="$PD/pareceres/.prova-leitura-c$K.txt"
+  NONCE="PROVA-$(od -An -N3 -tx1 /dev/urandom | tr -d ' ')"
+  echo "Token de prova de leitura do ciclo $K: $NONCE" > "$PROVA"
   { echo; echo "## Prova de leitura (obrigatória)"; echo
     echo "Abra \`$PROVA\` e transcreva o token dele na primeira linha do parecer, no formato \`prova_leitura: <token>\`."
   } >> "$BRIEF"
@@ -69,7 +94,7 @@ fi
 
 # ── probes de capacidade (help sai no STDERR) ────────────────────────────────
 HELP=$(agy --help 2>&1 || true)
-FLAGS=(); SINOS=()
+FLAGS=(); SINOS=(${SINOS_PRE[@]+"${SINOS_PRE[@]}"})
 grep -q -- "--log-file" <<<"$HELP" && FLAGS+=(--log-file "$LOG") \
   || SINOS+=("agy sem --log-file — fallback frágil pro cli-*.log por timestamp")
 if grep -q -- "--agent" <<<"$HELP" && [ -f "$HOME/.gemini/config/agents/revisor-gsd/agent.md" ]; then
@@ -100,7 +125,7 @@ if [ -n "$EVID" ] && ! grep -qi "$MODELO_ESPERADO" <<<"$EVID"; then
 fi
 [ -z "$EVID" ] && SINOS+=("agy sem evidência de modelo no log — não invente")
 PROVA_OK=ausente
-[ -s "$OUT" ] && grep -q "prova_leitura: *$NONCE" "$OUT" && PROVA_OK=ok
+[ -n "$NONCE" ] && [ -s "$OUT" ] && grep -q "prova_leitura: *$NONCE" "$OUT" && PROVA_OK=ok
 [ "$PROVA_OK" = ausente ] && [ "$VAZIO" = false ] \
   && SINOS+=("agy sem prova de leitura (canário) — parecer ponderado como corroboração")
 # aterramento (#3194 upstream): sem citação arquivo:linha = revisou o texto colado,

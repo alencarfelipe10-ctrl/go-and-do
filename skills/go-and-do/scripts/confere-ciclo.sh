@@ -2,7 +2,23 @@
 # confere-ciclo.sh — piso mecânico contra omissão de achados em resumo de ciclo.
 #
 # Uso: confere-ciclo.sh <parecer-bruto.md> <resumo-do-ciclo(arquivo)>
-#      confere-ciclo.sh --tabela <parecer1.md> [parecer2.md ...]
+#      confere-ciclo.sh --tabela [--perguntas MANIFESTO] [--vereditos ARQ]
+#                       [--status-dir DIR] <parecer1.md> [parecer2.md ...]
+#
+# R8 (v2.2.0) — respostas dirigidas entram na MESMA contagem de brutos:
+#   --perguntas   `.intent/.perguntas-c<C>.json` escrito pelo briefing-build.sh. Para
+#                 cada Q do manifesto, por lane usável: `sim`/`incerto` = bruto;
+#                 Q ausente, duplicada ou malformada = bruto `incerto` (nunca zero);
+#                 `não` com evidência real = `nao_provisorio` — conta como bruto até o
+#                 verificador sustentar a exclusão (contagem conservadora pré-rota, E5a).
+#                 `não — N/A`/reticências/"porque não" = bruto `incerto`.
+#   --vereditos   `.intent/runs/c<C>/<run_id>/vereditos-dirigidos.json`
+#                 (`[{lane,qid,raw,verdict,evidence}]`): só `supported_no` com evidência
+#                 tira a Q da contagem (vira `dirigida-excluida`).
+#   --status-dir  diretório com os `.status-c<C>-<lane>.json` do roda-lanes.sh: lane
+#                 `usable:false` não tem suas Q contadas (já é `sem_parecer`).
+# A tabela ganha a 4ª coluna `elicitacao` (estrutural | dirigida | dirigida-ausente |
+# nao_provisorio | dirigida-excluida) e `achados_estruturais_total` JÁ INCLUI os dirigidos.
 #
 # --tabela (v1.8.0): extrai dos pareceres o esqueleto dos achados estruturais em
 # markdown (| lane | linha | trecho |) — piso de enumeração para a fusão do
@@ -55,27 +71,207 @@ extrai_achados() {
 
 if [ "${1:-}" = "--tabela" ]; then
   shift
-  [ "$#" -ge 1 ] || { echo "uso: confere-ciclo.sh --tabela <parecer.md> [...]" >&2; exit 2; }
-  echo "| lane | linha | achado (trecho) |"
-  echo "|---|---|---|"
+  PERG=""; VERED=""; STATUSDIR=""; PARECERES=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --perguntas)  PERG="${2:-}";      shift 2 ;;
+      --vereditos)  VERED="${2:-}";     shift 2 ;;
+      --status-dir) STATUSDIR="${2:-}"; shift 2 ;;
+      --*) echo "flag desconhecida: $1" >&2; exit 2 ;;
+      *) PARECERES+=("$1"); shift ;;
+    esac
+  done
+  [ "${#PARECERES[@]}" -ge 1 ] || { echo "uso: confere-ciclo.sh --tabela [--perguntas MAN] [--vereditos ARQ] [--status-dir DIR] <parecer.md> [...]" >&2; exit 2; }
+  echo "| lane | linha | achado (trecho) | elicitacao |"
+  echo "|---|---|---|---|"
   TOTAL=0
-  for P in "$@"; do
-    [ -r "$P" ] || { echo "| $(basename "$P") | — | ILEGÍVEL |"; continue; }
+  LANES_TSV=""
+  for P in "${PARECERES[@]}"; do
+    [ -r "$P" ] || { echo "| $(basename "$P") | — | ILEGÍVEL | estrutural |"; continue; }
     # lane = último nome antes do -cN (fix F22: 22-parecer-plan-agy-c4.md → agy, não
     # plan; fix F24: 24-planrev-parecer-codex-c1.md → codex — o padrão antigo exigia
     # "NN-parecer-" no início e a lane virava o basename inteiro, zerando a contagem)
     LANE=$(basename "$P" | sed -E 's/^.*[-_]([a-z]+)-c[0-9]+\.md$/\1/; s/^[0-9]+-parecer-([a-z]+)[^a-z].*$/\1/; s/\.md$//')
+    CICLO=$(basename "$P" | sed -nE 's/^.*-c([0-9]+)\.md$/\1/p')
+    LANES_TSV="${LANES_TSV}${LANE}	${CICLO}	${P}
+"
     LISTA=$(extrai_achados "$P")
     while IFS= read -r linha; do
       [ -n "$linha" ] || continue
       TOTAL=$((TOTAL+1))
       NL="${linha%%:*}"; TX="${linha#*:}"
       TX=$(printf '%s' "$TX" | sed 's/|/\\|/g' | cut -c1-100)
-      echo "| ${LANE} | L${NL} | ${TX} |"
+      echo "| ${LANE} | L${NL} | ${TX} | estrutural |"
     done <<< "$LISTA"
   done
+
+  # ── R8: respostas dirigidas viram brutos (sim/incerto/nao_provisorio) ───────
+  DIR_JSON='{}'
+  if [ -n "$PERG" ]; then
+    DIR_OUT=$(GAD_MAN="$PERG" GAD_VER="$VERED" GAD_SD="$STATUSDIR" GAD_LANES="$LANES_TSV" \
+      python3 - <<'PY'
+import json, os, re, sys, unicodedata
+
+MAN = os.environ["GAD_MAN"]; VER = os.environ.get("GAD_VER", "")
+SD  = os.environ.get("GAD_SD", ""); LANES = os.environ.get("GAD_LANES", "")
+
+def norm(s):
+    s = unicodedata.normalize("NFKD", s or "")
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[\s*`_.,;:!?()\[\]-]+", " ", s).strip().lower()
+
+resumo = {"brutas": 0, "excluidas": 0, "nao_provisorio": 0, "total": 0, "avisos": []}
+linhas = []
+
+try:
+    with open(MAN, encoding="utf-8") as fh:
+        man = json.load(fh)
+    QIDS = list(man.get("qids") or [])
+except Exception as e:
+    print("| — | — | MANIFESTO ILEGÍVEL: %s | dirigida-ausente |" % e)
+    resumo["brutas"] = 1
+    resumo["avisos"].append("manifesto de perguntas ilegível")
+    print(json.dumps(resumo, ensure_ascii=False))
+    sys.exit(0)
+
+# vereditos do gad-verificador: (lane, qid) -> verdict; duplicata invalida a entrada
+VD, DUP = {}, set()
+if VER:
+    try:
+        with open(VER, encoding="utf-8") as fh:
+            dados = json.load(fh)
+        itens = dados if isinstance(dados, list) else (dados.get("vereditos") or [])
+        for it in itens:
+            k = (it.get("lane"), it.get("qid"))
+            if k in VD:
+                DUP.add(k)
+            VD[k] = it
+    except Exception as e:
+        resumo["avisos"].append("vereditos ilegíveis (%s) — todo `não` vira incerto" % e)
+
+RE_Q = re.compile(r"^\s*(?:[-*+]\s*)?\*{0,2}\s*Q\s*(\d+)\s*\*{0,2}\s*[:：]\s*(.*)$",
+                  re.IGNORECASE)
+SEP  = re.compile(r"\s(?:—|–|--|-)\s")
+FRACA = {"", "n a", "n/a", "na", "n/d", "nd", "nao", "nao aplicavel", "nao se aplica",
+         "nenhuma", "nada", "porque nao", "pq nao", "obvio", "sem evidencia",
+         "sem evidencias", "nao ha", "irrelevante"}
+
+def le_respostas(path):
+    """Linhas `- Q<n>: ...` da seção `## Respostas dirigidas` (fallback: arquivo todo)."""
+    try:
+        linhas_arq = open(path, encoding="utf-8").read().splitlines()
+    except Exception:
+        return {}, ["parecer ilegível: %s" % path]
+    ini = None
+    for i, l in enumerate(linhas_arq):
+        if re.match(r"^#{1,6}\s*respostas dirigidas", norm(l)):
+            ini = i + 1
+            break
+    avisos = []
+    if ini is None:
+        avisos.append("seção `## Respostas dirigidas` ausente em %s" % os.path.basename(path))
+        trecho = list(enumerate(linhas_arq, 1))
+    else:
+        fim = len(linhas_arq)
+        for j in range(ini, len(linhas_arq)):
+            if re.match(r"^\s*#{1,2}\s+\S", linhas_arq[j]):
+                fim = j
+                break
+        trecho = [(k + 1, linhas_arq[k]) for k in range(ini, fim)]
+    out = {}
+    for nl, l in trecho:
+        m = RE_Q.match(l)
+        if not m:
+            continue
+        qid = "Q%d" % int(m.group(1))
+        out.setdefault(qid, []).append((nl, l.strip(), m.group(2)))
+    return out, avisos
+
+for entrada in LANES.strip().splitlines():
+    partes = entrada.split("\t")
+    if len(partes) != 3:
+        continue
+    lane, ciclo, path = partes
+    if SD and ciclo:
+        st = os.path.join(SD, ".status-c%s-%s.json" % (ciclo, lane))
+        if os.path.exists(st):
+            try:
+                if json.load(open(st, encoding="utf-8")).get("usable") is False:
+                    resumo["avisos"].append("lane %s usable:false — Q não contam" % lane)
+                    continue
+            except Exception:
+                resumo["avisos"].append("status da lane %s ilegível" % lane)
+        else:
+            resumo["avisos"].append("lane %s sem .status-c%s-%s.json" % (lane, ciclo, lane))
+
+    respostas, avisos = le_respostas(path)
+    resumo["avisos"].extend(avisos)
+    vistos = set()
+
+    for qid in QIDS + [q for q in respostas if q not in QIDS]:
+        extra = qid not in QIDS
+        if qid in vistos:
+            continue
+        vistos.add(qid)
+        ocorr = respostas.get(qid, [])
+        resumo["total"] += 1
+        if not ocorr:
+            linhas.append("| %s | — | %s NÃO RESPONDIDA (manifesto) | dirigida-ausente |"
+                          % (lane, qid))
+            resumo["brutas"] += 1
+            continue
+        nl, bruto, resto = ocorr[0]
+        dup = len(ocorr) > 1
+        m = SEP.split(resto, 1)
+        cabeca = norm(m[0])
+        evid = norm(m[1]) if len(m) > 1 else ""
+        if cabeca in ("sim", "yes", "s"):
+            r = "sim"
+        elif cabeca in ("nao", "no", "n"):
+            r = "nao"
+        elif cabeca in ("incerto", "uncertain", "talvez", "maybe"):
+            r = "incerto"
+        else:
+            r = "malformada"
+        trecho = bruto.replace("|", "\\|")[:100]
+        rot = "dirigida"
+        conta = True
+        if dup:
+            r = "incerto"
+            resumo["avisos"].append("%s/%s duplicada — vira incerto" % (lane, qid))
+        if r == "nao":
+            if evid in FRACA or len(evid) < 3 or re.fullmatch(r"[. ]*", evid or "."):
+                r = "incerto"
+            else:
+                k = (lane, qid)
+                v = VD.get(k)
+                if VER and v and k not in DUP and v.get("verdict") == "supported_no" \
+                   and str(v.get("evidence") or "").strip():
+                    rot, conta = "dirigida-excluida", False
+                    resumo["excluidas"] += 1
+                else:
+                    rot = "nao_provisorio"
+                    resumo["nao_provisorio"] += 1
+        if extra:
+            resumo["avisos"].append("%s/%s fora do manifesto — contada assim mesmo" % (lane, qid))
+        if conta:
+            resumo["brutas"] += 1
+        linhas.append("| %s | L%d | %s | %s |" % (lane, nl, trecho, rot))
+
+for l in linhas:
+    print(l)
+print(json.dumps(resumo, ensure_ascii=False))
+PY
+) || { echo "ERRO: falha ao processar as respostas dirigidas" >&2; exit 2; }
+    # linhas da tabela + última linha = JSON de resumo
+    printf '%s\n' "$DIR_OUT" | sed '$d'
+    DIR_JSON=$(printf '%s\n' "$DIR_OUT" | tail -1)
+    NDIR=$(printf '%s' "$DIR_JSON" | sed -n 's/.*"brutas"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p')
+    TOTAL=$((TOTAL + ${NDIR:-0}))
+  fi
   echo
   echo "achados_estruturais_total: ${TOTAL}"
+  [ -n "$PERG" ] && echo "dirigidas: $DIR_JSON"
   exit 0
 fi
 

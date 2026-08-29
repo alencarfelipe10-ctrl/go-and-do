@@ -11,6 +11,11 @@
 #     autorreportada — proibido desde a v1.8.2).
 #   - VIOLACAO    cN → a tabela mostra >=3 achados brutos e não existe o marcador
 #     .verificador-cN.done (o gad-verificador não rodou: rota inline fora do teto).
+#   - VIOLACAO-INVERSA cN (E5a, v2.2.0) → o coordenador despachou o filho (`mode: child`)
+#     com <=2 brutos pré-rota num ciclo >=3: o caro sem o gatilho. A rota declarada vem
+#     de .rota-verificacao-cN.json {run_id, mode: inline|child, brutos_pre_rota} — o
+#     marcador .verificador-cN.done NÃO distingue as rotas (a inline também o grava).
+#     Severidade decidida pelo dono (28/08): exit 1 desde a 1ª fase, igual à direta.
 #   - ok          cN → rota respeitada (>=3 com verificador, ou <=2 em qualquer rota).
 #
 # Exit 0 = todas as rotas respeitadas · exit 1 = há SEM-TABELA/VIOLACAO (quem chamou
@@ -58,9 +63,32 @@ for N in $ciclos; do
   else
     echo "ok c$N ($brutos brutos$([ -f "$DIR/.verificador-c$N.done" ] && echo ', verificador rodou'))"
   fi
+  # ── E5a: violação INVERSA (rota cara sem gatilho) ──────────────────────────
+  # Ausência do .rota-verificacao-cN.json é AVISO nesta versão (o coordenador só passa
+  # a gravá-lo com o intent.md da v2.2.0); silêncio, nunca. Vira falha quando o prompt
+  # estiver publicado — a decisão está declarada aqui, não implícita.
+  rota="$DIR/.rota-verificacao-c$N.json"
+  if [ ! -f "$rota" ]; then
+    echo "aviso: c$N sem .rota-verificacao-c$N.json — rota declarada não medível (E5a não avaliado)"
+  else
+    modo=$(sed -n 's/.*"mode"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' "$rota" | head -1)
+    pre=$(sed -n 's/.*"brutos_pre_rota"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' "$rota" | head -1)
+    if [ -z "$modo" ] || [ -z "$pre" ]; then
+      echo "SEM-ROTA c$N (.rota-verificacao-c$N.json sem mode/brutos_pre_rota legíveis)"
+      falha=1
+    elif [ "$modo" = child ] && [ "$pre" -le 2 ] && [ "$N" -ge 3 ]; then
+      echo "VIOLACAO-INVERSA c$N (mode=child com $pre brutos pré-rota num ciclo >=3 — filho despachado sem gatilho)"
+      falha=1
+    else
+      echo "rota ok c$N (mode=$modo, brutos_pre_rota=$pre)"
+    fi
+  fi
   # Coluna categoria (decisão 1.7): achado sem tag [A-E]-* na tabela é aviso, não falha
   # — o verificador revalida com fail-up; sem tag, a parada por custo marginal degrada.
-  sem_cat=$(grep -aE '^\| [^|]+ \| L?[0-9]+ \|' "$tabela" | grep -cvE '\[(A|B|C|D|E)-' || true)
+  # (v2.2.0) as linhas de resposta dirigida (R8) não têm categoria por desenho — a
+  # categoria delas nasce no verificador; contá-las aqui acenderia o aviso todo ciclo.
+  sem_cat=$(grep -aE '^\| [^|]+ \| L?[0-9]+ \|' "$tabela" \
+    | grep -avE '\| (dirigida|dirigida-ausente) \|' | grep -cvE '\[(A|B|C|D|E)-' || true)
   [ "$sem_cat" -gt 0 ] 2>/dev/null && echo "aviso: c$N tem $sem_cat achado(s) sem categoria [A-E] na tabela (fail-up aplicado rio abaixo)"
 done
 exit $falha

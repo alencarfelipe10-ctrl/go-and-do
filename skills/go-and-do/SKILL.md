@@ -196,6 +196,29 @@ and Etapa 1 uses it as input: spec and discuss adopt its decisions as user-locke
 adversarial briefing discloses their origin, and the executive summary declares the file was
 used. `--obs` is no longer the vehicle for this.
 
+**PRE-SPEC decisions block (mandatory contract):** the decisions must be machine-readable —
+prose is not a source. The file carries exactly one block
+
+```
+<!-- gad:decisoes:begin v1 -->   …canonical JSON array…   <!-- gad:decisoes:end -->
+```
+
+one object per decision, keys `id` (`PS-nn`), `kind`, `area`, `req_anchor` (`R-n`/`SC-n`/`none`),
+`decisao`, `opcoes_descartadas[]`, `evidencia`, `reversibilidade` (`reversible|costly|one-way`),
+`reversibilidade_justificativa` (required for `costly`/`one-way`), `ressalva` (optional), `span`.
+
+Two kinds, two destinations: `decisao_dono` **locks** (marked `[pre-spec:PS-nn, R-n]`; reviewers
+attack its consequences, never the decision); `fato_medido` **does not** — it enters the SPEC as
+`[medido:PS-nn]`, is listed to the reviewers as a fact to verify, and requires a reproducible
+`evidencia` (`file:line`, or command + output).
+
+Fail-closed: block missing or invalid → Etapa 1 returns `needs_decision` — migrate the file
+(`scripts/pre-spec-migra.py` drafts the block from the prose for the owner to review) **or**
+authorize the legacy route (the child reads the whole file, mandatory `pre_spec_sem_bloco` bell).
+Never "zero decisions in silence". The answer is durable (`.intent/pre-spec-route.json`); a
+changed file hash invalidates it and re-asks. `scripts/confere-pre-spec.sh` is the gate (runs in
+`setup-intencao.sh` and `confere-etapa.sh 1`); its header carries the exact codes.
+
 Phases without a flag skip those gates (UI/AI contracts and audits). Everything else always
 runs. A step that does not run (config gate off, tool unavailable) is announced and disclosed
 in the summary.

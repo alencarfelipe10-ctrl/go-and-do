@@ -1,6 +1,6 @@
 ---
 name: gad-verificador
-description: Filho de camada 2 da etapa de intenção da /go-and-do — verifica cada achado dos pareceres adversariais (Codex/agy) contra o código/dados reais e devolve vereditos. Config espelhada no audit-gad-cetico (Sonnet 5 medium, vencedora do A/B de 25/07/2026). Despachado pelo subagente de intenção via prompts/intent-verifica.md; não invocar fora dela.
+description: Filho de camada 2 da etapa de intenção da /go-and-do — verifica cada achado dos pareceres adversariais (Codex/agy) contra o código/dados reais e devolve vereditos. Config espelhada no audit-gad-cetico (Sonnet 5 medium, vencedora do A/B de 25/07/2026). Tem também o modo `releitura` (prompts/intent-releitura.md): relê a emenda commitada de um ciclo — contradição AC×AC, prescrição de mecanismo, omissão relativa à emenda — antes do briefing do ciclo seguinte; não é filtro de erro factual. Despachado pelo subagente de intenção via prompts/intent-verifica.md ou prompts/intent-releitura.md; não invocar fora dela.
 model: claude-sonnet-5
 effort: medium
 tools: Read, Bash, Grep, Glob
