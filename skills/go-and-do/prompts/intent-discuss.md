@@ -27,11 +27,15 @@ absolutos em tudo.
    renderizador emite `[pre-spec:PS-nn, R-n]` no bullet do CONTEXT (a marca em prosa não
    existe mais — o campo `origin` do checkpoint é a fonte). Duas rotas, pelo
    `pre_spec_mode`:
-   - **`structured`** (rota normal): o coordenador te passa **só o bloco `gad:decisoes`**
-     (array JSON) — **não abra o `NN-PRE-SPEC.md`**. Só `kind: decisao_dono` trava;
-     `kind: fato_medido` não vira decisão (ele vive no SPEC como `[medido:PS-nn]`).
-     Quando o `discuss-init.sh --pre-spec` entrar (onda 2), essas entradas chegarão
-     prontas como batch e você não montará nenhuma delas à mão.
+   - **`structured`** (rota normal): **não faça nada** — nem abrir o `NN-PRE-SPEC.md`, nem
+     passar flag alguma, nem montar decisão à mão. O próprio workflow resolve: o
+     `discuss-init.sh` **autodetecta** `<phase_dir>/*-PRE-SPEC.md`, lê só o bloco
+     `gad:decisoes`, gera o batch **filtrado a `kind: decisao_dono`** (o `fato_medido`
+     nunca vira decisão — ele vive no SPEC como `[medido:PS-nn]`) e o `map-pre-spec`
+     insere essas entradas no checkpoint com `origin: pre-spec` e o `PS-nn` de origem,
+     fechando as áreas cobertas. Confira o rastro no eco do init
+     (`pre_spec=ok n=<N>` na linha `SPEC:` e a linha `PRE_SPEC:`) e reporte `N`; se vier
+     `pre_spec=ausente` com PRE-SPEC no phase_dir, é sino, não silêncio.
    - **`legacy`** (rota antiga, autorizada pelo dono): `Read` o `NN-PRE-SPEC.md` INTEIRO
      — **única exceção ao passo 0, e mesmo assim só DEPOIS da `Skill`**, dentro do loop
      de áreas, quando uma gray area precisar da resposta travada. Trate a prosa como as
