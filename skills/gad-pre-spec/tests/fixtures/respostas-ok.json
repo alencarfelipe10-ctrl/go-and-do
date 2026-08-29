@@ -1,0 +1,30 @@
+[
+  {
+    "tipo": "decisao",
+    "assunto": "Grão do relatório",
+    "texto": "O relatório agrega no grão responsável-mês (Opção A).",
+    "requisito": "R2",
+    "descartadas": ["Opção B — uma linha por contrato", "Opção C — híbrida"],
+    "evidencia": "src/motor.py:121-127",
+    "reversibilidade": "cara",
+    "justificativa": "trocar o grão depois exige reprocessar 14 meses de fechamento",
+    "ressalva": "o relatório passa a saber mais que o razão",
+    "onde": "§5 Decisões do dono"
+  },
+  {
+    "tipo": "medicao",
+    "assunto": "Sobreposição de janelas",
+    "texto": "As janelas de responsável nunca se sobrepõem no mesmo mês (9 de 9 medidos).",
+    "evidencia": "scripts/mede-janelas.py → 9/9 sem sobreposição",
+    "reversibilidade": "reversivel",
+    "onde": "§4 Medições"
+  },
+  {
+    "tipo": "decisao",
+    "assunto": "Rótulo da coluna",
+    "texto": "O rótulo canônico da coluna fica \"Resultado — receita/desconto\".",
+    "evidencia": "none",
+    "reversibilidade": "reversivel",
+    "onde": "§5 Decisões do dono"
+  }
+]

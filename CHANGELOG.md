@@ -2,6 +2,47 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.2.0] — em andamento
+
+### Adicionado
+
+- **Skill `/gad-pre-spec`** (`skills/gad-pre-spec/`) — sessão interativa que produz o
+  `NN-PRE-SPEC.md` de uma fase, o insumo que a `/go-and-do` entrega ao `gsd-spec-phase` e ao
+  `gsd-discuss-phase`. Nasce de um levantamento dos 9 PRE-SPECs reais (grupo-inspired,
+  oxmuscle-v2, rl-representation): nunca houve molde — cada documento copiava o anterior, o que
+  produziu 3 linhagens divergentes, 4 convenções de nome e **zero** blocos `gad:decisoes` (ou
+  seja, toda fase caía na rota legado do `intent.md`). A skill fixa as três coisas:
+  - **molde único** em `templates/PRE-SPEC.md` — 11 seções (leigo · origem · código ·
+    medições · decisões do dono · hipóteses falsificadas · regras do cliente · fora de escopo ·
+    aberto deliberadamente · ressalvas · referências) + as marcas do bloco. Seção vazia fica
+    com `— nada —`, nunca é removida.
+  - **nome canônico**: `<phase_dir>/<padded_phase>-PRE-SPEC.md`, com `padded_phase` vindo do
+    `init.phase-op` — é o caminho exato que o `abre-rodada.sh` procura (fase 2 → `02-…`).
+  - **bloco gerado, não escrito à mão**: `scripts/gera-bloco.py` traduz as respostas da
+    entrevista (JSON com nomes em português) para o contrato v1, numera `PS-01…PS-99`, insere
+    entre as marcas e chama o `confere-pre-spec.sh --so-bloco`; reprovou, o arquivo é
+    restaurado e o exit é ≠ 0.
+  - `scripts/abre-fase.sh` envolve `init.phase-op` (e `phase.insert` + espelhos de estado
+    quando o dono autoriza a inserção) e devolve `{phase_found, dir, padded, alvo, existe}` —
+    `dir` cai em `expected_phase_dir` quando o diretório ainda não existe, **nunca** no
+    `$NN-nova`. `--inserir` exige `--apos <M>` porque quem calcula o número decimal é o GSD, e
+    o script reporta `numero_atribuido`/`aviso_numero` quando ele diverge do pedido.
+  - `scripts/confere-pii.sh` (+ `scripts/nomes-permitidos.txt`) — gate de PII em duas camadas:
+    lista dura dos nomes vistos nos insumos (vale em qualquer contexto) e heurística
+    "Nome Sobrenome" fora de heading, código, caminho e URL. Fecha a dívida da fase 24, em que
+    a PII foi corrigida a posteriori com `sed`.
+  - Regra permanente escrita no molde, na skill e no gerador: **número sem fonte executada na
+    sessão é `[herdado]`** e não vira `fato_medido`. Precedente: uma fase montada sobre números
+    de auditoria velha teve os números reprovados quando foram re-derivados.
+  - 4 suítes em `skills/gad-pre-spec/tests/` (`roda.sh` + `test-fase.sh`, `test-molde.sh`,
+    `test-gera-bloco.sh`, `test-pii.sh`), com bancada `.planning/` sintética no scratchpad e
+    `init.phase-op` real. **Não** são recolhidas pelo runner da raiz (`tests/roda.sh`), que só
+    varre `tests/test-*.sh`.
+  - Comportamento documentado, contrário ao que o plano supunha: `confere-pre-spec.sh
+    --so-bloco` **aprova** bloco vazio (`[]` → exit 0, `entradas=0`); não existe código
+    `BLOCO-VAZIO`. O gate de conteúdo é a revisão com o dono (passo 6 da skill), e o
+    `test-molde.sh` trava esse comportamento.
+
 ## [2.1.9] — 2026-08-27
 
 Pacote da auditoria de fecho da F24.3 (grupo-inspired, 2 sessões, 26/08 —

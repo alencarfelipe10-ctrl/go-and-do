@@ -10,7 +10,7 @@
 # e o conteúdo é um ARRAY JSON canônico (parser `json` da stdlib com `object_pairs_hook`,
 # porque `json.loads` aceita chave duplicada em silêncio e fica com a última).
 # Campos por entrada: id (PS-nn) · kind (decisao_dono|fato_medido) · area ·
-# req_anchor (R-n | SC-n | none) · decisao · opcoes_descartadas[] · evidencia ·
+# req_anchor (R-n | SC-n | ID do REQUIREMENTS | none) · decisao · opcoes_descartadas[] · evidencia ·
 # reversibilidade (reversible|costly|one-way) · reversibilidade_justificativa
 # (obrigatória em costly/one-way) · ressalva (opcional) · span.
 #
@@ -67,7 +67,7 @@ OBRIG  = ["id", "kind", "area", "req_anchor", "decisao", "evidencia", "reversibi
 CONHEC = set(OBRIG) | {"opcoes_descartadas", "reversibilidade_justificativa", "ressalva"}
 
 RE_ID     = re.compile(r'^PS-\d\d$')
-RE_ANCHOR = re.compile(r'^(?:R-?\d+|SC-?\d+|none)$')
+RE_ANCHOR = re.compile(r'^(?:[A-Z]{1,8}-?\d+|none)$')  # R-n, SC-n ou ID do REQUIREMENTS do projeto (RESID-01, DESC-01…) — alargado 29/08
 RE_PONTO  = re.compile(r'\S+\.[A-Za-z0-9_]+:\d+(?:-\d+)?')   # arquivo:linha
 
 falhas, avisos = [], []
@@ -138,7 +138,7 @@ for i, e in enumerate(dados):
     if e["kind"] not in KINDS:
         morre_invalido(f"{psid}: `kind` inválido ({e['kind']!r}); use {sorted(KINDS)}", ln)
     if not RE_ANCHOR.match(str(e["req_anchor"])):
-        morre_invalido(f"{psid}: `req_anchor` inválido ({e['req_anchor']!r}); use R-n, SC-n ou none", ln)
+        morre_invalido(f"{psid}: `req_anchor` inválido ({e['req_anchor']!r}); use R-n, SC-n, um ID do REQUIREMENTS (ex. DESC-01) ou none", ln)
     if e["reversibilidade"] not in REVERS:
         morre_invalido(f"{psid}: `reversibilidade` inválida ({e['reversibilidade']!r})", ln)
     if e["reversibilidade"] in ("costly", "one-way") and not str(e.get("reversibilidade_justificativa", "")).strip():

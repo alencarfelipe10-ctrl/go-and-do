@@ -1,0 +1,77 @@
+# nomes-permitidos.txt — termos capitalizados que o confere-pii.sh NUNCA acusa.
+# Um termo por linha (comparação sem acento e sem caixa). `#` = comentário.
+# Entram aqui: modelos, ferramentas, produtos, projetos e siglas — nunca pessoas.
+# Para acrescentar nomes só de um PRE-SPEC, use um arquivo próprio e passe --permitidos.
+
+# modelos e fabricantes
+Claude
+Claude Code
+Anthropic
+Opus
+Sonnet
+Haiku
+Fable
+OpenAI
+Codex
+Antigravity
+Gemini
+GPT
+
+# ferramentas / primitivas
+AskUserQuestion
+GSD
+MemPalace
+Firecrawl
+Playwright
+Supabase
+Vercel
+GitHub
+Telegram
+WhatsApp
+Fireflies
+Python
+Node
+Bash
+Read
+Grep
+Glob
+Write
+Edit
+Skill
+Agent
+
+# projetos e artefatos deste acervo
+PRE-SPEC
+SPEC
+ROADMAP
+REQUIREMENTS
+STATE
+LEARNINGS
+CONTEXT
+PLAN
+REVIEW
+UAT
+RL Conecta
+Vox AI
+
+# cabeçalhos e rótulos frequentes em português
+Fase
+Data
+Autor
+Status
+Goal
+Insumo
+Origem
+Medições
+Decisões
+Decisão
+Opção
+Opções
+Regras
+Ressalvas
+Referências
+Hipóteses
+Consequência
+Reversibilidade
+Milestone
+Nada

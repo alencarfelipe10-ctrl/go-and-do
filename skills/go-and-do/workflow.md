@@ -605,7 +605,8 @@ Opus 5 medium — coordenador roteia; o julgamento pesado mora nos filhos e nos 
 `prompts/intent.md`, levando `N`, `NN`, `phase_dir`, `project_root` absolutos e, numa
 continuação, a resposta verbatim. Se o abre-rodada reportou `pre_spec` não-nulo
 (`NN-PRE-SPEC.md` detectado no diretório da fase — decisões pré-travadas pelo usuário numa
-sessão interativa anterior), repasse o caminho no despacho e declare o uso no sumário
+sessão interativa anterior; a rota normal para produzi-lo é `/gad-pre-spec NN`, que já grava o
+bloco `gad:decisoes`), repasse o caminho no despacho e declare o uso no sumário
 executivo — o `setup-intencao.sh` classifica o bloco de decisões (`pre_spec_bloco:
 ok|ausente|invalido`) e o `pre_spec_mode: structured|legacy` vai explícito no despacho dos dois
 filhos. Dentro dele: filho `gad-spec` (SPEC `--auto`) → filho
@@ -647,7 +648,8 @@ transcript, não contagem em sessão.
   - **Sub-caso `pre_spec_bloco: ausente|invalido`** (fail-closed do §0.5 do SKILL.md — PRE-SPEC
     presente sem o bloco `gad:decisoes` legível por máquina, ou com bloco inválido): a pergunta
     tem duas saídas — **(a) migrar** o PRE-SPEC para o bloco (`scripts/pre-spec-migra.py` gera
-    um rascunho a partir da prosa **para o dono revisar** — ele não decide nada) ou **(b)
+    um rascunho a partir da prosa **para o dono revisar** — ele não decide nada; é ferramenta de
+    legado, só para PRE-SPECs anteriores à 2.2.0) ou **(b)
     autorizar a rota antiga**, em que o filho lê o arquivo inteiro e o sino
     `pre_spec_sem_bloco` é obrigatório no retorno e no INTENT-REVIEW. Nunca siga com "zero
     decisões" em silêncio. A resposta é durável (`.intent/pre-spec-route.json`) e vale enquanto

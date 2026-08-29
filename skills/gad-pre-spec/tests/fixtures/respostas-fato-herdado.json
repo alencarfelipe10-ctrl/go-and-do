@@ -1,0 +1,10 @@
+[
+  {
+    "tipo": "medicao",
+    "assunto": "Volume de registros",
+    "texto": "São 217 registros com divergência.",
+    "evidencia": "número copiado do laudo de julho",
+    "reversibilidade": "reversivel",
+    "onde": "§4 Medições"
+  }
+]

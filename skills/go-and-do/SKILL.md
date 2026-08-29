@@ -188,9 +188,10 @@ Phase number + flags: $ARGUMENTS
 - `--vault <profile>` — pass a pre-configured gsd-browser vault profile so the UAT subagent can log in and verify authenticated flows (moves login flows from basket 3 to verifiable). 2FA/captcha stay basket 3.
 - `--obs "<texto livre>"` — a free-text note for this run (e.g. "check file X", "see continue-here.md"). Captured once in Etapa 0.1 and carried as a standing note to **every** stage dispatched in this invocation (Sub-rotina H prefixes it onto each subagent's dispatch message) — each stage judges for itself whether it's relevant. Not persisted across sessions: repeat the flag on a resume if you want it applied again.
 
-**PRE-SPEC (convention, not a flag):** if the phase directory already contains
-`NN-PRE-SPEC.md` (decisions locked in an interactive session before the run — exact name,
-zero-padded NN), the opening detects it automatically (`abre-rodada.sh` → `pre_spec` field)
+**PRE-SPEC (convention, not a flag):** the normal way to produce one is `/gad-pre-spec NN`
+(interactive session before the run — it writes `NN-PRE-SPEC.md` already carrying the
+`gad:decisoes` block below). If the phase directory already contains
+`NN-PRE-SPEC.md` (exact name, zero-padded NN), the opening detects it automatically (`abre-rodada.sh` → `pre_spec` field)
 and Etapa 1 uses it as input: spec and discuss adopt its decisions as user-locked (marked
 `[pre-spec]`, never re-asked or overridden; irreconcilable conflicts ring a bell), the
 adversarial briefing discloses their origin, and the executive summary declares the file was
@@ -203,7 +204,7 @@ prose is not a source. The file carries exactly one block
 <!-- gad:decisoes:begin v1 -->   …canonical JSON array…   <!-- gad:decisoes:end -->
 ```
 
-one object per decision, keys `id` (`PS-nn`), `kind`, `area`, `req_anchor` (`R-n`/`SC-n`/`none`),
+one object per decision, keys `id` (`PS-nn`), `kind`, `area`, `req_anchor` (`R-n`/`SC-n`/REQUIREMENTS id like `DESC-01`/`none`),
 `decisao`, `opcoes_descartadas[]`, `evidencia`, `reversibilidade` (`reversible|costly|one-way`),
 `reversibilidade_justificativa` (required for `costly`/`one-way`), `ressalva` (optional), `span`.
 
@@ -213,7 +214,8 @@ attack its consequences, never the decision); `fato_medido` **does not** — it 
 `evidencia` (`file:line`, or command + output).
 
 Fail-closed: block missing or invalid → Etapa 1 returns `needs_decision` — migrate the file
-(`scripts/pre-spec-migra.py` drafts the block from the prose for the owner to review) **or**
+(`scripts/pre-spec-migra.py` drafts the block from the prose for the owner to review — legacy
+tool, only for PRE-SPECs written before 2.2.0; new ones come from `/gad-pre-spec`) **or**
 authorize the legacy route (the child reads the whole file, mandatory `pre_spec_sem_bloco` bell).
 Never "zero decisions in silence". The answer is durable (`.intent/pre-spec-route.json`); a
 changed file hash invalidates it and re-asks. `scripts/confere-pre-spec.sh` is the gate (runs in

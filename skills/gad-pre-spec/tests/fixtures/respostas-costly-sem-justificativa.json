@@ -1,0 +1,10 @@
+[
+  {
+    "tipo": "decisao",
+    "assunto": "Migração do esquema",
+    "texto": "A migração reescreve a tabela de fechamento em vez de versionar.",
+    "evidencia": "none",
+    "reversibilidade": "sem-volta",
+    "onde": "§5 Decisões do dono"
+  }
+]

@@ -14,7 +14,9 @@
 # `run` e o ponteiro só nascem se tudo antes passou):
 #   1. parse fail-closed dos argumentos (0.1: flag desconhecida/número ausente = erro)
 #   2. portões de entrada (gsd-tools resolvível · .planning existe · fase no ROADMAP)
-#   3. retrato do disco (init.phase-op N) + detecção do NN-PRE-SPEC.md (insumo
+#   3. retrato do disco (init.phase-op N) — diretório = `phase_dir`, ou `expected_phase_dir`
+#      quando a fase está no ROADMAP mas ainda não tem pasta (nunca um nome inventado) —
+#      + detecção do NN-PRE-SPEC.md (insumo
 #      pré-travado pelo usuário → campo `pre_spec` no JSON, repassado à Etapa 1)
 #   4. gate de contexto embutido (adendo 0.2: a Etapa 1 NÃO roda gate próprio;
 #      status=stop → exit 3 com instrução de retomar fresh)
@@ -36,7 +38,9 @@
 #      o run-log em ms; o stop/fecho da rodada o remove)
 #
 # Saída: JSON 1 linha + espelho .planning/.gad/last-abre-rodada.json (PC-5).
-# Exit: 0 ok · 2 argumento/portão · 3 contexto stop · 4 fase não encontrada.
+# Exit: 0 ok · 2 argumento/portão · 3 contexto stop · 4 fase não encontrada (fora do
+#       ROADMAP) · 5 fase no ROADMAP mas diretório irresolúvel (phase_dir e
+#       expected_phase_dir vazios no init.phase-op).
 
 set -euo pipefail
 shopt -s nullglob
@@ -82,14 +86,24 @@ _gsd_resolve || exit 2
 
 # ── 3. retrato ───────────────────────────────────────────────────────────────
 RETRATO=$(cd "$ROOT" && gsd_run query init.phase-op "$FASE" 2>/dev/null | jq -c \
-  '{phase_found, phase_number, phase_name, phase_dir, padded_phase, planning_exists,
+  '{phase_found, phase_number, phase_name, phase_dir, expected_phase_dir, padded_phase, planning_exists,
     has_context, has_plans, has_research, has_reviews, has_verification, plan_count}') \
   || { echo "ERRO: retrato falhou (init.phase-op $FASE)" >&2; exit 2; }
 [ "$(jq -r '.phase_found' <<<"$RETRATO")" = "true" ] \
   || { echo "ERRO: fase $FASE não está no ROADMAP deste projeto" >&2; exit 4; }
 PHASE_DIR=$(jq -r '.phase_dir // empty' <<<"$RETRATO")
 NN=$(jq -r '.padded_phase // empty' <<<"$RETRATO")
-[ -n "$PHASE_DIR" ] || PHASE_DIR="$ROOT/.planning/phases/$NN-nova"
+# fase no ROADMAP cujo diretório ainda não existe no disco: o próprio GSD diz onde ele
+# DEVE nascer (`expected_phase_dir`, já com o prefixo do projeto — ex. RLR-03-deploy).
+# Nunca inventar nome: o antigo fallback "$NN-nova" produzia um diretório que nenhum
+# workflow do GSD encontra, e o PRE-SPEC do dono ficava invisível.
+if [ -z "$PHASE_DIR" ]; then
+  PHASE_DIR=$(jq -r '.expected_phase_dir // empty' <<<"$RETRATO")
+fi
+[ -n "$PHASE_DIR" ] || {
+  echo "ERRO: fase $FASE está no ROADMAP mas o diretório não pôde ser resolvido (phase_dir e expected_phase_dir vazios em init.phase-op $FASE) — confira o ROADMAP com /gsd-phase, ou produza o insumo com /gad-pre-spec $FASE" >&2
+  exit 5
+}
 
 # PRE-SPEC: insumo pré-travado pelo usuário (sessão interativa anterior à rodada).
 # Detecção por existência exata, sem glob — se existe, a Etapa 1 o usa como insumo
