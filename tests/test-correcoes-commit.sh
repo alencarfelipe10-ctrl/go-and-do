@@ -66,8 +66,16 @@ if [ $rc -ne 0 ]; then erro "commit do ciclo falhou (rc=$rc)" "$saida"; else
   cam=$(jq -cr '.caminhos|sort|join(",")' "$apl" 2>/dev/null)
   [ "$cam" = ".planning/ROADMAP.md,.planning/phases/24.3-fase/24.3-SPEC.md" ] \
     && ok '.aplicado lista exatamente os caminhos comitados' || erro ".aplicado.caminhos" "$cam"
-  ids=$(jq -cr '.correcoes|map(.id+":"+.hash)|join(",")' "$apl" 2>/dev/null)
-  [ "$ids" = "c1-01:h1,c1-02:h2" ] && ok '.aplicado traz {id,hash} das correcoes' || erro "ids" "$ids"
+  # C1: `h1`/`h2` não são caminhos comitados → são ignorados (era o placeholder
+  # `:<hash>` do intent.md, sem fonte). O ciclo tocou 2 caminhos e nenhum id declarou
+  # qual → hash vazio, mas DECLARADO em hash_ausente[].
+  ids=$(jq -cr '.correcoes|map(.id)|join(",")' "$apl" 2>/dev/null)
+  [ "$ids" = "c1-01,c1-02" ] && ok '.aplicado traz os ids das correcoes' || erro "ids" "$ids"
+  vaz=$(jq -cr '[.correcoes[]|select(.hash=="")]|length' "$apl" 2>/dev/null)
+  aus=$(jq -cr '.hash_ausente|sort|join(",")' "$apl" 2>/dev/null)
+  { [ "$vaz" = 2 ] && [ "$aus" = "c1-01,c1-02" ]; } \
+    && ok '>1 caminho sem declaração → hash vazio E id em hash_ausente[]' \
+    || erro "hash_ausente" "vazias=$vaz ausentes=$aus"
   msg=$(G log -1 --pretty=%s)
   [ "$msg" = "docs(fase 24.3): correções do ciclo 1 — c1-01:h1,c1-02:h2" ] \
     && ok "mensagem canônica do commit" || erro "mensagem" "$msg"
@@ -126,6 +134,48 @@ RUN "$PD" 3 --ids "c3-01" "${ALVOS[@]}" >/dev/null 2>&1; rc=$?
   || erro "sem marcador .vazio"
 [ -f "$PD/.intent/.correcoes-c3.aplicado" ] && erro ".aplicado gravado sem commit" || ok "nenhum .aplicado"
 [ "$(G rev-parse HEAD)" = "$HEAD_ANTES" ] && ok "HEAD não avançou (commit vazio não nasce)" || erro "HEAD avançou"
+limpa
+
+echo "== C1.1 — um único caminho comitado → hash = blob sha do arquivo no commit"
+monta_repo; set_alvos
+RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1
+echo "so a spec mudou neste ciclo" >> "$PD/24.3-SPEC.md"
+RUN "$PD" 1 --ids "c1-01,c1-02" "${ALVOS[@]}" >/dev/null 2>&1; rc=$?
+apl="$PD/.intent/.correcoes-c1.aplicado"
+if [ "$rc" != 0 ]; then erro "fecho falhou (rc=$rc)"; else
+  cam=$(jq -r '.caminhos|length' "$apl")
+  [ "$cam" = 1 ] && ok "o ciclo comitou exatamente 1 caminho" || erro "caminhos=$cam"
+  esperado=$(G rev-parse "HEAD:.planning/phases/24.3-fase/24.3-SPEC.md")
+  h1=$(jq -r '.correcoes[0].hash' "$apl"); h2=$(jq -r '.correcoes[1].hash' "$apl")
+  [ -n "$h1" ] && [ "$h1" = "$esperado" ] && [ "$h2" = "$esperado" ] \
+    && ok "hash não-vazio e igual ao blob do arquivo no commit" \
+    || erro "hash" "h1=$h1 h2=$h2 esperado=$esperado"
+  aus=$(jq -cr '.hash_ausente' "$apl")
+  [ "$aus" = "[]" ] && ok "hash_ausente presente e vazio (chave sempre gravada)" \
+    || erro "hash_ausente deveria ser []" "$aus"
+fi
+limpa
+
+echo "== C1.2 — forma 2 (id:<caminho>): cada correção pega o blob do caminho que declarou"
+monta_repo; set_alvos
+RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1
+echo "correcao na spec"    >> "$PD/24.3-SPEC.md"
+echo "correcao no context" >> "$PD/24.3-CONTEXT.md"
+RUN "$PD" 1 --ids "c1-01:.planning/phases/24.3-fase/24.3-SPEC.md,c1-02:.planning/phases/24.3-fase/24.3-CONTEXT.md" \
+  "${ALVOS[@]}" >/dev/null 2>&1; rc=$?
+apl="$PD/.intent/.correcoes-c1.aplicado"
+if [ "$rc" != 0 ]; then erro "fecho falhou (rc=$rc)"; else
+  bs=$(G rev-parse "HEAD:.planning/phases/24.3-fase/24.3-SPEC.md")
+  bc=$(G rev-parse "HEAD:.planning/phases/24.3-fase/24.3-CONTEXT.md")
+  h1=$(jq -r '.correcoes[]|select(.id=="c1-01")|.hash' "$apl")
+  h2=$(jq -r '.correcoes[]|select(.id=="c1-02")|.hash' "$apl")
+  { [ "$h1" = "$bs" ] && [ "$h2" = "$bc" ]; } \
+    && ok "caminho declarado resolve o hash mesmo com 2 caminhos no commit" \
+    || erro "hashes por caminho declarado" "c1-01=$h1 (esp $bs) c1-02=$h2 (esp $bc)"
+  [ "$(jq -cr '.hash_ausente' "$apl")" = "[]" ] && ok "nenhuma ausência" || erro "hash_ausente não vazio"
+  [ "$(jq -cr '.ids|join(",")' "$apl")" = "c1-01,c1-02" ] \
+    && ok "ids[] continua só com os ids (sem o caminho)" || erro "ids[] contaminado"
+fi
 limpa
 
 echo

@@ -96,9 +96,23 @@ if [ -n "$CWD" ] && [ -d "$CWD/.planning/phases" ]; then
 fi
 
 # ── Janela de silêncio: entrega muda entre 23h e 07h. ────────────────────────
-H=$((10#$(date +%H)))
-SILENT=false
-{ [ "$H" -ge 23 ] || [ "$H" -lt 7 ]; } && SILENT=true
+# Fonte única (B1, PLANO-B-rotas.md): consome skills/go-and-do/scripts/janela-silencio.sh
+# em vez de recalcular a janela aqui — dois cálculos independentes da mesma regra foi
+# exatamente o que deixou a pausa graciosa noturna sem disparar na F24.4. Se o script não
+# estiver disponível (instalação parcial, caminho diferente), cai no cálculo local antigo
+# como resguardo — este hook nunca pode deixar de notificar por causa disso.
+JANELA_SCRIPT="$(dirname -- "${BASH_SOURCE[0]:-$0}")/../skills/go-and-do/scripts/janela-silencio.sh"
+if [ -x "$JANELA_SCRIPT" ]; then
+  if "$JANELA_SCRIPT" >/dev/null 2>&1; then
+    SILENT=false
+  else
+    SILENT=true
+  fi
+else
+  H=$((10#$(date +%H)))
+  SILENT=false
+  { [ "$H" -ge 23 ] || [ "$H" -lt 7 ]; } && SILENT=true
+fi
 
 TEXT="${TITULO}"
 [ -n "$FASE_INFO" ] && TEXT="${TEXT}

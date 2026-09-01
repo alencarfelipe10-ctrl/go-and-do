@@ -115,17 +115,20 @@ qids=$(jq -cr '.qids|join(",")' "$PD/.intent/.perguntas-c1.json" 2>/dev/null)
 
 echo "== R3 — c1 com correção do ciclo 0: revalidação dirigida + sino não corrigido visível"
 limpa; monta_repo
-fecha_ciclo0 "c0-01:hAAA"
+fecha_ciclo0 "c0-01"
 APL="$PD/.intent/.correcoes-c0.aplicado"
 [ -f "$APL" ] || erro "o correcoes-commit.sh não produziu o .aplicado do ciclo 0"
 releitura_json_de 0 > "$PD/.intent/.releitura-c0.json"
 : > "$PD/.intent/.releitura-c0.done"
 COMMIT0=$(jq -r .commit "$APL")
-jq -n --arg c "$COMMIT0" --slurpfile r "$PD/.intent/.releitura-c0.json" '{
+# C1: quem preenche o hash é o correcoes-commit.sh — o `.ciclo0.json` tem de repetir
+# o que ele gravou (aqui o ciclo tocou 2 caminhos, então o hash sai vazio e declarado)
+H0=$(jq -r '.correcoes[0].hash' "$APL")
+jq -n --arg c "$COMMIT0" --arg h "$H0" --slurpfile r "$PD/.intent/.releitura-c0.json" '{
   v:1,
   sinos:[{id:"s-01",origem:"spec",disposicao:"corrigido",correcao_id:"c0-01"},
          {id:"s-02",origem:"discuss",disposicao:"aberto"}],
-  correcoes:[{id:"c0-01",hash:"hAAA"}],
+  correcoes:[{id:"c0-01",hash:$h}],
   releitura:$r[0]}' > "$PD/.intent/.ciclo0.json"
 saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
 [ "$rc" = 0 ] && ok "gate passa com o laço completo do ciclo 0" || erro "esperado 0, veio $rc" "$saida"
@@ -144,21 +147,43 @@ neg() { # <rotulo> <json do .ciclo0>
 }
 REL=$(cat "$PD/.intent/.releitura-c0.json")
 neg "sino corrigido sem correcao_id" \
-  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"hAAA\"}],\"releitura\":$REL}"
+  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
 neg "sino aberto COM correcao_id" \
-  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"aberto\",\"correcao_id\":\"c0-01\"},{\"id\":\"s-9\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"hAAA\"}],\"releitura\":$REL}"
+  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"aberto\",\"correcao_id\":\"c0-01\"},{\"id\":\"s-9\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
 neg "correção órfã (sem sino que a referencie)" \
-  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"aberto\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"hAAA\"}],\"releitura\":$REL}"
+  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"aberto\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
 neg "hash da correção divergente do .aplicado" \
   "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"OUTRO\"}],\"releitura\":$REL}"
 SUB=$(printf '%s' "$REL" | jq -c '.artefatos |= [.[0]]')
 neg "releitura com subconjunto dos caminhos do .aplicado" \
-  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"hAAA\"}],\"releitura\":$SUB}"
+  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$SUB}"
+
+echo "== C1 — hash vazio: sem declaração reprova, declarado passa, legado passa com aviso"
+CIC0_OK="{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"\"}],\"releitura\":$REL}"
+printf '%s' "$CIC0_OK" > "$PD/.intent/.ciclo0.json"
+# (a) `.aplicado` do script NOVO (tem a chave hash_ausente) com o id FORA dela → corrupção
+jq '.correcoes=[{"id":"c0-01","hash":""}] | .hash_ausente=[]' "$APL" > "$APL.t" && mv "$APL.t" "$APL"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 4 ] && ok "hash vazio com hash_ausente=[] → exit 4 (corrupção)" || erro "esperado 4, veio $rc" "$saida"
+# (b) mesma coisa, mas a ausência DECLARADA em hash_ausente → passa
+jq '.hash_ausente=["c0-01"]' "$APL" > "$APL.t" && mv "$APL.t" "$APL"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "hash vazio declarado em hash_ausente → exit 0" || erro "esperado 0, veio $rc" "$saida"
+printf '%s' "$saida" | jq -e '.gate.avisos[]? | select(test("hash_ausente"))' >/dev/null \
+  && ok "a ausência declarada aparece nos avisos (auditável)" || erro "ausência silenciosa"
+# (c) VÁLVULA DO LEGADO: `.aplicado` SEM a chave hash_ausente (fase anterior ao C1,
+#     como as 5 da F24.4) → passa com aviso, senão toda fase antiga travaria
+jq 'del(.hash_ausente)' "$APL" > "$APL.t" && mv "$APL.t" "$APL"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "legado (sem a chave hash_ausente) → exit 0" || erro "esperado 0, veio $rc" "$saida"
+printf '%s' "$saida" | jq -e '.gate.avisos[]? | select(test("legado"))' >/dev/null \
+  && ok "o legado é declarado como legado, não escondido" || erro "aviso de legado ausente"
+jq '.hash_ausente=["c0-01"]' "$APL" > "$APL.t" && mv "$APL.t" "$APL"
 
 echo "== R1 — artefato editado DEPOIS da releitura → exit 4"
 jq -n --slurpfile r "$PD/.intent/.releitura-c0.json" '{
   v:1, sinos:[{id:"s-01",origem:"spec",disposicao:"corrigido",correcao_id:"c0-01"}],
-  correcoes:[{id:"c0-01",hash:"hAAA"}], releitura:$r[0]}' > "$PD/.intent/.ciclo0.json"
+  correcoes:[{id:"c0-01",hash:""}], releitura:$r[0]}' > "$PD/.intent/.ciclo0.json"
 echo "edicao depois da releitura" >> "$PD/24.3-SPEC.md"
 RUN "$PD" 24.3 1 >/dev/null 2>&1; rc=$?
 [ "$rc" = 4 ] && ok "exit 4 (hash-object atual != blob relido)" || erro "esperado 4, veio $rc"
@@ -194,7 +219,7 @@ RUNC "$PD" 0 --inicio --artefatos "$PD/24.3-SPEC.md" "$PD/24.3-CONTEXT.md" \
      "$PD/24.3-INTENT-REVIEW.md" "${DOCS[@]}" >/dev/null 2>&1
 echo "correcao do ciclo 0" >> "$PD/24.3-SPEC.md"
 sed -i '1a linha inserida pelo ciclo 0' "$REPO/.planning/ROADMAP.md"
-RUNC "$PD" 0 --ids "c0-01:hAAA" --artefatos "$PD/24.3-SPEC.md" "$PD/24.3-CONTEXT.md" \
+RUNC "$PD" 0 --ids "c0-01" --artefatos "$PD/24.3-SPEC.md" "$PD/24.3-CONTEXT.md" \
      "$PD/24.3-INTENT-REVIEW.md" "${DOCS[@]}" >/dev/null 2>&1
 APL="$PD/.intent/.correcoes-c0.aplicado"
 bc=$(jq -r '.blobs[] | select(.path==".planning/ROADMAP.md") | .blob_commit' "$APL")
@@ -204,9 +229,10 @@ bw=$(jq -r '.blobs[] | select(.path==".planning/ROADMAP.md") | .blob_worktree' "
   || erro "dois hashes do ROADMAP" "commit=$bc worktree=$bw"
 releitura_json_de 0 > "$PD/.intent/.releitura-c0.json"
 : > "$PD/.intent/.releitura-c0.done"
-jq -n --slurpfile r "$PD/.intent/.releitura-c0.json" '{
+H0=$(jq -r '.correcoes[0].hash' "$APL")
+jq -n --arg h "$H0" --slurpfile r "$PD/.intent/.releitura-c0.json" '{
   v:1, sinos:[{id:"s-01",origem:"spec",disposicao:"corrigido",correcao_id:"c0-01"}],
-  correcoes:[{id:"c0-01",hash:"hAAA"}], releitura:$r[0]}' > "$PD/.intent/.ciclo0.json"
+  correcoes:[{id:"c0-01",hash:$h}], releitura:$r[0]}' > "$PD/.intent/.ciclo0.json"
 saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
 [ "$rc" = 0 ] && ok "gate c1 PASSA com ROADMAP legitimamente sujo" \
   || erro "gate acusou edição inexistente (esperado 0, veio $rc)" "$saida"

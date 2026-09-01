@@ -94,7 +94,7 @@ camada 0.
 Agentes aninhados (camada 2): você **não recebe notificações** de trabalho em
 background — nunca fique "aguardando" um retorno que não vai chegar. Precisa de
 background (trabalho >10min, o teto real do `timeout` da tool)? Só com waiter de
-disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`); nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia). Teto = duração esperada + 5 min; estourou → decida pelo disco na hora e a espera é um único
+disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`), sempre e só nessa forma. **Proibidos, sem exceção: `setsid`, `nohup`, `disown`** — um processo reparentado sobrevive ao `TaskStop` e não é varrido. Não cabe no teto de 600000ms do harness mesmo assim? A saída é **pausar e reportar**, nunca desacoplar o processo. Nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia). Teto = duração esperada + 5 min; estourou → decida pelo disco na hora e a espera é um único
 `timeout <Ns> bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` — nunca polling
 picado, nunca espera de notificação. Depois decida pelo disco: `SUMMARY.md`
 esperado existe → siga; não existe → trate como falha do passo (não como sucesso).
@@ -218,6 +218,8 @@ mortos por timeout):
   de shell — é o parâmetro que mata (default 120s). Teto real do harness: 600000ms;
   pedir mais é inócuo (medido em fase real: um run com 1200000 morreu aos 10min).
   Trabalho que precisa de mais que 10min → protocolo de background com waiter de disco.
+- Todo lançamento de trabalho em background (waiter de disco) entra no run-log, com o
+  caminho do marcador escolhido — é onde `varre-orfaos.sh` e a auditoria cruzam.
 
 Quando um passo pedir o `gsd-tools`, cole este shim no início do bloco Bash (a função
 não sobrevive entre blocos — re-cole a cada bloco que a usa):

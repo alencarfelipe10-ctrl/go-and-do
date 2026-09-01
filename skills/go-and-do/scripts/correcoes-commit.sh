@@ -22,9 +22,17 @@
 #         staged / unmerged / intent-to-add no índice real (`pre_dirty` é do worktree,
 #         não do índice — um alvo staged tornaria a promoção ambígua).
 #
-#   correcoes-commit.sh <phase_dir> <C> --ids "<id[:hash]>[,...]" \
+#   correcoes-commit.sh <phase_dir> <C> --ids "<id[:caminho]>[,...]" \
 #       --artefatos <SPEC> <CONTEXT> <INTENT-REVIEW> [--docs <ROADMAP> <REQUIREMENTS>]
 #       → fecha o ciclo: monta a árvore candidata, VALIDA, e só então promove.
+#       O `--ids` aceita DUAS formas (C1, conserto de 01/09/2026):
+#         · `"c1-01,c1-02"`         → só os ids. Forma CANÔNICA.
+#         · `"c1-01:<caminho>,..."` → a parte depois do `:` é o CAMINHO DO ARQUIVO ALVO
+#           daquela correção (não um hash — o hash não existe ainda no instante em que
+#           o coordenador monta a flag; era por isso que ele saía vazio em 100% das
+#           entradas). Use esta forma quando o ciclo tocou MAIS DE UM arquivo, para
+#           dizer qual correção mexeu em qual. Um valor que não bate com nenhum caminho
+#           comitado é ignorado em silêncio e a entrada cai na forma só-ids.
 #
 #   correcoes-commit.sh <phase_dir> <C> --vazio
 #       → o ciclo não teve correção: grava `.intent/.correcoes-c<C>.vazio` (o marcador
@@ -52,8 +60,19 @@
 # novos, e a nova releitura sobrescreve `.releitura-c<C>.json`; o briefing-build.sh lê
 # só o nome fixo, então não há ciclo "b" pendurado no gate:
 #   {v:1, ciclo, ids, correcoes:[{id,hash}], commit, caminhos:[...],
-#    blobs:[{path, blob_commit, blob_worktree}], mensagem}
+#    hash_ausente:[...], blobs:[{path, blob_commit, blob_worktree}], mensagem}
 # — insumo do `--mudancas`, do R1 (releitura) e do T3.
+#
+# CAMPO `hash` (C1, 01/09/2026) — quem preenche é ESTE script, porque só ele tem a
+# informação. Não é o sha do commit (esse já está em `commit`, seria redundante): é o
+# **blob sha do arquivo alvo depois da correção**, o mesmo `blob_commit` que a releitura
+# (intent-releitura.md) e o gate do briefing-build.sh conferem. Ordem de preenchimento:
+#   1. caminho declarado na forma `id:<caminho>` e presente entre os comitados → o blob dele;
+#   2. senão, se o ciclo comitou EXATAMENTE UM caminho → o blob desse caminho;
+#   3. senão (0 ou >1 caminhos, sem declaração) → `hash: ""` E o id entra em
+#      `hash_ausente[]`, para que a ausência seja auditável em vez de silenciosa.
+# `hash_ausente` é gravado SEMPRE (mesmo vazio): a presença da chave é o que distingue
+# um `.aplicado` novo de um anterior a este conserto — o leitor usa isso como válvula.
 #
 # Exit 0 ok · 2 uso inválido · 3 recusa/falha (nada promovido).
 
@@ -262,8 +281,46 @@ for r in "${COMITADOS[@]}"; do
   fi
 done
 
-COR_JSON=$(printf '%s' "$IDS" | tr ',' '\n' | jq -R 'select(length>0)
-  | split(":") | {id: .[0], hash: (.[1] // "")}' | jq -cs .)
+# ── hash por correção (C1) ───────────────────────────────────────────────────
+# O mapa caminho → blob candidato é o mesmo que alimentou o `update-index --cacheinfo`
+# e que a validação por blobs acabou de conferir contra a árvore candidata: por isso
+# usamos BLOBS_CAND (= blob_commit) e NÃO um `hash-object` do worktree — para um doc
+# pré-sujo os dois diferem por desenho, e a releitura ancora no blob_commit.
+declare -A BLOB_DE=()
+for i in "${!COMITADOS[@]}"; do BLOB_DE["${COMITADOS[$i]}"]="${BLOBS_CAND[$i]}"; done
+UNICO=""
+[ ${#COMITADOS[@]} -eq 1 ] && UNICO="${COMITADOS[0]}"
+
+COR_ENTRADAS=(); AUSENTES=()
+IFS=',' read -r -a TOKENS_ID <<< "$IDS"
+for tok in ${TOKENS_ID[@]+"${TOKENS_ID[@]}"}; do
+  [ -n "$tok" ] || continue
+  cid="${tok%%:*}"
+  [ -n "$cid" ] || continue
+  decl=""
+  case "$tok" in *:*) decl="${tok#*:}" ;; esac
+  h=""
+  if [ -n "$decl" ]; then
+    dnorm="$decl"
+    # o coordenador pode declarar caminho absoluto ou relativo ao cwd; normaliza para
+    # a forma relativa à raiz do repo, que é a chave do mapa
+    if [ -e "$decl" ]; then
+      dnorm=$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$decl" "$ROOT" 2>/dev/null) || dnorm="$decl"
+    fi
+    h="${BLOB_DE[$dnorm]:-}"
+    # valor que não bate com caminho comitado nenhum (o antigo placeholder `<hash>`,
+    # por exemplo) é ignorado: a entrada cai na regra do caminho único
+    [ -n "$h" ] || h=""
+  fi
+  if [ -z "$h" ] && [ -n "$UNICO" ]; then h="${BLOB_DE[$UNICO]}"; fi
+  [ -n "$h" ] || AUSENTES+=("$cid")
+  COR_ENTRADAS+=("$(jq -cn --arg i "$cid" --arg h "$h" '{id:$i, hash:$h}')")
+done
+COR_JSON=$(printf '%s\n' ${COR_ENTRADAS[@]+"${COR_ENTRADAS[@]}"} | jq -cs .)
+AUS_JSON=$(printf '%s\n' ${AUSENTES[@]+"${AUSENTES[@]}"} | jq -R . | jq -cs 'map(select(length>0))')
+if [ ${#AUSENTES[@]} -gt 0 ]; then
+  echo "aviso: ${#AUSENTES[@]} correção(ões) sem hash (ciclo comitou ${#COMITADOS[@]} caminhos e o id não declarou qual): ${AUSENTES[*]} — declaradas em hash_ausente[]" >&2
+fi
 IDS_JSON=$(printf '%s' "$IDS" | tr ',' '\n' | jq -R 'select(length>0) | split(":")[0]' | jq -cs .)
 CAM_JSON=$(printf '%s\n' "${COMITADOS[@]}" | jq -R . | jq -cs .)
 # Dois hashes por caminho comitado (resolução do conflito E2 x R1):
@@ -284,9 +341,9 @@ BLOBS_JSON=$(printf '%s\n' "${BLOBS[@]}" | jq -cs .)
 APL="$IN/.correcoes-c$C.aplicado"
 jq -cn --arg c "$C" --arg commit "$CAND" --arg msg "$MSG" \
   --argjson ids "$IDS_JSON" --argjson cor "$COR_JSON" --argjson cam "$CAM_JSON" \
-  --argjson bl "$BLOBS_JSON" \
+  --argjson bl "$BLOBS_JSON" --argjson aus "$AUS_JSON" \
   '{v:1, ciclo:$c, ids:$ids, correcoes:$cor, commit:$commit, caminhos:$cam,
-    blobs:$bl, mensagem:$msg}' \
+    hash_ausente:$aus, blobs:$bl, mensagem:$msg}' \
   > "$APL.tmp" && mv -f "$APL.tmp" "$APL"
 rm -f "$IN/.correcoes-c$C.vazio"
 

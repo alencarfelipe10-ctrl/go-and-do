@@ -13,6 +13,10 @@
 #              com `.correcoes-c0.aplicado` + `.releitura-c0.done`.
 #     C >= 2 → exige `.correcoes-c<C-1>.aplicado` (ou `.correcoes-c<C-1>.vazio`) e
 #              `.releitura-c<C-1>.json` válido, amarrado ao commit e aos blobs.
+#     C1  → `hash` de correção tem de ser NÃO-VAZIO. Válvula: um `.aplicado` que traz
+#           o campo `hash_ausente` pode listar ali os ids sem hash (ausência declarada,
+#           passa); um `.aplicado` SEM esse campo é anterior ao conserto C1 (legado) e
+#           passa com aviso — senão toda fase antiga travaria.
 #   R3   → seção "Revalidação dirigida (ciclo 0)" no c1: cada correção do ciclo 0 volta
 #          ao revisor como pedido de confirmação. Nenhum sino sai do briefing.
 #   R8   → (1) seção "Perguntas dirigidas" com resposta estruturada obrigatória em
@@ -88,6 +92,40 @@ def exige_chaves(d, chaves, rotulo):
         die("%s: chave(s) obrigatória(s) faltando: %s (array/objeto vazio tem de ser "
             "EXPLÍCITO — `{}` não basta)" % (rotulo, ", ".join(faltando)))
 
+def valida_hashes(aplicado, sem_hash, rotulo, avisos):
+    """C1 — `hash` vazio só passa quando a ausência foi DECLARADA.
+
+    `sem_hash` = ids cujo `hash` é string vazia. A régua tem uma válvula, e a válvula
+    é a PRESENÇA DA CHAVE `hash_ausente` no `.aplicado`:
+
+    · chave ausente  → `.aplicado` gravado por um `correcoes-commit.sh` anterior ao
+      conserto C1, que nunca teve como preencher o hash (o `--ids` mandava o
+      placeholder `:<hash>`). É legado, não corrupção: aceita com aviso. Sem isso toda
+      fase antiga — a F24.4 inteira, 58/58 entradas — passaria a travar.
+    · chave presente (mesmo `[]`) → artefato do script novo, que preenche o hash
+      sozinho. Aí um `hash` vazio fora de `hash_ausente[]` é corrupção → reprova.
+    """
+    if not sem_hash:
+        return
+    if aplicado is None or "hash_ausente" not in aplicado:
+        avisos.append(
+            "%s: %d correção(ões) com `hash` vazio num `.aplicado` sem campo "
+            "`hash_ausente` — artefato anterior ao conserto C1, aceito como legado "
+            "(%s)" % (rotulo, len(sem_hash), ", ".join(sorted(sem_hash))))
+        return
+    declarados = aplicado.get("hash_ausente") or []
+    if not isinstance(declarados, list):
+        die("`.aplicado`.hash_ausente não é lista")
+    faltando = sorted(set(sem_hash) - set(declarados))
+    if faltando:
+        die("%s: correção(ões) com `hash` VAZIO e não declaradas em "
+            "`.aplicado`.hash_ausente: %s — hash vazio declarado é ausência auditável; "
+            "hash vazio silencioso é corrupção (C1)" % (rotulo, ", ".join(faltando)))
+    avisos.append(
+        "%s: %d correção(ões) sem hash, declaradas em `hash_ausente` (o ciclo tocou "
+        "mais de um caminho e o id não disse qual)" % (rotulo, len(sem_hash)))
+
+
 def valida_releitura(rel, aplicado, vazio, rotulo):  # noqa: C901
     """rel = {commit, artefatos:[{path, blob}]}; amarra a commit + blobs."""
     exige_chaves(rel, ["commit", "artefatos"], rotulo)
@@ -162,12 +200,15 @@ if str(C) == "1":
         die("`.ciclo0.json`: sinos e correcoes têm de ser listas")
 
     ids_cor = {}
+    sem_hash = []          # ids com `hash` presente mas VAZIO (C1)
     for c in cors:
         if not isinstance(c, dict) or "id" not in c or "hash" not in c:
             die("`.ciclo0.json`.correcoes: item sem id/hash")
         if c["id"] in ids_cor:
             die("`.ciclo0.json`.correcoes: id duplicado %s" % c["id"])
         ids_cor[c["id"]] = c["hash"]
+        if not str(c["hash"]).strip():
+            sem_hash.append(c["id"])
 
     referenciados = set()
     for s in sinos:
@@ -216,6 +257,9 @@ if str(C) == "1":
         par_a = sorted((c.get("id"), c.get("hash")) for c in aplicado["correcoes"])
         if par_z != par_a:
             die("`.ciclo0.json`.correcoes %s != `.aplicado`.correcoes %s" % (par_z, par_a))
+    # C1: o veredito da válvula vem AQUI — logo depois de carregar o `.aplicado` e
+    # ANTES da releitura. Assim "hash vazio" nunca se disfarça de erro de releitura.
+    valida_hashes(aplicado, sem_hash, "`.ciclo0.json`.correcoes", info["avisos"])
     valida_releitura(z["releitura"], aplicado, False, "`.ciclo0.json`.releitura")
 
     if not os.path.exists(os.path.join(IN, ".releitura-c0.done")):
@@ -246,6 +290,13 @@ else:
         die("`.correcoes-c%d.aplicado` E `.correcoes-c%d.vazio` coexistem — estado ambíguo"
             % (prev, prev))
     aplicado = carrega(ap_p, "`.correcoes-c%d.aplicado`" % prev) if tem_ap else None
+    if aplicado is not None:
+        # mesma régua do ciclo 0, mesma válvula — aqui a fonte dos ids é o próprio
+        # `.aplicado` (não há `.ciclo0.json` para os ciclos >= 2)
+        sem_hash_ap = [c.get("id") for c in (aplicado.get("correcoes") or [])
+                       if isinstance(c, dict) and not str(c.get("hash", "")).strip()]
+        valida_hashes(aplicado, sem_hash_ap,
+                      "`.correcoes-c%d.aplicado`.correcoes" % prev, info["avisos"])
     rel = carrega(os.path.join(IN, ".releitura-c%d.json" % prev),
                   "`.intent/.releitura-c%d.json` (R1)" % prev)
     paths = valida_releitura(rel, aplicado, tem_vaz, "`.releitura-c%d.json`" % prev)

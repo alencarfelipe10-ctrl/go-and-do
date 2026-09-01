@@ -303,11 +303,28 @@ if [ "$ETAPA" = "6" ]; then
   fi
   # v2.1.9 (F24.3 falha 3 / 32e — 3ª reincidência): espelhos de estado reconciliados?
   # reconcilia-docs.sh roda antes desta cancela; aqui só se confere que ele agiu.
+  # B2 (31/08): esta cancela usava o MESMO grep literal do reconcilia-docs.sh — e por isso
+  # herdava o mesmo ponto cego. Quando o `status` é uma frase em vez do token (formato real
+  # no alencarOS: `status: "Fase 13 … PAUSADA…"`), `^status: *executing` não bate: o
+  # reconciliador não escreve e a cancela dá verde. Agora os campos são lidos como VALOR e
+  # o formato ilegível reprova por si (assert `state_formato`).
+  # Caminho escolhido: checagem PRÓPRIA, e não chamada ao reconcilia-docs.sh em modo
+  # verificação — o `--dry-run` dele NÃO é livre de efeito colateral (o `gad_json_out` da
+  # linha final grava `.planning/.gad/last-reconcilia-docs.json` fora da guarda do DRY, e
+  # medimos isso no grupo-inspired). Uma cancela não pode mutar estado para julgar.
   ST="$ROOT/.planning/STATE.md"
-  if [ -f "$ST" ] && grep -qE '^status: *executing' "$ST" \
-     && grep -qE "^current_phase: *${FASE}\$" "$ST"; then
-    RES=$(jq -c --arg d "STATE.md ainda diz status: executing para a fase $FASE — rode reconcilia-docs.sh" \
-      '. + [{id:"state_reconciliado", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+  if [ -f "$ST" ]; then
+    st_val=$(grep -m1 -E '^status: ' "$ST" | sed -e 's/^status:[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\r$//')
+    cp_val=$(grep -m1 -E '^current_phase: ' "$ST" | sed -e 's/^current_phase:[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\r$//')
+    if [ "$cp_val" = "$FASE" ]; then
+      if [ "$st_val" = executing ]; then
+        RES=$(jq -c --arg d "STATE.md ainda diz status: executing para a fase $FASE — rode reconcilia-docs.sh" \
+          '. + [{id:"state_reconciliado", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      elif ! printf '%s' "$st_val" | grep -qE '^[A-Za-z_][A-Za-z0-9_-]*$'; then
+        RES=$(jq -c --arg d "FORMATO-INESPERADO: o status do STATE.md da fase $FASE não é um token reconhecível ('$(printf '%s' "$st_val" | cut -c1-80)') — nem esta cancela nem o reconcilia-docs.sh conseguem julgá-lo; conserte à mão" \
+          '. + [{id:"state_formato", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      fi
+    fi
   fi
   # varredura anti-órfã da TaskList (S.C): sinal p/ camada 0 reconciliar
   EXTRAI=$(jq -c --argjson p "$n_plans" --argjson s "$n_sums" \
@@ -386,6 +403,67 @@ if [ "$ETAPA" = "1" ]; then
         fi ;;
     esac
   done < <(jq -c '.issues[]?' <<<"$R6")
+
+  # ── R7 (proveniência T3) — B4, 31/08 ──────────────────────────────────────────────
+  # O `prompts/intent.md` (336-343 e 386-394) manda cada achado `confirmado` da tabela do
+  # NN-INTENT-REVIEW.md trazer a `proposicao` com CINCO campos — {artefato, ancora,
+  # span_linhas, texto, origem_texto} —, que é o que localiza a frase defeituosa no
+  # artefato. Era prosa sem comando associado: nada conferia a presença, e a régua T3 da
+  # /audit-gad ficou cega por duas fases. Aqui a etapa 1 passa a reprovar quando falta.
+  #
+  # Parsing, com as armadilhas do arquivo real (24.4-INTENT-REVIEW.md) já contornadas:
+  #  · a coluna se chama `proposição` (com cedilha e til) e a célula NÃO repete a chave
+  #    `proposicao:` — procurar o token literal `proposicao` dá zero e mataria a regra;
+  #  · o arquivo tem outras tabelas (contagem por ciclo, sinos do c0) que não têm a coluna
+  #    — por isso a tabela é delimitada pelo cabeçalho que traz `veredito` E `proposi…`;
+  #  · o `texto:` verbatim pode conter `|` (caso real c3-06), o que quebra split
+  #    posicional — daí o veredito ser casado como célula inteira (`| confirmado |`) e os
+  #    campos serem procurados na linha toda, com borda de palavra para que `origem_texto:`
+  #    não seja contado como `texto:`.
+  # É checagem de PRESENÇA dos cinco nomes, não de validade do valor: a linha legítima
+  # `artefato: —` (achado c1-04, destino transparência) tem de continuar passando.
+  IR_F="$PHASE_DIR/$NN-INTENT-REVIEW.md"
+  if [ -f "$IR_F" ]; then
+    R7_OUT=$(awk '
+      function tem(l, campo) { return (l ~ ("(^|[^A-Za-z0-9_])" campo ":")) }
+      substr($0,1,1) != "|" { dentro=0; next }
+      !dentro { if (index($0,"veredito")>0 && index($0,"proposi")>0) dentro=1; next }
+      /^\|[-: |]*\|[-: |]*$/ { next }                       # linha separadora
+      $0 !~ /\| *confirmado *\|/ { next }                    # só achados confirmados
+      {
+        total++
+        n = tem($0,"artefato") + tem($0,"ancora") + tem($0,"span_linhas") \
+          + tem($0,"texto") + tem($0,"origem_texto")
+        split($0, c, "|"); id = c[2]; gsub(/^[[:space:]]+|[[:space:]]+$/, "", id)
+        if (id == "") id = "(sem id)"
+        if (n == 5) completos++
+        else {
+          if (n == 0) zerados++; else parciais++
+          if (ruins != "") ruins = ruins ","
+          ruins = ruins id "(" n "/5)"      # o id entra na lista com ou sem campo algum
+        }
+      }
+      END { printf "%d %d %d %d %s\n", total+0, completos+0, parciais+0, zerados+0, ruins }
+    ' "$IR_F")
+    read -r r7_tot r7_com r7_par r7_zer r7_ids <<<"$R7_OUT"
+    if [ "${r7_tot:-0}" = 0 ]; then
+      : # nenhum achado confirmado na tabela (ou tabela ausente) — outra regra cuida disso
+    elif [ "$r7_zer" = "$r7_tot" ]; then
+      # ESCOTILHA DE COMPATIBILIDADE (obrigatória): nenhum achado tem proposição alguma →
+      # é fase anterior à régua. Avisa e NÃO falha; sem isso toda fase antiga reprovaria.
+      # A regra só morde na adoção PARCIAL, que é o estado que corrompe a medição da T3.
+      RES=$(jq -c --arg d "nenhum dos $r7_tot achados confirmados traz \`proposicao\` — fase anterior à régua T3; a /audit-gad medirá tudo como \`não_medido\`" \
+        '. + [{id:"r7_proposicao_t3", resultado:"aviso", detalhe:$d}]' <<<"$RES")
+    elif [ "$((r7_par + r7_zer))" -gt 0 ]; then
+      RES=$(jq -c --arg d "adoção parcial da \`proposicao\` (T3): $r7_com de $r7_tot achados confirmados completos; sem os cinco campos: ${r7_ids:-—}$( [ "$r7_zer" -gt 0 ] && printf ' · %s sem nenhum campo' "$r7_zer" )" \
+        '. + [{id:"r7_proposicao_t3", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    else
+      RES=$(jq -c --arg d "os $r7_tot achados confirmados trazem \`proposicao\` com os cinco campos" \
+        '. + [{id:"r7_proposicao_t3", resultado:"ok", detalhe:$d}]' <<<"$RES")
+    fi
+    EXTRAI=$(jq -c --argjson t "${r7_tot:-0}" --argjson k "${r7_com:-0}" \
+      '. + {r7_confirmados: $t, r7_com_proposicao: $k}' <<<"$EXTRAI")
+  fi
 
   EXTRAI=$(jq -c --argjson r6 "$R6" --arg st "$R2_ST" --argjson av "$R2_AVISOS" \
     '. + {goal_roadmap: ($r6.goal_roadmap // null),

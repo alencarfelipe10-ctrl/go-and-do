@@ -83,12 +83,37 @@ for N in $ciclos; do
       echo "rota ok c$N (mode=$modo, brutos_pre_rota=$pre)"
     fi
   fi
-  # Coluna categoria (decisão 1.7): achado sem tag [A-E]-* na tabela é aviso, não falha
+  # Coluna categoria (decisão 1.7): achado sem tag [A-E]-* na tabela é aviso, NÃO falha
   # — o verificador revalida com fail-up; sem tag, a parada por custo marginal degrada.
+  # A política não mudou: aviso na stdout, `falha` intocada, exit preservado.
   # (v2.2.0) as linhas de resposta dirigida (R8) não têm categoria por desenho — a
   # categoria delas nasce no verificador; contá-las aqui acenderia o aviso todo ciclo.
-  sem_cat=$(grep -aE '^\| [^|]+ \| L?[0-9]+ \|' "$tabela" \
-    | grep -avE '\| (dirigida|dirigida-ausente) \|' | grep -cvE '\[(A|B|C|D|E)-' || true)
+  #
+  # C7 (01/09) — o que mudou: a categoria passa a ser lida da COLUNA `categoria` da
+  # tabela (5 colunas, confere-ciclo.sh), não do trecho truncado em 100 caracteres.
+  # Tabela sem essa coluna (formato antigo, 4 colunas) cai no detector por texto — sem
+  # o fallback o aviso sumiria em silêncio nas fases já rodadas, que é guarda cega.
+  #
+  # Os quatro rótulos R8 (dirigida, dirigida-ausente, dirigida-excluida, nao_provisorio)
+  # são excluídos da contagem — DESVIO DECLARADO do plano C7, que só pedia os dois
+  # primeiros. Motivo medido na F24.4: os 27 "sem categoria" do c1 eram 26
+  # `dirigida-excluida` + 1 `nao_provisorio`, e os 5 do c3 eram 5 `dirigida-excluida`.
+  # A justificativa do parágrafo acima ("a categoria delas nasce no verificador") vale
+  # igual para os quatro, e `dirigida-excluida` sequer é bruto (conta=false na origem).
+  RE_R8='(dirigida|dirigida-ausente|dirigida-excluida|nao_provisorio)'
+  if head -1 "$tabela" | grep -q 'categoria'; then
+    sem_cat=$(awk -F'|' -v r8="^($RE_R8)$" '
+      /^\| [^|]+ \| L?[0-9]+ \|/ {
+        rot = $(NF-1); gsub(/^[ \t]+|[ \t]+$/, "", rot)
+        if (rot ~ r8) next
+        cat = $(NF-2); gsub(/^[ \t]+|[ \t]+$/, "", cat)
+        if (cat == "") n++
+      }
+      END { print n+0 }' "$tabela")
+  else
+    sem_cat=$(grep -aE '^\| [^|]+ \| L?[0-9]+ \|' "$tabela" \
+      | grep -avE "\\| $RE_R8 \\|" | grep -cvE '\[(A|B|C|D|E)-' || true)
+  fi
   [ "$sem_cat" -gt 0 ] 2>/dev/null && echo "aviso: c$N tem $sem_cat achado(s) sem categoria [A-E] na tabela (fail-up aplicado rio abaixo)"
 done
 exit $falha

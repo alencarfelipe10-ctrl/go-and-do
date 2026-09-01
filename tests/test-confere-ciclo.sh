@@ -92,6 +92,58 @@ printf 'Sim, a varredura está incompleta (respondido em prosa).\n' > "$TMP/24.3
 [ "$(campo "$TMP/t6.txt" brutas)" = 4 ] && ok "resposta só em prosa = 4 Q ausentes = 4 brutos" \
   || erro "brutas prosa" "$(resumo "$TMP/t6.txt")"
 
+echo "== C7 — a tag [A-E] vai para coluna própria, extraída ANTES do corte de 100 chars"
+# Régua: o corte em 100 caracteres não pode decidir se um achado tem categoria. Se o
+# revisor escreve a explicação primeiro e a tag depois, ela ainda tem de chegar à tabela.
+LONGA="explicação bem comprida escrita antes da tag, com mais de cem caracteres de texto corrido para empurrar a tag para longe do começo da linha"
+cat > "$TMP/24.3-parecer-tarde-c1.md" <<EOF
+# Parecer
+
+### Achado 1 — $LONGA [C-processo] — fim
+EOF
+"$SCRIPT" --tabela "$TMP/24.3-parecer-tarde-c1.md" > "$TMP/t8.txt" 2>/dev/null
+head -1 "$TMP/t8.txt" | grep -q '| categoria |' && ok "cabeçalho traz a coluna categoria" \
+  || erro "cabeçalho sem a coluna categoria" "$(head -1 "$TMP/t8.txt")"
+linha_t8=$(grep -E '^\| tarde \| L[0-9]+ \|' "$TMP/t8.txt")
+printf '%s' "$linha_t8" | grep -qE '\| C-processo \| estrutural \|$' \
+  && ok "tag depois do caractere 100 aparece na coluna categoria (sem colchetes)" \
+  || erro "categoria não chegou à tabela" "$linha_t8"
+printf '%s' "$linha_t8" | grep -q 'C-processo\] ' \
+  && erro "o trecho não devia conter a tag (ela ficou além do corte)" "$linha_t8" \
+  || ok "o trecho segue truncado — a categoria não depende mais dele"
+[ "$(total "$TMP/t8.txt")" = 1 ] && ok "achados_estruturais_total intacto (registra-ciclo.sh o lê)" \
+  || erro "total" "$(total "$TMP/t8.txt")"
+
+echo "== C7 — o corte de 100 não parte caractere acentuado no meio"
+# `cut -c` do coreutils corta BYTES: na F24.4 isso deixou um `\xc3` solto na tabela do
+# planrev c2. O corte agora é `${var:0:100}` do bash, que conta caracteres.
+{ echo "# Parecer"; echo
+  printf '### Achado 1 — '; for i in $(seq 1 40); do printf 'autorização '; done; echo; } \
+  > "$TMP/24.3-parecer-acento-c1.md"
+"$SCRIPT" --tabela "$TMP/24.3-parecer-acento-c1.md" > "$TMP/t11.txt" 2>/dev/null
+iconv -f utf-8 -t utf-8 "$TMP/t11.txt" >/dev/null 2>&1 \
+  && ok "tabela sai UTF-8 válida (nenhum byte solto no corte)" \
+  || erro "corte partiu caractere multibyte" "$(cat -v "$TMP/t11.txt" | grep 'L[0-9]' | head -1)"
+
+echo "== C7 — achado sem tag nenhuma deixa a coluna categoria vazia (ausência de verdade)"
+cat > "$TMP/24.3-parecer-nutag-c1.md" <<'EOF'
+# Parecer
+
+### Achado 1 — sem taxonomia alguma
+EOF
+"$SCRIPT" --tabela "$TMP/24.3-parecer-nutag-c1.md" > "$TMP/t9.txt" 2>/dev/null
+grep -qE '^\| nutag \| L[0-9]+ \|[^|]*\|  \| estrutural \|$' "$TMP/t9.txt" \
+  && ok "coluna categoria vazia quando a linha completa não tem tag" \
+  || erro "coluna categoria não saiu vazia" "$(grep -E '^\| nutag' "$TMP/t9.txt")"
+
+echo "== C7 — linha dirigida sai com a coluna categoria vazia (categoria nasce no verificador)"
+"$SCRIPT" --tabela --perguntas "$MAN" "$CODEX" > "$TMP/t10.txt" 2>/dev/null
+grep -qE '^\| codex \| L[0-9]+ \|.*\|  \| dirigida \|$' "$TMP/t10.txt" \
+  && ok "linha dirigida tem categoria vazia" || erro "dirigida com categoria preenchida" "$(grep 'Q1: sim' "$TMP/t10.txt")"
+grep -qE '^\| codex \| — \| Q4 NÃO RESPONDIDA \(manifesto\) \|  \| dirigida-ausente \|$' "$TMP/t10.txt" \
+  && ok "linha dirigida-ausente também tem 5 colunas" \
+  || erro "dirigida-ausente fora do formato de 5 colunas" "$(grep 'Q4' "$TMP/t10.txt")"
+
 echo "== manifesto ilegível não zera a contagem (fail-closed)"
 "$SCRIPT" --tabela --perguntas "$TMP/nao-existe.json" "$CODEX" > "$TMP/t7.txt" 2>/dev/null
 [ "$(campo "$TMP/t7.txt" brutas)" -ge 1 ] && ok "manifesto ausente vira bruto, não zero" || erro "guarda cega"

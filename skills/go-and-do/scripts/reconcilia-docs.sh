@@ -24,8 +24,16 @@
 #                   frontmatter mínimo (phase/type/reviewers/cycles_run) lido de lá.
 # A cancela `confere-etapa.sh 6` reprova se o STATE.md ainda disser `executing` para a
 # fase — este script roda ANTES dela (workflow 6.5, ambas as rotas).
-# Saída: JSON 1 linha + espelho .planning/.gad/last-reconcilia-docs.json. Exit 0 sempre
-# que rodou (reconciliar é best-effort; o que falhou vem em `pendentes`).
+# Saída: JSON 1 linha + espelho .planning/.gad/last-reconcilia-docs.json.
+# Exit: 0 = rodou (reconciliar é best-effort; o que falhou vem em `pendentes`)
+#       2 = uso inválido
+#       3 = FORMATO-INESPERADO (B2, 31/08): o `current_phase` bate com a fase, mas o campo
+#           `status` não é um token reconhecível — é uma frase (tipicamente entre aspas,
+#           como em alencarOS: `status: "Fase 13 … PAUSADA…"`). Nesse formato o grep
+#           literal `^status: *executing` NUNCA bate: o script achava que não havia o que
+#           fazer e a cancela achava que estava tudo certo. Os dois compartilhavam o mesmo
+#           ponto cego, e por isso "roda, passa" com o STATE.md errado era garantido.
+#           Agora o caso é declarado em voz alta, em vez de virar um `pend` silencioso.
 
 set -uo pipefail
 shopt -s nullglob
@@ -81,8 +89,19 @@ else
 fi
 
 # ── 1. STATE.md ──────────────────────────────────────────────────────────────
+# Lê os dois campos como VALOR (e não por grep literal) para poder distinguir "o status é
+# outro token" de "o status nem é um token". Trim de espaços e de \r à direita.
+campo_state() { # <nome do campo> → valor cru, sem o prefixo e sem espaços nas bordas
+  grep -m1 -E "^$1: " "$STATE" 2>/dev/null \
+    | sed -e "s/^$1:[[:space:]]*//" -e 's/[[:space:]]*$//' -e 's/\r$//'
+}
+FORMATO_INESPERADO=0
 if [ -f "$STATE" ]; then
-  if grep -qE '^status: *executing' "$STATE" && grep -qE "^current_phase: *${FASE}\$" "$STATE"; then
+  ST_VAL=$(campo_state status); CP_VAL=$(campo_state current_phase)
+  # token = uma única palavra nua (sem aspas, sem espaço): `executing`, `between_phases`…
+  ST_TOKEN=0; printf '%s' "$ST_VAL" | grep -qE '^[A-Za-z_][A-Za-z0-9_-]*$' && ST_TOKEN=1
+  CP_OK=0; [ "$CP_VAL" = "$FASE" ] && CP_OK=1
+  if [ "$ST_TOKEN" = 1 ] && [ "$ST_VAL" = executing ] && [ "$CP_OK" = 1 ]; then
     # progress: o STATE.md conta só o MILESTONE atual (o ROADMAP acumula todos), então
     # o incremento é relativo ao que já estava lá: +1 fase; +planos desta fase (teto =
     # total_plans). Heurística declarada — o GSD recalcula no próximo `state.update`.
@@ -107,10 +126,41 @@ if [ -f "$STATE" ]; then
     ed "s/^Status: Executing Phase .*/Status: Between phases$proxtxt/" "$STATE"
     ed "s/^Last Activity Description: .*/Last Activity Description: Phase $FASE shipped${PR:+ (PR ${PR%% *} merged)}/" "$STATE"
     acao "STATE.md: executing → between_phases (fases $done_f/$tot, planos $cp/$tp, $pct%)"
-  elif grep -qE '^status: *between_phases' "$STATE"; then
+
+    # state_head: o outro sintoma da auditoria da F24.4 — o script simplesmente não
+    # conhecia o campo. Só se ATUALIZA o que já existe; não se inventa campo em artefato
+    # do GSD. O HEAD é o do repositório do PROJETO ($ROOT), nunca o da skill.
+    if grep -qE '^state_head:' "$STATE"; then
+      HEAD_ATUAL=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)
+      if [ -n "$HEAD_ATUAL" ]; then
+        ed "s/^state_head: .*/state_head: $HEAD_ATUAL/" "$STATE"
+        acao "STATE.md: state_head → ${HEAD_ATUAL:0:12}"
+      else
+        pend "STATE.md: state_head presente, mas o HEAD de $ROOT é ilegível (repo sem commit?) — não atualizado"
+      fi
+    else
+      pend "STATE.md: campo state_head ausente — NÃO criado (não se inventa campo do GSD)"
+    fi
+
+    # Coerência stopped_at × last_activity_desc: na F24.4 os dois ficaram de épocas
+    # diferentes por terem sido tocados por chamadas distintas que bateram parcialmente na
+    # condição. Aqui os dois são reescritos na MESMA passada (os `ed` acima), então a
+    # incoerência só pode reaparecer se um deles não existir no arquivo — é isso que se
+    # declara. Guarda estreita de propósito: não há checador semântico de coerência.
+    tem_sa=0; grep -qE '^stopped_at:' "$STATE" && tem_sa=1
+    tem_lad=0; grep -qE '^last_activity_desc:' "$STATE" && tem_lad=1
+    if [ "$tem_sa" != "$tem_lad" ]; then
+      pend "STATE.md: stopped_at e last_activity_desc não coexistem (stopped_at=$tem_sa, last_activity_desc=$tem_lad) — só o presente foi reescrito; a coerência entre os dois não pôde ser garantida na mesma passada"
+    fi
+  elif [ "$ST_TOKEN" = 1 ] && [ "$ST_VAL" = between_phases ]; then
     :
+  elif [ "$ST_TOKEN" = 0 ] && [ "$CP_OK" = 1 ]; then
+    # O caso que hoje passa em silêncio: a fase é a certa, mas o `status` é uma frase.
+    echo "FORMATO-INESPERADO: status não é um token reconhecível ('$(printf '%s' "$ST_VAL" | cut -c1-90)')" >&2
+    pend "FORMATO-INESPERADO: STATE.md da fase $FASE tem status em formato não reconhecível ('$(printf '%s' "$ST_VAL" | cut -c1-80)') — nem o reconciliador nem a cancela conseguem julgá-lo; conserte à mão"
+    FORMATO_INESPERADO=1
   else
-    pend "STATE.md: status/current_phase não casam com a fase $FASE — não tocado"
+    pend "STATE.md: não casa com a fase $FASE — current_phase esperado '$FASE', encontrado '$CP_VAL'; status encontrado '$(printf '%s' "$ST_VAL" | cut -c1-60)' — não tocado"
   fi
 else
   pend "STATE.md ausente"
@@ -146,5 +196,7 @@ fi
 n_ac=$(jq 'length' <<<"$ACOES"); n_pe=$(jq 'length' <<<"$PEND")
 [ "$DRY" = 1 ] || gad_autoregistro "reconcilia-docs.sh" 0 "fase $FASE: $n_ac ação(ões), $n_pe pendente(s)" || true
 gad_json_out reconcilia-docs "$(jq -cn --arg f "$FASE" --argjson a "$ACOES" --argjson p "$PEND" --argjson d "$DRY" \
-  '{fase:$f, acoes:$a, pendentes:$p, dry_run:($d==1)}')"
+  --argjson fi "$FORMATO_INESPERADO" \
+  '{fase:$f, acoes:$a, pendentes:$p, dry_run:($d==1), formato_inesperado:($fi==1)}')"
+[ "$FORMATO_INESPERADO" = 0 ] || exit 3
 exit 0

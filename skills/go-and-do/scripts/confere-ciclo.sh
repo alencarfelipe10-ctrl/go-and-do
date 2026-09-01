@@ -17,8 +17,19 @@
 #                 tira a Q da contagem (vira `dirigida-excluida`).
 #   --status-dir  diretório com os `.status-c<C>-<lane>.json` do roda-lanes.sh: lane
 #                 `usable:false` não tem suas Q contadas (já é `sem_parecer`).
-# A tabela ganha a 4ª coluna `elicitacao` (estrutural | dirigida | dirigida-ausente |
+# A tabela ganha a coluna `elicitacao` (estrutural | dirigida | dirigida-ausente |
 # nao_provisorio | dirigida-excluida) e `achados_estruturais_total` JÁ INCLUI os dirigidos.
+#
+# C7 (01/09) — coluna `categoria` própria. A tabela passou a ter 5 colunas:
+#   | lane | linha | achado (trecho) | categoria | elicitacao |
+# A tag da taxonomia (`[A-produto]`, `[B-viabilidade]`, … — ver prompts/categorias-achados.md)
+# é extraída da linha COMPLETA do parecer, ANTES do truncamento em 100 caracteres, e sai
+# sem colchetes na coluna `categoria`. Antes disso o confere-rotas.sh procurava a tag no
+# trecho já cortado: se o revisor escrevesse a explicação antes da tag, o corte a
+# descartava e o achado era acusado de "sem categoria" tendo categoria. Coluna vazia
+# agora significa ausência de verdade. As linhas de resposta dirigida (R8) saem com a
+# coluna vazia por desenho — a categoria delas nasce no verificador.
+# A linha `achados_estruturais_total:` NÃO mudou de formato (registra-ciclo.sh a lê).
 #
 # --tabela (v1.8.0): extrai dos pareceres o esqueleto dos achados estruturais em
 # markdown (| lane | linha | trecho |) — piso de enumeração para a fusão do
@@ -82,12 +93,12 @@ if [ "${1:-}" = "--tabela" ]; then
     esac
   done
   [ "${#PARECERES[@]}" -ge 1 ] || { echo "uso: confere-ciclo.sh --tabela [--perguntas MAN] [--vereditos ARQ] [--status-dir DIR] <parecer.md> [...]" >&2; exit 2; }
-  echo "| lane | linha | achado (trecho) | elicitacao |"
-  echo "|---|---|---|---|"
+  echo "| lane | linha | achado (trecho) | categoria | elicitacao |"
+  echo "|---|---|---|---|---|"
   TOTAL=0
   LANES_TSV=""
   for P in "${PARECERES[@]}"; do
-    [ -r "$P" ] || { echo "| $(basename "$P") | — | ILEGÍVEL | estrutural |"; continue; }
+    [ -r "$P" ] || { echo "| $(basename "$P") | — | ILEGÍVEL |  | estrutural |"; continue; }
     # lane = último nome antes do -cN (fix F22: 22-parecer-plan-agy-c4.md → agy, não
     # plan; fix F24: 24-planrev-parecer-codex-c1.md → codex — o padrão antigo exigia
     # "NN-parecer-" no início e a lane virava o basename inteiro, zerando a contagem)
@@ -100,8 +111,16 @@ if [ "${1:-}" = "--tabela" ]; then
       [ -n "$linha" ] || continue
       TOTAL=$((TOTAL+1))
       NL="${linha%%:*}"; TX="${linha#*:}"
-      TX=$(printf '%s' "$TX" | sed 's/|/\\|/g' | cut -c1-100)
-      echo "| ${LANE} | L${NL} | ${TX} | estrutural |"
+      # Categoria: extraída da linha INTEIRA, antes de qualquer corte (C7). Sem colchetes.
+      CAT=$(printf '%s' "$TX" | grep -oE '\[[A-E]-[A-Za-z0-9_-]+\]' | head -1 | tr -d '[]')
+      # Truncamento em bash, não em `cut`: o `cut -c` do coreutils corta BYTES mesmo em
+      # locale UTF-8 e parte caractere acentuado no meio — na F24.4 isso produziu byte
+      # solto (`\xc3`) na tabela do planrev c2. A expansão `${var:0:100}` do bash conta
+      # CARACTERES em locale UTF-8 (e, em locale C, degrada para o comportamento antigo,
+      # nunca pior). Mesma ordem de antes: escapa o `|`, depois corta.
+      TX=${TX//|/\\|}
+      TX=${TX:0:100}
+      echo "| ${LANE} | L${NL} | ${TX} | ${CAT} | estrutural |"
     done <<< "$LISTA"
   done
 
@@ -128,7 +147,8 @@ try:
         man = json.load(fh)
     QIDS = list(man.get("qids") or [])
 except Exception as e:
-    print("| — | — | MANIFESTO ILEGÍVEL: %s | dirigida-ausente |" % e)
+    # 5 colunas (C7): a coluna `categoria` sai vazia — dirigida não tem tag por desenho.
+    print("| — | — | MANIFESTO ILEGÍVEL: %s |  | dirigida-ausente |" % e)
     resumo["brutas"] = 1
     resumo["avisos"].append("manifesto de perguntas ilegível")
     print(json.dumps(resumo, ensure_ascii=False))
@@ -216,7 +236,7 @@ for entrada in LANES.strip().splitlines():
         ocorr = respostas.get(qid, [])
         resumo["total"] += 1
         if not ocorr:
-            linhas.append("| %s | — | %s NÃO RESPONDIDA (manifesto) | dirigida-ausente |"
+            linhas.append("| %s | — | %s NÃO RESPONDIDA (manifesto) |  | dirigida-ausente |"
                           % (lane, qid))
             resumo["brutas"] += 1
             continue
@@ -256,7 +276,7 @@ for entrada in LANES.strip().splitlines():
             resumo["avisos"].append("%s/%s fora do manifesto — contada assim mesmo" % (lane, qid))
         if conta:
             resumo["brutas"] += 1
-        linhas.append("| %s | L%d | %s | %s |" % (lane, nl, trecho, rot))
+        linhas.append("| %s | L%d | %s |  | %s |" % (lane, nl, trecho, rot))
 
 for l in linhas:
     print(l)
