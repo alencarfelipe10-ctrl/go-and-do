@@ -365,6 +365,28 @@ if [ "$ETAPA" = "1" ]; then
     fi
   fi
 
+  # ── R5 (A5, consertos F24.4): reconciliação VEREDITO × APLICADO + trava de ordem.
+  # A tabela de reconciliação do NN-INTENT-REVIEW.md é prosa do coordenador e nunca foi
+  # conferida por máquina: na F24.4 passaram 1 INVERSAO (c4-05 `nao_sustentado` aplicado),
+  # 2 CONFIRMADO-NAO-APLICADO, 3 APLICADO-SEM-VEREDITO e 1 ORDEM-VIOLADA (correção c4b
+  # promovida 5 min depois da releitura c4). Fase sem ciclos sai `n/a` com exit 0.
+  CREC="$GAD_SCRIPTS_DIR/confere-reconciliacao.sh"
+  if [ -f "$CREC" ]; then
+    recrc=0; recout=$(bash "$CREC" "$PHASE_DIR" --ordem 2>&1) || recrc=$?
+    if [ "$recrc" = 0 ]; then
+      RES=$(jq -c --arg d "$(printf '%s\n' "$recout" | { grep -E '^(resumo|reconciliacao|ordem):' || true; } | tr '\n' ' ' | cut -c1-300)" \
+        '. + [{id:"r5_reconciliacao", resultado:"ok", detalhe:$d}]' <<<"$RES")
+    elif [ "$recrc" = 1 ]; then
+      RES=$(jq -c --arg d "confere-reconciliacao.sh reprovou: $(printf '%s\n' "$recout" | { grep -E '^(INVERSAO|CONFIRMADO-NAO-APLICADO|APLICADO-SEM-VEREDITO|ORDEM-VIOLADA)' || true; } | head -4 | tr '\n' ' ' | cut -c1-400)" \
+        '. + [{id:"r5_reconciliacao", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    else
+      # exit 2 (uso inválido/insumo ilegível): ausência de garantia, não prova de que está
+      # reconciliado — reprova, no mesmo critério do R2/R6 acima.
+      RES=$(jq -c --arg d "confere-reconciliacao.sh não pôde conferir (rc=$recrc): $(printf '%s\n' "$recout" | tr '\n' ' ' | cut -c1-300)" \
+        '. + [{id:"r5_reconciliacao", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+  fi
+
   # ── R6: cada issue estruturada emitida pelo setup tem de estar RESOLVIDA no disco —
   # o id existe no REQUIREMENTS.md (o `--r6` já re-deriva contra ele) OU há sino
   # ESTRUTURADO. Menção em prosa não conta. O sino é procurado nos `.intent/.sinos-*.txt`
@@ -463,6 +485,24 @@ if [ "$ETAPA" = "1" ]; then
     fi
     EXTRAI=$(jq -c --argjson t "${r7_tot:-0}" --argjson k "${r7_com:-0}" \
       '. + {r7_confirmados: $t, r7_com_proposicao: $k}' <<<"$EXTRAI")
+  fi
+
+  # ── C3 (consertos F24.4): nenhum sino do ciclo 0 fica `aberto` no fecho da etapa.
+  # Na F24.4 o sino c0-14 chegou ao fim `aberto` e a etapa fechou assim mesmo.
+  CSIN="$GAD_SCRIPTS_DIR/confere-sinos.sh"
+  if [ -x "$CSIN" ]; then
+    csrc=0; csout=$(bash "$CSIN" "$PHASE_DIR" 2>&1) || csrc=$?
+    if [ "$csrc" = 0 ]; then
+      RES=$(jq -c --arg d "$(printf '%s' "$csout" | head -1)" \
+        '. + [{id:"c3_sinos_abertos", resultado:"ok", detalhe:$d}]' <<<"$RES")
+    elif [ "$csrc" = 1 ]; then
+      RES=$(jq -c --arg d "$(printf '%s' "$csout" | tr '\n' ' ' | cut -c1-400)" \
+        '. + [{id:"c3_sinos_abertos", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    else
+      # exit 2 (.ciclo0.json ilegível): mesmo critério do R5 — ausência de garantia reprova.
+      RES=$(jq -c --arg d "confere-sinos.sh não pôde conferir (rc=$csrc): $(printf '%s' "$csout" | tr '\n' ' ' | cut -c1-300)" \
+        '. + [{id:"c3_sinos_abertos", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
   fi
 
   EXTRAI=$(jq -c --argjson r6 "$R6" --arg st "$R2_ST" --argjson av "$R2_AVISOS" \

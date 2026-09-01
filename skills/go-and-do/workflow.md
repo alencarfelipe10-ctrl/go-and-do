@@ -247,13 +247,22 @@ Use quando sobra **trabalho de implementação** que depende do dono: ação hum
 janela de silêncio (Sub-rotina I), ou o teto de contexto (Sub-rotina A). Feche com handoff
 limpo:
 
-1. **Encerre o trabalho vivo — inclusive o que o TaskStop não mata.** `TaskStop` na árvore do
-   subagente ativo; depois varra bash em background órfãos (waiters de disco, processos codex
-   — um waiter já sobreviveu 55min ao TaskStop) e encerre o que era da árvore parada. Feche na
-   telemetria a etapa interrompida: **`confere-etapa.sh pausa`** — mede a janela aberta com o
-   mede-tokens e grava o `end` com o rótulo CANÔNICO do checkpoint + `"interrompida":true`
-   (nunca invente variante de rótulo; nunca estime — F24: a pausa ficou sem medição e o
-   rótulo fragmentou em 3 grafias, quebrando a agregação).
+1. **Encerre o trabalho vivo — inclusive o que o TaskStop não mata.** Nesta ordem:
+   1. `ListAgents` — enumere os subagentes vivos. A lista é a fonte da verdade: pare todos,
+      não só o ativo, porque um filho vivo continua gravando artefato depois da pausa.
+   2. `TaskStop` em cada filho que a lista devolveu.
+   3. `varre-orfaos.sh <phase_dir>` — os processos de fundo que sobrevivem ao TaskStop
+      (waiters de disco, codex; um waiter já durou 55min). Ele identifica por vínculo com o
+      `<phase_dir>`, agrupa por `pgid` e só relata. É o substituto da varredura por nome de
+      processo, que falhou duas vezes na F24.4.
+   4. Exit 1 (há órfãos) → `varre-orfaos.sh <phase_dir> --matar`: TERM no grupo, espera 5s,
+      então KILL. Ele recusa em três casos previstos — mais de 10 candidatos (`RECUSA:`),
+      `GRUPO-MISTO` e `GRUPO-PROPRIO`. Em qualquer recusa, leve os pids relatados para a
+      linha de handoff do passo 4 e siga.
+   5. **`confere-etapa.sh pausa`** — fecha a etapa interrompida na telemetria: mede a janela
+      aberta com o mede-tokens e grava o `end` com o rótulo CANÔNICO do checkpoint +
+      `"interrompida":true`. Rótulo canônico, nunca variante; medição, nunca estimativa — na
+      F24 a pausa ficou sem medição e o rótulo fragmentou em 3 grafias, quebrando a agregação.
 2. **Resumo executivo (modo parcial):** Sub-rotina F com `modo: parcial` e o `motivo`. Falhou
    ao gerar → não pare por isso; registre numa linha e siga (o handoff técnico é o que garante
    a retomada).
@@ -265,7 +274,8 @@ limpo:
    corrige um stopped_at herdado — quem retoma pelo STATE seria enganado); divergiu → emende
    as duas linhas no commit WIP.
 4. **Pare** com a linha de handoff `🔔`: o motivo, a ação exata (comando literal), os planos
-   pendentes, e onde está o `NN-RESUMO-EXECUTIVO.md`. Retoma com `/go-and-do N`.
+   pendentes, os pids que a varredura relatou e recusou matar (se houver) e onde está o
+   `NN-RESUMO-EXECUTIVO.md`. Retoma com `/go-and-do N`.
 
 > **Quando NÃO usar:** balde 3 (não-pude-verificar — falta verificação HUMANA; rota de
 > hand-back da Etapa 6, próximo passo `/gsd-verify-work`) e balde 4 (assumed — shipa com
@@ -520,13 +530,18 @@ usuário diverge, é para endurecer). Mecânica:
 mesma mecânica, entrada no `NN-DECISOES.md` (a narração no chat se perde; o registro é o que
 o resumo e a auditoria releem).
 
-**Janela de silêncio (23h–07h):** o `pre-despacho.sh` já reporta a janela; um gate duro
-dentro dela não pendura pergunta de madrugada — feche com **parada graciosa** (Sub-rotina D,
-motivo `gate duro em janela de silêncio`), com a pergunta pendente (opções + recomendação) no
-handoff e no resumo parcial; a retomada re-apresenta. Não se aplica à auto-decisão (que nunca
-para) nem muda os fail-closed. Um `blocking-human` de precondição na janela não é pergunta —
-é ação pendente: segue a rota 3.4 → Sub-rotina D com a precondição verbatim no handoff
-(`NN-ACAO-HUMANA.md` se houver passo a passo a dar).
+**Janela de silêncio (23h–07h):** antes de abrir gate duro com `AskUserQuestion`, rode
+`janela-silencio.sh` e siga o exit code — ele é a fonte única da regra. O campo
+`janela_silencio` do checkpoint é informativo e ninguém o consumia: foi por isso que uma
+pergunta de gate ficou pendurada das 23:58 às 05:50 na F24.4.
+1. exit 0 (`acao: pergunta`) → pergunte normalmente.
+2. exit 1 (`acao: pausa`) → **parada graciosa** (Sub-rotina D, motivo `gate duro em janela de
+   silêncio`), com a pergunta pendente (opções + recomendação) no handoff e no resumo
+   parcial; a retomada re-apresenta.
+
+Não se aplica à auto-decisão (que nunca para) nem muda os fail-closed. Um `blocking-human`
+de precondição na janela não é pergunta — é ação pendente: segue a rota 3.4 → Sub-rotina D
+com a precondição verbatim no handoff (`NN-ACAO-HUMANA.md` se houver passo a passo a dar).
 
 A transparência fecha o ciclo: o resumo executivo narra toda auto-decisão lendo o
 `NN-DECISOES.md` — a supervisão que era síncrona vira revisão assíncrona com rota de desfazer.
@@ -928,6 +943,11 @@ F.
 evidência estacionada fora do git (ex.: PDF com segredo) → o campo `evidencia:` do cenário
 aponta o paradeiro REAL com o motivo — path fantasma é defeito de fecho (a prova deixa de ser
 auditável).
+Exit 1 = recusa do teto de segurança (`uat-evidencia/` com mais de 20 arquivos): trate como
+bloqueio de ambiente, não como o best-effort dos outros modos. Não siga para o ship; repasse
+a mensagem de `RECUSA:` ao dono — ela já traz a contagem e o caminho — e aguarde a seleção
+manual dos arquivos legítimos. Na recusa o script sai antes de qualquer `git add`, então o
+`NN-UAT.md` também não foi commitado; e re-rodar devolve a mesma recusa.
 
 **6.4-SHIP — Ship.**
 - **Rota B (`git_remote: false` — 6.E, julgamento seu):** o projeto shipa por caminho próprio
@@ -972,6 +992,12 @@ pronta para o seu UAT`, campos `Balde 3` (quantos) e `Resumo` (caminho) — e as
 `reconcilia-docs.sh --pr "#N <url>" [--proxima M]` (v2.1.9, tarefa 32e — 3 fases seguidas
 terminaram com STATE.md `executing`, ROADMAP `[ ]`, REVIEW.md `issues_found` com re-review
 clean e REVIEWS.md sem frontmatter; a rota B não roda o gsd-ship e a rota A só toca 2 campos).
+Exit 3 (`FORMATO-INESPERADO`) → pare antes da cancela: o `status` do STATE.md está numa forma
+que nenhum dos dois sabe julgar (tipicamente uma frase, onde se espera o token `executing` ou
+`between_phases`). Corrija o campo para o token e re-rode o script — o `confere-etapa.sh 6`
+reprova o mesmo caso pelo assert `state_formato`, de propósito: os dois deixaram de
+compartilhar o ponto cego. Exit 2 segue sendo uso inválido; exit 0, "rodou, pendências no
+banner".
 Leia `acoes`/`pendentes` do JSON; pendente = anote no banner. Commite (best-effort:
 `docs(fase NN): reconcilia espelhos de estado pós-ship`). Então `confere-etapa.sh 6` —
 PLAN×SUMMARY (plano sem SUMMARY = falha) + anti-placeholder de timestamps + **AC parcial no

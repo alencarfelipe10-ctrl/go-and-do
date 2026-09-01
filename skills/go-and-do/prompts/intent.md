@@ -215,8 +215,14 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    devolve `consistencia: não_disponível`, sem falha). Depois grave `.intent/.ciclo0.json`
    — schema exigido pelo `briefing-build.sh`:
    `{"v":1, "sinos":[{"id":"c0-01","origem":"spec|discuss","disposicao":"corrigido|
-   descartado|aberto","correcao_id":"c0-01"}], "correcoes":[{"id":"c0-01","hash":"<do
-   .aplicado>"}], "releitura":{"commit":"…","artefatos":[{"path":"…","blob":"…"}]}}`
+   descartado|aberto","correcao_id":"c0-01"}], "correcoes":[{"id":"c0-01","hash":"<copiado
+   verbatim de .correcoes-c0.aplicado>"}],
+   "releitura":{"commit":"…","artefatos":[{"path":"…","blob":"…"}]}}`
+   O `hash` vem do disco: `jq -r '.correcoes[] | .id + " " + .hash'` sobre
+   `.intent/.correcoes-c0.aplicado`, copiado caractere a caractere. Desde o conserto C1 ele
+   carrega um blob sha real (ou string vazia, quando o `.aplicado` listou o id em
+   `hash_ausente[]`), e o gate do briefing c1 compara os dois lados — valor divergente sai
+   como "`.ciclo0.json`.correcoes != `.aplicado`.correcoes".
    Arrays vazios **explícitos** (`{}` ou chave faltando → exit 4); `corrigido` exige um
    `correcao_id` existente no `.correcoes-c0.aplicado`, `descartado`/`aberto` proíbem o
    campo. **Nenhum sino some:** cada correção c0 volta ao revisor na seção "Revalidação
@@ -355,9 +361,19 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
       ciclo e execute-o **no mesmo turno**. Uma edição por achado, id `c<C>-NN`.
    3. Feche:
       ```bash
-      …  correcoes-commit.sh "<phase_dir>" <C> --ids "c<C>-01:<hash>,c<C>-02:<hash>" \
+      …  correcoes-commit.sh "<phase_dir>" <C> --ids "c<C>-01,c<C>-02" \
         --artefatos "<SPEC>" "<CONTEXT>" "<INTENT-REVIEW>" [--docs …]
       ```
+      O `--ids` leva só os ids. O `hash` de cada correção é preenchido pelo próprio script,
+      com o blob sha do arquivo alvo depois da correção — no instante em que você monta a
+      flag o commit ainda não existe (o exemplo antigo pedia um hash sem fonte, e o campo
+      saiu vazio em 58/58 entradas da F24.4).
+      Ciclo que tocou **mais de um arquivo**: diga qual correção mexeu em qual, na forma
+      `id:<caminho relativo à raiz do repo>` —
+      `--ids "c<C>-01:.planning/phases/<fase>/NN-SPEC.md,c<C>-02:.planning/ROADMAP.md"`.
+      Sem essa declaração o script grava `hash: ""` e lista os ids em `hash_ausente[]` no
+      `.correcoes-c<C>.aplicado`: a ausência fica auditável, mas a releitura perde a âncora
+      por correção. Com um só arquivo no ciclo, a forma só-ids basta.
       Ciclo sem correção → `correcoes-commit.sh "<phase_dir>" <C> --vazio` (marcador
       explícito; ausência não vale). Exit 3 = **nada promovido**: leia a razão, conserte e
       re-rode — nunca contorne com `git` na mão.
@@ -396,6 +412,17 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    `fase_sem_req` e `pre_spec_sem_bloco` TÊM de aparecer aqui exatamente como escritos — a
    limpeza do 7b apaga os `.sinos-*.txt`, e é neste arquivo que o `confere-etapa.sh 1` vai
    procurá-los. Menção em prosa ("o REQ-X continua ausente") não conta.
+   **Antes de escrever a tabela, rode a reconciliação mecânica** — ela junta os dois lados do
+   dado que já estão em disco, o que a tabela sozinha (prosa sua, conferida por ninguém) não
+   faz:
+   ```bash
+   $HOME/.claude/skills/go-and-do/scripts/confere-reconciliacao.sh "<phase_dir>" --ordem
+   ```
+   Exit 0 → a tabela pode afirmar a reconciliação. Exit 1 → cada linha vira uma entrada da
+   tabela com a ação tomada, mais um `incidente` no run-log: `INVERSAO` (reverta a correção
+   indevida), `CONFIRMADO-NAO-APLICADO` (aplique o que faltou), `APLICADO-SEM-VEREDITO`
+   (registre a origem da correção órfã), `ORDEM-VIOLADA` (re-rode a releitura sobre a emenda
+   final). Copie a saída do script para a tabela, em vez de reescrevê-la de memória.
    Antes do commit, `spot-check-ponteiros.sh <arquivo> <root1> [root2 …]` (TODAS as raízes
    citadas) nos artefatos que VOCÊ escreveu; ponteiro quebrado → conserte antes de commitar.
    ```bash

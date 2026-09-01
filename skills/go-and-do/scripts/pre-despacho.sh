@@ -73,10 +73,19 @@ pct=$(printf '%s' "$linha"    | sed -n 's/.*pct=\([0-9]*\).*/\1/p')
 status=$(printf '%s' "$linha" | sed -n 's/.*status=\([a-z]*\).*/\1/p')
 reason=$(printf '%s' "$linha" | sed -n 's/.*reason=\(.*\)$/\1/p')
 
-# ── janela de silêncio (S.I): 23h–07h local ──────────────────────────────────
-hora=$(date +%H)
-silencio=false
-case "$hora" in 23|00|01|02|03|04|05|06) silencio=true ;; esac
+# ── janela de silêncio (S.I): 23h–07h local — fonte única em janela-silencio.sh ──
+# Um só cálculo da regra. Enquanto eram dois independentes, um deles podia divergir em
+# silêncio — o padrão que deixou a pergunta pendurada 5h52 na F24.4.
+# Forma `if`, não `$(...; [ $? -eq 1 ])`: com `set -e` o comando falhando aborta a
+# substituição antes do teste e devolveria string vazia. Exit 2 (uso inválido) cai no
+# `else` como `null` (JSON válido, lido como "não medido" — não como `false`): este campo
+# é informativo, e quem atua é o gate da Sub-rotina I, que chama o script direto.
+silencio=null
+JS="$GAD_SCRIPTS_DIR/janela-silencio.sh"
+if [ -x "$JS" ]; then
+  js_rc=0; "$JS" >/dev/null 2>&1 || js_rc=$?
+  case "$js_rc" in 0) silencio=false ;; 1) silencio=true ;; esac
+fi
 
 # ── extras da etapa (declarados no manifest, executados aqui) ────────────────
 extras="{}"

@@ -2,6 +2,75 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.3.0] — 2026-09-01
+
+Pacote dos **consertos mecânicos da F24.4** (auditoria interina de 31/08,
+`auditorias/310826-inspired-f24.4-interina.md`): falhas em que um script não rodou, um campo
+não foi gravado ou uma régua publicada nunca virou trava — nada de julgamento do modelo.
+Dezessete falhas listadas, doze consertadas, executadas por doze subagentes com escopo de
+arquivos exclusivo.
+
+**A exigência que definiu o pacote:** nenhum conserto valia por passar em fixture — cada um
+teve de reencontrar o incidente nos artefatos reais da F24.4. Isso derrubou **três** dos
+dezessete diagnósticos:
+
+- A régua T3 não estava sem dado: os 21 achados confirmados tinham `proposicao`, 21/21. Quem
+  não lia era o `etiqueta-achados.py`, que só aceitava fixture e nunca abria o
+  `NN-INTENT-REVIEW.md` — e ainda avisava de uma ausência que não fora conferir.
+- Os "39 achados sem categoria" não vinham do truncamento: 0 de 77 linhas perderam a tag no
+  corte. Eram 31 respostas dirigidas (sem categoria por desenho) + 4 falsos-positivos + 4
+  headings capturados por engano.
+- O commit dos 190 arquivos não veio do `commita-artefatos.sh` — nenhum dos arquivos está em
+  `uat-evidencia/`. O defeito consertado é real (6 fases antigas comitaram o diretório
+  inteiro), mas a origem do incidente segue **em aberto**.
+
+### Adicionado
+- `confere-reconciliacao.sh` — cruza veredito × aplicado por ciclo (`INVERSAO`,
+  `CONFIRMADO-NAO-APLICADO`, `APLICADO-SEM-VEREDITO`) e, com `--ordem`, acusa correção
+  promovida depois da releitura. Na F24.4 reencontra os 5 casos apurados à mão, incluindo o
+  achado `nao_sustentado` aplicado assim mesmo. Fiado como assert `r5_reconciliacao` do
+  `confere-etapa.sh 1` e como passo do `intent.md` 7.
+- `confere-sinos.sh` — nenhum sino do ciclo 0 fecha a etapa `aberto` (na F24.4, o `c0-14`
+  fechou). Assert `c3_sinos_abertos`.
+- `janela-silencio.sh` — fonte única da janela 23h–07h, com exit code que o gate duro
+  obedece (Sub-rotina I). O sensor existia em dois lugares e ninguém o consumia: a pergunta
+  ficou pendurada das 23:58 às 05:50.
+- `varre-orfaos.sh` — órfãos por vínculo com o `phase_dir`, nunca por nome de processo
+  (o critério por nome falhou 2× na F24.4). Só relata; `--matar` recusa acima de 10
+  candidatos, em `GRUPO-MISTO` e em `GRUPO-PROPRIO`. Fiado na Sub-rotina D, agora uma
+  sequência numerada que começa por `ListAgents` e para **todos** os filhos.
+- `--intent-review` no `etiqueta-achados.py` da `/audit-gad`: 21/21 no caso real.
+- `--regua`/`--limiar`/`--exit-code`/`--e4` no `turnos-por-ciclo.py`: turnos por ciclo
+  (16·8·16·19 contra régua ≤4) e contrato E4 medido — atrasos reais de 27, 21, 376 e 280 s.
+
+### Corrigido
+- `hash` das correções deixa de sair vazio (58/58 na F24.4). O `intent.md` mandava passar
+  `cC-01:<hash>` antes de o commit existir; quem preenche agora é o próprio
+  `correcoes-commit.sh`, e ciclos com mais de um arquivo declaram `id:<caminho>` — sem isso,
+  40% das entradas ficariam degradadas por desenho.
+- `commita-artefatos.sh uat` não comita mais o diretório inteiro; acima de 20 arquivos
+  recusa e devolve exit 1, que o `workflow.md` 6.3b trata como bloqueio de ambiente.
+- `reconcilia-docs.sh` ganha exit 3 (`FORMATO-INESPERADO`) para `status` que não é token, com
+  dono na etapa 6.5 — antes virava pendência muda, e a trava que deveria pegar o descuido
+  compartilhava o mesmo ponto cego.
+- Categoria dos achados em coluna própria (`confere-ciclo.sh`, `confere-rotas.sh`); o corte
+  passou a contar caracteres, não bytes — vinha partindo palavras acentuadas.
+- `token-ledger.py` classifica a divergência run-log × ledger (`direcao`, `causa_provavel`);
+  os 3,1% da F24.4 saem como `flush_lag`, não como conta errada.
+- `pre-despacho.sh` deixa de calcular a janela de silêncio por conta própria.
+- `execute.md` nomeia os atalhos de background proibidos — os mesmos que criavam os órfãos.
+
+### Notas
+- Os textos de instrução tocados neste pacote foram revisados para as diretrizes Gen5 da
+  Anthropic (fraseado normal no lugar de ênfase agressiva, forma positiva no lugar de
+  negativas empilhadas, condição → consequência → motivo, sequência numerada onde a ordem
+  importa). Literais de script, flags, exit codes e tokens que os gates procuram foram
+  preservados verbatim.
+- **Fora deste release:** a guarda de isolamento e o auto-degrade #683 são do GSD, não da
+  skill — vão para o lote do fork. As mudanças da `/audit-gad` acompanham o pacote mas não
+  são versionadas aqui (a skill não é repositório git).
+- Suíte: 19 arquivos, 19/19 verde.
+
 ## [2.2.0] — 2026-08-30
 
 Pacote dos **27 ajustes da etapa de intenção** (triagem do dono em 28/08 sobre a auditoria
