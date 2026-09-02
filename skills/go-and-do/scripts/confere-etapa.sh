@@ -17,6 +17,10 @@
 #   o caminho de pausa não media e fragmentava o rótulo da etapa em 3 variantes).
 #   --dry-run: avalia e imprime, não grava evento nenhum (PC-12 — validação contra
 #   fases arquivadas sem sujar run-log real).
+#   <etapa> = "pausa" --pos-pausa (P17, v2.4.0): cancela DEPOIS do `reconcilia-docs.sh
+#   --pausa` — não mede nada, só confere que o STATE.md diz `status: paused` e que o
+#   `state_head` é HEAD ou HEAD~1 (o WIP logo antes do commit próprio do reconciliador).
+#   Na F24.4 o STATE.md ficou 16 commits atrás do HEAD depois da pausa e ninguém viu.
 #
 # Manifest (DSL dos asserts):
 #   nivel "falha" reprova a etapa; "informativo" só reporta (PC-4: asserts que dependem
@@ -27,9 +31,10 @@
 #   ocorrências) · sdk (gsd_run query + jq + espera) · ou (passa se qualquer sub-assert
 #   passar). Placeholders: {fase}=phase_dir · {nn}=NN · {n}=fase · {root}=raiz.
 #
-# Blocos MECÂNICOS fora do manifest (a DSL só sabe glob/grep/sdk): etapa 1 = R2
-# (`confere-pre-spec.sh <SPEC> <PRE-SPEC>`: falhas reprovam, EXTENSAO-SUSPEITA vira aviso
-# em `extrai.r2_avisos`) + R6 (`setup-intencao.sh --r6`: cada issue estruturada exige id
+# Blocos MECÂNICOS fora do manifest (a DSL só sabe glob/grep/sdk/json): etapa 1 = R2
+# (`confere-pre-spec.sh --exige-origem [--reqs REQUIREMENTS.md] <SPEC> <PRE-SPEC>`: falhas
+# reprovam — inclusive AC-SEM-ORIGEM e AC-ORIGEM-INEXISTENTE, P12 —; EXTENSAO-SUSPEITA e
+# ORIGEM-NAO-CONFERIDA viram aviso em `extrai.r2_avisos`) + R6 (`setup-intencao.sh --r6`: cada issue estruturada exige id
 # no REQUIREMENTS.md OU sino `req_ausente: <id>` / `fase_sem_req` — nos `.sinos-*.txt` ou
 # no NN-INTENT-REVIEW.md, que é onde o conteúdo sobrevive à limpeza 1.5); etapa 5 = UAT;
 # etapa 6 = self-check.
@@ -46,13 +51,14 @@ shopt -s nullglob
 
 ETAPA="${1:-}"; shift || true
 [ -n "$ETAPA" ] || { echo "uso: confere-etapa.sh <etapa> [--fase N] [--projeto DIR] [--dry-run]" >&2; exit 2; }
-FASE=""; PROJ=""; DRY=0; FIXCYCLE=0
+FASE=""; PROJ=""; DRY=0; FIXCYCLE=0; POSPAUSA=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --fase)    FASE="${2:-}"; shift 2 ;;
     --projeto) PROJ="${2:-}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     --fix-cycle) FIXCYCLE=1; shift ;;
+    --pos-pausa) POSPAUSA=1; shift ;;
     *) echo "flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
@@ -76,6 +82,32 @@ fi
 [ -n "$PHASE_DIR" ] && [ -d "$PHASE_DIR" ] || PHASE_DIR=$(gad_phase_dir "$ROOT" "$FASE") \
   || { echo "ERRO: fase $FASE não encontrada em $ROOT/.planning/phases/" >&2; exit 2; }
 [ -n "$NN" ] || NN=$(basename "$PHASE_DIR" | grep -o '[0-9][0-9.]*' | head -1)
+
+# ── modo pausa --pos-pausa: o STATE.md aponta o commit real da parada? ───────
+if [ "$ETAPA" = "pausa" ] && [ "$POSPAUSA" = 1 ]; then
+  STATE="$ROOT/.planning/STATE.md"; MOTIVOS="[]"
+  motivo() { MOTIVOS=$(jq -c --arg m "$1" '. + [$m]' <<<"$MOTIVOS"); }
+  st=""; sh=""
+  if [ -f "$STATE" ]; then
+    st=$(grep -m1 -E '^status: ' "$STATE" | sed -e 's/^status:[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/\r$//' || true)
+    sh=$(grep -m1 -E '^state_head: ' "$STATE" | sed -e 's/^state_head:[[:space:]]*//' -e 's/[[:space:]]*$//' || true)
+  else
+    motivo "STATE.md ausente"
+  fi
+  head0=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)
+  head1=$(git -C "$ROOT" rev-parse HEAD~1 2>/dev/null || true)
+  [ -n "$head0" ] || motivo "HEAD ilegível em $ROOT"
+  [ "$st" = paused ] || motivo "status: '$(printf '%s' "$st" | cut -c1-60)' (esperado paused — rode reconcilia-docs.sh --pausa)"
+  if [ -z "$sh" ]; then motivo "state_head ausente no STATE.md"
+  elif [ "$sh" != "$head0" ] && [ "$sh" != "$head1" ]; then
+    atras=$(git -C "$ROOT" rev-list --count "$sh..HEAD" 2>/dev/null || echo "?")
+    motivo "state_head ${sh:0:12} não é HEAD nem HEAD~1 ($atras commit(s) atrás de ${head0:0:12})"
+  fi
+  n=$(jq 'length' <<<"$MOTIVOS"); ver=pass; [ "$n" = 0 ] || ver=fail
+  gad_json_out confere-etapa "$(jq -cn --arg v "$ver" --arg st "$st" --arg sh "$sh" --arg h "$head0" --argjson m "$MOTIVOS" \
+    '{etapa:"pausa", pos_pausa:true, veredito:$v, status:$st, state_head:$sh, head:$h, motivos:$m}')"
+  [ "$ver" = pass ] && exit 0 || exit 1
+fi
 
 # ── modo pausa: fecho medido da etapa interrompida (Sub-rotina D) ────────────
 if [ "$ETAPA" = "pausa" ]; then
@@ -216,6 +248,20 @@ while IFS= read -r x; do
         val=$(grep -hoE "$regex" "$f" 2>/dev/null | head -1) && [ -n "$val" ] && break
       done
       EXTRAI=$(jq -c --arg id "$xid" --arg v "$val" '. + {($id): (if $v=="" then null else $v end)}' <<<"$EXTRAI") ;;
+    json)
+      # P13/P19: espelho JSON gravado por outro script (ex.: `.planning/.gad/last-plan-gate.json`
+      # do plan shape gate §13a-bis), filtrado por `jq`. Ausente → null; com `"ausente":
+      # "incidente"` grava também um `incidente` no run-log (fora do --dry-run): o gate do
+      # fork sempre grava o espelho, então arquivo ausente = o gate não rodou.
+      arq=$(subst "$(jq -r '.arquivo' <<<"$x")"); jqf=$(jq -r '.jq // "."' <<<"$x")
+      val=null
+      if [ -f "$arq" ]; then
+        val=$(jq -c "$jqf" "$arq" 2>/dev/null) || val=null; [ -n "$val" ] || val=null
+      elif [ "$(jq -r '.ausente // ""' <<<"$x")" = incidente ] && [ "$DRY" = 0 ]; then
+        gad_runlog "$PHASE_DIR" "$NN" incidente "$RUNLOG_ETAPA" --kv origem=confere-etapa.sh \
+          --kv detalhe="$xid: $(basename "$arq") ausente — o script que o grava não rodou"
+      fi
+      EXTRAI=$(jq -c --arg id "$xid" --argjson v "$val" '. + {($id): $v}' <<<"$EXTRAI") ;;
   esac
 done < <(jq -c '.extrai[]?' "$MANIFEST")
 
@@ -331,6 +377,149 @@ if [ "$ETAPA" = "6" ]; then
     '. + {plans:$p, summaries:$s}' <<<"$EXTRAI")
 fi
 
+# ── etapa 3 (construção): paralelismo observado × planejado ──────────────────
+# O mandato de paralelismo do prompts/execute.md só era imponível por confissão da camada
+# 1. Aqui a cancela mede pelo run-log: para cada onda planejada com >=2 planos, quantos
+# executores daquela onda estiveram abertos ao mesmo tempo (despacho sem retorno entre
+# eles). Só extrai — a régua da /audit-gad julga depois. O que reprova é uma coisa só:
+# `workflow.use_worktrees` ter virado false entre o pré-despacho e o fecho (a "chave de
+# emergência" que serializa a fase inteira sem ninguém decidir).
+if [ "$ETAPA" = "3" ]; then
+  RL3="$PHASE_DIR/$NN-RUN-LOG.jsonl"
+  IDX3=$(cd "$ROOT" && gsd_run phase-plan-index "$FASE" --raw 2>/dev/null || echo '{}')
+  jq -e . >/dev/null 2>&1 <<<"$IDX3" || IDX3='{}'
+  # Regras que o arquivo real da F24.4 impôs ao leitor: a `descricao` do despacho veio em
+  # três grafias ("Execute plan 01 of phase 24.4", "… of phase INS-24.4", "Execute plan
+  # 24.4-08") — a chave comum é o sufixo numérico do id; um `retorno` fecha TODOS os
+  # despachos abertos daquele plano, porque os despachos negados pelo sentinel ficam sem
+  # retorno e contariam como abertos para sempre; `serializacao_observada` só quando >=2
+  # planos da onda foram despachados e nunca dois estiveram abertos juntos.
+  PAR_OBS=$(IDX_JSON="$IDX3" python3 - "$RL3" 2>/dev/null <<'PYOBS' || echo '{"paralelismo_observado":{},"serializacao_observada":[]}'
+import json
+import os
+import re
+import sys
+from datetime import datetime
+
+
+def main() -> int:
+    idx = json.loads(os.environ.get("IDX_JSON") or "{}")
+    waves = {w: list(ids) for w, ids in (idx.get("waves") or {}).items() if len(ids) >= 2}
+    plan_of = {}
+    for ids in waves.values():
+        for pid in ids:
+            plan_of[pid] = pid
+            plan_of[pid.rsplit("-", 1)[-1]] = pid
+    wave_of = {pid: w for w, ids in waves.items() for pid in ids}
+
+    evs = []
+    try:
+        with open(sys.argv[1], encoding="utf-8") as fh:
+            for ln in fh:
+                try:
+                    e = json.loads(ln)
+                except Exception:
+                    continue
+                if e.get("evento") not in ("despacho", "retorno") or e.get("agente") != "gsd-executor":
+                    continue
+                m = re.search(r"plan\s+([0-9][0-9.]*-)?([0-9]+)", e.get("descricao") or "", re.I)
+                if not m:
+                    continue
+                num = m.group(2)
+                pid = (plan_of.get((m.group(1) or "") + num) or plan_of.get(num.zfill(2))
+                       or plan_of.get(num))
+                if not pid:
+                    continue
+                try:
+                    ts = datetime.fromisoformat(e.get("ts", "")).timestamp()
+                except Exception:
+                    ts = 0.0
+                evs.append((ts, e.get("seq", 0), e["evento"], pid))
+    except (FileNotFoundError, IndexError):
+        pass
+    evs.sort()
+
+    aberto = {}
+    res = {w: {"planejados": len(ids), "despachados": 0, "simultaneos_max": 0,
+               "janela_despachos_s": None} for w, ids in waves.items()}
+    primeiro, ultimo = {}, {}
+    vistos = {w: set() for w in waves}
+    for ts, _seq, ev, pid in evs:
+        w = wave_of[pid]
+        if ev == "despacho":
+            aberto[pid] = aberto.get(pid, 0) + 1
+            vistos[w].add(pid)
+            primeiro.setdefault(w, ts)
+            ultimo[w] = ts
+            sim = sum(1 for p in waves[w] if aberto.get(p, 0) > 0)
+            res[w]["simultaneos_max"] = max(res[w]["simultaneos_max"], sim)
+        else:
+            aberto[pid] = 0
+    for w in waves:
+        res[w]["despachados"] = len(vistos[w])
+        if w in primeiro and primeiro[w] and ultimo.get(w):
+            res[w]["janela_despachos_s"] = int(ultimo[w] - primeiro[w])
+    ser = [w for w, r in res.items() if r["despachados"] >= 2 and r["simultaneos_max"] <= 1]
+    print(json.dumps({"paralelismo_observado": res, "serializacao_observada": ser},
+                     ensure_ascii=False))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+PYOBS
+  )
+  jq -e . >/dev/null 2>&1 <<<"$PAR_OBS" || PAR_OBS='{"paralelismo_observado":{},"serializacao_observada":[]}'
+  # use_worktrees do início (espelho do pre-despacho.sh 3) × do fecho
+  PRE3="$ROOT/.planning/.gad/last-pre-despacho-3.json"
+  uw0=null; uw1=null
+  [ -f "$PRE3" ] && uw0=$(jq -c '.use_worktrees // null' "$PRE3" 2>/dev/null || echo null)
+  uw1=$(cd "$ROOT" && gsd_run query config-get workflow.use_worktrees --raw 2>/dev/null | tr -d ' \n\r' || true)
+  case "$uw1" in true|false) ;; *) uw1=null ;; esac
+  if [ "$uw0" = true ] && [ "$uw1" = false ]; then
+    RES=$(jq -c '. + [{id:"use_worktrees_alterado", resultado:"FALHA", detalhe:"workflow.use_worktrees era true no pré-despacho da etapa 3 e está false no fecho — a fase foi serializada por mudança de config durante a rodada, sem decisão do dono"}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" incidente "$RUNLOG_ETAPA" \
+      --kv origem=confere-etapa.sh --kv detalhe="use_worktrees true→false durante a etapa 3"
+  fi
+  EXTRAI=$(jq -c --argjson po "$PAR_OBS" --argjson a "$uw0" --argjson b "$uw1" \
+    '. + $po + {use_worktrees:{inicio:$a, fecho:$b}}' <<<"$EXTRAI")
+
+  # ── escopo por plano (P06, consertos F24.4): confere-plano.sh em cada plano com SUMMARY.
+  # FORA-DA-LISTA e LISTA-VAZIA reprovam — arquivo fora do `files_modified` é colisão que o
+  # cálculo de ondas não enxerga. COMMITS-A-MENOS e SEM-COMMIT só extraem (a régua da
+  # /audit-gad julga). Cada plano reprovado pelo script vira um `incidente` no run-log; um
+  # plano que falha não impede a conferência dos outros, e plano sem SUMMARY é pulado.
+  CPL="$GAD_SCRIPTS_DIR/confere-plano.sh"
+  PC_OK=0; PC_FALHA="[]"; PC_CODIGOS="{}"; PC_REPROVA=""
+  if [ -f "$CPL" ]; then
+    for sf in "$PHASE_DIR"/*-SUMMARY.md; do
+      [ -f "$sf" ] || continue
+      pid=$(basename "$sf" -SUMMARY.md)
+      [ -f "$PHASE_DIR/$pid-PLAN.md" ] || continue
+      pcrc=0; pcout=$(bash "$CPL" "$PHASE_DIR" "$pid" 2>/dev/null | tail -1) || pcrc=$?
+      jq -e . >/dev/null 2>&1 <<<"$pcout" || pcout=$(jq -cn --arg p "$pid" --arg rc "$pcrc" \
+        '{plan:$p, veredito:"falha", codigos:["ILEGIVEL (rc=\($rc))"], fora_da_lista:[]}')
+      if [ "$(jq -r '.veredito' <<<"$pcout")" = ok ]; then
+        PC_OK=$((PC_OK+1)); continue
+      fi
+      PC_FALHA=$(jq -c --arg p "$pid" '. + [$p]' <<<"$PC_FALHA")
+      PC_CODIGOS=$(jq -c --arg p "$pid" --argjson c "$(jq -c '.codigos' <<<"$pcout")" '. + {($p): $c}' <<<"$PC_CODIGOS")
+      if jq -e '.codigos[] | select(test("^(FORA-DA-LISTA|LISTA-VAZIA)"))' >/dev/null <<<"$pcout"; then
+        PC_REPROVA="$PC_REPROVA${PC_REPROVA:+ · }$pid: $(jq -r '[.codigos[]|select(test("^(FORA-DA-LISTA|LISTA-VAZIA)"))] + .fora_da_lista | join(" ")' <<<"$pcout")"
+      fi
+      [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" incidente "$RUNLOG_ETAPA" \
+        --kv origem=confere-plano.sh --kv plano="$pid" \
+        --kv detalhe="$(jq -r '.codigos | join(", ")' <<<"$pcout")"
+    done
+    if [ -n "$PC_REPROVA" ]; then
+      RES=$(jq -c --arg d "plano fora do escopo declarado: $PC_REPROVA — arquivo fora do files_modified é colisão invisível para as ondas" \
+        '. + [{id:"escopo_planos", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+  fi
+  EXTRAI=$(jq -c --argjson ok "$PC_OK" --argjson f "$PC_FALHA" --argjson c "$PC_CODIGOS" \
+    '. + {planos_conferidos:{ok:$ok, falha:$f, codigos:$c}}' <<<"$EXTRAI")
+fi
+
 # ── etapa 1 (intenção): R2 (SPEC × PRE-SPEC) + R6 (ROADMAP × REQUIREMENTS) ───
 # Os dois asserts são MECÂNICOS e vivem aqui (não no manifest) porque dependem de rodar
 # outro script e de casar id a id — a DSL do manifest só sabe glob/grep/sdk.
@@ -341,17 +530,23 @@ if [ "$ETAPA" = "1" ]; then
   ROTA_F="$PHASE_DIR/.intent/pre-spec-route.json"
 
   # ── R2: as falhas do confere-pre-spec.sh ((a) MARCA-SEM-ID, (b) ID-INEXISTENTE e as
-  # demais) REPROVAM; EXTENSAO-SUSPEITA (c) é AVISO — vai para `extrai.r2_avisos`, que o
-  # coordenador põe no briefing do revisor. Sem PRE-SPEC não há o que conferir.
+  # demais, inclusive AC-SEM-ORIGEM / AC-ORIGEM-INEXISTENTE — P12) REPROVAM;
+  # EXTENSAO-SUSPEITA (c) e ORIGEM-NAO-CONFERIDA são AVISO — vão para `extrai.r2_avisos`,
+  # que o coordenador põe no briefing do revisor. Sem PRE-SPEC não há o que conferir.
+  # `--exige-origem` sempre (a go-and-do exige origem nos ACs a partir da v2.4.0) e
+  # `--reqs` quando o REQUIREMENTS.md existe — sem ele `CANC-v3x-03` e afins entrariam
+  # sem conferência.
   R2_ST=nao_aplicavel; R2_AVISOS="[]"
   if [ -f "$PRE_F" ] && [ -f "$SPEC_F" ] && [ -f "$CPS" ]; then
-    r2rc=0; r2out=$(bash "$CPS" "$SPEC_F" "$PRE_F" 2>&1) || r2rc=$?
-    R2_AVISOS=$(printf '%s\n' "$r2out" | { grep -E '^EXTENSAO-SUSPEITA ' || true; } | jq -R . | jq -cs .)
-    r2fal=$(printf '%s\n' "$r2out" | { grep -E '^(MARCA-SEM-ID|ID-INEXISTENTE|FATO-SEM-EVIDENCIA|RESSALVA-SEM-LIMITACAO|AC-POR-PONTEIRO|BLOCO-AUSENTE|BLOCO-INVALIDO) ' || true; })
+    REQS_F="$ROOT/.planning/REQUIREMENTS.md"
+    R2_ARGS=(--exige-origem); [ -f "$REQS_F" ] && R2_ARGS+=(--reqs "$REQS_F")
+    r2rc=0; r2out=$(bash "$CPS" "${R2_ARGS[@]}" "$SPEC_F" "$PRE_F" 2>&1) || r2rc=$?
+    R2_AVISOS=$(printf '%s\n' "$r2out" | { grep -E '^(EXTENSAO-SUSPEITA|ORIGEM-NAO-CONFERIDA) ' || true; } | jq -R . | jq -cs .)
+    r2fal=$(printf '%s\n' "$r2out" | { grep -E '^(MARCA-SEM-ID|ID-INEXISTENTE|FATO-SEM-EVIDENCIA|RESSALVA-SEM-LIMITACAO|AC-POR-PONTEIRO|AC-SEM-ORIGEM|AC-ORIGEM-INEXISTENTE|BLOCO-AUSENTE|BLOCO-INVALIDO) ' || true; })
     ROTA_MODO=""; [ -f "$ROTA_F" ] && ROTA_MODO=$(jq -r '.mode // empty' "$ROTA_F" 2>/dev/null || true)
     if [ -z "$r2fal" ]; then
       R2_ST=ok
-      RES=$(jq -c --arg d "confere-pre-spec.sh sem falhas ($(printf '%s' "$R2_AVISOS" | jq 'length') aviso(s) EXTENSAO-SUSPEITA)" \
+      RES=$(jq -c --arg d "confere-pre-spec.sh sem falhas ($(printf '%s' "$R2_AVISOS" | jq 'length') aviso(s) EXTENSAO-SUSPEITA/ORIGEM-NAO-CONFERIDA)" \
         '. + [{id:"r2_pre_spec", resultado:"ok", detalhe:$d}]' <<<"$RES")
     elif [ "$ROTA_MODO" = legacy ] && printf '%s' "$r2fal" | grep -q '^BLOCO-AUSENTE'; then
       # rota antiga autorizada pelo dono (§0.5): o bloco não existe por decisão dele —

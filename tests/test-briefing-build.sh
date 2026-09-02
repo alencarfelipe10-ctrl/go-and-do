@@ -110,6 +110,7 @@ grep -q "Phase 24.2" "$BRF" && erro "ROADMAP trouxe a fase anterior" || ok "ROAD
 grep -q "Entrada desta fase" "$BRF" && ok "ROADMAP traz a entrada da fase" || erro "entrada da fase sumiu"
 grep -q "^## Perguntas dirigidas" "$BRF" && ok "seção Perguntas dirigidas presente" || erro "seção ausente"
 grep -q "## Respostas dirigidas" "$BRF" && ok "briefing exige a seção de resposta estruturada" || erro "formato de resposta não pedido"
+grep -q '### Achado 0 — nenhum achado novo' "$BRF" && ok "briefing documenta o gabarito de zero achados (P15)" || erro "gabarito Achado 0 ausente do briefing"
 qids=$(jq -cr '.qids|join(",")' "$PD/.intent/.perguntas-c1.json" 2>/dev/null)
 [ "$qids" = "Q1,Q2,Q3" ] && ok "manifesto estável com Q1–Q3" || erro "manifesto" "$qids"
 

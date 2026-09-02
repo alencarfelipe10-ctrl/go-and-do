@@ -75,11 +75,14 @@ PRE-SPEC, `pre_spec_mode: structured|legacy` + o insumo correspondente. Traz ain
      entra como `PS-nn descartada: <porquê>`. Ressalva sem linha reprova
      (`RESSALVA-SEM-LIMITACAO`).
 7. **Conferência mecânica antes de devolver** (só quando há PRE-SPEC):
-   `$HOME/.claude/skills/go-and-do/scripts/confere-pre-spec.sh "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-PRE-SPEC.md"`.
+   `$HOME/.claude/skills/go-and-do/scripts/confere-pre-spec.sh --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-PRE-SPEC.md"`.
    `MARCA-SEM-ID`, `ID-INEXISTENTE`, `FATO-SEM-EVIDENCIA`, `RESSALVA-SEM-LIMITACAO`,
-   `AC-POR-PONTEIRO` = **falha**: corrija o SPEC e re-rode até sair limpo. Exit 2 (bloco
-   inválido) → sino, não conserto seu. `EXTENSAO-SUSPEITA` é **aviso** — não corrija por
-   ele; liste cada linha em `r2_avisos` no retorno (o coordenador decide, o revisor lê).
+   `AC-POR-PONTEIRO`, `AC-SEM-ORIGEM`, `AC-ORIGEM-INEXISTENTE` = **falha**: corrija o SPEC e
+   re-rode até sair limpo. Um AC sem `[origem: …]` é um AC que ninguém pediu — cite o PS-nn,
+   o requisito ou o AC de que ele deriva; não invente a origem para calar a cancela. Exit 2
+   (bloco inválido) → sino, não conserto seu. `EXTENSAO-SUSPEITA` e `ORIGEM-NAO-CONFERIDA`
+   são **aviso** — não corrija por eles; liste cada linha em `r2_avisos` no retorno (o
+   coordenador decide, o revisor lê).
 7b. **Re-commite antes de selar.** O workflow commitou o SPEC no passo 2; os passos 4–7
    o editaram depois. Feche tudo num commit só — `--amend` se o commit foi do próprio
    workflow, commit novo se não — incluindo a reconciliação do ROADMAP (R6 exige o mesmo
@@ -126,7 +129,7 @@ devolva `estado: pausa` com a pergunta mastigada. Você não fala com o usuário
 estado: done | pausa
 spec: <caminho absoluto do NN-SPEC.md, ou ausente se pausa antes de nascer>
 score_ambiguidade: <como reportado pelo comando; sem_report se não houver>
-r2_avisos: [<uma linha EXTENSAO-SUSPEITA por item; ausente se nenhum>]
+r2_avisos: [<uma linha EXTENSAO-SUSPEITA ou ORIGEM-NAO-CONFERIDA por item; ausente se nenhum>]
 base_spec: <blob do .base-SPEC.txt; nao_gravado + porquê se a selagem não rodou>
 sinos: [<um item por linha; ausente se vazio>]
 pergunta: <só no estado pausa — a decisão pendente com opções e sua recomendação primeiro>

@@ -65,6 +65,13 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    `NAO-COBERTO` no resumo do ciclo, OU o resumo REDUZ a contagem vs o parecer — o
    script é piso, não teto (um HIGH real já sumiu de resumo de ciclo). Omissão
    recuperada entra em `incidentes:`.
+   Se a `pareceres/.tabela-c<k>.txt` trouxer `parecer_informe: <lane> devolver`: relance só
+   essa lane com o briefing do ciclo mais o bloco `## Reformatação obrigatória` (copie o
+   bloco de `roda-lanes.sh`), grave `touch "<phase_dir>/pareceres/.reformat-planrev-<lane>-c<k>"`
+   antes do relance e re-rode o `registra-ciclo.sh`. Na 2ª ocorrência a lane está reprovada
+   (marcador `.reprovada` + incidente); siga com a outra lane e sino. O relance é manual
+   porque o `roda-lanes.sh --reformata` só promove o alias da intenção (`NN-parecer-…`),
+   não o da convergência (`NN-planrev-parecer-…`).
    **Aterramento e modelo (GSD 1.11.0 — #3194/#2295):** o JSON do `registra-ciclo.sh`
    devolve `sem_citacao_fonte: [lanes]` — parecer sem UMA citação `arquivo:linha` (ou
    carimbado `[reviewed-without-source-citations]` pelo runner) revisou o texto colado,

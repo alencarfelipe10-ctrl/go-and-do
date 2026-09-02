@@ -18,6 +18,10 @@
 #   bloqueio_sem_revisor — só etapa 2.5: NENHUM revisor externo instalado. A fase NÃO
 #                          continua sem revisão adversarial (decisão do Felipe 09/08,
 #                          PC-6) — pergunte ao dono como proceder. (exit 4)
+#   bloqueio_paralelismo — só etapa 3 (manifest `pre.paralelismo`): a rodada vai
+#                          serializar uma onda de >=2 planos, ou os args trazem
+#                          `--interactive`. O campo `motivo` diz a chave e o valor; suba
+#                          AskUserQuestion com a `message` real do base-check. (exit 4)
 #   Contexto `unknown` — falha ABERTA declarada: `despacho: ok` com `contexto.reason`
 #   preenchido; anuncie "gate não mediu, confiando na retomabilidade" e siga (freio que
 #   falha fechado por defeito de MEDIÇÃO pararia rodadas saudáveis).
@@ -154,6 +158,81 @@ if [ "$(jq -r '.pre.git_remote // false' "$MANIFEST")" = "true" ]; then
   extras=$(jq -cn --argjson gr "$gr" --argjson prev "$extras" '$prev + {git_remote: $gr}')
 fi
 
+# ── paralelismo (etapa 3, manifest `pre.paralelismo`) — o 18b do workflow vira dente ──
+# Antes era prosa dirigida à camada 0, com um antídoto (`baseRef: head`) que o predicado do
+# GSD ignorava; a serialização virava fato consumido dentro do gsd-execute-phase sem
+# ninguém medir (F20, F24.x). Aqui o script lê as três fontes que decidem o paralelismo
+# (config, isolamento + base-check, args) e bloqueia com exit 4 quando alguma delas nega.
+PARALELISMO_ATIVO=0
+if [ "$(jq -r '.pre.paralelismo // false' "$MANIFEST")" = "true" ]; then
+  PARALELISMO_ATIVO=1
+  bloqueia_par() { # $1 = motivo curto (chave=valor)  $2 = pergunta ao dono  $3 = JSON paralelismo
+    resumo="bloqueio_paralelismo: $1"
+    [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
+      --kv script=pre-despacho.sh --kv exit=4 --kv paralelismo=bloqueio --kv resumo="$resumo"
+    gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" --arg m "$1" --arg q "$2" \
+      --argjson par "$3" --argjson x "$extras" \
+      '{etapa:$e, despacho:"bloqueio_paralelismo", motivo:$m, pergunta_ao_dono:$q, paralelismo:$par} + $x')"
+    exit 4
+  }
+  # (1) config: workflow.use_worktrees e parallelization (objeto {enabled} ou booleano —
+  # a mesma coerção do config-loader.cjs; `--raw` num objeto imprime "[object Object]")
+  uw=$(cd "$ROOT" && gsd_run query config-get workflow.use_worktrees --raw 2>/dev/null | tr -d ' \n\r' || true)
+  praw=$(cd "$ROOT" && gsd_run query config-get parallelization 2>/dev/null | tr -d ' \n\r' || true)
+  # `has("enabled")`, não `.enabled // true`: o `//` do jq trata false como ausente
+  pen=$(jq -r 'if type=="object" then (if has("enabled") then .enabled else true end) else . end' <<<"$praw" 2>/dev/null || printf '%s' "$praw")
+  # (2) isolamento + base da cópia. `set-baseref` é no-clobber (só escreve se a chave não
+  # existir ou já for "head"); registra no NN-DECISOES.md só quando mudou algo.
+  ISO=$(cd "$ROOT" && gsd_run inspect-dispatch-isolation 2>/dev/null | tr -d ' \n\r' || true)
+  : "${ISO:=desconhecido}"
+  BASEREF_APLICADO=false; SD=null; MSG=""
+  if [ "$ISO" = harness-worktree ] || [ "$ISO" = orchestrator-worktree ]; then
+    if [ "$DRY" = 0 ] && [ "$ISO" = harness-worktree ]; then
+      sb=$(cd "$ROOT" && gsd_run worktree set-baseref 2>/dev/null || echo '{}')
+      if [ "$(jq -r '.changed // false' <<<"$sb" 2>/dev/null)" = true ]; then
+        BASEREF_APLICADO=true
+        DEC="$PHASE_DIR/$NN-DECISOES.md"
+        grep -q 'baseRef: head aplicado pelo pre-despacho' "$DEC" 2>/dev/null || {
+          printf '\n## Decisões automáticas da Etapa 3 (pré-despacho)\n\n- `[auto]` baseRef: head aplicado pelo pre-despacho.sh em `.claude/settings.local.json` (%s) — a cópia de cada executor parte do HEAD, não de origin/HEAD.\n  Desfazer: remover a chave `worktree.baseRef` do arquivo.\n' "$(date -Is)" >> "$DEC"; }
+      fi
+    fi
+    SD=$(cd "$ROOT" && gsd_run worktree base-check --mode "$ISO" --pick shouldDegrade 2>/dev/null | tr -d ' \n\r' || true)
+    case "$SD" in true|false) ;; *) SD=null ;; esac
+    [ "$SD" = true ] && MSG=$(cd "$ROOT" && gsd_run worktree base-check --mode "$ISO" --pick message 2>/dev/null | tr -d '\r' || true)
+  fi
+  # ondas largas = ondas com >=2 planos ainda incompletos (é onde a serialização custa)
+  IDX=$(cd "$ROOT" && gsd_run phase-plan-index "$FASE" --raw 2>/dev/null || echo '{}')
+  jq -e . >/dev/null 2>&1 <<<"$IDX" || IDX='{}'
+  ONDAS=$(jq -c '(.incomplete // []) as $inc
+    | [ (.waves // {}) | to_entries[] | select(([.value[] | select(. as $p | $inc | index($p))] | length) >= 2) | .key ]' <<<"$IDX")
+  # (3) args da rodada: `--interactive` serializa por desenho (execute-phase.md:243-249)
+  INTERATIVO=false
+  [ -f "$PONTEIRO" ] && jq -e '[.args // {} | .. | strings | select(test("--interactive"))] | length > 0' "$PONTEIRO" >/dev/null 2>&1 && INTERATIVO=true
+  PAR=$(jq -cn --arg iso "$ISO" --argjson sd "$SD" --argjson ondas "$ONDAS" --arg uw "${uw:-desconhecido}" \
+    --arg pen "${pen:-desconhecido}" --argjson ba "$BASEREF_APLICADO" --arg msg "$MSG" --argjson it "$INTERATIVO" \
+    'def b: if .=="true" then true elif .=="false" then false else . end;
+     {isolation:$iso, should_degrade:$sd, ondas_largas:$ondas, use_worktrees:($uw|b), parallelization:($pen|b),
+      baseref_aplicado:$ba, interactive_nos_args:$it} + (if $msg != "" then {message:$msg} else {} end)')
+  # espelho lido pelo confere-etapa.sh 3 (compara use_worktrees do início com o do fecho);
+  # --dry-run não grava nada, como o resto do script
+  [ "$DRY" = 1 ] || { mkdir -p "$ROOT/.planning/.gad"; jq -cn --arg ts "$(date -Is)" --argjson par "$PAR" \
+    '{ts:$ts, use_worktrees:$par.use_worktrees, paralelismo:$par}' > "$ROOT/.planning/.gad/last-pre-despacho-3.json"; }
+  if [ "$uw" = false ]; then
+    bloqueia_par "workflow.use_worktrees=false" "workflow.use_worktrees está false: toda onda de >=2 planos rodaria em série. Religar (config-set workflow.use_worktrees true) e continuar, ou aceitar a serialização?" "$PAR"
+  fi
+  if [ "$pen" = false ]; then
+    bloqueia_par "parallelization=false" "parallelization está false no config: o gsd-execute-phase serializa tudo. Religar e continuar, ou aceitar a serialização?" "$PAR"
+  fi
+  if [ "$INTERATIVO" = true ]; then
+    bloqueia_par "args contêm --interactive" "Os args da rodada trazem --interactive, que executa os planos em série e ignora as ondas. Remover a bandeira (use --wave N para filtrar onda) ou aceitar a serialização?" "$PAR"
+  fi
+  if [ "$SD" = true ] && [ "$(jq 'length' <<<"$ONDAS")" -gt 0 ]; then
+    bloqueia_par "should_degrade=true em onda(s) $(jq -r 'join(",")' <<<"$ONDAS")" "O base-check do GSD rebaixaria a(s) onda(s) $(jq -r 'join(",")' <<<"$ONDAS") para sequencial. Mensagem real: $MSG — Como proceder?" "$PAR"
+  fi
+  [ "$(jq 'length' <<<"$ONDAS")" -gt 0 ] || PAR=$(jq -c '. + {nota:"n/a (ondas de 1 plano)"}' <<<"$PAR")
+  extras=$(jq -cn --argjson prev "$extras" --argjson par "$PAR" '$prev + {paralelismo: $par}')
+fi
+
 # ── etapa 6: roteamento por baldes (6.1) + transparência mecânica (6.2) ──────
 if [ "$ETAPA" = "6" ]; then
   UAT="$PHASE_DIR/$NN-UAT.md"
@@ -203,8 +282,9 @@ if [ "$status" = "stop" ]; then
 fi
 
 # ok (ou unknown declarado): abre a janela da etapa e autoriza o despacho
+PAR_KV=(); [ "$PARALELISMO_ATIVO" = 1 ] && PAR_KV=(--kv paralelismo=ok)
 [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" checkpoint "$RUNLOG_ETAPA" \
-  "$tokens" "$pct" "" "$limite" --kv despacho=autorizado
+  "$tokens" "$pct" "" "$limite" --kv despacho=autorizado ${PAR_KV[@]+"${PAR_KV[@]}"}
 gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" --arg st "${status:-unknown}" --arg rz "$reason" \
   --arg pr "prompts" --argjson t "${tokens:-0}" --argjson p "${pct:-0}" --argjson l "${limite:-0}" \
   --argjson sil "$silencio" --argjson x "$extras" \

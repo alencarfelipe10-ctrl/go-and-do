@@ -75,7 +75,7 @@ TUID=$(jq -r '.tool_use_id // empty' <<<"$IN")
 TP=$(jq -r '.transcript_path // ""' <<<"$IN")
 SUBDIR="${TP%.jsonl}/subagents"
 
-RETOMADA=0
+RETOMADA=0; ISOL=""
 if [ "$TOOL" = "SendMessage" ]; then
   # retomada de subagente vivo (SendMessage): alvo = campo `to`; mensagens para fora
   # (outras sessões/canais) não têm meta local e caem no fallback camada 0 — aceitável,
@@ -86,6 +86,9 @@ if [ "$TOOL" = "SendMessage" ]; then
 else
   AG=$(jq -r '.tool_input.subagent_type // "general-purpose"' <<<"$IN")
   DESC=$(jq -r '.tool_input.description // ""' <<<"$IN" | head -c 120)
+  # isolamento pedido no despacho (`isolation: "worktree"`): é o que permite ao
+  # confere-etapa.sh 3 distinguir executor em cópia de executor na árvore principal.
+  ISOL=$(jq -r '.tool_input.isolation // ""' <<<"$IN" | tr -cd 'a-z-' | head -c 20)
 fi
 
 # etapa = janela aberta (último checkpoint do run-log); sem janela = abertura.
@@ -301,6 +304,6 @@ bash "$RUNLOG_SH" "$PD" "$NN" "$TIPO" "$ET" \
   --kv agente="$AG" --kv origem=hook \
   $([ "$RETOMADA" = 1 ] && echo '--kv retomada=true') \
   $([ "$HERDADO" = 1 ] && echo '--kv modelo_herdado=true') \
-  ${DESC:+--kv descricao="$DESC"} >/dev/null 2>&1
+  ${DESC:+--kv descricao="$DESC"} ${ISOL:+--kv isolation="$ISOL"} >/dev/null 2>&1
 
 exit 0

@@ -2,7 +2,7 @@
 # confere-pre-spec.sh — conferência mecânica do contrato PRE-SPEC ↔ SPEC (R2 · R7 · S4 · §0.5).
 #
 # Uso:
-#   confere-pre-spec.sh <NN-SPEC.md> <NN-PRE-SPEC.md>
+#   confere-pre-spec.sh [--exige-origem] [--reqs REQUIREMENTS.md] <NN-SPEC.md> <NN-PRE-SPEC.md>
 #   confere-pre-spec.sh --so-bloco <NN-PRE-SPEC.md>
 #
 # O bloco de decisões vive no PRE-SPEC entre os marcadores
@@ -24,6 +24,15 @@
 #   FALHA   AC-POR-PONTEIRO       AC/MUST NOT cujo corpo é só um ponteiro (S4): `→ NN-PRE-SPEC.md §x`,
 #                                 `ver §x`, `→ §x`, `conforme PRE-SPEC §x`. AC que apenas
 #                                 TERMINA com a citação tem corpo próprio e passa.
+#   FALHA   AC-SEM-ORIGEM         linha de AC (`- [ ] AC-nn — …`) sem `[origem: <ids>]` no fim.
+#                                 Um AC sem origem é um AC que ninguém pediu (caso AC-12 da F24.4).
+#                                 É FALHA quando o SPEC traz `<!-- spec-origem: v1 -->` (molde
+#                                 novo) ou com `--exige-origem`; senão é AVISO (specs antigas).
+#   FALHA   AC-ORIGEM-INEXISTENTE id citado na origem que não existe: PS-nn fora do bloco,
+#                                 AC-nn fora da própria SPEC (ou o próprio AC), id fora do
+#                                 padrão; R-n/SC-n/REQ-ID fora do `--reqs` quando passado.
+#   AVISO   ORIGEM-NAO-CONFERIDA  sem `--reqs`, os ids R-n/SC-n/REQ-ID foram aceitos pelo
+#                                 padrão, sem conferir no REQUIREMENTS.md (uma linha por rodada).
 #   AVISO   EXTENSAO-SUSPEITA     números, identificadores snake_case/CamelCase e literais
 #                                 (None, default, …) presentes na linha marcada
 #                                 `[pre-spec:PS-nn…]` e ausentes no span/decisao do PS-nn.
@@ -44,6 +53,15 @@ set -u
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null && trap 'gad_autoregistro "confere-pre-spec.sh" "$?"' EXIT || true
 
 MODO="completo"
+EXIGE_ORIGEM=0; REQS=""
+while :; do
+  case "${1:-}" in
+    --exige-origem) EXIGE_ORIGEM=1; shift ;;
+    --reqs) REQS="${2:?uso: --reqs <REQUIREMENTS.md>}"; shift 2
+            [ -f "$REQS" ] || { echo "ERRO: --reqs não encontrado: $REQS" >&2; exit 2; } ;;
+    *) break ;;
+  esac
+done
 if [ "${1:-}" = "--so-bloco" ]; then
   MODO="so-bloco"; shift
   PRE="${1:?uso: confere-pre-spec.sh --so-bloco <NN-PRE-SPEC.md>}"
@@ -55,10 +73,11 @@ else
 fi
 [ -f "$PRE" ] || { echo "ERRO: PRE-SPEC não encontrado: $PRE" >&2; exit 2; }
 
-python3 - "$MODO" "$PRE" "$SPEC" <<'PY'
+python3 - "$MODO" "$PRE" "$SPEC" "$EXIGE_ORIGEM" "$REQS" <<'PY'
 import json, re, sys
 
 MODO, PRE, SPEC = sys.argv[1], sys.argv[2], sys.argv[3]
+EXIGE_ORIGEM, REQS = sys.argv[4] == "1", sys.argv[5]
 
 BEGIN = "<!-- gad:decisoes:begin v1 -->"
 END   = "<!-- gad:decisoes:end -->"
@@ -236,9 +255,13 @@ RE_SO_PONTA = re.compile(
     r')'
     r'[\s.,;]*$', re.I)
 
+RE_ORIGEM = re.compile(r'\[origem:\s*([^\]]*)\]', re.I)
+
 def corpo_do_ac(l):
     c = RE_MARCA_ID.sub("", RE_MARCA_NUA.sub("", l))
+    c = RE_ORIGEM.sub("", c)   # a origem é campo, não corpo (P12)
     c = re.sub(r'^\s*(?:[-*+]|\d+\.)\s*', "", c)          # marcador de lista
+    c = re.sub(r'^\s*\[[^\]]\]\s*', "", c)                 # checkbox `[ ]`/`[x]`/`[m]` (P12)
     c = c.replace("**", "").replace("`", "")
     # tira, em qualquer ordem, rótulo do AC / "MUST NOT" / pontuação de abertura
     for _ in range(4):
@@ -257,6 +280,56 @@ for n, l in enumerate(linhas_spec, 1):
         falha("AC-POR-PONTEIRO", SPEC, n,
               "AC/MUST NOT cujo corpo é só um ponteiro para o PRE-SPEC; "
               "requisito, AC, MUST NOT e decisão não saem por referência (S4)")
+    elif not corpo and RE_ORIGEM.search(l):
+        falha("AC-POR-PONTEIRO", SPEC, n,
+              "AC cujo corpo é só a origem `[origem: …]`; a origem é campo, o critério é o corpo (S4/P12)")
+
+# --- AC-SEM-ORIGEM / AC-ORIGEM-INEXISTENTE (P12) ------------------------------
+# Linha de DEFINIÇÃO de AC: item de lista, checkbox opcional, `AC-nn` no começo
+# (mesma âncora do etiqueta-achados.py). Menções no meio da linha (tabelas) não contam.
+RE_AC_DEF   = re.compile(r'^\s*(?:[-*+]|\d+\.)\s*(?:\[[^\]]\]\s*)?\*{0,2}(AC-\d+)\b')
+RE_ID_REQ   = re.compile(r'^[A-Z]{1,8}-?\d+$')
+MARCADOR    = "<!-- spec-origem: v1 -->"
+exige = EXIGE_ORIGEM or any(MARCADOR in l for l in linhas_spec)
+acs_def = {}
+for n, l in enumerate(linhas_spec, 1):
+    m = RE_AC_DEF.match(l)
+    if m:
+        acs_def.setdefault(m.group(1).upper(), n)
+reqs_txt = open(REQS, encoding="utf-8", errors="replace").read() if REQS else None
+nao_conferidos = []
+sem_origem = falha if exige else aviso
+for acid, n in acs_def.items():
+    l = linhas_spec[n-1]
+    mo = RE_ORIGEM.search(l)
+    ids = [x.strip() for x in mo.group(1).split(",") if x.strip()] if mo else []
+    if not ids:
+        sem_origem("AC-SEM-ORIGEM", SPEC, n,
+                   f"{acid} sem `[origem: <ids>]` — cite PS-nn, R-n/SC-n/REQ-ID ou AC-nn desta SPEC"
+                   + ("" if exige else " (aviso: SPEC sem `<!-- spec-origem: v1 -->` e sem --exige-origem)"))
+        continue
+    for oid in ids:
+        u = oid.upper()
+        if RE_ID.match(u):
+            if u not in ps:
+                falha("AC-ORIGEM-INEXISTENTE", SPEC, n, f"{acid} cita {oid}, que não existe no bloco de {PRE}")
+        elif u.startswith("AC-") and RE_ID_REQ.match(u):
+            if u == acid:
+                falha("AC-ORIGEM-INEXISTENTE", SPEC, n, f"{acid} cita a si mesmo como origem")
+            elif u not in acs_def:
+                falha("AC-ORIGEM-INEXISTENTE", SPEC, n, f"{acid} cita {oid}, que não é AC desta SPEC")
+        elif RE_ID_REQ.match(oid):
+            if reqs_txt is not None:
+                if not re.search(r'(?<![\w-])' + re.escape(oid) + r'(?![\w-])', reqs_txt):
+                    falha("AC-ORIGEM-INEXISTENTE", SPEC, n, f"{acid} cita {oid}, que não aparece em {REQS}")
+            elif oid not in nao_conferidos:
+                nao_conferidos.append(oid)
+        else:
+            falha("AC-ORIGEM-INEXISTENTE", SPEC, n,
+                  f"{acid} cita {oid!r}, fora do padrão (PS-nn, AC-nn, R-n, SC-n ou REQ-ID)")
+if nao_conferidos:
+    aviso("ORIGEM-NAO-CONFERIDA", SPEC, 0,
+          f"sem --reqs: aceitos pelo padrão, sem conferir no REQUIREMENTS.md: {', '.join(nao_conferidos)}")
 
 # --- EXTENSAO-SUSPEITA (aviso, token-level) --------------------------------
 RE_IDS_DOC   = re.compile(r'\b(?:PS|AC|R|SC|D|REQ|Q)-?\d+\b')

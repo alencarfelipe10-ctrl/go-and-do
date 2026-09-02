@@ -1,5 +1,6 @@
 {
   "etapa": "3", "nome": "construcao", "runlog_etapa": "3 construcao",
+  "pre": { "paralelismo": true },
   "asserts": [
     { "id": "has_verification", "tipo": "sdk", "query": "init.phase-op {n}", "jq": ".has_verification", "espera": "true",
       "desc": "retrato do SDK confirma execução verificada" },

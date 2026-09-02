@@ -33,6 +33,13 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    (checkpoints de verificação auto-aprovados; checkpoints de decisão pegam a 1ª
    opção); `--no-transition` impede o auto-avanço pra fase seguinte — o miolo termina
    nesta fase, quem encadeia é a /go-and-do.
+1b. Ao despachar cada executor (`Agent(subagent_type="gsd-executor", …)`), escreva a
+   `description` exatamente como `Execute plan {NN} of phase {phase_number}`, com o
+   `{phase_number}` que o `init.execute-phase` devolveu (no inspired é `INS-24.4`, com o
+   prefixo do projeto) e o `{NN}` de dois dígitos do nome do plano. Não abrevie para
+   `Execute plan 24.4-09` nem tire o prefixo: o hook de isolamento lê essa string para
+   casar o despacho com o sentinel da fase, e na 24.4 duas grafias diferentes custaram
+   2 despachos negados (RUN-LOG 24.4:180-183).
 2. Deixe o motor de ondas trabalhar. O `--auto` **não silencia** as paradas de
    realidade — falha de teste de regressão, schema drift, conflito pós-merge — e elas
    devem parar mesmo: são decisões do usuário → siga o `<environment>` (devolva
@@ -94,13 +101,23 @@ camada 0.
 Agentes aninhados (camada 2): você **não recebe notificações** de trabalho em
 background — nunca fique "aguardando" um retorno que não vai chegar. Precisa de
 background (trabalho >10min, o teto real do `timeout` da tool)? Só com waiter de
-disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`), sempre e só nessa forma. **Proibidos, sem exceção: `setsid`, `nohup`, `disown`** — um processo reparentado sobrevive ao `TaskStop` e não é varrido. Não cabe no teto de 600000ms do harness mesmo assim? A saída é **pausar e reportar**, nunca desacoplar o processo. Nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia). Teto = duração esperada + 5 min; estourou → decida pelo disco na hora e a espera é um único
+disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`), sempre e só nessa forma. **Proibidos, sem exceção: `setsid`, `nohup`, `disown`** — um processo reparentado sobrevive ao `TaskStop` e não é varrido. Não cabe no teto de 600000ms do harness mesmo assim? A saída é **pausar e reportar**, nunca desacoplar o processo. Isso não é só regra: o hook `gad-bash-guard.sh` nega, dentro da rodada, todo Bash de subagente com `run_in_background`, `nohup`, `setsid`, `disown` ou `&` de fundo que não seja o waiter acima — uma negativa dele é definitiva, não procure outra forma; cada negativa vira `incidente` no run-log. Nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia). Teto = duração esperada + 5 min; estourou → decida pelo disco na hora e a espera é um único
 `timeout <Ns> bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` — nunca polling
 picado, nunca espera de notificação. Depois decida pelo disco: `SUMMARY.md`
 esperado existe → siga; não existe → trate como falha do passo (não como sucesso).
 E devolva sempre o bloco do contrato de retorno — prosa de espera ("vou aguardar a
 notificação") no lugar do bloco é retorno inválido.
 Saída vazia com exit 0 também é falha.
+
+Executor travado (stall do `gsd-execute-phase`, ou o teto acima estourado sem
+`SUMMARY.md`): a única resposta automática é matar o executor e relançá-lo em cópia
+nova (`isolation: worktree`, o mesmo despacho, idempotente pelos `SUMMARY.md` que já
+existem). Rodar o plano inline, na árvore principal, nunca é escolha sua — inline
+serializa a onda e some com a cópia isolada; só o dono autoriza, por `needs_decision`.
+Relançou → item em `incidentes:` com o plano, a hora do stall e o motivo apurado. O
+porquê: a F24.4 serializou as ondas 1 e 6 sem que nenhum retorno declarasse o desvio —
+matar e relançar mantém o paralelismo e deixa rastro no run-log; a rota inline apaga os
+dois.
 
 Worktrees × envs (o pré-requisito do paralelismo): um worktree nasce **sem** os arquivos
 `.env*` — o git só carrega o que está versionado, e segredo é git-ignored por design. Isso

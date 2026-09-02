@@ -2,6 +2,15 @@
 # roda-lanes.sh — lançador assíncrono das lanes adversariais da intenção (item E4).
 #
 # Uso: roda-lanes.sh <phase_dir> <NN> <C> <briefing> --prova <arquivo> [--lanes "a b"]
+#      roda-lanes.sh <phase_dir> <NN> <C> <briefing> --prova <arquivo> --reformata <lane>
+#                    ^ devolução (P15): relança SÓ a lane cujo parecer o confere-ciclo.sh
+#                    marcou `parecer_informe … devolver`, com o briefing original mais o
+#                    bloco `## Reformatação obrigatória`, gravado em
+#                    `.intent/briefing-c<C>-reformat-<lane>.md`. Grava o marcador durável
+#                    `pareceres/.reformat-<lane>-c<C>` (run_id + ts); se ele já existe a
+#                    devolução é recusada (exit 4) — a 2ª ocorrência é reprovação da lane,
+#                    decidida pelo confere-ciclo.sh, não uma 3ª tentativa (cada relance
+#                    custa um ciclo de revisor).
 #      roda-lanes.sh --supervisiona <lane> <run_dir> <phase_dir> <NN> <C> <briefing> <prova>
 #                    ^ modo INTERNO (o lançador se re-invoca); não chame à mão.
 #
@@ -244,13 +253,14 @@ fi
 # Modo LANÇADOR
 # ═══════════════════════════════════════════════════════════════════════════════
 PD="${1:-}"; NN="${2:-}"; C="${3:-}"; BRIEF="${4:-}"
-PROVA=""; LANES_ARG=""
+PROVA=""; LANES_ARG=""; REFORMATA=""
 [ -n "$PD" ] && [ -n "$NN" ] && [ -n "$C" ] && [ -f "${BRIEF:-/nao-existe}" ] \
-  || { echo "uso: roda-lanes.sh <phase_dir> <NN> <C> <briefing> --prova <arquivo> [--lanes \"codex agy\"]" >&2; exit 2; }
+  || { echo "uso: roda-lanes.sh <phase_dir> <NN> <C> <briefing> --prova <arquivo> [--lanes \"codex agy\"] [--reformata <lane>]" >&2; exit 2; }
 shift 4
 while [ $# -gt 0 ]; do case "$1" in
   --prova) PROVA="${2:-}"; shift 2 ;;
   --lanes) LANES_ARG="${2:-}"; shift 2 ;;
+  --reformata) REFORMATA="${2:-}"; shift 2 ;;
   *) shift ;;
 esac; done
 
@@ -268,6 +278,36 @@ mkdir -p "$INTENT/runs/c$C" "$PD/pareceres"
 
 RUN_ID="$(date -u +%Y%m%dT%H%M%S)-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')"
 RUN_DIR="$INTENT/runs/c$C/$RUN_ID"
+
+# ── devolução de uma lane (P15) ─────────────────────────────────────────────────
+if [ -n "$REFORMATA" ]; then
+  MARC="$PD/pareceres/.reformat-$REFORMATA-c$C"
+  if [ -e "$MARC" ]; then
+    echo "RECUSADO: lane $REFORMATA já foi devolvida uma vez no ciclo $C ($MARC). A 2ª ocorrência de parecer_informe reprova a lane (confere-ciclo.sh --tabela); não há 3ª tentativa." >&2
+    exit 4
+  fi
+  BRIEF_R="$INTENT/briefing-c$C-reformat-$REFORMATA.md"
+  {
+    cat "$BRIEF"
+    echo
+    echo "## Reformatação obrigatória"
+    echo
+    echo "Seu parecer anterior neste ciclo foi lido, mas nenhum achado nele segue o gabarito,"
+    echo "então o contador mecânico o registrou como zero achados — e zero achados fecha o"
+    echo "ciclo como convergência. Reescreva o mesmo parecer no gabarito abaixo, sem"
+    echo "acrescentar nem retirar conteúdo."
+    echo
+    echo "- Cada achado: \`### Achado N [categoria] — título\` (categoria em A-produto,"
+    echo "  B-viabilidade, C-instrumentacao, D-documental, E-decisao-do-dono), seguido de"
+    echo "  alegação, evidência (arquivo:linha) e confiança."
+    echo "- Sem achado novo: escreva literalmente \`### Achado 0 — nenhum achado novo\`."
+    echo "- Mantenha a linha \`prova_leitura: <token>\` na primeira linha."
+  } > "$BRIEF_R"
+  BRIEF="$BRIEF_R"
+  LANES="$REFORMATA"
+  printf '%s %s\n' "$RUN_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$MARC"
+fi
+
 mkdir -p "$RUN_DIR"
 
 # ponteiro: `mv` atômico sob o lock do ciclo. O lançador só escreve o ponteiro e solta

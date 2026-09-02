@@ -31,6 +31,21 @@
 # coluna vazia por desenho — a categoria delas nasce no verificador.
 # A linha `achados_estruturais_total:` NÃO mudou de formato (registra-ciclo.sh a lê).
 #
+# P15 (01/09) — cancela `parecer_informe`. Um parecer com corpo substantivo (>= 12 linhas
+# não vazias fora do frontmatter, do canário e do filtro RUIDO, ou >= 500 caracteres de
+# corpo) e ZERO achados extraídos deixa de ser "0 achados": na F24.4 quatro pareceres reais
+# da convergência (c4 agy/codex, c5 e c6 codex) saíram assim, e o decide-ciclo.sh leu o zero
+# como convergência. A tabela ganha a linha `parecer_informe: <lane> devolver|reprovada`:
+#   devolver  — 1ª vez no ciclo: o coordenador relança SÓ a lane com
+#               `roda-lanes.sh … --reformata <lane>` (que grava o marcador
+#               `pareceres/.reformat-<lane>-c<C>`);
+#   reprovada — o marcador já existe (2ª vez): grava `.reformat-<lane>-c<C>.reprovada`, põe
+#               `usable:false, rc_reason:parecer_informe` no `.status-c<C>-<lane>.json`
+#               (com --status-dir) e um evento `incidente` no run-log (uma vez).
+# Pareceres da convergência (`NN-planrev-parecer-…`) usam o marcador `.reformat-planrev-<lane>-c<C>`.
+# `### Achado 0 — nenhum achado novo` é o gabarito de "zero achados, parecer válido": não
+# conta como achado e não dispara a cancela (linha `sem_achado_novo: <lane>`).
+#
 # --tabela (v1.8.0): extrai dos pareceres o esqueleto dos achados estruturais em
 # markdown (| lane | linha | trecho |) — piso de enumeração para a fusão do
 # verificador: cada linha emitida precisa de destino na tabela final do ciclo.
@@ -67,17 +82,62 @@ SEV='HIGH|MEDIUM|LOW|CRITICAL|BLOCKER|ALTA|ALTO|M[ÉE]DIA|M[ÉE]DIO|BAIXA|BAIXO|
 # inflavam a tabela com ruído e escondiam a subcontagem dos achados reais.
 RUIDO='^[0-9]+:(prova_leitura:|.*\*\*Token de Leitura|.*PROVA-)|n[íi]vel (geral )?de risco|risco geral|overall risk|risk level|confian[çc]a|^[0-9]+:#{2,4} +[0-9]+[.:] *(parecer|resumo|metodologia|conclus)'
 
+# `### Achado 0 …` é o gabarito de "nenhum achado novo" (P15): sai da lista aqui.
+ACHADO_ZERO='^[0-9]+:#{2,4} +Achado +0([^0-9]|$)'
+
 extrai_achados() {
   local f="$1" h
   # "Achado N" vale com qualquer coisa depois do número — o formato real da F24
   # ("### Achado 6 [B-viabilidade] — ...") não tinha `.`/`:` e escapava da detecção
   h=$(grep -nE '^#{2,4} +(Achado +[0-9]+([ .:[]|$)|(Achado +)?([0-9]+[.:][^0-9]|[Cc][0-9]+-[0-9]+))' "$f" \
     | grep -viE '^[0-9]+:#{3,4} +[0-9.]*\s*(pontos? fortes|strengths|sugest|suggestion)' \
-    | grep -viE "$RUIDO")
+    | grep -viE "$RUIDO" | grep -vE "$ACHADO_ZERO")
   if [ -n "$h" ]; then printf '%s\n' "$h"; return; fi
   grep -inE "(^#{2,4} .*\\[?(${SEV})|^[*-] .*\`?\\*{0,2}(${SEV})|c[0-9]+-([a-z]+)?[0-9]+)" "$f" \
     | grep -viE '^\s*[0-9]+:\s*(#{2,4} )?[0-9.]*\s*(pontos? fortes|strengths|sugest|suggestion)' \
-    | grep -viE "$RUIDO"
+    | grep -viE "$RUIDO" | grep -vE "$ACHADO_ZERO"
+}
+
+# tem_achado_zero <parecer>: o revisor declarou literalmente que não há achado novo.
+tem_achado_zero() { grep -qE '^#{2,4} +Achado +0([^0-9]|$)' "$1"; }
+
+# parecer_substantivo <parecer>: corpo fora do frontmatter, do canário e do RUIDO com
+# >= 12 linhas não vazias OU >= 500 caracteres. O piso de linhas sozinho deixava passar os
+# 4 pareceres reais da F24.4 (7-8 linhas longas, 665-2145 bytes) — por isso o segundo eixo.
+parecer_substantivo() {
+  local corpo n c
+  corpo=$(awk 'NR==1 && $0=="---"{fm=1; next} fm && $0=="---"{fm=0; next} !fm' "$1" \
+    | grep -n . | grep -viE "$RUIDO" | sed 's/^[0-9]*://')
+  n=$(printf '%s\n' "$corpo" | grep -c .)
+  c=$(printf '%s' "$corpo" | wc -m | tr -d ' ')
+  [ "$n" -ge 12 ] || [ "$c" -ge 500 ]
+}
+
+# cancela_parecer_informe <parecer> <lane> <ciclo> <status-dir|""> → ecoa a linha da tabela
+cancela_parecer_informe() {
+  local p="$1" lane="$2" c="$3" sd="$4" dir fam marc rep pd nn etapa st
+  dir=$(dirname -- "$p"); pd=$(dirname -- "$dir")
+  nn=$(basename -- "$p" | sed -E 's/^([0-9.]+)-.*$/\1/')
+  fam=""; etapa="1 intencao"
+  case "$(basename -- "$p")" in *-planrev-*) fam="planrev-"; etapa="2.5 convergencia" ;; esac
+  marc="$dir/.reformat-${fam}${lane}-c${c}"; rep="$marc.reprovada"
+  if [ ! -e "$marc" ]; then
+    echo "parecer_informe: ${lane} devolver"
+    return 0
+  fi
+  echo "parecer_informe: ${lane} reprovada"
+  if [ -n "$sd" ]; then
+    st="$sd/.status-c${c}-${lane}.json"
+    if [ -s "$st" ] && jq -e . "$st" >/dev/null 2>&1; then
+      jq -c '.usable=false | .independent=false | .rc_reason="parecer_informe"' "$st" > "$st.tmp" \
+        && mv -f "$st.tmp" "$st"
+    fi
+  fi
+  if [ ! -e "$rep" ]; then
+    : > "$rep"
+    bash "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/run-log.sh" "$pd" "$nn" incidente "$etapa" \
+      --kv origem=confere-ciclo.sh --kv detalhe="lane ${lane} c${c}: parecer sem achados 2×" >/dev/null 2>&1 || true
+  fi
 }
 
 if [ "${1:-}" = "--tabela" ]; then
@@ -97,6 +157,7 @@ if [ "${1:-}" = "--tabela" ]; then
   echo "|---|---|---|---|---|"
   TOTAL=0
   LANES_TSV=""
+  EXTRAS=()   # linhas parecer_informe:/sem_achado_novo: (saem depois do total)
   for P in "${PARECERES[@]}"; do
     [ -r "$P" ] || { echo "| $(basename "$P") | — | ILEGÍVEL |  | estrutural |"; continue; }
     # lane = último nome antes do -cN (fix F22: 22-parecer-plan-agy-c4.md → agy, não
@@ -107,6 +168,13 @@ if [ "${1:-}" = "--tabela" ]; then
     LANES_TSV="${LANES_TSV}${LANE}	${CICLO}	${P}
 "
     LISTA=$(extrai_achados "$P")
+    if [ -z "$LISTA" ]; then
+      if tem_achado_zero "$P"; then
+        EXTRAS+=("sem_achado_novo: ${LANE}")
+      elif [ -n "$CICLO" ] && parecer_substantivo "$P"; then
+        EXTRAS+=("$(cancela_parecer_informe "$P" "$LANE" "$CICLO" "$STATUSDIR")")
+      fi
+    fi
     while IFS= read -r linha; do
       [ -n "$linha" ] || continue
       TOTAL=$((TOTAL+1))
@@ -292,6 +360,7 @@ PY
   echo
   echo "achados_estruturais_total: ${TOTAL}"
   [ -n "$PERG" ] && echo "dirigidas: $DIR_JSON"
+  for x in ${EXTRAS[@]+"${EXTRAS[@]}"}; do [ -n "$x" ] && echo "$x"; done
   exit 0
 fi
 
@@ -304,7 +373,16 @@ PARECER="${1:-}"; RESUMO="${2:-}"
 #    fallback bullet-de-severidade/ID — formato real dos pareceres F20-ox, 02/08).
 ACHADOS=$(extrai_achados "$PARECER")
 
-[ -n "$ACHADOS" ] || { echo "achados_estruturais: 0 (nada detectável no parecer — aplique a regra de leitura do bruto)"; exit 0; }
+if [ -z "$ACHADOS" ]; then
+  if tem_achado_zero "$PARECER"; then
+    echo "achados_estruturais: 0 (o parecer declara \`Achado 0 — nenhum achado novo\`)"
+  elif parecer_substantivo "$PARECER"; then
+    echo "achados_estruturais: 0 · parecer_informe (corpo substantivo sem achado no gabarito — devolva a lane com roda-lanes.sh --reformata)"
+  else
+    echo "achados_estruturais: 0 (nada detectável no parecer — aplique a regra de leitura do bruto)"
+  fi
+  exit 0
+fi
 
 TOTAL=0; NAOCOB=0
 while IFS= read -r linha; do

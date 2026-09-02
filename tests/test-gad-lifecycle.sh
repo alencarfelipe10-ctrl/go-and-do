@@ -202,6 +202,16 @@ esp_passou "E3b: Agent(gad-spec) sem NN-SPEC.md passa" gad-spec
 roda "$(p_agent gad-spec '' '' tu-e3b4)"
 esp_negado "E3b: Agent(gad-spec) com NN-SPEC.md existente negado"
 
+# ═════════════════════ 3b. isolation no evento despacho (P04, 01/09) ═════════════════════
+monta
+roda "$(p_agent gsd-executor '' '' tu-iso | jq -c '.tool_input.isolation="worktree"')"
+esp_passou "isolation: Agent(gsd-executor, isolation=worktree) grava despacho" gsd-executor
+[ "$(jq -r '.isolation // ""' <<<"$ULT")" = worktree ] \
+  && ok "isolation: campo isolation=worktree no evento" || bad "isolation: campo isolation=worktree no evento" "$ULT"
+roda "$(p_agent gsd-executor '' '' tu-iso2)"
+[ "$(jq -r '.isolation // "ausente"' <<<"$ULT")" = ausente ] \
+  && ok "isolation: sem o campo no tool_input, evento não o traz" || bad "isolation: sem o campo no tool_input, evento não o traz" "$ULT"
+
 # ═════════════════════ 4. regressão — cenário normal × golden ═════════════════════
 # Sequência sem nenhum gate acionado; o run-log resultante (sem `ts`, que varia) deve ser
 # byte a byte igual ao produzido pelo hook PRÉ-mudança.

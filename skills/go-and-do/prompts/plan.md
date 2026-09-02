@@ -76,8 +76,9 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    - Sem `--auto`: no plan-phase ele encadeia direto pro execute, e quem encadeia é a
      /go-and-do (a convergência da Etapa 2.5 roda entre plano e execução).
 2. Deixe o comando trabalhar. Paradas herdadas são legítimas — decision-coverage gate,
-   requirements-coverage gap, source-audit, phase-split recomendado, revision-loop
-   stall: decisões de escopo/dimensionamento do usuário → `<environment>` (devolva
+   plan shape gate (§13a-bis: sobreposição de arquivos na onda, `files_modified` vazio,
+   cadeia quase-serial), requirements-coverage gap, source-audit, phase-split
+   recomendado, revision-loop stall: decisões de escopo/dimensionamento do usuário → `<environment>` (devolva
    `needs_decision` mastigado).
 3. **Trilha do plan-checker (2.B).** A cada retorno do checker dentro do comando,
    persista o bloco YAML de issues em `<phase_dir>/.plan-checker/iter-<i>.yaml`
@@ -86,7 +87,10 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    que deixa a convergência da 2.5 dizer aos revisores o que o checker JÁ viu.
 4. Ao final, confirme pelo disco (mesmo bloco): `gsd_run query init.phase-op N` →
    `has_plans`; `gsd_run query phase-plan-index N` → contagem de planos, ondas e
-   `autonomous: false` por plano. Fidelidade acima de otimismo: comando terminou sem
+   `autonomous: false` por plano; `<k>` do retorno = `.resumo.largura_max` de
+   `.planning/.gad/last-plan-gate.json` (o número que o §13a-bis imprime em `✓ Plan
+   shape`) — `<w>` sozinho não diz se houve paralelismo: 9 ondas para 11 planos e 2 ondas
+   para 11 planos só se distinguem pela largura. Fidelidade acima de otimismo: comando terminou sem
    erro mas `has_plans` falso → devolva `done` com `veredito: sem_plano`, nunca
    sucesso vazio.
 5. Devolva pelo `<return_contract>`. Falha de ponta a ponta → `blocked` com motivo.
@@ -114,7 +118,7 @@ Responda **apenas** com um dos blocos abaixo, preenchido — sem prosa antes ou 
 ```
 estado: done
 veredito: planejado | sem_plano
-planos: <n> (<w> ondas)
+planos: <n> (<w> ondas — largura máx <k>)
 pesquisa: feita | pulada | reusada — <motivo em 1 linha>
 mapper: rodou | pulado — <motivo em 1 linha>
 granularidade: coarse | standard | fine — <motivo em 1 linha>

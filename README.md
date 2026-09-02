@@ -100,6 +100,25 @@ milissegundos. **Sem o hook a skill funciona normalmente** — a abertura detect
 ausência e declara a degradação (o run-log fica sem os eventos `despacho`/`retorno`,
 e as conferências que dependem deles viram informativas).
 
+### Hook de guarda do Bash `gad-bash-guard` (recomendado)
+
+Nega, dentro de uma rodada ativa, comando de subagente em segundo plano ou desprendido
+(`run_in_background`, `nohup`, `setsid`, `disown`, `&` de fundo); só o waiter de disco
+`( trabalho ; touch marcador ) &` passa. Fora de rodada, ou na sessão principal, é no-op.
+Registre no `~/.claude/settings.json`, em `hooks.PreToolUse`, apontando para o clone
+(caminho absoluto — `~/.claude/hooks/` é do GSD e some no update):
+
+```json
+{
+  "matcher": "Bash",
+  "hooks": [
+    { "type": "command", "command": "bash \"/caminho/para/go-and-do/hooks/gad-bash-guard.sh\"", "timeout": 5 }
+  ]
+}
+```
+
+Cada negativa vira um `incidente` no run-log da fase.
+
 ## Aviso no Telegram (opcional)
 
 Quando o Claude Code para e espera você — uma pergunta interativa (`AskUserQuestion`) ou um

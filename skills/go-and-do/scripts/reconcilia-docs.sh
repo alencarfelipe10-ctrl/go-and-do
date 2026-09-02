@@ -9,9 +9,23 @@
 # REVIEWS.md sem frontmatter. Este script faz o que o dono fazia à mão (11/08, 27/08).
 #
 # Uso: reconcilia-docs.sh [--fase N] [--projeto DIR] [--pr "#42 https://…"] [--proxima N]
-#                         [--dry-run]
+#                         [--dry-run] [--pausa]
 #   Sem --fase/--projeto lê o ponteiro da rodada ativa. Idempotente: o que já está
 #   reconciliado não é tocado. Nunca apaga conteúdo; só troca campos de estado.
+#
+# Modo --pausa (v2.4.0, P17 — Sub-rotina D, depois do commit WIP do pause-work): o
+#   pause-work.md nunca toca o STATE.md, e o HANDOFF.json anota hashes antes de existir o
+#   commit que o carrega; na F24.4 o STATE.md ficou 16 commits atrás do HEAD real. Aqui o
+#   STATE.md é escrito POR ÚLTIMO: lê o HEAD real ($ROOT, no momento da escrita) e o
+#   HANDOFF.json (plano/tarefa), grava `status: paused` (valor canônico do
+#   STATUS_LIFECYCLE_ENUM do state-md-schema), `Stopped At`, `Last Activity`, `Last
+#   Activity Description` via `gsd-tools state update` (os três últimos só aceitam o rótulo
+#   do corpo: o frontmatter deles é derivado; `state_head` e `last_updated` o verbo
+#   re-deriva sozinho) e o corpo `## Current Position` (Phase/Plan) por sed, e faz UM commit
+#   próprio `docs(state): STATE.md reconciliado na pausa` só com o STATE.md. O hash gravado
+#   é o do commit anterior ao próprio (o WIP) — o "onde paramos" verdadeiro. O JSON traz
+#   `discrepancia_commits`: quantos commits o `state_head` antigo estava atrás do HEAD
+#   (régua de reincidência). ROADMAP/REVIEW/REVIEWS não são tocados neste modo.
 #
 # O que reconcilia (cada item vira uma entrada em `acoes` do JSON de saída):
 #   1. STATE.md   — frontmatter: status executing→between_phases · stopped_at · last_updated ·
@@ -39,7 +53,7 @@ set -uo pipefail
 shopt -s nullglob
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
 
-FASE=""; PROJ=""; PR=""; PROX=""; DRY=0
+FASE=""; PROJ=""; PR=""; PROX=""; DRY=0; PAUSA=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --fase)    FASE="${2:-}"; shift 2 ;;
@@ -47,6 +61,7 @@ while [ $# -gt 0 ]; do
     --pr)      PR="${2:-}"; shift 2 ;;
     --proxima) PROX="${2:-}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
+    --pausa)   PAUSA=1; shift ;;
     *) echo "flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
@@ -74,6 +89,124 @@ ed() { [ "$DRY" = 1 ] || sed -i "$1" "$2"; }
 STATE="$ROOT/.planning/STATE.md"; ROADMAP="$ROOT/.planning/ROADMAP.md"
 PRTXT=""; [ -n "$PR" ] && PRTXT=", PR ${PR%% *}"
 
+# Lê os dois campos como VALOR (e não por grep literal) para poder distinguir "o status é
+# outro token" de "o status nem é um token". Trim de espaços e de \r à direita.
+campo_state() { # <nome do campo> → valor cru, sem o prefixo e sem espaços nas bordas
+  grep -m1 -E "^$1: " "$STATE" 2>/dev/null \
+    | sed -e "s/^$1:[[:space:]]*//" -e 's/[[:space:]]*$//' -e 's/\r$//'
+}
+# token = uma única palavra nua (sem aspas, sem espaço): `executing`, `between_phases`, `paused`…
+eh_token() { printf '%s' "$1" | grep -qE '^[A-Za-z_][A-Za-z0-9_-]*$'; }
+
+# ── modo --pausa: STATE.md escrito por último, apontando o commit WIP ─────────
+if [ "$PAUSA" = 1 ]; then
+  MSG_PROPRIO="docs(state): STATE.md reconciliado na pausa"
+  FORMATO_INESPERADO=0; DISC=null; COMMIT_PROPRIO=""
+  [ -f "$STATE" ] || { echo "ERRO: $STATE ausente — nada a reconciliar na pausa" >&2; exit 2; }
+  HEAD_FULL=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null) \
+    || { echo "ERRO: $ROOT sem commit legível — o modo --pausa grava o HEAD real" >&2; exit 2; }
+  HEAD_CURTO=$(git -C "$ROOT" rev-parse --short HEAD)
+  ASSUNTO=$(git -C "$ROOT" log -1 --format=%s | tr -d '\r' | cut -c1-120)
+  # HANDOFF.json: plano/tarefa da parada, só se for desta fase
+  HANDOFF="$ROOT/.planning/HANDOFF.json"; H_PLANO=""; H_TAREFA=""; H_TOT=""
+  if [ -f "$HANDOFF" ] && jq -e . "$HANDOFF" >/dev/null 2>&1; then
+    h_fase=$(jq -r '.phase // empty' "$HANDOFF")
+    if [ "$h_fase" = "$FASE" ]; then
+      H_PLANO=$(jq -r '.plan // empty' "$HANDOFF"); H_TAREFA=$(jq -r '.task // empty' "$HANDOFF")
+      H_TOT=$(jq -r '.total_tasks // empty' "$HANDOFF")
+    else
+      pend "HANDOFF.json é da fase '$h_fase', não da $FASE — plano/tarefa não usados"
+    fi
+  else
+    pend "HANDOFF.json ausente ou ilegível — sem plano/tarefa da parada (só o commit)"
+  fi
+  ONDE="$HEAD_CURTO — $ASSUNTO"
+  [ -n "$H_PLANO" ] && ONDE="$ONDE (plano $H_PLANO${H_TAREFA:+, tarefa $H_TAREFA${H_TOT:+ de $H_TOT}})"
+
+  # discrepância: quantos commits o state_head antigo estava atrás do HEAD real
+  SH_VAL=$(campo_state state_head)
+  if [ -z "$SH_VAL" ]; then
+    pend "STATE.md: sem state_head — discrepância não mensurável"
+  elif git -C "$ROOT" cat-file -e "$SH_VAL^{commit}" 2>/dev/null; then
+    DISC=$(git -C "$ROOT" rev-list --count "$SH_VAL..HEAD" 2>/dev/null || echo null)
+  else
+    pend "STATE.md: state_head ${SH_VAL:0:12} não existe neste repositório — discrepância não mensurável"
+  fi
+
+  ST_VAL=$(campo_state status); CP_VAL=$(campo_state current_phase)
+  CP_OK=0; [ "$CP_VAL" = "$FASE" ] && CP_OK=1
+  ja_reconciliado=0
+  if [ "$ST_VAL" = paused ] && [ "$CP_OK" = 1 ]; then
+    # já apontava para o HEAD, ou para o WIP logo antes de um commit próprio anterior
+    if [ "$SH_VAL" = "$HEAD_FULL" ]; then ja_reconciliado=1
+    elif [ "$ASSUNTO" = "$MSG_PROPRIO" ] && [ "$SH_VAL" = "$(git -C "$ROOT" rev-parse HEAD~1 2>/dev/null)" ]; then ja_reconciliado=1
+    fi
+  fi
+
+  if [ "$ja_reconciliado" = 1 ]; then
+    :
+  elif ! eh_token "$ST_VAL" && [ "$CP_OK" = 1 ]; then
+    echo "FORMATO-INESPERADO: status não é um token reconhecível ('$(printf '%s' "$ST_VAL" | cut -c1-90)')" >&2
+    pend "FORMATO-INESPERADO: STATE.md da fase $FASE tem status em formato não reconhecível ('$(printf '%s' "$ST_VAL" | cut -c1-80)') — conserte à mão antes de pausar"
+    FORMATO_INESPERADO=1
+  elif [ "$CP_OK" != 1 ]; then
+    pend "STATE.md: não casa com a fase $FASE — current_phase esperado '$FASE', encontrado '$CP_VAL' — não tocado"
+  elif [ "$ST_VAL" = between_phases ] || [ "$ST_VAL" = completed ]; then
+    pend "STATE.md: status '$ST_VAL' não é uma fase em curso — pausa não gravada"
+  else
+    # frontmatter via gsd-tools (só campos que já existem no schema; nada é inventado).
+    # stopped_at/last_activity(_desc) são derivados do corpo: o verbo só aceita o rótulo
+    # ("Stopped At"…) e recusa quando a linha não existe no corpo — aí cai no sed do
+    # frontmatter, o mesmo que o pós-ship já faz (só valor de campo existente).
+    upd() { # <campo ou rótulo do corpo> <valor> [campo do frontmatter para o sed de reserva]
+      local out
+      if [ "$DRY" = 1 ]; then return 0; fi
+      out=$(cd "$ROOT" && gsd_run state update "$1" "$2" 2>/dev/null)
+      if [ "$(jq -r '.updated // false' <<<"$out" 2>/dev/null)" = true ]; then return 0; fi
+      if [ -n "${3:-}" ] && grep -qE "^$3: " "$STATE"; then
+        ed "s|^$3: .*|$3: \"$(printf '%s' "$2" | sed 's/[|\\&"]/\\&/g')\"|" "$STATE"
+        pend "STATE.md: corpo sem o rótulo '$1' — $3 gravado por sed no frontmatter"
+        return 0
+      fi
+      pend "STATE.md: state update '$1' falhou: $(jq -r '.reason // "sem motivo"' <<<"$out" 2>/dev/null | cut -c1-120)"
+      return 1
+    }
+    upd status paused && acao "STATE.md: status $ST_VAL → paused"
+    upd "Stopped At" "Phase $FASE paused at $ONDE" stopped_at && acao "STATE.md: stopped_at → $HEAD_CURTO"
+    upd "Last Activity" "$HOJE — $ONDE" && acao "STATE.md: last_activity → $HOJE"
+    upd "Last Activity Description" "Phase $FASE paused ($HEAD_CURTO)" last_activity_desc && acao "STATE.md: last_activity_desc → paused"
+    ed "s/^last_activity: .*/last_activity: $HOJE/" "$STATE"
+    # corpo "## Current Position": Phase/Plan não têm campo no frontmatter — sed, como no pós-ship
+    ed "s/^\(Phase: .*\) — EXECUTING$/\1 — PAUSED/" "$STATE"
+    if [ -n "$H_PLANO" ] && grep -qE '^Plan: [0-9]+ of [0-9]+' "$STATE"; then
+      ed "s/^Plan: [0-9]* of \([0-9]*\)/Plan: $H_PLANO of \1/" "$STATE"
+      acao "STATE.md: Plan → $H_PLANO (HANDOFF.json)"
+    fi
+    # commit próprio, só se o STATE.md mudou; o hash gravado (state_head) é o do WIP
+    if [ "$DRY" = 1 ]; then
+      acao "commit próprio '$MSG_PROPRIO' (não feito: dry-run)"
+    elif git -C "$ROOT" diff --quiet HEAD -- .planning/STATE.md; then
+      pend "STATE.md sem mudança — commit próprio não feito"
+    else
+      cout=$(cd "$ROOT" && gsd_run query commit "$MSG_PROPRIO" --files .planning/STATE.md 2>/dev/null)
+      COMMIT_PROPRIO=$(jq -r '.hash // empty' <<<"$cout" 2>/dev/null)
+      if [ -n "$COMMIT_PROPRIO" ]; then acao "commit $COMMIT_PROPRIO: $MSG_PROPRIO"
+      else pend "commit próprio falhou: $(jq -r '.reason // "sem motivo"' <<<"$cout" 2>/dev/null | cut -c1-120)"; fi
+    fi
+  fi
+
+  n_ac=$(jq 'length' <<<"$ACOES"); n_pe=$(jq 'length' <<<"$PEND")
+  [ "$DRY" = 1 ] || gad_autoregistro "reconcilia-docs.sh" 0 "pausa fase $FASE: $n_ac ação(ões), $n_pe pendente(s), discrepância $DISC" || true
+  gad_json_out reconcilia-docs "$(jq -cn --arg f "$FASE" --argjson a "$ACOES" --argjson p "$PEND" --argjson d "$DRY" \
+    --argjson fi "$FORMATO_INESPERADO" --argjson disc "$DISC" --arg reg "$HEAD_CURTO" --arg pr "$COMMIT_PROPRIO" \
+    --argjson ja "$ja_reconciliado" \
+    '{fase:$f, modo:"pausa", acoes:$a, pendentes:$p, dry_run:($d==1), formato_inesperado:($fi==1),
+      discrepancia_commits:$disc, ja_reconciliado:($ja==1), commit_registrado:$reg,
+      commit_proprio:(if $pr=="" then null else $pr end)}')"
+  [ "$FORMATO_INESPERADO" = 0 ] || exit 3
+  exit 0
+fi
+
 # ── 2. ROADMAP.md (antes do STATE: o progresso conta os [x]) ────────────────
 if [ -f "$ROADMAP" ]; then
   if grep -qE "^- \[ \] \*\*Phase ${FASE}:" "$ROADMAP"; then
@@ -89,17 +222,10 @@ else
 fi
 
 # ── 1. STATE.md ──────────────────────────────────────────────────────────────
-# Lê os dois campos como VALOR (e não por grep literal) para poder distinguir "o status é
-# outro token" de "o status nem é um token". Trim de espaços e de \r à direita.
-campo_state() { # <nome do campo> → valor cru, sem o prefixo e sem espaços nas bordas
-  grep -m1 -E "^$1: " "$STATE" 2>/dev/null \
-    | sed -e "s/^$1:[[:space:]]*//" -e 's/[[:space:]]*$//' -e 's/\r$//'
-}
 FORMATO_INESPERADO=0
 if [ -f "$STATE" ]; then
   ST_VAL=$(campo_state status); CP_VAL=$(campo_state current_phase)
-  # token = uma única palavra nua (sem aspas, sem espaço): `executing`, `between_phases`…
-  ST_TOKEN=0; printf '%s' "$ST_VAL" | grep -qE '^[A-Za-z_][A-Za-z0-9_-]*$' && ST_TOKEN=1
+  ST_TOKEN=0; eh_token "$ST_VAL" && ST_TOKEN=1
   CP_OK=0; [ "$CP_VAL" = "$FASE" ] && CP_OK=1
   if [ "$ST_TOKEN" = 1 ] && [ "$ST_VAL" = executing ] && [ "$CP_OK" = 1 ]; then
     # progress: o STATE.md conta só o MILESTONE atual (o ROADMAP acumula todos), então

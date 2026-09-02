@@ -16,7 +16,11 @@
 #              E-decisao-do-dono | (vazia → conta como A/B, regra fail-up 1.8)
 #
 # Decisão (nesta ordem):
-#   para-zerou           — nenhum achado novo/reaberto confirmado no ciclo
+#   para-zerou           — nenhum achado novo/reaberto confirmado no ciclo E nenhuma lane
+#                          reprovada por `parecer_informe` (P15: marcador
+#                          pareceres/.reformat-<lane>-c<C>.reprovada ou status
+#                          rc_reason=parecer_informe). Zero por parecer sem achados
+#                          legíveis é silêncio, não convergência: cai em continua/para-teto.
 #   para-teto            — ciclo >= 4 (teto duro caiu de 5 para 4)
 #   continua             — ciclo 1 (nunca é cortado) OU >=1 novo confirmado A/B
 #   para-custo-marginal  — só C/D/E confirmados: viram LOTE ÚNICO de correção
@@ -52,9 +56,28 @@ while IFS='|' read -r id classe veredito categoria; do
   esac
 done < "$V"
 
+# lanes reprovadas no ciclo (P15) — família da intenção apenas (a convergência tem
+# marcador `.reformat-planrev-…` e não passa por aqui)
+REPROV=()
+for m in "$PD"/pareceres/.reformat-*-c"$C".reprovada; do
+  [ -e "$m" ] || continue
+  l=$(basename -- "$m"); l=${l#.reformat-}; l=${l%-c$C.reprovada}
+  case "$l" in planrev-*) continue ;; esac
+  REPROV+=("$l")
+done
+for st in "$PD"/.intent/.status-c"$C"-*.json; do
+  [ -s "$st" ] || continue
+  [ "$(jq -r '.rc_reason // ""' "$st" 2>/dev/null)" = parecer_informe ] || continue
+  l=$(basename -- "$st" .json); l=${l#.status-c$C-}
+  case " ${REPROV[*]-} " in *" $l "*) ;; *) REPROV+=("$l") ;; esac
+done
+NREP=${#REPROV[@]}
+
 CINT=$(printf '%s' "$C" | tr -cd '0-9'); : "${CINT:=1}"
-if [ "$novos" = 0 ]; then
+if [ "$novos" = 0 ] && [ "$NREP" = 0 ]; then
   DEC=para-zerou; MOT="ciclo $C: nenhum achado novo confirmado — convergiu"
+elif [ "$novos" = 0 ] && [ "$CINT" -lt 4 ]; then
+  DEC=continua; MOT="ciclo $C: zero achados, mas lane(s) reprovada(s) por parecer_informe (${REPROV[*]}) — zero por silêncio não é convergência"
 elif [ "$CINT" -ge 4 ]; then
   DEC=para-teto; MOT="ciclo $C: teto duro de 4 ciclos atingido ($novos novos confirmados no ciclo)"
 elif [ "$CINT" -le 1 ] || [ "$novos_ab" -gt 0 ]; then
@@ -64,7 +87,8 @@ else
 fi
 
 LOTE=$(printf '%s\n' ${lote_cd[@]+"${lote_cd[@]}"} | jq -R . | jq -cs 'map(select(length>0))')
+REPJ=$(printf '%s\n' ${REPROV[@]+"${REPROV[@]}"} | jq -R . | jq -cs 'map(select(length>0))')
 gad_autoregistro "decide-ciclo.sh" 0 "$DEC ($MOT)" || true
 gad_json_out decide-ciclo "$(jq -cn --arg c "$C" --arg d "$DEC" --arg m "$MOT" \
-  --argjson n "$novos" --argjson ab "$novos_ab" --argjson l "$LOTE" \
-  '{ciclo:$c, decisao:$d, motivo:$m, novos_confirmados:$n, novos_ab:$ab, lote_cde:$l}')"
+  --argjson n "$novos" --argjson ab "$novos_ab" --argjson l "$LOTE" --argjson r "$REPJ" \
+  '{ciclo:$c, decisao:$d, motivo:$m, novos_confirmados:$n, novos_ab:$ab, lote_cde:$l, lanes_reprovadas:$r}')"

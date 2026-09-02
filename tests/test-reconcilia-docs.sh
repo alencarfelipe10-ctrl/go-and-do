@@ -14,6 +14,9 @@
 #   c) current_phase divergente               → pend com os DOIS valores, exit 0
 #   d) state_head presente                    → atualizado para o HEAD do repo do projeto
 #   e) state_head ausente                     → NÃO criado, mas registrado em pendentes
+#   f–k) modo --pausa (P17): STATE.md escrito por último, apontando o commit WIP; um
+#        commit próprio; `discrepancia_commits`; dry-run sem escrita; idempotente;
+#        state_head desconhecido; frase → exit 3; `confere-etapa.sh pausa --pos-pausa`.
 #
 # Tudo em projeto de bancada (mktemp): nenhum projeto real é tocado.
 #   bash tests/test-reconcilia-docs.sh      · exit 0 = verde
@@ -55,6 +58,8 @@ monta_projeto() {
     echo '## Current Position'
     echo 'Phase: 24.4 — EXECUTING'
     echo 'Status: Executing Phase 24.4'
+    echo 'Last activity: 2026-08-01 — Plano 24.4-08 concluído'
+    echo 'Last Activity Description: Plano 24.4-08 concluído'
   } > "$root/.planning/STATE.md"
   printf -- '- [ ] **Phase 24.4: bancada**\n' > "$root/.planning/ROADMAP.md"
   git init -q "$root" >/dev/null 2>&1
@@ -116,6 +121,77 @@ R=$(monta_projeto i between_phases 24.4 sim); roda "$R"
 printf '%s' "$SAIDA" | tail -1 | grep -q 'FORMATO-INESPERADO' \
   && erro "token válido acusado como formato inesperado" "$SAIDA" \
   || ok "token reconhecido não vira FORMATO-INESPERADO"
+
+# ── modo --pausa (P17) ────────────────────────────────────────────────────────
+CONFERE="$AQUI/../skills/go-and-do/scripts/confere-etapa.sh"
+# monta_pausa <nome> <status> <sim|desconhecido>: projeto com o state_head apontando o
+#   commit base (ou um sha inexistente), HANDOFF.json da fase e 5 commits depois (docs +
+#   3 de tarefa + o WIP do pause-work) — é o "5 atrás" da F24.4 em miniatura. O corpo
+#   tem Last activity/Last Activity Description como o STATE.md real, mas não "Stopped
+#   at" — exercita o sed de reserva do stopped_at.
+monta_pausa() {
+  local root; root=$(monta_projeto "$1" "$2" 24.4 sim)   # sempre com state_head (o real tem)
+  git -C "$root" config user.email b@b; git -C "$root" config user.name b
+  [ "$3" = desconhecido ] || sed -i "s/^state_head: .*/state_head: $(git -C "$root" rev-parse HEAD)/" "$root/.planning/STATE.md"
+  git -C "$root" add -A; git -C "$root" commit -qm "docs: state_head aponta o base" >/dev/null 2>&1
+  for i in 1 2 3; do git -C "$root" commit -q --allow-empty -m "feat(24.4-10): tarefa $i" >/dev/null 2>&1; done
+  printf '{"version":"1.0","phase":"24.4","plan":10,"task":2,"total_tasks":3,"status":"paused"}\n' > "$root/.planning/HANDOFF.json"
+  git -C "$root" add .planning/HANDOFF.json; git -C "$root" commit -qm "wip: fase 24.4 pausada no plano 10 task 2/3" >/dev/null 2>&1
+  printf '%s' "$root"
+}
+roda_pausa() { SAIDA=$(bash "$SCRIPT" --fase 24.4 --projeto "$1" --pausa "${@:2}" 2>&1); RC=$?; J=$(printf '%s' "$SAIDA" | tail -1); }
+
+echo "== (g) --pausa --dry-run → relata a discrepância, não escreve, não commita"
+R=$(monta_pausa g executing sim); WIP=$(git -C "$R" rev-parse HEAD); roda_pausa "$R" --dry-run
+[ "$RC" = 0 ] && ok "exit 0" || erro "esperado 0, veio $RC" "$SAIDA"
+[ "$(jq -r .discrepancia_commits <<<"$J")" = 5 ] && ok "discrepancia_commits: 5" || erro "discrepância errada" "$J"
+[ "$(campo "$R" status)" = executing ] && ok "status não tocado" || erro "dry-run escreveu"
+[ "$(git -C "$R" rev-parse HEAD)" = "$WIP" ] && [ -z "$(git -C "$R" status --porcelain)" ] \
+  && ok "sem commit e árvore limpa" || erro "dry-run commitou ou sujou a árvore"
+
+echo "== (k) confere-etapa.sh pausa --pos-pausa ANTES do reconcilia → fail"
+CE=$(bash "$CONFERE" pausa --pos-pausa --fase 24.4 --projeto "$R" 2>&1); CRC=$?
+[ "$CRC" = 1 ] && printf '%s' "$CE" | tail -1 | grep -q '"veredito":"fail"' \
+  && ok "fail: status executing e state_head atrás" || erro "esperado fail/exit 1, veio $CRC" "$CE"
+
+echo "== (f) --pausa → paused, state_head = WIP, um commit próprio, discrepância 5"
+roda_pausa "$R"
+[ "$RC" = 0 ] && ok "exit 0" || erro "esperado 0, veio $RC" "$SAIDA"
+[ "$(campo "$R" status)" = paused ] && ok "status executing → paused" || erro "status: $(campo "$R" status)"
+[ "$(campo "$R" state_head)" = "$WIP" ] && ok "state_head = commit WIP ($(cut -c1-12 <<<"$WIP"))" \
+  || erro "state_head não é o WIP" "obtido $(campo "$R" state_head)"
+[ "$(git -C "$R" log -1 --format=%s)" = "docs(state): STATE.md reconciliado na pausa" ] \
+  && [ "$(git -C "$R" rev-parse HEAD~1)" = "$WIP" ] \
+  && ok "um commit próprio logo depois do WIP" || erro "commit próprio ausente ou fora de ordem" "$(git -C "$R" log --oneline -3)"
+[ "$(git -C "$R" diff --name-only HEAD~1 HEAD)" = ".planning/STATE.md" ] \
+  && ok "o commit próprio só carrega o STATE.md" || erro "commit próprio com outros arquivos"
+campo "$R" stopped_at | grep -q "$(cut -c1-7 <<<"$WIP")" && ok "stopped_at cita o hash do WIP" || erro "stopped_at sem o hash" "$(campo "$R" stopped_at)"
+[ "$(jq -r .discrepancia_commits <<<"$J")" = 5 ] && [ "$(jq -r .commit_proprio <<<"$J")" != null ] \
+  && ok "JSON: discrepancia_commits 5 + commit_proprio" || erro "JSON incompleto" "$J"
+[ -z "$(git -C "$R" status --porcelain)" ] && ok "árvore limpa depois" || erro "árvore suja"
+
+echo "== (k2) confere-etapa.sh pausa --pos-pausa DEPOIS do reconcilia → pass"
+CE=$(bash "$CONFERE" pausa --pos-pausa --fase 24.4 --projeto "$R" 2>&1); CRC=$?
+[ "$CRC" = 0 ] && ok "pass (state_head = HEAD~1)" || erro "esperado pass, veio $CRC" "$CE"
+
+echo "== (h) --pausa de novo → já reconciliado, nada a fazer, sem commit novo"
+H=$(git -C "$R" rev-parse HEAD); roda_pausa "$R"
+[ "$RC" = 0 ] && [ "$(jq -r .ja_reconciliado <<<"$J")" = true ] && [ "$(jq '.acoes|length' <<<"$J")" = 0 ] \
+  && ok "ja_reconciliado: true, 0 ações" || erro "reincidiu" "$J"
+[ "$(git -C "$R" rev-parse HEAD)" = "$H" ] && ok "sem commit novo" || erro "commitou de novo"
+
+echo "== (i) state_head desconhecido neste repo → discrepância null + pendência"
+R=$(monta_pausa i executing desconhecido); roda_pausa "$R"
+[ "$RC" = 0 ] && ok "exit 0" || erro "esperado 0, veio $RC" "$SAIDA"
+[ "$(jq -r .discrepancia_commits <<<"$J")" = null ] && printf '%s' "$J" | grep -q 'não existe neste repositório' \
+  && ok "discrepancia_commits: null + pendência declarada" || erro "discrepância silenciosa" "$J"
+[ "$(campo "$R" status)" = paused ] && ok "mesmo assim gravou paused (o HEAD real é legível)" || erro "não gravou"
+
+echo "== (j) --pausa com status como FRASE → FORMATO-INESPERADO + exit 3, nada escrito"
+R=$(monta_pausa j '"Fase 24.4 EM EXECUÇÃO → PAUSADA"' sim); H=$(git -C "$R" rev-parse HEAD); roda_pausa "$R"
+[ "$RC" = 3 ] && ok "exit 3" || erro "esperado 3, veio $RC" "$SAIDA"
+[ "$(git -C "$R" rev-parse HEAD)" = "$H" ] && grep -q '^status: "Fase 24.4' "$R/.planning/STATE.md" \
+  && ok "sem commit e sem reescrever o status ilegível" || erro "mexeu no que não sabe ler"
 
 echo
 [ "$falhas" -eq 0 ] && echo "test-reconcilia-docs: TUDO OK" || echo "test-reconcilia-docs: $falhas falha(s)"

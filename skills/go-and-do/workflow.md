@@ -101,7 +101,7 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 **Etapa 3 — Construção**
 16. ⏭️ `has_verification` → pula a Etapa 3 inteira.
 18. 🔒 ⏭️ `pre-despacho.sh 2.5` decide (pular · skip_config declarado · ⏸️ bloqueio_sem_revisor = fail-closed PC-6 · ok) → Convergência via **subagente** (Sub-rotina H + `prompts/convergence.md`, hospedando `gsd-plan-review-convergence --codex --agy --max-cycles 3`; lanes por `roda-codex.sh`/`roda-agy.sh`). Não convergiu (`escalou`) → ⏸️ para.
-18b. **Pré-flight de paralelismo** (só com `use_worktrees: true` e onda com ≥2 planos): worktree degradaria por **base mismatch** → aplique o antídoto `"worktree": {"baseRef": "head"}` no `.claude/settings.local.json`, re-cheque, registre no `NN-DECISOES.md`. Degradaria por **qualquer outra causa** → investigue a solução e ⏸️ suba AskUserQuestion com diagnóstico + opções — degradação nunca vira fato consumado (3 fases já serializaram pelo mesmo padrão sem antídoto).
+18b. **Paralelismo** — o `pre-despacho.sh 3` que abre o item 19 (🔒) é a autoridade: lê `use_worktrees`/`parallelization`, aplica `baseRef: head` via `worktree set-baseref`, roda o `base-check` e mede as ondas de ≥2 planos incompletos. `despacho: ok` → siga ao 19 sem mais nada. `despacho: bloqueio_paralelismo` (exit 4) → ⏸️ AskUserQuestion com a `pergunta_ao_dono` do JSON, que já traz a `message` real do `base-check` — não diagnostique por conta própria nem aplique antídoto à mão: o motivo real da F24.x era `origin/HEAD unresolved`, não "base mismatch", e o script mede em vez de presumir. O fecho (`confere-etapa.sh 3`) extrai `paralelismo_observado` do run-log e reprova se `use_worktrees` virar `false` durante a etapa.
 19. 🔒 Execução via **subagente** (Sub-rotina H + `prompts/execute.md`) — sobrou `autonomous: false` (exceção rara pós-2.4b) → **inline** (`Skill gsd-execute-phase --auto --no-transition`).
 20. Checa completude: plano sem SUMMARY (ação humana travou ondas) → ⏸️ Sub-rotina D. Senão status: passed → segue · human_needed → anota (insumo da Etapa 5) e segue · gaps_found → 21.
 21. *(gaps)* Fecha 1×: despacho da 2.3 (`prompts/plan.md`, args `N --gaps`) → re-execução pela regra de rota da 3.3 → re-verifica. ⏸️ Persistiu → Sub-rotina D.
@@ -259,7 +259,12 @@ limpo:
       então KILL. Ele recusa em três casos previstos — mais de 10 candidatos (`RECUSA:`),
       `GRUPO-MISTO` e `GRUPO-PROPRIO`. Em qualquer recusa, leve os pids relatados para a
       linha de handoff do passo 4 e siga.
-   5. **`confere-etapa.sh pausa`** — fecha a etapa interrompida na telemetria: mede a janela
+   5. `varre-worktrees.sh --projeto "$ROOT"` — as cópias (worktrees) que a pausa deixa
+      para trás. O `reap-orphans` do GSD só vê cópia com arquivo `locked` e já incorporada;
+      a da 24.2 ficou 11 dias invisível com 2 commits. Só relata. Cada `com-trabalho` ou
+      `suja` do JSON vira uma linha no handoff do passo 4: `cópia <branch>: <commits>
+      commits, <idade_dias> dias — arquivar com --arquivar; remoção com o dono`.
+   6. **`confere-etapa.sh pausa`** — fecha a etapa interrompida na telemetria: mede a janela
       aberta com o mede-tokens e grava o `end` com o rótulo CANÔNICO do checkpoint +
       `"interrompida":true`. Rótulo canônico, nunca variante; medição, nunca estimativa — na
       F24 a pausa ficou sem medição e o rótulo fragmentou em 3 grafias, quebrando a agregação.
@@ -269,10 +274,17 @@ limpo:
 3. `Skill gsd-pause-work` — handoff durável (HANDOFF.json + `.continue-here.md`) + commit WIP.
    Registre o evento `stop` com a etapa CANÔNICA em curso (ex.: `"2.5 convergencia"`) e o
    motivo no campo próprio (10º posicional do run-log.sh) — nunca `pausa: <motivo>` no
-   rótulo da etapa. **Reconciliação-lite do STATE.md:**
-   confira que `stopped_at`/`Resume file` apontam o ponto REAL desta parada (o pause-work não
-   corrige um stopped_at herdado — quem retoma pelo STATE seria enganado); divergiu → emende
-   as duas linhas no commit WIP.
+   rótulo da etapa.
+3.5. **STATE.md por último.** Depois do commit WIP, rode
+   `reconcilia-docs.sh --pausa --projeto "$ROOT" --fase N` e em seguida
+   `confere-etapa.sh pausa --pos-pausa --projeto "$ROOT" --fase N`. O pause-work nunca toca
+   o STATE.md e o HANDOFF.json anota hashes antes de existir o commit que o carrega — na
+   F24.4 o STATE.md ficou 16 commits atrás do HEAD e ninguém viu. O script grava
+   `status: paused`, o hash do WIP e o plano/tarefa do HANDOFF, e faz um commit próprio
+   `docs(state): STATE.md reconciliado na pausa`. A cancela reprova (exit 1) se o
+   `state_head` não for HEAD nem HEAD~1: nesse caso, não emende à mão — releia o JSON
+   (`pendentes`) e re-rode; exit 3 (`FORMATO-INESPERADO`) é status em frase, conserte o
+   token e re-rode.
 4. **Pare** com a linha de handoff `🔔`: o motivo, a ação exata (comando literal), os planos
    pendentes, os pids que a varredura relatou e recusou matar (se houver) e onde está o
    `NN-RESUMO-EXECUTIVO.md`. Retoma com `/go-and-do N`.
@@ -1003,7 +1015,10 @@ Leia `acoes`/`pendentes` do JSON; pendente = anote no banner. Commite (best-effo
 PLAN×SUMMARY (plano sem SUMMARY = falha) + anti-placeholder de timestamps + **AC parcial no
 SUMMARY × VERIFICATION `passed`** (falha 5 da F24.3) + **STATE.md ainda `executing`** (a
 reconciliação não rodou); 🔔 em divergência (ts divergente → corrija para o ts real do git e
-registre em `incidentes:`). Reconcilie a TaskList (anti-órfã S.C). Depois:
+registre em `incidentes:`). Reconcilie a TaskList (anti-órfã S.C). Rode
+`varre-worktrees.sh --projeto "$ROOT"` (só relato): toda cópia `com-trabalho` ou `suja` do
+JSON entra no resumo executivo como pendência com o dono (`cópia <branch>: <commits> commits,
+<idade_dias> dias`); uma fase não fecha com trabalho escondido numa cópia. Depois:
 - **Ship:** moldura com título `— shipada`, campos `PR` (com o estado REAL: `#N — mergeado`
   ou `#N — aberto`) e `Resumo`; abaixo: URL do PR, bloco de transparência e add-tests como
   passo **pós-PR**. Encerre.

@@ -71,5 +71,34 @@ roda "uma limitação declarada não absolve a outra ressalva (cobertura por lin
 nao_casa "a PS coberta por \`PS-01 descartada: …\` não é acusada" \
      'RESSALVA-SEM-LIMITACAO .*PS-01' -- "$F/uma-limitacao-SPEC.md" "$F/duas-ressalvas-PRE-SPEC.md"
 
+echo "-- origem dos ACs (P12)"
+roda "SPEC com marcador: AC sem origem → AC-SEM-ORIGEM é FALHA" 1 'AC-SEM-ORIGEM .*origem-SPEC.md:14 AC-05' -- "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "PS-99 na origem → AC-ORIGEM-INEXISTENTE" 1 'AC-ORIGEM-INEXISTENTE .*:11 AC-02 cita PS-99' -- "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "AC que cita a si mesmo → AC-ORIGEM-INEXISTENTE" 1 'AC-ORIGEM-INEXISTENTE .*:16 AC-07 cita a si mesmo' -- "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "AC-42 (não existe na SPEC) → AC-ORIGEM-INEXISTENTE" 1 \
+     'AC-ORIGEM-INEXISTENTE .*:17 AC-08 cita AC-42' -- "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "id fora do padrão na origem → AC-ORIGEM-INEXISTENTE" 1 "AC-ORIGEM-INEXISTENTE .*:17 AC-08 cita 'capítulo 3'" -- "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "corpo vazio, só a origem → AC-POR-PONTEIRO" 1 'AC-POR-PONTEIRO .*:15 ' -- "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "sem --reqs: R2/SC-1/DESC-01 aceitos com ORIGEM-NAO-CONFERIDA (aviso único)" 1 \
+     'ORIGEM-NAO-CONFERIDA .*R2, SC-1, DESC-01' -- "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "contagem exata: 4 INEXISTENTE · 1 SEM-ORIGEM · 1 POR-PONTEIRO" 1 \
+     'AC-ORIGEM-INEXISTENTE=4 · AC-POR-PONTEIRO=1 · AC-SEM-ORIGEM=1' -- "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+nao_casa "AC-01 (PS-01, R2), AC-03 e AC-04 (AC-01) não são acusados" \
+     'INEXISTENTE .*:(10|12|13) ' -- "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "com --reqs: SC-1 fora do REQUIREMENTS → INEXISTENTE" 1 \
+     'AC-ORIGEM-INEXISTENTE .*:12 AC-03 cita SC-1' -- --reqs "$F/origem-REQUIREMENTS.md" "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+nao_casa "com --reqs: R2 e DESC-01 conferidos, sem ORIGEM-NAO-CONFERIDA" \
+     'ORIGEM-NAO-CONFERIDA|cita (R2|DESC-01)' -- --reqs "$F/origem-REQUIREMENTS.md" "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "sem marcador e sem flag: AC-SEM-ORIGEM vira AVISO (retrocompatível)" 1 \
+     'AC-SEM-ORIGEM .*:13 AC-05 .*aviso' -- "$F/origem-sem-marcador-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "sem marcador e sem flag: os INEXISTENTE continuam FALHA" 1 \
+     'falhas=5 .*AC-SEM-ORIGEM=1' -- "$F/origem-sem-marcador-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "sem marcador + --exige-origem: AC-SEM-ORIGEM volta a FALHA" 1 \
+     'falhas=6 ' -- --exige-origem "$F/origem-sem-marcador-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "spec antiga (sem sufixo, sem marcador) → só avisos, exit 0" 0 \
+     'AC-SEM-ORIGEM=2' -- "$F/ok-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "spec antiga + --exige-origem → exit 1" 1 'AC-SEM-ORIGEM=2' -- --exige-origem "$F/ok-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "--reqs inexistente → exit 2" 2 'ERRO: --reqs' -- --reqs "$F/nao-existe.md" "$F/ok-SPEC.md" "$F/ok-PRE-SPEC.md"
+
 echo "test-confere-pre-spec.sh: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

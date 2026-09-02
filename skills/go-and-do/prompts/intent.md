@@ -149,13 +149,14 @@ Parâmetros obrigatórios do despacho, além dos do protocolo:
 **Conferência PRE-SPEC ↔ SPEC (R2c) — antes de qualquer briefing.** O `r2_avisos` do filho
 já é o resultado; veio ausente (fallback inline, ou SPEC pré-existente na chegada
 `revisao`) → rode você
-`confere-pre-spec.sh "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-PRE-SPEC.md"`.
+`confere-pre-spec.sh --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-PRE-SPEC.md"`.
 Linha `FALHA` (`MARCA-SEM-ID`, `ID-INEXISTENTE`, `FATO-SEM-EVIDENCIA`,
-`RESSALVA-SEM-LIMITACAO`, `AC-POR-PONTEIRO`) → conserte o SPEC antes de seguir (ou
-`<business_pause>`, se mexer em decisão do dono) — é o que o `confere-etapa.sh 1` cobra no
-fecho. `AVISO EXTENSAO-SUSPEITA` **não** reprova: copie as linhas para a
-`.intent/.varredura.md`, sob o heading `### Extensões suspeitas ao PRE-SPEC (R2c)`, para
-chegarem ao revisor no briefing; quem decide é você.
+`RESSALVA-SEM-LIMITACAO`, `AC-POR-PONTEIRO`, `AC-SEM-ORIGEM`, `AC-ORIGEM-INEXISTENTE`) →
+conserte o SPEC antes de seguir (ou `<business_pause>`, se mexer em decisão do dono) — é o
+que o `confere-etapa.sh 1` cobra no fecho. `AVISO EXTENSAO-SUSPEITA` e `AVISO
+ORIGEM-NAO-CONFERIDA` **não** reprovam: copie as linhas para a `.intent/.varredura.md`,
+sob o heading `### Extensões suspeitas ao PRE-SPEC (R2c)`, para chegarem ao revisor no
+briefing; quem decide é você.
 </spec>
 
 <discuss>
@@ -298,6 +299,21 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    `brutos` = a linha `achados_estruturais_total:` DESSE arquivo, lida mecanicamente, nunca
    da sua leitura. Ela já inclui as respostas dirigidas (`sim`/`incerto`) e conta `não`
    como `nao_provisorio`.
+
+   **Linha `parecer_informe: <lane> devolver` na tabela** = a lane escreveu um parecer com
+   corpo, mas nenhum achado no gabarito, e o contador o leria como zero. Devolva a lane uma
+   vez, no mesmo ciclo, antes de decidir a rota:
+   ```bash
+   $HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh "<phase_dir>" "<NN>" <C> \
+     "<phase_dir>/.intent/briefing-c<C>.md" \
+     --prova "<phase_dir>/.intent/.prova-leitura-c<C>.txt" --reformata <lane>
+   ```
+   Espere o `.status-c<C>-<lane>.json` novo e re-rode o (a). `parecer_informe: <lane>
+   reprovada` na 2ª tabela = a lane fica `usable:false` (`rc_reason=parecer_informe`) e
+   entra como `sem_parecer: <lane>`; o incidente já está no run-log. Não há 3ª tentativa
+   (`--reformata` de novo devolve exit 4). `sem_achado_novo: <lane>` é parecer válido com
+   zero achados — não devolva. Sem esta devolução a linha nova fica órfã e o zero vira
+   convergência por prosa.
 
    **(b) A regra da rota, nos dois sentidos — e declare a escolhida ANTES de verificar**
    (o marcador `.verificador-c<C>.done` não distingue as rotas: a inline também o grava).

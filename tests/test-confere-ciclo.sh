@@ -144,6 +144,50 @@ grep -qE '^\| codex \| — \| Q4 NÃO RESPONDIDA \(manifesto\) \|  \| dirigida-a
   && ok "linha dirigida-ausente também tem 5 colunas" \
   || erro "dirigida-ausente fora do formato de 5 colunas" "$(grep 'Q4' "$TMP/t10.txt")"
 
+
+echo "== P15 — cancela parecer_informe: corpo substantivo sem achado no gabarito"
+# Régua: zero achados extraídos de um parecer com corpo NÃO é convergência. Na F24.4 o
+# c4/c5/c6 da convergência saíram `achados_estruturais_total: 0` com texto e o
+# decide-ciclo.sh leu o zero como para-zerou.
+mkdir -p "$TMP/p15/pareceres" "$TMP/p15/.intent"
+cp "$FIX/24.4-planrev-parecer-codex-c4.md" "$TMP/p15/pareceres/"
+"$SCRIPT" --tabela "$TMP/p15/pareceres/24.4-planrev-parecer-codex-c4.md" > "$TMP/t12.txt" 2>/dev/null
+[ "$(total "$TMP/t12.txt")" = 0 ] && ok "parecer real da F24.4 (planrev codex c4, 7 linhas/665 B): 0 achados extraídos" \
+  || erro "total" "$(total "$TMP/t12.txt")"
+grep -qx 'parecer_informe: codex devolver' "$TMP/t12.txt" && ok "…e sai \`parecer_informe: codex devolver\` (1ª vez)" \
+  || erro "parecer_informe ausente" "$(cat "$TMP/t12.txt")"
+: > "$TMP/p15/pareceres/.reformat-planrev-codex-c4"
+printf '{"lane":"codex","usable":true,"rc_reason":"ok"}\n' > "$TMP/p15/.intent/.status-c4-codex.json"
+"$SCRIPT" --tabela --status-dir "$TMP/p15/.intent" "$TMP/p15/pareceres/24.4-planrev-parecer-codex-c4.md" > "$TMP/t13.txt" 2>/dev/null
+grep -qx 'parecer_informe: codex reprovada' "$TMP/t13.txt" && ok "com o marcador da devolução já gravado: reprovada (2ª vez)" \
+  || erro "reprovada ausente" "$(cat "$TMP/t13.txt")"
+[ "$(jq -r .rc_reason "$TMP/p15/.intent/.status-c4-codex.json")" = parecer_informe ] \
+  && [ "$(jq -r .usable "$TMP/p15/.intent/.status-c4-codex.json")" = false ] \
+  && ok "status da lane vira usable:false / rc_reason=parecer_informe" || erro "status não atualizado" "$(cat "$TMP/p15/.intent/.status-c4-codex.json")"
+[ -e "$TMP/p15/pareceres/.reformat-planrev-codex-c4.reprovada" ] && ok "marcador .reprovada da família planrev" || erro "sem .reprovada"
+grep -q '"evento":"incidente".*"origem":"confere-ciclo.sh"' "$TMP/p15/24.4-RUN-LOG.jsonl" 2>/dev/null \
+  && ok "incidente gravado no run-log da fase (etapa 2.5 convergencia)" || erro "sem incidente" "$(cat "$TMP/p15/24.4-RUN-LOG.jsonl" 2>/dev/null)"
+grep -q '"etapa":"2.5 convergencia"' "$TMP/p15/24.4-RUN-LOG.jsonl" && ok "família planrev → etapa 2.5" || erro "etapa errada"
+
+echo "== P15 — o que NÃO dispara a cancela"
+printf 'Sim, a varredura está incompleta.\n' > "$TMP/24.3-parecer-curto-c1.md"
+"$SCRIPT" --tabela "$TMP/24.3-parecer-curto-c1.md" > "$TMP/t14.txt" 2>/dev/null
+grep -q '^parecer_informe:' "$TMP/t14.txt" && erro "parecer curto (1 linha) não é substantivo" "$(cat "$TMP/t14.txt")" \
+  || ok "parecer curto (1 linha, < 500 caracteres) não dispara"
+{ echo "prova_leitura: PROVA-abc123"; echo "### Achado 0 — nenhum achado novo"
+  for i in $(seq 1 15); do echo "Conferi a emenda $i em src/a.py:$i e ela fecha o ponto."; done; } > "$TMP/24.3-parecer-zero-c1.md"
+"$SCRIPT" --tabela "$TMP/24.3-parecer-zero-c1.md" > "$TMP/t15.txt" 2>/dev/null
+[ "$(total "$TMP/t15.txt")" = 0 ] && ok "\`### Achado 0 — nenhum achado novo\` não conta como achado" || erro "Achado 0 contou" "$(cat "$TMP/t15.txt")"
+grep -qx 'sem_achado_novo: zero' "$TMP/t15.txt" && ok "…e sai \`sem_achado_novo\` (parecer válido, não parecer_informe)" || erro "sem_achado_novo ausente" "$(cat "$TMP/t15.txt")"
+grep -q '^parecer_informe:' "$TMP/t15.txt" && erro "Achado 0 disparou a cancela" || ok "Achado 0 não dispara a cancela"
+{ echo "prova_leitura: PROVA-abc123"; echo "Nível Geral de Risco: LOW"
+  for i in $(seq 1 14); do echo "Linha $i de prosa sobre o plano, sem gabarito."; done; } > "$TMP/24.3-parecer-ruido-c1.md"
+"$SCRIPT" --tabela "$TMP/24.3-parecer-ruido-c1.md" > "$TMP/t16.txt" 2>/dev/null
+grep -qx 'parecer_informe: ruido devolver' "$TMP/t16.txt" && ok "canário e rubrica de risco passam pelo filtro RUIDO; 14 linhas de prosa disparam" \
+  || erro "prosa de 14 linhas não disparou" "$(cat "$TMP/t16.txt")"
+"$SCRIPT" "$TMP/24.3-parecer-ruido-c1.md" "$TMP/24.3-parecer-curto-c1.md" > "$TMP/t17.txt" 2>/dev/null
+grep -q 'parecer_informe' "$TMP/t17.txt" && ok "modo padrão (parecer + resumo) também avisa parecer_informe" || erro "modo padrão mudo" "$(cat "$TMP/t17.txt")"
+
 echo "== manifesto ilegível não zera a contagem (fail-closed)"
 "$SCRIPT" --tabela --perguntas "$TMP/nao-existe.json" "$CODEX" > "$TMP/t7.txt" 2>/dev/null
 [ "$(campo "$TMP/t7.txt" brutas)" -ge 1 ] && ok "manifesto ausente vira bruto, não zero" || erro "guarda cega"

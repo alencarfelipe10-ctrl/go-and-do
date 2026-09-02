@@ -363,6 +363,7 @@ fi
   echo "Não há número certo de achados — zero achados A é um resultado válido se a"
   echo "intenção estiver sólida. Cada achado com: alegação, evidência (arquivo:linha"
   echo "quando houver) e confiança (alta/média/baixa)."
+  echo "Sem achado novo, escreva literalmente \`### Achado 0 — nenhum achado novo\`: o contador só lê o gabarito, e um parecer só em prosa é devolvido para reformatação."
   echo
   # Ciclo 2+: "o que mudou" logo após a Missão (R8.4) — o revisor precisa do delta
   # ANTES de decidir onde gastar leitura, não num rodapé.

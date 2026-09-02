@@ -43,8 +43,11 @@ assert_de() { printf '%s' "$1" | jq -r --arg id "$2" '(.asserts[]|select(.id==$i
 echo "── R2: SPEC × PRE-SPEC na cancela ──"
 IFS='|' read -r R PD <<<"$(monta r2 99)"
 cp "$FP/ok-PRE-SPEC.md" "$PD/99-PRE-SPEC.md"; cp "$FP/ok-SPEC.md" "$PD/99-SPEC.md"
+# desde a fiação P19 a cancela passa --exige-origem: "conforme" inclui `[origem: …]` nos ACs
+# (a ok-SPEC.md fica como "spec antiga" — o test-confere-pre-spec.sh depende disso)
+sed -i 's/^\(- AC-0[12] — .*\)$/\1 [origem: PS-01]/' "$PD/99-SPEC.md"
 J="$(confere "$R" 99)"
-eq "SPEC conforme → r2_pre_spec ok"      "$(assert_de "$J" r2_pre_spec)" "ok"
+eq "SPEC conforme (ACs com origem) → r2_pre_spec ok" "$(assert_de "$J" r2_pre_spec)" "ok"
 casa "EXTENSAO-SUSPEITA sai em extrai.r2_avisos (insumo do briefing)" \
      "$(printf '%s' "$J" | jq -r '.extrai.r2_avisos|join("|")')" 'EXTENSAO-SUSPEITA'
 
@@ -60,6 +63,36 @@ eq "PRE-SPEC sem bloco e sem rota → FALHA" "$(assert_de "$J" r2_pre_spec)" "FA
 bash "$S" "$PD" 99 --pre-spec-route legacy --resposta "autorizo a rota antiga" >/dev/null 2>&1
 J="$(confere "$R" 99)"
 eq "rota legacy autorizada pelo dono → aviso, não falha" "$(assert_de "$J" r2_pre_spec)" "aviso"
+
+# ═══════════════════════════════════════ R2 × origem dos ACs (P12, fiação P19)
+# A cancela passa `--exige-origem` sempre e `--reqs` quando o REQUIREMENTS.md existe:
+# AC sem `[origem: …]` reprova mesmo em SPEC sem o marcador `spec-origem`; id inexistente
+# reprova; REQ-ID sem REQUIREMENTS.md para conferir vira aviso em `extrai.r2_avisos`.
+echo "── R2: origem dos ACs (--exige-origem / --reqs) ──"
+IFS='|' read -r R PD <<<"$(monta r2origem 99)"
+cp "$FP/ok-PRE-SPEC.md" "$PD/99-PRE-SPEC.md"; cp "$FP/ok-SPEC.md" "$PD/99-SPEC.md"
+J="$(confere "$R" 99)"
+eq "SPEC antiga (ACs sem origem) → AC-SEM-ORIGEM reprova a cancela" "$(assert_de "$J" r2_pre_spec)" "FALHA"
+casa "…e o detalhe nomeia o código" \
+     "$(printf '%s' "$J" | jq -r '.asserts[]|select(.id=="r2_pre_spec")|.detalhe')" 'AC-SEM-ORIGEM'
+sed -i 's/^\(- AC-0[12] — .*\)$/\1 [origem: PS-01]/' "$PD/99-SPEC.md"
+J="$(confere "$R" 99)"
+eq "ACs com [origem: PS-01] → r2_pre_spec ok"  "$(assert_de "$J" r2_pre_spec)" "ok"
+sed -i 's/^\(- AC-02 — .*\)\[origem: PS-01\]$/\1[origem: PS-99]/' "$PD/99-SPEC.md"
+J="$(confere "$R" 99)"
+eq "origem PS-99 (fora do bloco) → AC-ORIGEM-INEXISTENTE reprova" "$(assert_de "$J" r2_pre_spec)" "FALHA"
+casa "…nomeado no detalhe" \
+     "$(printf '%s' "$J" | jq -r '.asserts[]|select(.id=="r2_pre_spec")|.detalhe')" 'AC-ORIGEM-INEXISTENTE'
+sed -i 's/\[origem: PS-99\]/[origem: BANC-01]/' "$PD/99-SPEC.md"
+J="$(confere "$R" 99)"
+eq "REQ-ID BANC-01 conferido no REQUIREMENTS.md (--reqs) → ok" "$(assert_de "$J" r2_pre_spec)" "ok"
+eq "…sem aviso ORIGEM-NAO-CONFERIDA" \
+   "$(printf '%s' "$J" | jq -r '[.extrai.r2_avisos[]|select(startswith("ORIGEM-NAO-CONFERIDA"))]|length')" "0"
+rm -f "$R/.planning/REQUIREMENTS.md"
+J="$(confere "$R" 99)"
+eq "sem REQUIREMENTS.md → r2 continua ok (REQ-ID não é falha)" "$(assert_de "$J" r2_pre_spec)" "ok"
+casa "…e ORIGEM-NAO-CONFERIDA sai em extrai.r2_avisos (vai ao briefing)" \
+     "$(printf '%s' "$J" | jq -r '.extrai.r2_avisos|join("|")')" 'ORIGEM-NAO-CONFERIDA'
 
 # ═════════════════════════════════════════════════════════════════════ R6
 echo "── R6: issues estruturadas na cancela ──"
@@ -194,6 +227,149 @@ eq "…e token válido não é acusado de formato inesperado" "$(assert_de "$J" 
 J="$(confere6 "$(monta_state s6ok between_phases)")"
 eq "status: between_phases → nenhum dos dois asserts" "$(assert_de "$J" state_reconciliado)" "<ausente>"
 eq "…nem o de formato"                                "$(assert_de "$J" state_formato)" "<ausente>"
+
+# ═════════════════════════════════ cancela da ETAPA 3 × paralelismo (P04, 01/09)
+# Mede pelo run-log quantos executores de cada onda planejada (>=2 planos) estiveram
+# abertos juntos; reprova só `use_worktrees_alterado` (true no pré-despacho → false no
+# fecho). O run-log sintético reproduz as grafias e o despacho órfão do arquivo real da
+# F24.4 (despacho negado pelo sentinel fica sem retorno).
+echo "── cancela 3: paralelismo observado ──"
+
+plano3() { # <pd> <plan> <wave> [dep]
+  { printf -- '---\nphase: "95"\nplan: %s\ntype: execute\nwave: %s\ndepends_on: [%s]\nfiles_modified:\n  - src/%s.py\nautonomous: true\n---\n' \
+      "$2" "$3" "${4:-}" "$2"; } > "$1/95-$2-PLAN.md"
+}
+monta3() { # <nome> → ecoa "<root>|<phase_dir>"
+  local root="$BASE/$1" pd="$BASE/$1/.planning/phases/95-bancada"
+  mkdir -p "$pd"; git init -q "$root" >/dev/null 2>&1
+  printf '{"workflow":{"use_worktrees":true}}\n' > "$root/.planning/config.json"
+  plano3 "$pd" 01 1; plano3 "$pd" 02 1; plano3 "$pd" 03 2 '"95-01"'
+  printf '%s|%s' "$root" "$pd"
+}
+ev() { # <arquivo> <seq> <ts> <evento> <descricao>
+  printf '{"ts":"%s","seq":%s,"sessao":"b","evento":"%s","etapa":"3 construcao","camada":1,"agente":"gsd-executor","origem":"hook","descricao":"%s"}\n' \
+    "$3" "$2" "$4" "$5" >> "$1"
+}
+confere3() { printf '%s' "$(bash "$C" 3 --projeto "$1" --fase 95 --dry-run 2>/dev/null | tail -1)"; }
+
+IFS='|' read -r R PD <<<"$(monta3 c3serial)"
+RL="$PD/95-RUN-LOG.jsonl"
+ev "$RL" 1 2026-09-01T10:00:00-03:00 despacho "Execute plan 01 of phase 95"      # negado (sem retorno)
+ev "$RL" 2 2026-09-01T10:01:00-03:00 despacho "Execute plan 01 of phase INS-95"
+ev "$RL" 3 2026-09-01T10:30:00-03:00 retorno  "Execute plan 01 of phase INS-95"
+ev "$RL" 4 2026-09-01T10:31:00-03:00 despacho "Execute plan 95-02"
+ev "$RL" 5 2026-09-01T11:00:00-03:00 retorno  "Execute plan 95-02"
+J="$(confere3 "$R")"
+eq "serial: onda 1 simultaneos_max 1 (o despacho órfão não conta como aberto)" \
+   "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].simultaneos_max')" "1"
+eq "…despachados 2 (as três grafias de descricao resolvem)" \
+   "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].despachados')" "2"
+eq "…serializacao_observada [\"1\"]" "$(printf '%s' "$J" | jq -c '.extrai.serializacao_observada')" '["1"]'
+eq "…onda 2 (1 plano) não entra"   "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["2"] // "ausente"')" '"ausente"'
+eq "…serialização só extrai, não reprova" "$(assert_de "$J" use_worktrees_alterado)" "<ausente>"
+
+IFS='|' read -r R PD <<<"$(monta3 c3paralelo)"
+RL="$PD/95-RUN-LOG.jsonl"
+ev "$RL" 1 2026-09-01T10:00:00-03:00 despacho "Execute plan 01 of phase 95"
+ev "$RL" 2 2026-09-01T10:00:05-03:00 despacho "Execute plan 02 of phase 95"
+ev "$RL" 3 2026-09-01T10:30:00-03:00 retorno  "Execute plan 01 of phase 95"
+ev "$RL" 4 2026-09-01T10:31:00-03:00 retorno  "Execute plan 02 of phase 95"
+J="$(confere3 "$R")"
+eq "paralelo: simultaneos_max 2"       "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].simultaneos_max')" "2"
+eq "…janela_despachos_s 5"             "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].janela_despachos_s')" "5"
+eq "…serializacao_observada vazia"     "$(printf '%s' "$J" | jq -c '.extrai.serializacao_observada')" '[]'
+
+IFS='|' read -r R PD <<<"$(monta3 c3um)"
+RL="$PD/95-RUN-LOG.jsonl"
+ev "$RL" 1 2026-09-01T10:00:00-03:00 despacho "Execute plan 01 of phase 95"
+J="$(confere3 "$R")"
+eq "1 só despacho na onda de 2 → não prova serialização" "$(printf '%s' "$J" | jq -c '.extrai.serializacao_observada')" '[]'
+
+IFS='|' read -r R PD <<<"$(monta3 c3uw)"
+mkdir -p "$R/.planning/.gad"; printf '{"use_worktrees":true}\n' > "$R/.planning/.gad/last-pre-despacho-3.json"
+printf '{"workflow":{"use_worktrees":false}}\n' > "$R/.planning/config.json"
+J="$(confere3 "$R")"
+eq "use_worktrees true no pré-despacho → false no fecho: FALHA" "$(assert_de "$J" use_worktrees_alterado)" "FALHA"
+eq "…extrai.use_worktrees {inicio:true, fecho:false}" "$(printf '%s' "$J" | jq -c '.extrai.use_worktrees')" '{"inicio":true,"fecho":false}'
+# fora do --dry-run o incidente é gravado
+bash "$C" 3 --projeto "$R" --fase 95 >/dev/null 2>&1
+casa "…e o incidente vai ao run-log (origem=confere-etapa.sh)" "$(cat "$PD/95-RUN-LOG.jsonl" 2>/dev/null)" \
+     '"evento":"incidente".*"origem":"confere-etapa.sh".*use_worktrees true→false'
+
+IFS='|' read -r R PD <<<"$(monta3 c3sem_espelho)"
+printf '{"workflow":{"use_worktrees":false}}\n' > "$R/.planning/config.json"
+J="$(confere3 "$R")"
+eq "sem espelho do pré-despacho → não acusa alteração" "$(assert_de "$J" use_worktrees_alterado)" "<ausente>"
+eq "…inicio null"                          "$(printf '%s' "$J" | jq -c '.extrai.use_worktrees.inicio')" "null"
+
+# ═════════════════════════════════ cancela da ETAPA 2 × plan_gate (P13, fiação P19)
+# O manifest da etapa 2 extrai `plan_gate` do espelho `.planning/.gad/last-plan-gate.json`
+# (tipo `json`, novo): informativo — passed/planos/ondas/largura_max/avisos. Espelho ausente
+# → null e, fora do --dry-run, um `incidente` (o gate do fork sempre grava o espelho).
+echo "── cancela 2: plan_gate (espelho do §13a-bis) ──"
+monta2() { # <nome> → "<root>|<phase_dir>"
+  local root="$BASE/$1" pd="$BASE/$1/.planning/phases/95-bancada"
+  mkdir -p "$pd" "$root/.planning/.gad"; git init -q "$root" >/dev/null 2>&1
+  plano3 "$pd" 01 1
+  printf '%s|%s' "$root" "$pd"
+}
+confere2() { printf '%s' "$(bash "$C" 2 --projeto "$1" --fase 95 --dry-run 2>/dev/null | tail -1)"; }
+IFS='|' read -r R PD <<<"$(monta2 c2sem)"
+J="$(confere2 "$R")"
+eq "sem last-plan-gate.json → extrai.plan_gate null" "$(printf '%s' "$J" | jq -c '.extrai.plan_gate')" "null"
+bash "$C" 2 --projeto "$R" --fase 95 >/dev/null 2>&1
+casa "…fora do --dry-run vira incidente no run-log" "$(cat "$PD/95-RUN-LOG.jsonl" 2>/dev/null)" \
+     '"evento":"incidente".*"origem":"confere-etapa.sh".*plan_gate: last-plan-gate.json ausente'
+IFS='|' read -r R PD <<<"$(monta2 c2com)"
+printf '{"passed":true,"falhas":[],"avisos":[{"codigo":"CADEIA-QUASE-SERIAL","planos":["95-01"]}],"resumo":{"fase":"95","planos":11,"ondas":2,"razao":0.18,"largura_max":6}}\n' \
+  > "$R/.planning/.gad/last-plan-gate.json"
+J="$(confere2 "$R")"
+eq "com espelho → {passed, planos, ondas, largura_max, avisos[].codigo}" \
+   "$(printf '%s' "$J" | jq -c '.extrai.plan_gate')" '{"passed":true,"planos":11,"ondas":2,"largura_max":6,"avisos":["CADEIA-QUASE-SERIAL"]}'
+eq "…e os extrai antigos seguem" "$(printf '%s' "$J" | jq -c '.extrai|has("nao_autonomos") and has("mapper_pulado")')" "true"
+
+# ═══════════════════════════════ cancela da ETAPA 3 × escopo por plano (P06, 01/09)
+# confere-plano.sh roda em cada plano com SUMMARY: FORA-DA-LISTA reprova a etapa,
+# COMMITS-A-MENOS só extrai, cada plano reprovado vira `incidente`, e a falha de um plano
+# não impede a conferência dos outros. Bancada com commits reais em repositório sintético.
+echo "── cancela 3: escopo por plano (confere-plano.sh) ──"
+
+monta3g() { # <nome> → "<root>|<phase_dir>" com 3 planos (01 ok · 02 fora da lista · 03 commits a menos)
+  local root="$BASE/$1" pd="$BASE/$1/.planning/phases/95-bancada" p
+  mkdir -p "$pd"; git init -q "$root" >/dev/null 2>&1
+  git -C "$root" config user.email t@t; git -C "$root" config user.name t
+  printf '{"workflow":{"use_worktrees":true}}\n' > "$root/.planning/config.json"
+  plano3 "$pd" 01 1; plano3 "$pd" 02 1; plano3 "$pd" 03 2 '"95-01"'
+  for p in 01 02 03; do printf '<tasks>\n<task type="auto">a</task>\n<task type="auto">b</task>\n</tasks>\n' >> "$pd/95-$p-PLAN.md"; done
+  git -C "$root" add -A; git -C "$root" commit -qm 'docs(95): planos'
+  c3() { local r="$1" m="$2"; shift 2; local f; for f in "$@"; do mkdir -p "$r/$(dirname "$f")"; date +%N >> "$r/$f"; done; git -C "$r" add -A; git -C "$r" commit -qm "$m"; }
+  c3 "$root" 'feat(95-01): t1' src/01.py; c3 "$root" 'feat(95-01): t2' src/01.py
+  c3 "$root" 'feat(95-02): t1' src/02.py; c3 "$root" 'fix(95-02): t2 fora' src/02.py src/intruso.py
+  c3 "$root" 'feat(95-03): t1+t2' src/03.py
+  c3 "$root" 'docs(95-03): complete t plan' .planning/phases/95-bancada/95-03-SUMMARY.md
+  : > "$pd/95-01-SUMMARY.md"; : > "$pd/95-02-SUMMARY.md"
+  printf '%s|%s' "$root" "$pd"
+}
+IFS='|' read -r R PD <<<"$(monta3g c3escopo)"
+J="$(confere3 "$R")"
+eq "FORA-DA-LISTA no plano 02 → escopo_planos FALHA"  "$(assert_de "$J" escopo_planos)" "FALHA"
+casa "…e o detalhe nomeia plano e arquivo intruso" \
+     "$(printf '%s' "$J" | jq -r '.asserts[]|select(.id=="escopo_planos")|.detalhe')" '95-02: FORA-DA-LISTA src/intruso.py'
+eq "planos_conferidos.ok 1 (o 01) — a falha do 02 não derruba os outros" \
+   "$(printf '%s' "$J" | jq -c '.extrai.planos_conferidos.ok')" "1"
+eq "…falha lista 02 e 03"   "$(printf '%s' "$J" | jq -c '.extrai.planos_conferidos.falha')" '["95-02","95-03"]'
+casa "…03 = COMMITS-A-MENOS (só extrai)" "$(printf '%s' "$J" | jq -r '.extrai.planos_conferidos.codigos["95-03"][0]')" 'COMMITS-A-MENOS \(1 commits para 2 tarefas\)'
+bash "$C" 3 --projeto "$R" --fase 95 >/dev/null 2>&1
+casa "…incidente por plano reprovado no run-log (origem=confere-plano.sh, plano 02)" \
+     "$(cat "$PD/95-RUN-LOG.jsonl" 2>/dev/null)" '"evento":"incidente".*"origem":"confere-plano.sh".*"plano":"95-02".*FORA-DA-LISTA'
+casa "…e também para o 03 (COMMITS-A-MENOS)" \
+     "$(cat "$PD/95-RUN-LOG.jsonl" 2>/dev/null)" '"plano":"95-03".*COMMITS-A-MENOS'
+
+IFS='|' read -r R PD <<<"$(monta3g c3escopo_so_menos)"
+rm -f "$PD/95-02-SUMMARY.md"   # plano sem SUMMARY é pulado
+J="$(confere3 "$R")"
+eq "sem o 02: só COMMITS-A-MENOS → nenhum assert escopo_planos (não reprova)" "$(assert_de "$J" escopo_planos)" "<ausente>"
+eq "…planos_conferidos {ok:1, falha:[03]}" "$(printf '%s' "$J" | jq -c '.extrai.planos_conferidos|{ok,falha}')" '{"ok":1,"falha":["95-03"]}'
 
 echo "--------------------------------------------------"
 echo "test-confere-etapa.sh: $OK ok / $FALHAS falha(s)"
