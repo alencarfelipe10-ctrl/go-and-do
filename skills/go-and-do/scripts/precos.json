@@ -1,10 +1,12 @@
 {
-  "atualizado_em": "2026-08-11",
-  "nota": "Tabela de preços por 1M de tokens lida pelo mede-tokens.py (decisão G.1-e; PC-7: preço é DADO, não código — mudou o preço, edite só este arquivo e o campo atualizado_em). Match do modelo por prefixo mais longo do id; 'default' cobre o resto. cache_write = escrita de cache (cache_creation_input_tokens); cache_read = leitura.",
+  "atualizado_em": "2026-09-03",
+  "nota": "Tabela de preços por 1M de tokens lida pelo mede-tokens.py (decisão G.1-e; PC-7: preço é DADO, não código — mudou o preço, edite só este arquivo e o campo atualizado_em). Match do modelo por prefixo mais longo do id; 'default' cobre o resto. cache_write = escrita de cache de 5 min (cache_creation_input_tokens; a de 1h é 2× o input, não modelada); cache_read = leitura. Fable/Mythos 5.1 leem cache a 0.025× o input (US$ 0,25) em vez do 0.1× de todos os outros modelos — por isso têm entrada própria, mais específica que 'claude-fable'. Fonte: platform.claude.com/docs/en/about-claude/pricing, conferida em 03/09/2026.",
   "anthropic_por_1m": {
     "default":       { "input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50 },
     "claude-opus":   { "input": 5.0, "output": 25.0, "cache_write": 6.25, "cache_read": 0.50 },
     "claude-fable":  { "input": 10.0, "output": 50.0, "cache_write": 12.50, "cache_read": 1.00 },
+    "claude-fable-5-1":  { "input": 10.0, "output": 50.0, "cache_write": 12.50, "cache_read": 0.25 },
+    "claude-mythos-5-1": { "input": 10.0, "output": 50.0, "cache_write": 12.50, "cache_read": 0.25 },
     "claude-sonnet-5": { "input": 2.0, "output": 10.0, "cache_write": 2.50, "cache_read": 0.20 },
     "claude-sonnet": { "input": 3.0, "output": 15.0, "cache_write": 3.75, "cache_read": 0.30 },
     "claude-haiku":  { "input": 1.0, "output": 5.0,  "cache_write": 1.25, "cache_read": 0.10 }
