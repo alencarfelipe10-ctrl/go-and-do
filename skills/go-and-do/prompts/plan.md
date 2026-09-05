@@ -90,7 +90,10 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    `autonomous: false` por plano; `<k>` do retorno = `.resumo.largura_max` de
    `.planning/.gad/last-plan-gate.json` (o número que o §13a-bis imprime em `✓ Plan
    shape`) — `<w>` sozinho não diz se houve paralelismo: 9 ondas para 11 planos e 2 ondas
-   para 11 planos só se distinguem pela largura. Fidelidade acima de otimismo: comando terminou sem
+   para 11 planos só se distinguem pela largura. Os avisos do mesmo arquivo (`ARQUIVO-HUB`,
+   `LARGURA-MAXIMA-1`, `CADEIA-QUASE-SERIAL` justificada) são para relatar em `sinos:`, não
+   para travar: fase legitimamente serial existe, e quem julga é o dono com o número na mão.
+   Fidelidade acima de otimismo: comando terminou sem
    erro mas `has_plans` falso → devolva `done` com `veredito: sem_plano`, nunca
    sucesso vazio.
 5. Devolva pelo `<return_contract>`. Falha de ponta a ponta → `blocked` com motivo.

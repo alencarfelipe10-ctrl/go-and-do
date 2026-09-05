@@ -272,7 +272,10 @@ def main():
              "um subagente não recebe aviso de trabalho em segundo plano, e processo desprendido "
              "sobrevive ao TaskStop. Rode em primeiro plano com timeout <= 600000; para mais de "
              "10 min use o waiter de disco `( trabalho ; touch marcador ) &` e espere pelo arquivo "
-             "com um único `timeout <Ns> bash -c 'until [ -s marcador ]; do sleep 15; done'`.")
+             "com `timeout 590 bash -c 'until [ -s marcador ]; do sleep 15; done'`, chamado de novo "
+             "enquanto o arquivo não existir. Teste ou suíte longa vai por `bash roda-suite.sh "
+             "--lancar --cmd '…'` e `--esperar` (gsd-core/bin/nosso/): um lançamento só, espera em "
+             "pedaços e o vermelho por arquivo.")
     registra(pont, agente, cmd, motivo)
     sys.stderr.write(f"gad-bash-guard: negado ({motivo}) agente={agente}\n")
     sys.stdout.write(json.dumps({"hookSpecificOutput": {

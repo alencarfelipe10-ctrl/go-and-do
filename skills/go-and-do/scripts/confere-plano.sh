@@ -15,6 +15,8 @@
 #      de metadados do executor (`docs(<plano>): complete … plan`, gsd-executor.md:790) —
 #      correções pós-gate e docs vêm depois e não são tarefa. Menos → COMMITS-A-MENOS;
 #      nenhum commit com a tag → SEM-COMMIT. `files_modified` vazio → LISTA-VAZIA.
+#      Os quatro códigos reprovam a etapa 3 (A1, 04/09/2026): commit único para três
+#      tarefas esconde qual tarefa quebrou e impede reverter só ela.
 #
 # Tag reconhecida no assunto do commit: `tipo(24.4-08): …` ou `tipo(24.4-08-slug): …`
 # (formato do executor, `{type}({phase}-{plan}): …`). `docs(24.4): …` sem plano é do
@@ -26,8 +28,8 @@
 # Uso: confere-plano.sh <phase_dir> <plan_id>       (ex.: … 24.4-08)
 # Saída: JSON de uma linha {plan, tasks, commits, commits_tarefa, fora_da_lista, veredito,
 #        codigos} + espelho .planning/.gad/last-confere-plano-<plan>.json
-# Exit: 0 ok · 1 falha (qualquer código) · 2 uso inválido. Quem decide o que reprova a
-# etapa é o confere-etapa.sh 3, que lê `codigos`.
+# Exit: 0 ok · 1 falha (qualquer código) · 2 uso inválido. Quem aplica a reprovação à
+# etapa é o confere-etapa.sh 3, que lê `codigos` (hoje todos reprovam).
 
 set -euo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"

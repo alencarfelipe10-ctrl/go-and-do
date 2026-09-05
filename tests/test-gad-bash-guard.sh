@@ -84,6 +84,10 @@ ls' 'bash -c "uv run pytest -x"' "echo 'screen -dm'" 'grep -n "tmux" arquivo'; d
   r=$(chama "$c"); [ "$r" = allow ] && ok "allow: $(printf '%q' "$c" | cut -c1-60)" || bad "allow esperado: $(printf '%q' "$c")" "$r"
 done
 r=$(chama 'uv run pytest -q' false); [ "$r" = allow ] && ok "allow: run_in_background=false" || bad "run_in_background=false" "$r"
+echo "── roda-suite.sh (plano 4 / A2): o fundo mora dentro do script, não no comando da tool"
+r=$(chama "bash \$HOME/.claude/gsd-core/bin/nosso/roda-suite.sh --lancar --cmd 'uv run pytest -n 4 -q' --tag suite"); [ "$r" = allow ] && ok "allow: bash roda-suite.sh --lancar (sem & no comando)" || bad "roda-suite --lancar" "$r"
+r=$(chama 'bash roda-suite.sh --lancar --cmd "uv run pytest" &'); [ "$r" = deny ] && ok "deny: roda-suite.sh … & (o & de fundo continua negado)" || bad "roda-suite &" "$r"
+printf '{"session_id":"%s","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Bash","agent_type":"gsd-executor","tool_input":{"command":"sleep 1 &"}}' "$SESS" "$PROJ" | bash "$HOOK" 2>/dev/null | grep -q 'roda-suite.sh' && ok "a mensagem de negativa aponta o roda-suite.sh" || bad "mensagem sem roda-suite.sh"
 
 echo "── escopo"
 r=$(chama 'nohup x &' - -);                 [ "$r" = allow ] && ok "sem agent_type (sessão principal) → allow" || bad "sem agent_type" "$r"

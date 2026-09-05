@@ -38,9 +38,9 @@
       "id": "plan_gate",
       "tipo": "json",
       "arquivo": "{root}/.planning/.gad/last-plan-gate.json",
-      "jq": "{passed, planos: .resumo.planos, ondas: .resumo.ondas, largura_max: .resumo.largura_max, avisos: [.avisos[]?.codigo]}",
+      "jq": "{passed, fase: .resumo.fase, planos: .resumo.planos, ondas: .resumo.ondas, razao: .resumo.razao, largura_max: .resumo.largura_max, avisos: [.avisos[]?.codigo]}",
       "ausente": "incidente",
-      "desc": "plan shape gate (§13a-bis do plan-phase do fork) — informativo: o gate já bloqueia dentro do plan-phase; aqui a camada 0 vê planos/ondas/largura máx e os avisos que sobraram. Ausente = o gate não rodou → incidente no run-log"
+      "desc": "plan shape gate (§13a-bis do plan-phase do fork) — informativo: o gate já bloqueia dentro do plan-phase; aqui a camada 0 vê fase/planos/ondas/razão/largura máx e os avisos que sobraram (`fase` confere que o espelho, singleton por .planning/.gad/, é desta fase — P-12 do plano 4). Ausente = o gate não rodou → incidente no run-log"
     }
   ]
 }

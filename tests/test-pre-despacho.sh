@@ -36,7 +36,9 @@ monta() { # <nome> <largura da onda 1: 1|2> → ecoa "<root>|<phase_dir>"
   git -C "$root" -c user.name=t -c user.email=t@t commit -q --allow-empty -m base >/dev/null 2>&1
   printf '{"workflow":{"use_worktrees":true},"parallelization":{"enabled":true}}\n' > "$root/.planning/config.json"
   printf '{"permissions":{"allow":[]}}\n' > "$root/.claude/settings.local.json"
-  pd="$root/.planning/phases/99-bancada"; mkdir -p "$pd"
+  pd="$root/.planning/phases/99-bancada"; mkdir -p "$pd" "$root/.planning/.gad"
+  # C1 (plano 4): o bloco exige o portão §13a-bis passado NESTA fase — a bancada nasce com o espelho
+  printf '{"passed":true,"falhas":[],"avisos":[],"resumo":{"fase":"99","planos":3,"ondas":2,"razao":0.67,"largura_max":2}}\n' > "$root/.planning/.gad/last-plan-gate.json"
   plano "$pd" 99 01 1
   [ "$2" = 2 ] && plano "$pd" 99 02 1
   plano "$pd" 99 03 2 '"99-01"'
@@ -123,6 +125,33 @@ roda "$R" --dry-run
 eq "ondas de 1 plano → exit 0"                    "$RC" "0"
 casa "…nota n/a"                                  "$(jq -r '.paralelismo.nota // ""' <<<"$J")" 'n/a'
 eq "…ondas_largas vazio"                          "$(jq -c .paralelismo.ondas_largas <<<"$J")" '[]'
+eq "…C2: sem_onda_larga true no espelho"          "$(jq -c .paralelismo.sem_onda_larga <<<"$J")" "true"
+roda "$R"
+casa "…C2: fora do dry-run toca o sino — incidente no run-log (origem=pre-despacho.sh)" "$(cat "$PD/99-RUN-LOG.jsonl")" '"evento":"incidente".*"origem":"pre-despacho.sh".*nenhuma onda com 2\+ planos'
+eq "…e não bloqueia (exit 0)"                     "$RC" "0"
+
+echo "── C1: portão de forma (§13a-bis) desta fase ──"
+IFS='|' read -r R PD <<<"$(monta pg_ausente 2)"
+rm -f "$R/.planning/.gad/last-plan-gate.json"
+roda "$R" --dry-run
+eq "sem last-plan-gate.json → exit 4"             "$RC" "4"
+casa "…motivo plan_gate_ausente_ou_reprovado"     "$(jq -r .motivo <<<"$J")" 'plan_gate_ausente_ou_reprovado: last-plan-gate.json ausente'
+casa "…pergunta ao dono: replanejar ou aceitar"   "$(jq -r .pergunta_ao_dono <<<"$J")" 'Replanejar.*aceitar o despacho'
+IFS='|' read -r R PD <<<"$(monta pg_reprovado 2)"
+printf '{"passed":false,"falhas":[{"codigo":"SOBREPOSICAO-NA-ONDA","planos":["99-01","99-02"]}],"avisos":[],"resumo":{"fase":"99"}}\n' > "$R/.planning/.gad/last-plan-gate.json"
+roda "$R" --dry-run
+eq "passed:false → exit 4"                        "$RC" "4"
+casa "…motivo cita o código que reprovou"         "$(jq -r .motivo <<<"$J")" 'passed=false: SOBREPOSICAO-NA-ONDA'
+IFS='|' read -r R PD <<<"$(monta pg_outra_fase 2)"
+printf '{"passed":true,"falhas":[],"avisos":[],"resumo":{"fase":"98"}}\n' > "$R/.planning/.gad/last-plan-gate.json"
+roda "$R" --dry-run
+eq "passed:true mas resumo.fase de outra fase → exit 4" "$RC" "4"
+casa "…motivo nomeia a fase do espelho"           "$(jq -r .motivo <<<"$J")" "é da fase '98', não da 99"
+IFS='|' read -r R PD <<<"$(monta pg_prefixo 2)"
+printf '{"passed":true,"falhas":[],"avisos":[],"resumo":{"fase":"INS-99"}}\n' > "$R/.planning/.gad/last-plan-gate.json"
+roda "$R" --dry-run
+eq "resumo.fase com prefixo de projeto (INS-99) casa com 99 → exit 0" "$RC" "0"
+eq "…plan_gate_ok true no espelho"                "$(jq -c .paralelismo.plan_gate_ok <<<"$J")" "true"
 
 IFS='|' read -r R PD <<<"$(monta bloqueio_runlog 2)"
 cfg "$R" '.workflow.use_worktrees=false'

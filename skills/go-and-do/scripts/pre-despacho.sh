@@ -229,7 +229,32 @@ if [ "$(jq -r '.pre.paralelismo // false' "$MANIFEST")" = "true" ]; then
   if [ "$SD" = true ] && [ "$(jq 'length' <<<"$ONDAS")" -gt 0 ]; then
     bloqueia_par "should_degrade=true em onda(s) $(jq -r 'join(",")' <<<"$ONDAS")" "O base-check do GSD rebaixaria a(s) onda(s) $(jq -r 'join(",")' <<<"$ONDAS") para sequencial. Mensagem real: $MSG — Como proceder?" "$PAR"
   fi
-  [ "$(jq 'length' <<<"$ONDAS")" -gt 0 ] || PAR=$(jq -c '. + {nota:"n/a (ondas de 1 plano)"}' <<<"$PAR")
+  # (5) C1 (plano 4, 05/09): o portão de forma §13a-bis tem de ter passado NESTA fase. É ele que
+  # reprova sobreposição de arquivos dentro da onda — o único estado que faz o execute-phase
+  # serializar a onda inteira (`Running these plans sequentially…`). `last-plan-gate.json` é
+  # singleton por .planning/.gad/: um `passed: true` da fase anterior liberaria a fase nova sem
+  # portão, por isso `resumo.fase` tem de casar com a fase (comparados pelo sufixo numérico —
+  # o índice diz "24.4", o ponteiro pode dizer "INS-24.4").
+  PG="$ROOT/.planning/.gad/last-plan-gate.json"; PG_OK=false; PG_MOTIVO=""
+  if [ ! -f "$PG" ]; then PG_MOTIVO="last-plan-gate.json ausente (o portão não rodou)"
+  elif [ "$(jq -r '.passed // false' "$PG" 2>/dev/null)" != true ]; then PG_MOTIVO="last-plan-gate.json com passed=$(jq -r 'if has("passed") then (.passed|tostring) else "ilegível" end' "$PG" 2>/dev/null): $(jq -r '[.falhas[]?.codigo]|unique|join(",")' "$PG" 2>/dev/null)"
+  else
+    pg_fase=$(jq -r '.resumo.fase // ""' "$PG" 2>/dev/null | grep -oE '[0-9][0-9.]*$' || true)
+    fase_num=$(printf '%s' "$FASE" | grep -oE '[0-9][0-9.]*$' || true)
+    if [ -n "$pg_fase" ] && [ "$pg_fase" = "$fase_num" ]; then PG_OK=true; else PG_MOTIVO="last-plan-gate.json é da fase '$(jq -r '.resumo.fase // ""' "$PG")', não da $FASE"; fi
+  fi
+  PAR=$(jq -c --argjson ok "$PG_OK" --arg m "$PG_MOTIVO" '. + {plan_gate_ok:$ok} + (if $m != "" then {plan_gate_motivo:$m} else {} end)' <<<"$PAR")
+  if [ "$PG_OK" != true ]; then
+    bloqueia_par "plan_gate_ausente_ou_reprovado: $PG_MOTIVO" "O portão de forma dos planos não passou (ou não rodou) nesta fase — $PG_MOTIVO. Replanejar (rodar o plan-phase de novo até o §13a-bis passar), ou aceitar o despacho sabendo que a onda pode serializar?" "$PAR"
+  fi
+  if [ "$(jq 'length' <<<"$ONDAS")" -gt 0 ]; then :; else
+    # C2 (plano 4): nenhuma onda com 2+ planos — a fase inteira roda em série. Não bloqueia (3 planos
+    # encadeados por medição são legítimos, caso 08→09→10 da 24.4), mas toca o sino: incidente no
+    # run-log e `sem_onda_larga: true` no espelho, para a régua e o dono verem.
+    PAR=$(jq -c '. + {nota:"n/a (ondas de 1 plano)", sem_onda_larga:true}' <<<"$PAR")
+    [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" incidente "$RUNLOG_ETAPA" --kv origem=pre-despacho.sh \
+      --kv detalhe="nenhuma onda com 2+ planos — a fase inteira roda em série"
+  fi
   extras=$(jq -cn --argjson prev "$extras" --argjson par "$PAR" '$prev + {paralelismo: $par}')
 fi
 

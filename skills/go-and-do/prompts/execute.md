@@ -101,9 +101,17 @@ camada 0.
 Agentes aninhados (camada 2): você **não recebe notificações** de trabalho em
 background — nunca fique "aguardando" um retorno que não vai chegar. Precisa de
 background (trabalho >10min, o teto real do `timeout` da tool)? Só com waiter de
-disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`), sempre e só nessa forma. **Proibidos, sem exceção: `setsid`, `nohup`, `disown`** — um processo reparentado sobrevive ao `TaskStop` e não é varrido. Não cabe no teto de 600000ms do harness mesmo assim? A saída é **pausar e reportar**, nunca desacoplar o processo. Isso não é só regra: o hook `gad-bash-guard.sh` nega, dentro da rodada, todo Bash de subagente com `run_in_background`, `nohup`, `setsid`, `disown` ou `&` de fundo que não seja o waiter acima — uma negativa dele é definitiva, não procure outra forma; cada negativa vira `incidente` no run-log. Nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia). Teto = duração esperada + 5 min; estourou → decida pelo disco na hora e a espera é um único
-`timeout <Ns> bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` — nunca polling
-picado, nunca espera de notificação. Depois decida pelo disco: `SUMMARY.md`
+disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`), sempre e só nessa forma. **Proibidos, sem exceção: `setsid`, `nohup`, `disown`** — um processo reparentado sobrevive ao `TaskStop` e não é varrido. Não cabe no teto de 600000ms do harness mesmo assim? A saída é **pausar e reportar**, nunca desacoplar o processo. Isso não é só regra: o hook `gad-bash-guard.sh` nega, dentro da rodada, todo Bash de subagente com `run_in_background`, `nohup`, `setsid`, `disown` ou `&` de fundo que não seja o waiter acima — uma negativa dele é definitiva, não procure outra forma; cada negativa vira `incidente` no run-log. Nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia).
+Trabalho de fundo espera em **waiters encadeados de até 590 s**: cada chamada é um
+`timeout 590 bash -c 'until [ -s <arquivo> ]; do sleep 15; done'`, com `timeout: 600000` no
+parâmetro da tool (o default de 120 s mataria a própria espera), e, se o arquivo ainda não
+existe, você chama de novo. Nunca relance o trabalho por já ter estourado um waiter — a tool
+morre aos 600 s, o processo não. Teste ou suíte acima de dois minutos vai por `roda-suite.sh`
+(`bash "$HOME/.claude/gsd-core/bin/nosso/roda-suite.sh" --lancar --cmd '…'` uma vez,
+`--esperar` quantas vezes precisar): ele recusa o segundo lançamento e devolve o rc, o
+sumário e os testes vermelhos por arquivo. Na F24.4 dez lançamentos foram perdidos — cerca de
+duas horas — porque o waiter de 1800 s do plano estourava e o executor concluía que a suíte
+tinha morrido. Depois decida pelo disco: `SUMMARY.md`
 esperado existe → siga; não existe → trate como falha do passo (não como sucesso).
 E devolva sempre o bloco do contrato de retorno — prosa de espera ("vou aguardar a
 notificação") no lugar do bloco é retorno inválido.
@@ -118,6 +126,28 @@ Relançou → item em `incidentes:` com o plano, a hora do stall e o motivo apur
 porquê: a F24.4 serializou as ondas 1 e 6 sem que nenhum retorno declarasse o desvio —
 matar e relançar mantém o paralelismo e deixa rastro no run-log; a rota inline apaga os
 dois.
+
+Plano que volta com menos commits de tarefa do que tarefas é falha do passo, não sucesso
+parcial: registre o incidente e não sele a etapa. O contrato do executor já manda um commit
+por tarefa (`gsd-executor.md`, `task_commit_protocol`); na F24.4 três planos juntaram três
+tarefas num commit e ninguém cobrou — a cancela de fecho (`confere-etapa.sh 3`) agora
+reprova.
+
+Depois que a última onda fechar, rode a suíte completa uma vez, por `roda-suite.sh`, e trate
+o resultado como gate da etapa. Rodada extra no meio é escolha sua (fase longa, arquivo-hub
+tocado), nunca regra: com N executores em paralelo, N suítes `-n 4` disputam os mesmos quatro
+núcleos. O gate por onda que o GSD roda sozinho (`workflow.test_command`) só é barato
+quando a config do projeto aponta `roda-suite.sh --gate-onda` (só os testes que a onda
+tocou); enquanto apontar a suíte inteira, um exit 124 desse gate é a suíte morrendo aos
+600 s, não um resultado — registre como incidente e não conclua nada dele.
+
+Perda de paralelismo é incidente, não rota. Registre em `incidentes:` toda vez que o comando
+que você hospeda imprimir `Running these plans sequentially to avoid parallel worktree
+conflicts` (sobreposição de arquivos dentro da onda) ou o aviso de uma linha do base-check
+rebaixando a onda por divergência da base (`worktree base-check` com `shouldDegrade`), com a
+onda e os planos. Esses literais são texto do upstream e podem mudar numa release; a cancela
+de fecho mede a serialização pelo run-log de qualquer forma — o seu registro é o que dá ao
+dono a causa.
 
 Worktrees × envs (o pré-requisito do paralelismo): um worktree nasce **sem** os arquivos
 `.env*` — o git só carrega o que está versionado, e segredo é git-ignored por design. Isso
@@ -221,11 +251,10 @@ em relatório permanente.
 Economia de testes (princípio agnóstico de stack; o racional: na F16, 58% do tempo de
 execução foi suíte de teste, com ~1h45 de re-verificação duplicada e ~35min de runs
 mortos por timeout):
-- A suíte completa é gate, não feedback: rode-a **no máximo 1× por wave**, como o seu
-  check independente ao final dela. Não re-rode uma suíte que você mesmo acabou de
-  rodar, e não duplique por desconfiança um run idêntico que o executor já fez na
-  mesma wave — o papel do executor é o escopo do que ele tocou; o gate de regressão
-  da wave é seu.
+- A suíte completa é gate de fase, não feedback: roda **uma vez, depois da última onda**,
+  por `roda-suite.sh` (ver o contrato acima). Não re-rode uma suíte que você mesmo acabou
+  de rodar, e não duplique por desconfiança um run que o executor já fez — o papel do
+  executor é o escopo do que ele tocou; o gate de regressão da fase é seu.
 - Antes de rodar testes, consulte a receita do projeto (seção de testes do CLAUDE.md
   do projeto, se existir): comando da suíte, flags de paralelização e o que deve
   permanecer serial.
@@ -234,7 +263,7 @@ mortos por timeout):
   dimensionamento vai no parâmetro `timeout` da tool Bash (em ms), não num `timeout N`
   de shell — é o parâmetro que mata (default 120s). Teto real do harness: 600000ms;
   pedir mais é inócuo (medido em fase real: um run com 1200000 morreu aos 10min).
-  Trabalho que precisa de mais que 10min → protocolo de background com waiter de disco.
+  Trabalho que precisa de mais que 10min → `roda-suite.sh` com waiters encadeados.
 - Todo lançamento de trabalho em background (waiter de disco) entra no run-log, com o
   caminho do marcador escolhido — é onde `varre-orfaos.sh` e a auditoria cruzam.
 

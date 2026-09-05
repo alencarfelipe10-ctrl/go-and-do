@@ -266,7 +266,13 @@ eq "…despachados 2 (as três grafias de descricao resolvem)" \
    "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].despachados')" "2"
 eq "…serializacao_observada [\"1\"]" "$(printf '%s' "$J" | jq -c '.extrai.serializacao_observada')" '["1"]'
 eq "…onda 2 (1 plano) não entra"   "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["2"] // "ausente"')" '"ausente"'
-eq "…serialização só extrai, não reprova" "$(assert_de "$J" use_worktrees_alterado)" "<ausente>"
+eq "…serialização não reprova" "$(assert_de "$J" use_worktrees_alterado)" "<ausente>"
+eq "…C3: duracao_onda_s 3600 (10:00 → 11:00) e plano_mais_lento_s 1740 (o 01 relançado às 10:01)" \
+   "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"]|[.duracao_onda_s,.plano_mais_lento_s]')" '[3600,1740]'
+bash "$C" 3 --projeto "$R" --fase 95 >/dev/null 2>&1
+casa "…C2: fora do dry-run a onda serializada vira incidente no run-log (origem=confere-etapa.sh)" "$(cat "$RL")" \
+     '"evento":"incidente".*"origem":"confere-etapa.sh".*onda 1 serializada: 2 planos despachados.*janela entre despachos 1860s'
+eq "…um incidente por onda serializada (1)" "$(grep -c 'onda 1 serializada' "$RL")" "1"
 
 IFS='|' read -r R PD <<<"$(monta3 c3paralelo)"
 RL="$PD/95-RUN-LOG.jsonl"
@@ -278,6 +284,15 @@ J="$(confere3 "$R")"
 eq "paralelo: simultaneos_max 2"       "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].simultaneos_max')" "2"
 eq "…janela_despachos_s 5"             "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].janela_despachos_s')" "5"
 eq "…serializacao_observada vazia"     "$(printf '%s' "$J" | jq -c '.extrai.serializacao_observada')" '[]'
+eq "…C3: duracao_onda_s 1860 × plano_mais_lento_s 1855 (razão ≈ 1: paralelismo real)" \
+   "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"]|[.duracao_onda_s,.plano_mais_lento_s]')" '[1860,1855]'
+eq "…C3: extrai.suite sem lançamentos = zeros" "$(printf '%s' "$J" | jq -c '.extrai.suite')" '{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[]}'
+mkdir -p "$R/.git/gad-suite/suite" "$R/.git/gad-suite/gate-onda-1"
+printf 'uv run pytest -n 4 -q -rf\n' > "$R/.git/gad-suite/suite/cmd"; date -Is -d '-100 seconds' > "$R/.git/gad-suite/suite/iniciado"; echo 1 > "$R/.git/gad-suite/suite/rc"; printf 'x\ny\n' > "$R/.git/gad-suite/suite/recusados"
+printf 'uv run pytest tests/unit/test_a.py -rf\n' > "$R/.git/gad-suite/gate-onda-1/cmd"; date -Is -d '-30 seconds' > "$R/.git/gad-suite/gate-onda-1/iniciado"; echo 0 > "$R/.git/gad-suite/gate-onda-1/rc"
+J="$(confere3 "$R")"
+eq "…C3: extrai.suite conta lançamentos (2), recusados pelo lock (2) e as tags" "$(printf '%s' "$J" | jq -c '.extrai.suite|{lancamentos,recusados,tags}')" '{"lancamentos":2,"recusados":2,"tags":["gate-onda-1","suite"]}'
+casa "…tempo_total_s ≈ 130 (iniciado → mtime do rc)" "$(printf '%s' "$J" | jq -r '.extrai.suite.tempo_total_s')" '^1[23][0-9]$'
 
 IFS='|' read -r R PD <<<"$(monta3 c3um)"
 RL="$PD/95-RUN-LOG.jsonl"
@@ -324,8 +339,8 @@ IFS='|' read -r R PD <<<"$(monta2 c2com)"
 printf '{"passed":true,"falhas":[],"avisos":[{"codigo":"CADEIA-QUASE-SERIAL","planos":["95-01"]}],"resumo":{"fase":"95","planos":11,"ondas":2,"razao":0.18,"largura_max":6}}\n' \
   > "$R/.planning/.gad/last-plan-gate.json"
 J="$(confere2 "$R")"
-eq "com espelho → {passed, planos, ondas, largura_max, avisos[].codigo}" \
-   "$(printf '%s' "$J" | jq -c '.extrai.plan_gate')" '{"passed":true,"planos":11,"ondas":2,"largura_max":6,"avisos":["CADEIA-QUASE-SERIAL"]}'
+eq "com espelho → {passed, fase, planos, ondas, razao, largura_max, avisos[].codigo}" \
+   "$(printf '%s' "$J" | jq -c '.extrai.plan_gate')" '{"passed":true,"fase":"95","planos":11,"ondas":2,"razao":0.18,"largura_max":6,"avisos":["CADEIA-QUASE-SERIAL"]}'
 eq "…e os extrai antigos seguem" "$(printf '%s' "$J" | jq -c '.extrai|has("nao_autonomos") and has("mapper_pulado")')" "true"
 
 # ═══════════════════════════════ cancela da ETAPA 3 × escopo por plano (P06, 01/09)
@@ -358,7 +373,9 @@ casa "…e o detalhe nomeia plano e arquivo intruso" \
 eq "planos_conferidos.ok 1 (o 01) — a falha do 02 não derruba os outros" \
    "$(printf '%s' "$J" | jq -c '.extrai.planos_conferidos.ok')" "1"
 eq "…falha lista 02 e 03"   "$(printf '%s' "$J" | jq -c '.extrai.planos_conferidos.falha')" '["95-02","95-03"]'
-casa "…03 = COMMITS-A-MENOS (só extrai)" "$(printf '%s' "$J" | jq -r '.extrai.planos_conferidos.codigos["95-03"][0]')" 'COMMITS-A-MENOS \(1 commits para 2 tarefas\)'
+casa "…03 = COMMITS-A-MENOS (extraído)" "$(printf '%s' "$J" | jq -r '.extrai.planos_conferidos.codigos["95-03"][0]')" 'COMMITS-A-MENOS \(1 commits para 2 tarefas\)'
+casa "…e COMMITS-A-MENOS entra na frase de reprovação (A1)" \
+     "$(printf '%s' "$J" | jq -r '.asserts[]|select(.id=="escopo_planos")|.detalhe')" '95-03: COMMITS-A-MENOS \(1 commits para 2 tarefas\)'
 bash "$C" 3 --projeto "$R" --fase 95 >/dev/null 2>&1
 casa "…incidente por plano reprovado no run-log (origem=confere-plano.sh, plano 02)" \
      "$(cat "$PD/95-RUN-LOG.jsonl" 2>/dev/null)" '"evento":"incidente".*"origem":"confere-plano.sh".*"plano":"95-02".*FORA-DA-LISTA'
@@ -368,8 +385,33 @@ casa "…e também para o 03 (COMMITS-A-MENOS)" \
 IFS='|' read -r R PD <<<"$(monta3g c3escopo_so_menos)"
 rm -f "$PD/95-02-SUMMARY.md"   # plano sem SUMMARY é pulado
 J="$(confere3 "$R")"
-eq "sem o 02: só COMMITS-A-MENOS → nenhum assert escopo_planos (não reprova)" "$(assert_de "$J" escopo_planos)" "<ausente>"
+eq "sem o 02: só COMMITS-A-MENOS → escopo_planos FALHA (A1: um commit por tarefa é cobrado)" "$(assert_de "$J" escopo_planos)" "FALHA"
 eq "…planos_conferidos {ok:1, falha:[03]}" "$(printf '%s' "$J" | jq -c '.extrai.planos_conferidos|{ok,falha}')" '{"ok":1,"falha":["95-03"]}'
+eq "…e o veredito da etapa é fail" "$(printf '%s' "$J" | jq -r .veredito)" "fail"
+
+# ═══════════════════════════ cancela da ETAPA 3 × prova por reexecução (A4, plano 4, 05/09)
+# "17 de 18 verdes" sem comando e saída na mesma seção `##`: aviso sem o marcador
+# `<!-- gad_prova: v1 -->` (fase antiga), FALHA com ele; com a prova ao lado, passa.
+# Os SUMMARYs sintéticos não têm PLAN.md par: o laço do confere-plano.sh os pula.
+echo "── cancela 3: prova por reexecução (SUMMARY) ──"
+IFS='|' read -r R PD <<<"$(monta3 c3prova)"
+printf '%s\n' '---' 'phase: 95' 'plan: 07' '---' '# S' '## Next Phase Readiness' '- 17 dos 18 node IDs vermelhos atribuídos a este plano fecham verdes; o 18º aguarda o dono.' '## Self-Check' '- Cada arquivo tocado rodado isoladamente e verde: `test_a.py` (14 passed)' > "$PD/95-07-SUMMARY.md"
+J="$(confere3 "$R")"
+eq "sem marcador: prova_por_reexecucao = aviso"  "$(assert_de "$J" prova_por_reexecucao)" "aviso"
+eq "…extrai.prova_avisos aponta 95-07-SUMMARY.md:7 (e não a linha 9, que traz a prova)" \
+   "$(printf '%s' "$J" | jq -c '.extrai.prova_avisos|map("\(.arquivo):\(.linha)")')" '["95-07-SUMMARY.md:7"]'
+sed -i '4a <!-- gad_prova: v1 -->' "$PD/95-07-SUMMARY.md"
+J="$(confere3 "$R")"
+eq "com marcador gad_prova: v1 → FALHA"           "$(assert_de "$J" prova_por_reexecucao)" "FALHA"
+casa "…detalhe PROVA-SEM-REEXECUCAO com arquivo:linha e trecho" \
+     "$(printf '%s' "$J" | jq -r '.asserts[]|select(.id=="prova_por_reexecucao")|.detalhe')" 'PROVA-SEM-REEXECUCAO: 95-07-SUMMARY.md:8 «17 dos 18'
+bash "$C" 3 --projeto "$R" --fase 95 >/dev/null 2>&1
+casa "…e o incidente vai ao run-log"              "$(cat "$PD/95-RUN-LOG.jsonl" 2>/dev/null)" '"evento":"incidente".*PROVA-SEM-REEXECUCAO em 95-07-SUMMARY.md:8'
+printf '%s\n' '---' 'phase: 95' 'plan: 08' '---' '<!-- gad_prova: v1 -->' '# S' '## Verificação' '- 17 de 18 testes fecham verdes; o 18º é conhecido.' '$ uv run pytest tests/golden/test_x.py -q' '17 passed, 1 failed in 41.2s' > "$PD/95-08-SUMMARY.md"
+rm -f "$PD/95-07-SUMMARY.md"
+J="$(confere3 "$R")"
+eq "afirmação com linha \$ comando e saída na mesma seção → sem assert (passa)" "$(assert_de "$J" prova_por_reexecucao)" "<ausente>"
+eq "…prova_falhas vazio" "$(printf '%s' "$J" | jq -c '.extrai.prova_falhas')" '[]'
 
 echo "--------------------------------------------------"
 echo "test-confere-etapa.sh: $OK ok / $FALHAS falha(s)"

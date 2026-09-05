@@ -441,8 +441,9 @@ def main() -> int:
 
     aberto = {}
     res = {w: {"planejados": len(ids), "despachados": 0, "simultaneos_max": 0,
-               "janela_despachos_s": None} for w, ids in waves.items()}
-    primeiro, ultimo = {}, {}
+               "janela_despachos_s": None, "duracao_onda_s": None, "plano_mais_lento_s": None}
+           for w, ids in waves.items()}
+    primeiro, ultimo, ultimo_retorno, inicio_plano = {}, {}, {}, {}
     vistos = {w: set() for w in waves}
     for ts, _seq, ev, pid in evs:
         w = wave_of[pid]
@@ -451,14 +452,23 @@ def main() -> int:
             vistos[w].add(pid)
             primeiro.setdefault(w, ts)
             ultimo[w] = ts
+            inicio_plano[pid] = ts   # o último despacho do plano é o que o retorno fecha
             sim = sum(1 for p in waves[w] if aberto.get(p, 0) > 0)
             res[w]["simultaneos_max"] = max(res[w]["simultaneos_max"], sim)
         else:
             aberto[pid] = 0
+            if ts and inicio_plano.get(pid):
+                ultimo_retorno[w] = max(ultimo_retorno.get(w, 0), ts)
+                dur = int(ts - inicio_plano[pid])
+                res[w]["plano_mais_lento_s"] = max(res[w]["plano_mais_lento_s"] or 0, dur)
     for w in waves:
         res[w]["despachados"] = len(vistos[w])
         if w in primeiro and primeiro[w] and ultimo.get(w):
             res[w]["janela_despachos_s"] = int(ultimo[w] - primeiro[w])
+        # C3 (plano 4): tempo da onda (1º despacho → último retorno) × plano mais lento — próximo
+        # de 1 na onda larga é o sinal de paralelismo real
+        if w in primeiro and primeiro[w] and ultimo_retorno.get(w):
+            res[w]["duracao_onda_s"] = int(ultimo_retorno[w] - primeiro[w])
     ser = [w for w, r in res.items() if r["despachados"] >= 2 and r["simultaneos_max"] <= 1]
     print(json.dumps({"paralelismo_observado": res, "serializacao_observada": ser},
                      ensure_ascii=False))
@@ -470,6 +480,18 @@ if __name__ == "__main__":
 PYOBS
   )
   jq -e . >/dev/null 2>&1 <<<"$PAR_OBS" || PAR_OBS='{"paralelismo_observado":{},"serializacao_observada":[]}'
+  # C2 (plano 4, 05/09): onda planejada com 2+ planos que rodou em série é incidente no run-log,
+  # um por onda, com a janela entre os despachos. Continua não reprovando — serializar não é
+  # erro do executor, é fato a registrar; na F24.4 as ondas 1 e 6 serializaram (11 h entre os
+  # despachos da 6) sem que nenhum retorno ou evento dissesse isso.
+  if [ "$DRY" = 0 ]; then
+    while IFS= read -r w; do
+      [ -n "$w" ] || continue
+      jan=$(jq -r --arg w "$w" '.paralelismo_observado[$w].janela_despachos_s // "?"' <<<"$PAR_OBS")
+      gad_runlog "$PHASE_DIR" "$NN" incidente "$RUNLOG_ETAPA" --kv origem=confere-etapa.sh \
+        --kv detalhe="onda $w serializada: $(jq -r --arg w "$w" '.paralelismo_observado[$w].despachados' <<<"$PAR_OBS") planos despachados, nunca 2 abertos juntos (janela entre despachos ${jan}s)"
+    done < <(jq -r '.serializacao_observada[]' <<<"$PAR_OBS")
+  fi
   # use_worktrees do início (espelho do pre-despacho.sh 3) × do fecho
   PRE3="$ROOT/.planning/.gad/last-pre-despacho-3.json"
   uw0=null; uw1=null
@@ -481,14 +503,42 @@ PYOBS
     [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" incidente "$RUNLOG_ETAPA" \
       --kv origem=confere-etapa.sh --kv detalhe="use_worktrees true→false durante a etapa 3"
   fi
-  EXTRAI=$(jq -c --argjson po "$PAR_OBS" --argjson a "$uw0" --argjson b "$uw1" \
-    '. + $po + {use_worktrees:{inicio:$a, fecho:$b}}' <<<"$EXTRAI")
+  # C3 (plano 4): lançamentos de suíte pelo roda-suite.sh nesta fase — lidos do estado em
+  # `<git-common-dir>/gad-suite/<tag>/` (comum aos worktrees): quantos lançamentos, quantos
+  # relançamentos recusados pelo lock (rc 3) e o tempo total (iniciado → mtime do rc).
+  COMMON3=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
+  SUITE=$(GAD_SUITE_DIR="${COMMON3:+$COMMON3/gad-suite}" python3 - 2>/dev/null <<'PYSUITE' || echo '{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[]}'
+import glob, json, os
+from datetime import datetime
+d = os.environ.get("GAD_SUITE_DIR") or ""
+lanc = rec = tempo = 0; tags = []
+for st in sorted(glob.glob(os.path.join(d, "*"))) if d and os.path.isdir(d) else []:
+    if not os.path.isfile(os.path.join(st, "cmd")):
+        continue
+    lanc += 1; tags.append(os.path.basename(st))
+    try:
+        rec += sum(1 for l in open(os.path.join(st, "recusados")) if l.strip())
+    except OSError:
+        pass
+    try:
+        ini = datetime.fromisoformat(open(os.path.join(st, "iniciado")).read().strip()).timestamp()
+        fim = os.path.getmtime(os.path.join(st, "rc"))
+        tempo += max(0, int(fim - ini))
+    except (OSError, ValueError):
+        pass
+print(json.dumps({"lancamentos": lanc, "recusados": rec, "tempo_total_s": tempo, "tags": tags}))
+PYSUITE
+  )
+  jq -e . >/dev/null 2>&1 <<<"$SUITE" || SUITE='{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[]}'
+  EXTRAI=$(jq -c --argjson po "$PAR_OBS" --argjson a "$uw0" --argjson b "$uw1" --argjson su "$SUITE" \
+    '. + $po + {use_worktrees:{inicio:$a, fecho:$b}, suite:$su}' <<<"$EXTRAI")
 
   # ── escopo por plano (P06, consertos F24.4): confere-plano.sh em cada plano com SUMMARY.
-  # FORA-DA-LISTA e LISTA-VAZIA reprovam — arquivo fora do `files_modified` é colisão que o
-  # cálculo de ondas não enxerga. COMMITS-A-MENOS e SEM-COMMIT só extraem (a régua da
-  # /audit-gad julga). Cada plano reprovado pelo script vira um `incidente` no run-log; um
-  # plano que falha não impede a conferência dos outros, e plano sem SUMMARY é pulado.
+  # `FORA-DA-LISTA`, `LISTA-VAZIA`, `COMMITS-A-MENOS` e `SEM-COMMIT` reprovam. Arquivo fora do
+  # `files_modified` é colisão que o cálculo de ondas não enxerga; commit único para três
+  # tarefas esconde qual tarefa quebrou e impede reverter só ela (A1, 04/09/2026). Cada plano
+  # reprovado pelo script vira um `incidente` no run-log; um plano que falha não impede a
+  # conferência dos outros, e plano sem SUMMARY é pulado.
   CPL="$GAD_SCRIPTS_DIR/confere-plano.sh"
   PC_OK=0; PC_FALHA="[]"; PC_CODIGOS="{}"; PC_REPROVA=""
   if [ -f "$CPL" ]; then
@@ -504,20 +554,91 @@ PYOBS
       fi
       PC_FALHA=$(jq -c --arg p "$pid" '. + [$p]' <<<"$PC_FALHA")
       PC_CODIGOS=$(jq -c --arg p "$pid" --argjson c "$(jq -c '.codigos' <<<"$pcout")" '. + {($p): $c}' <<<"$PC_CODIGOS")
-      if jq -e '.codigos[] | select(test("^(FORA-DA-LISTA|LISTA-VAZIA)"))' >/dev/null <<<"$pcout"; then
-        PC_REPROVA="$PC_REPROVA${PC_REPROVA:+ · }$pid: $(jq -r '[.codigos[]|select(test("^(FORA-DA-LISTA|LISTA-VAZIA)"))] + .fora_da_lista | join(" ")' <<<"$pcout")"
+      if jq -e '.codigos[] | select(test("^(FORA-DA-LISTA|LISTA-VAZIA|COMMITS-A-MENOS|SEM-COMMIT)"))' >/dev/null <<<"$pcout"; then
+        PC_REPROVA="$PC_REPROVA${PC_REPROVA:+ · }$pid: $(jq -r '[.codigos[]|select(test("^(FORA-DA-LISTA|LISTA-VAZIA|COMMITS-A-MENOS|SEM-COMMIT)"))] + .fora_da_lista | join(" ")' <<<"$pcout")"
       fi
       [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" incidente "$RUNLOG_ETAPA" \
         --kv origem=confere-plano.sh --kv plano="$pid" \
         --kv detalhe="$(jq -r '.codigos | join(", ")' <<<"$pcout")"
     done
     if [ -n "$PC_REPROVA" ]; then
-      RES=$(jq -c --arg d "plano fora do escopo declarado: $PC_REPROVA — arquivo fora do files_modified é colisão invisível para as ondas" \
+      RES=$(jq -c --arg d "plano fora do escopo declarado: $PC_REPROVA — arquivo fora do files_modified é colisão invisível para as ondas; menos commits que tarefas esconde qual tarefa quebrou" \
         '. + [{id:"escopo_planos", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
   fi
   EXTRAI=$(jq -c --argjson ok "$PC_OK" --argjson f "$PC_FALHA" --argjson c "$PC_CODIGOS" \
     '. + {planos_conferidos:{ok:$ok, falha:$f, codigos:$c}}' <<<"$EXTRAI")
+
+  # ── prova por reexecução (A4, plano 4 / 05/09/2026): "17 de 18 verdes" sem comando e saída
+  # colados na mesma seção não é verificação. Na F24.4 o 24.4-05-SUMMARY.md:71 e :223
+  # declararam a contagem sem ter rodado nada; o :237 do mesmo arquivo traz a prova por
+  # arquivo tocado e não pode ser acusado. Afirmação = `N (de|dos|of) M … verde(s)|passed|
+  # passing` (ASCII); prova na mesma seção `##` (o bloco antes do 1º `##`, frontmatter
+  # incluído, é uma seção) = linha `$ …`, fence com pytest|uv run|npm|make|cargo, ou linha de
+  # sumário `passed|failed … (in|em) <tempo>`. Reprova só quando o SUMMARY traz o marcador
+  # `<!-- gad_prova: v1 -->` do template do fork; sem ele vira aviso em `extrai.prova_avisos`
+  # (fase antiga não reprova por regra nova, molde do P12).
+  PROVA=$(python3 - "$PHASE_DIR" 2>/dev/null <<'PYPROVA' || echo '{"falhas":[],"avisos":[]}'
+import glob
+import json
+import os
+import re
+import sys
+
+RE_AFIRMA = re.compile(r"\b([0-9]+) (de|dos|of) ([0-9]+)[^.\n]{0,80}\b(verde|verdes|passed|passing)\b", re.I)
+RE_CMD = re.compile(r"^\s*\$ \S")
+RE_FENCE_CMD = re.compile(r"\b(pytest|uv run|npm|make|cargo)\b")
+RE_SUMARIO = re.compile(r"\b(passed|failed)\b.*\b(in|em) [0-9]+([.,][0-9]+)?(s|min|m)\b")
+
+
+def secoes(linhas):
+    """[(inicio, fim)] por `##`; o bloco antes do primeiro `##` é uma seção."""
+    marcas = [i for i, l in enumerate(linhas) if l.startswith("## ")]
+    limites = [0] + marcas + [len(linhas)]
+    return [(limites[i], limites[i + 1]) for i in range(len(limites) - 1) if limites[i] < limites[i + 1]]
+
+
+def tem_prova(bloco):
+    fence = False
+    for l in bloco:
+        if l.startswith("```"):
+            fence = not fence
+            continue
+        if fence and RE_FENCE_CMD.search(l):
+            return True
+        if RE_CMD.match(l) or RE_SUMARIO.search(l):
+            return True
+    return False
+
+
+falhas, avisos = [], []
+for arq in sorted(glob.glob(os.path.join(sys.argv[1], "*-SUMMARY.md"))):
+    with open(arq, encoding="utf-8", errors="replace") as fh:
+        linhas = fh.read().splitlines()
+    marcado = any("<!-- gad_prova: v1 -->" in l for l in linhas)
+    for ini, fim in secoes(linhas):
+        bloco = linhas[ini:fim]
+        if tem_prova(bloco):
+            continue
+        for k, l in enumerate(bloco, ini + 1):
+            m = RE_AFIRMA.search(l)
+            if m:
+                item = {"arquivo": os.path.basename(arq), "linha": k, "trecho": m.group(0)[:100]}
+                (falhas if marcado else avisos).append(item)
+print(json.dumps({"falhas": falhas, "avisos": avisos}, ensure_ascii=False))
+PYPROVA
+  )
+  jq -e . >/dev/null 2>&1 <<<"$PROVA" || PROVA='{"falhas":[],"avisos":[]}'
+  if [ "$(jq '.falhas|length' <<<"$PROVA")" -gt 0 ]; then
+    RES=$(jq -c --arg d "PROVA-SEM-REEXECUCAO: $(jq -r '[.falhas[]|"\(.arquivo):\(.linha) «\(.trecho)»"]|join(" · ")' <<<"$PROVA" | cut -c1-400) — cole o comando rodado e a saída na mesma seção" \
+      '. + [{id:"prova_por_reexecucao", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" incidente "$RUNLOG_ETAPA" --kv origem=confere-etapa.sh \
+      --kv detalhe="PROVA-SEM-REEXECUCAO em $(jq -r '[.falhas[]|"\(.arquivo):\(.linha)"]|join(", ")' <<<"$PROVA")"
+  elif [ "$(jq '.avisos|length' <<<"$PROVA")" -gt 0 ]; then
+    RES=$(jq -c --arg d "$(jq '.avisos|length' <<<"$PROVA") afirmação(ões) de contagem sem comando e saída na mesma seção (SUMMARY sem \`gad_prova: v1\` — aviso): $(jq -r '[.avisos[]|"\(.arquivo):\(.linha)"]|join(", ")' <<<"$PROVA" | cut -c1-300)" \
+      '. + [{id:"prova_por_reexecucao", resultado:"aviso", detalhe:$d}]' <<<"$RES")
+  fi
+  EXTRAI=$(jq -c --argjson p "$PROVA" '. + {prova_avisos: $p.avisos, prova_falhas: $p.falhas}' <<<"$EXTRAI")
 fi
 
 # ── etapa 1 (intenção): R2 (SPEC × PRE-SPEC) + R6 (ROADMAP × REQUIREMENTS) ───
