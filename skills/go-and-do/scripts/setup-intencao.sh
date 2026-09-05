@@ -39,10 +39,19 @@
 #   diferente do PRE-SPEC atual → a rota é invalidada e a pergunta volta.
 #   `pre_spec_mode` (structured|legacy|null) vai explícito no resultado — o coordenador
 #   repassa aos DOIS filhos; `legacy` acende `sino_pre_spec_sem_bloco` (obrigatório).
-# R2. Com SPEC **e** PRE-SPEC no disco, roda `confere-pre-spec.sh <SPEC> <PRE-SPEC>` e
-#   devolve `r2: {status, falhas[], avisos[]}` — as falhas (MARCA-SEM-ID, ID-INEXISTENTE,
-#   …) reprovam no `confere-etapa.sh 1`; `EXTENSAO-SUSPEITA` é aviso que o coordenador
-#   põe no briefing do revisor.
+#   Precedência (D7/D8): NN-SPEC.md e NN-CONTEXT.md no disco vencem o PRE-SPEC. A rota
+#   do §0.5 só roda em `entrada: spec|discuss` — com os dois artefatos presentes o
+#   PRE-SPEC já cumpriu o papel de insumo e não pode parar uma intenção pronta. Fora
+#   dessas entradas: `pre_spec_bloco: nao_aplicavel`, `pre_spec_mode: null`,
+#   `needs_decision: null` e `pre_spec_precedencia: spec_e_context_em_disco` (ou
+#   `estado_do_intent_review`, quando foi o INTENT-REVIEW que decidiu a entrada) — o
+#   coordenador declara no sumário que a rota foi pulada.
+# R2. Com SPEC **e** PRE-SPEC no disco, roda `confere-pre-spec.sh --exige-origem
+#   [--reqs .planning/REQUIREMENTS.md] <SPEC> <PRE-SPEC>` (paridade com o
+#   `confere-etapa.sh 1`, que passa as mesmas flags) e devolve `r2: {status, falhas[],
+#   avisos[]}` — as falhas (MARCA-SEM-ID, ID-INEXISTENTE, AC-SEM-ORIGEM,
+#   AC-ORIGEM-INEXISTENTE, …) reprovam no `confere-etapa.sh 1`; `EXTENSAO-SUSPEITA` e
+#   `ORIGEM-NAO-CONFERIDA` são avisos que o coordenador põe no briefing do revisor.
 # R6. `goal_roadmap` (Goal da entrada da fase no ROADMAP) + `issues` estruturadas:
 #   `{tipo: missing_requirement, id}` (id citado na linha **Requirements** da entrada e
 #   ausente do REQUIREMENTS.md) e `{tipo: phase_without_req_id}` (entrada sem linha
@@ -228,8 +237,14 @@ ROTA_F="$PD/.intent/pre-spec-route.json"
 TEXTO_DECISAO='O PRE-SPEC não tem o bloco de decisões legível por máquina. Escolha: migrar o PRE-SPEC para o bloco (o `pre-spec-migra.py` gera um rascunho a partir da prosa para você revisar) OU autorizar a rota antiga (filho lê o arquivo inteiro, com sino `pre_spec_sem_bloco`).'
 
 BLOCO=nao_aplicavel; MODO=null; NEEDS=null; SINO_LEGACY=false; ROTA_ESTADO=nao_aplicavel
-SHA=""
-if [ -n "$PRE_SPEC" ]; then
+SHA=""; PRECEDENCIA=null
+# A rota só roda quando ainda há artefato a gerar (entrada spec|discuss). Com SPEC e
+# CONTEXT no disco o PRE-SPEC é insumo já consumido: um PRE-SPEC sem bloco não pode
+# devolver `needs_decision` sobre uma intenção pronta (inversão de precedência, D8).
+if [ -n "$PRE_SPEC" ] && [ "$ENTRADA" != spec ] && [ "$ENTRADA" != discuss ]; then
+  if [ -f "$SPEC_F" ] && [ -f "$CTX_F" ]; then PRECEDENCIA='"spec_e_context_em_disco"'
+  else PRECEDENCIA='"estado_do_intent_review"'; fi
+elif [ -n "$PRE_SPEC" ]; then
   SHA=$(sha256sum "$PRE_SPEC" | cut -d' ' -f1)
   BLOCO=erro
   if [ -f "$CPS" ]; then
@@ -287,9 +302,14 @@ fi
 # ══ R2 — SPEC × PRE-SPEC (mecânico) ══════════════════════════════════════════
 R2='{"status":"nao_aplicavel","motivo":"exige NN-SPEC.md e NN-PRE-SPEC.md no disco","falhas":[],"avisos":[]}'
 if [ -n "$PRE_SPEC" ] && [ -f "$SPEC_F" ] && [ -f "$CPS" ]; then
-  RC=0; OUT2=$(bash "$CPS" "$SPEC_F" "$PRE_SPEC" 2>&1) || RC=$?
-  FAL=$(printf '%s\n' "$OUT2" | { grep -E '^(MARCA-SEM-ID|ID-INEXISTENTE|FATO-SEM-EVIDENCIA|RESSALVA-SEM-LIMITACAO|AC-POR-PONTEIRO|BLOCO-AUSENTE|BLOCO-INVALIDO) ' || true; } | jq -R . | jq -cs .)
-  AVI=$(printf '%s\n' "$OUT2" | { grep -E '^EXTENSAO-SUSPEITA ' || true; } | jq -R . | jq -cs .)
+  # Mesmas flags do confere-etapa.sh 1: sem `--exige-origem` o r2 do primeiro turno
+  # aceitava AC sem origem e o gate reprovava no fecho (fiação do P12 que não chegou aqui).
+  R2_ARGS=(--exige-origem)
+  R2_ROOT="$(raiz_planning "$PD" || true)"
+  [ -n "$R2_ROOT" ] && [ -f "$R2_ROOT/.planning/REQUIREMENTS.md" ] && R2_ARGS+=(--reqs "$R2_ROOT/.planning/REQUIREMENTS.md")
+  RC=0; OUT2=$(bash "$CPS" "${R2_ARGS[@]}" "$SPEC_F" "$PRE_SPEC" 2>&1) || RC=$?
+  FAL=$(printf '%s\n' "$OUT2" | { grep -E '^(MARCA-SEM-ID|ID-INEXISTENTE|FATO-SEM-EVIDENCIA|RESSALVA-SEM-LIMITACAO|AC-POR-PONTEIRO|AC-SEM-ORIGEM|AC-ORIGEM-INEXISTENTE|BLOCO-AUSENTE|BLOCO-INVALIDO) ' || true; } | jq -R . | jq -cs .)
+  AVI=$(printf '%s\n' "$OUT2" | { grep -E '^(EXTENSAO-SUSPEITA|ORIGEM-NAO-CONFERIDA) ' || true; } | jq -R . | jq -cs .)
   case "$RC" in 0) ST=ok ;; 2) ST=bloco_invalido ;; *) ST=falha ;; esac
   R2=$(jq -cn --arg s "$ST" --argjson f "$FAL" --argjson a "$AVI" --argjson rc "$RC" \
     '{status:$s, exit:$rc, falhas:$f, avisos:$a}')
@@ -341,11 +361,11 @@ R6=$(r6_json)
 
 gad_json_out setup-intencao "$(jq -cn --arg ch "$CHAIN" --arg e "$ENTRADA" --arg est "${ESTADO:-ausente}" \
   --arg ps "$PRE_SPEC" --arg bl "$BLOCO" --argjson md "$MODO" --argjson nd "$NEEDS" \
-  --argjson sl "$SINO_LEGACY" --arg re "$ROTA_ESTADO" --arg rf "$ROTA_F" \
+  --argjson sl "$SINO_LEGACY" --arg re "$ROTA_ESTADO" --arg rf "$ROTA_F" --argjson pc "$PRECEDENCIA" \
   --argjson r2 "$R2" --argjson t3 "$T3" --argjson r6 "$R6" \
   '{chain_flag_zerada:$ch, entrada:$e, intent_review:$est,
     pre_spec:(if $ps != "" then $ps else null end),
-    pre_spec_bloco:$bl, pre_spec_mode:$md, pre_spec_rota:{estado:$re, arquivo:$rf},
+    pre_spec_bloco:$bl, pre_spec_mode:$md, pre_spec_precedencia:$pc, pre_spec_rota:{estado:$re, arquivo:$rf},
     sino_pre_spec_sem_bloco:$sl, needs_decision:$nd,
     r2:$r2, t3:$t3,
     goal_roadmap:$r6.goal_roadmap, issues:$r6.issues,

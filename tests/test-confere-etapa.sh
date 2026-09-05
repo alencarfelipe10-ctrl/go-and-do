@@ -94,6 +94,50 @@ eq "sem REQUIREMENTS.md → r2 continua ok (REQ-ID não é falha)" "$(assert_de 
 casa "…e ORIGEM-NAO-CONFERIDA sai em extrai.r2_avisos (vai ao briefing)" \
      "$(printf '%s' "$J" | jq -r '.extrai.r2_avisos|join("|")')" 'ORIGEM-NAO-CONFERIDA'
 
+# ═══════════════════════════════════ R2 sem PRE-SPEC (modo sem pré-spec, D7c / plano 1)
+# Fase sem NN-PRE-SPEC.md (SPEC do dono, ou gerado sem insumo): o SPEC passa pelas mesmas
+# conferências de forma, com id `r2_spec_sem_pre_spec`. Hoje a fase saía sem item r2 nenhum.
+echo "── R2: fase sem PRE-SPEC → r2_spec_sem_pre_spec ──"
+IFS='|' read -r R PD <<<"$(monta r2sempre 99)"
+cp "$FP/spec-sem-pre.md" "$PD/99-SPEC.md"
+J="$(confere "$R" 99)"
+eq "sem PRE-SPEC: item r2_spec_sem_pre_spec presente (era ausente)" \
+   "$(printf '%s' "$J" | jq -r '[.asserts[]|select(.id=="r2_spec_sem_pre_spec")]|length')" "1"
+eq "…e r2_pre_spec não aparece"  "$(assert_de "$J" r2_pre_spec)" "<ausente>"
+eq "origens fora do REQUIREMENTS da bancada (R2, DESC-01, CANC-v3x-01) → FALHA" "$(assert_de "$J" r2_spec_sem_pre_spec)" "FALHA"
+printf '# SPEC do dono\n\n- [ ] AC-01 — o DRE agrega por responsável-mês. [origem: BANC-01]\n- [ ] AC-02 — o Δ fecha em zero. [origem: AC-01]\n' > "$PD/99-SPEC.md"
+J="$(confere "$R" 99)"
+eq "SPEC do dono com origens conferidas no REQUIREMENTS → ok" "$(assert_de "$J" r2_spec_sem_pre_spec)" "ok"
+eq "…extrai.r2_status = ok"  "$(printf '%s' "$J" | jq -r .extrai.r2_status)" "ok"
+sed -i 's/\[origem: AC-01\]/[origem: PS-01]/' "$PD/99-SPEC.md"
+J="$(confere "$R" 99)"
+eq "origem PS-nn numa fase sem PRE-SPEC → FALHA" "$(assert_de "$J" r2_spec_sem_pre_spec)" "FALHA"
+casa "…com a mensagem própria" \
+     "$(printf '%s' "$J" | jq -r '.asserts[]|select(.id=="r2_spec_sem_pre_spec")|.detalhe')" 'a fase não tem PRE-SPEC'
+
+# ═══════════════════════════════ R2 × classe do critério (plano 1, P-04): só por marcador
+# O gate não passa --exige-classe. SPEC sem `<!-- spec-classe: v1 -->` mas com tag/bloco de
+# classe (SPEC do dono fora do molde) → os códigos de classe saem como AVISO e não reprovam;
+# com o marcador, reprovam.
+echo "── R2: classe só por marcador (resposta 2 do dono) ──"
+IFS='|' read -r R PD <<<"$(monta r2classe 99)"
+rm -f "$R/.planning/REQUIREMENTS.md"   # as fixtures de classe citam R2/PS-nn/AA-n, não os ids da bancada
+cp "$FP/anexo-PRE-SPEC.md" "$PD/99-PRE-SPEC.md"; cp "$FP/classe-sem-marcador-SPEC.md" "$PD/99-SPEC.md"
+J="$(confere "$R" 99)"
+eq "sem marcador: avisos de classe NÃO reprovam (r2_pre_spec ok)" "$(assert_de "$J" r2_pre_spec)" "ok"
+casa "…e chegam ao briefing em extrai.r2_avisos" \
+     "$(printf '%s' "$J" | jq -r '.extrai.r2_avisos|join("|")')" 'AC-SEM-CLASSE .*\(aviso: SPEC sem'
+casa "…junto com a bandeira AC-ORIGEM-REPETIDA" \
+     "$(printf '%s' "$J" | jq -r '.extrai.r2_avisos|join("|")')" 'AC-ORIGEM-REPETIDA'
+cp "$FP/classe-SPEC.md" "$PD/99-SPEC.md"
+J="$(confere "$R" 99)"
+eq "com o marcador: os mesmos códigos reprovam" "$(assert_de "$J" r2_pre_spec)" "FALHA"
+casa "…nomeados no detalhe" \
+     "$(printf '%s' "$J" | jq -r '.asserts[]|select(.id=="r2_pre_spec")|.detalhe')" 'EXIGIDO-SEM-REGUA|AC-SEM-CLASSE|GOAL-SEM-COBERTURA'
+cp "$FP/classe-ok-SPEC.md" "$PD/99-SPEC.md"
+J="$(confere "$R" 99)"
+eq "SPEC do molde novo, limpo → ok" "$(assert_de "$J" r2_pre_spec)" "ok"
+
 # ═════════════════════════════════════════════════════════════════════ R6
 echo "── R6: issues estruturadas na cancela ──"
 IFS='|' read -r R PD <<<"$(monta r6a 97)"

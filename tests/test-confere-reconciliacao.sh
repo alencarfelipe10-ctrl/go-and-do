@@ -167,6 +167,54 @@ saida=$("$SCRIPT" "$D" --ordem 2>&1); rc=$?
 printf '%s' "$saida" | grep -q "ordem: n/a" && [ "$rc" = 0 ] \
   && ok "sem .releitura-c1.json → ordem: n/a + exit 0 (é gate de outro)" || erro "ausência de releitura virou falha aqui" "$saida"
 
+echo "== C3 (plano 2, 05/09/2026) — D-NN-DESATUALIZADA: mexeu no SPEC, tem de olhar o CONTEXT"
+# Repositório sintético: SPEC com AC-01/AC-02, CONTEXT com D-01 (cita AC-01), D-02 (cita AC-02,
+# superada-c1) e D-03 (cita R2). O ciclo 1 emenda o AC-01 e o R2 no SPEC sem tocar o CONTEXT.
+repo_c3() { # <nome> → REPO e PD3 globais
+  REPO=$(mktemp -d "${TMPDIR:-/tmp}/gad-c3-XXXXXX"); PD3="$REPO/.planning/phases/24.4-fase"
+  mkdir -p "$PD3/.intent"; git -c init.defaultBranch=main init -q "$REPO"
+  printf '## Requirements\n- R1: contar linhas\n- R2: somar mensalidades\n\n## Acceptance Criteria\n- AC-01: o motor reconhece uma linha para o aluno\n- AC-02: duas mensalidades somam\n' > "$PD3/24.4-SPEC.md"
+  printf '<decisions>\n## Implementation Decisions\n\n### A\n- **D-01 [auto, R1]:** decisão que cita AC-01\n- **D-02 [auto, R1, superada-c1, informational]:** decisão que cita AC-02 e ficou velha no c1\n- **D-03 [auto, R2]:** decisão ancorada em R2\n- **D-04 [auto, R1]:** decisão que não cita critério nenhum\n\n### Claude'"'"'s Discretion\n- nada\n\n</decisions>\n' > "$PD3/24.4-CONTEXT.md"
+  git -C "$REPO" -c user.name=t -c user.email=t@t add -A; git -C "$REPO" -c user.name=t -c user.email=t@t commit -qm base
+  git -C "$REPO" hash-object -w "$PD3/24.4-SPEC.md" > "$PD3/.intent/.base-SPEC.txt"
+  git -C "$REPO" hash-object -w "$PD3/24.4-CONTEXT.md" > "$PD3/.intent/.base-CONTEXT.txt"
+}
+G3() { git -C "$REPO" -c user.name=t -c user.email=t@t "$@"; }
+aplicado3() { # <C> <commit> <caminhos separados por vírgula>
+  local cam; cam=$(printf '%s' "$3" | tr ',' '\n' | sed 's/.*/"&"/' | paste -sd, -)
+  printf '{"v":1,"ciclo":"%s","ids":["c%s-01"],"commit":"%s","caminhos":[%s]}\n' "$1" "$1" "$2" "$cam" > "$PD3/.intent/.correcoes-c$1.aplicado"
+}
+repo_c3
+sed -i 's/AC-01: o motor reconhece uma linha/AC-01: o motor reconhece zero ou mais linhas/; s/R2: somar mensalidades/R2: somar mensalidades ativas/; s/AC-02: duas mensalidades somam/AC-02: duas mensalidades ativas somam/' "$PD3/24.4-SPEC.md"
+G3 add -A; G3 commit -qm "docs(fase 24.4): correções do ciclo 1 — c1-01"
+C1=$(G3 rev-parse HEAD); aplicado3 1 "$C1" ".planning/phases/24.4-fase/24.4-SPEC.md"
+saida=$("$SCRIPT" "$PD3" 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "^D-NN-DESATUALIZADA c1 D-01 — cita AC-01 (SPEC mudou em ${C1:0:8}); CONTEXT fora dos caminhos do ciclo" \
+  && ok "SPEC emendado (AC-01) + CONTEXT parado → D-NN-DESATUALIZADA c1 D-01, id como 3º token" || erro "D-01 não acusada" "$saida"
+printf '%s' "$saida" | grep -q "^D-NN-DESATUALIZADA c1 D-03 — cita R2" && ok "eixo R-n: D-03 (cita R2 mudado) também acusa" || erro "eixo R-n mudo" "$saida"
+printf '%s' "$saida" | grep -q "D-NN-DESATUALIZADA c1 D-02" && erro "superada-c1 ainda acusada" || ok "tag superada-c1 → D-02 não acusa (mesmo citando AC-02 mudado)"
+printf '%s' "$saida" | grep -q "D-NN-DESATUALIZADA c1 D-04" && erro "falso positivo: D-04 não cita critério" || ok "D-04 (sem id citado) nunca aparece"
+printf '%s' "$saida" | grep -q "^informativos: D-NN-DESATUALIZADA=2$" && ok "contagem em informativos: D-NN-DESATUALIZADA=2" || erro "linha informativos" "$saida"
+printf '%s' "$saida" | grep -q "^nota c1: CONTEXT ausente dos caminhos" && ok "nota declara o CONTEXT fora dos caminhos do ciclo" || erro "nota do CONTEXT ausente"
+[ "$rc" = 0 ] && ok "informativo: o exit continua 0 (sem vereditos, sem classe antiga)" || erro "D-NN-DESATUALIZADA mudou o exit (rc=$rc)"
+# --final: base selada → worktree; um passe «b» fora do .aplicado emenda o AC-02 (D-02 é superada → não conta) e o CONTEXT toca a D-01
+sed -i 's/D-01 \[auto, R1\]:\*\* decisão que cita AC-01/D-01 [auto, R1]:** decisão que cita AC-01 (emendada no c1b)/' "$PD3/24.4-CONTEXT.md"
+G3 add -A; G3 commit -qm "docs(fase 24.4): passe b fora do .aplicado"
+saida=$("$SCRIPT" "$PD3" --final 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "^D-NN-DESATUALIZADA final D-03 — cita R2" && ok "--final: D-03 continua desatualizada contra a base selada" || erro "--final não acusou D-03" "$saida"
+printf '%s' "$saida" | grep -q "D-NN-DESATUALIZADA final D-01" && erro "--final acusou D-01, que foi tocada no CONTEXT" || ok "--final: D-01 tocada no CONTEXT (base → worktree) não acusa"
+printf '%s' "$saida" | grep -q "^desatualizadas final: 1 " && ok "--final: contagem 1" || erro "contagem do --final" "$saida"
+[ "$rc" = 0 ] && ok "--final também é informativo (exit 0)" || erro "--final mudou o exit (rc=$rc)"
+# ciclo cujo commit não tocou o SPEC (o passe b acima só mexeu no CONTEXT) → n/a; sem base selada → final n/a
+aplicado3 2 "$(G3 rev-parse HEAD)" ".planning/phases/24.4-fase/24.4-CONTEXT.md"
+saida=$("$SCRIPT" "$PD3" 2 2>&1)
+printf '%s' "$saida" | grep -q "^nota c2: SPEC fora dos caminhos do commit" && ok "ciclo sem SPEC nos caminhos → nota n/a, nada acusado" || erro "n/a do ciclo sem SPEC" "$saida"
+printf '%s' "$saida" | grep -q "DESATUALIZADA c2" && erro "acusou sem SPEC no ciclo" || ok "nenhuma D-NN-DESATUALIZADA c2"
+rm -f "$PD3/.intent/.base-SPEC.txt"
+saida=$("$SCRIPT" "$PD3" --final 2>&1)
+printf '%s' "$saida" | grep -q "^final: n/a (sem .base-SPEC.txt" && ok "fase sem base selada → final: n/a (nunca falha)" || erro "final sem base" "$saida"
+rm -rf "$REPO"
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-confere-reconciliacao: TUDO OK" || echo "test-confere-reconciliacao: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

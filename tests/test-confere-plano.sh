@@ -122,6 +122,42 @@ roda "$R"
 eq "tasks=2 (checkpoint fora)"        "$(campo .tasks)" "2"
 eq "veredito ok"                      "$(campo .veredito)" "ok"
 
+echo "== (i) C7: PLAN cita D-NN que o SUMMARY não cita → DECISAO-SEM-SUMMARY (informativo, veredito intocado)"
+ctx() { # <root> → 7-CONTEXT.md com D-01..D-03, D-03 informational
+  printf '<decisions>\n## Implementation Decisions\n\n### A\n- **D-01 [auto, R1]:** a\n- **D-02 [auto, R1]:** b\n- **D-03 [pre-spec:PS-01, informational]:** ver SPEC\n\n### Claude'"'"'s Discretion\n- nada\n\n</decisions>\n' > "$1/.planning/phases/7-bancada/7-CONTEXT.md"
+}
+R=$(repo i); plano "$R" 'files_modified:
+  - src/a.py'; ctx "$R"
+commit "$R" 'feat(7-01): t1 per D-01' src/a.py
+commit "$R" 'feat(7-01): t2' src/a.py
+commit "$R" 'feat(7-01): t3' src/a.py
+printf -- '---\nphase: 7\nplan: 01\n---\n## Tasks\n- honra D-01, D-02 e D-03 (ver PLAN)\n' > "$R/.planning/phases/7-bancada/7-01-PLAN.md.tmp"
+{ cat "$R/.planning/phases/7-bancada/7-01-PLAN.md"; printf '\nImplement per D-01 and per D-02; D-03 is the SPEC pointer.\n'; } > "$R/.planning/phases/7-bancada/7-01-PLAN.md.new"; mv "$R/.planning/phases/7-bancada/7-01-PLAN.md.new" "$R/.planning/phases/7-bancada/7-01-PLAN.md"; rm -f "$R/.planning/phases/7-bancada/7-01-PLAN.md.tmp"
+printf -- '---\nphase: 7\nplan: 01\ndecisions-honored: [D-01]\n---\n# Summary\nHonrou D-01.\n' > "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"
+roda "$R"
+eq "veredito ok (informativo não reprova), exit 0" "$(campo .veredito)/$rc" "ok/0"
+eq "codigos vazio"                                  "$(campo '.codigos|length')" "0"
+eq "informativos = DECISAO-SEM-SUMMARY (D-02)"      "$(campo '.informativos[0]')" "DECISAO-SEM-SUMMARY (D-02)"
+eq "decisoes.faltantes = [D-02] (D-03 informational sai da conta)" "$(campo '.decisoes.faltantes|join(",")')" "D-02"
+eq "decisoes.informational = [D-03]"                "$(campo '.decisoes.informational|join(",")')" "D-03"
+eq "decisoes.plan = D-01,D-02,D-03 · summary = D-01" "$(campo '"\(.decisoes.plan|join(","))/\(.decisoes.summary|join(","))"')" "D-01,D-02,D-03/D-01"
+# sem o filtro de informational a D-03 também faltaria — provado pela contagem bruta
+eq "sem o filtro, faltariam 2 (D-02, D-03): o filtro é o que faz a diferença" \
+   "$(campo '(.decisoes.plan - .decisoes.summary) | length')" "2"
+# SUMMARY passa a citar as duas → limpo
+printf -- '---\nphase: 7\nplan: 01\ndecisions-honored: [D-01, D-02]\n---\n# Summary\n' > "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"
+roda "$R"
+eq "SUMMARY com decisions-honored: [D-01, D-02] → informativos vazio" "$(campo '.informativos|length')" "0"
+echo "== (j) C7: sem SUMMARY ou sem CONTEXT → n/a"
+rm -f "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"; roda "$R"
+eq "sem SUMMARY → decisoes.estado n/a, informativos vazio" "$(campo '"\(.decisoes.estado)/\(.informativos|length)"')" "n/a/0"
+R=$(repo j); plano "$R" 'files_modified:
+  - src/a.py'
+commit "$R" 'feat(7-01): t1' src/a.py; commit "$R" 'feat(7-01): t2' src/a.py; commit "$R" 'feat(7-01): t3' src/a.py
+printf -- '# Summary\n' > "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"
+roda "$R"
+eq "sem CONTEXT → n/a (o filtro de informational precisa dele)" "$(campo '.decisoes.estado')" "n/a"
+
 echo "== (h) uso inválido → exit 2"
 "$SCRIPT" >/dev/null 2>&1; eq "sem argumentos" "$?" "2"
 "$SCRIPT" "$TMP/a/.planning/phases/7-bancada" 7-99 >/dev/null 2>&1; eq "PLAN inexistente" "$?" "2"

@@ -102,6 +102,26 @@ RUN "$PD" 24.3 1 >/dev/null 2>&1; rc=$?
 [ "$rc" = 4 ] && ok "exit 4 (sinos declarados vazios com sino no disco)" || erro "esperado 4, veio $rc"
 rm -f "$PD/.intent/.sinos-spec.txt"
 
+echo "== C4 (plano 2, 05/09/2026) — criterio_nao_fecha: do discuss chega ao briefing do revisor"
+# As duas medições que na F24.4 viraram D-13 e D-15, escritas como sino com o prefixo exato.
+cat > "$PD/.intent/.sinos-discuss.txt" <<'SINOS'
+criterio_nao_fecha: AC-11 — motor reconhece zero linhas para o aluno 616385 (esperado ≥ 1) — uv run python -m src.dre --aluno 616385 --mes 2026-03
+criterio_nao_fecha: AC-42 — dois contratos ativos no mês onde o critério só admite um — uv run pytest tests/golden/test_contratos_ativos.py -k 616385
+licao 1: aplicada — resposta do checklist, não é sino
+SINOS
+# o ciclo 0 declara os dois sinos (senão o anti-cegueira do R3 barra o briefing, e com razão)
+cp "$PD/.intent/.ciclo0.json" "$PD/.intent/.ciclo0.json.bak"
+echo '{"v":1,"sinos":[{"id":"criterio_nao_fecha AC-11","origem":"discuss","disposicao":"aberto"},{"id":"criterio_nao_fecha AC-42","origem":"discuss","disposicao":"aberto"}],"correcoes":[],"releitura":{"commit":"","artefatos":[]}}' \
+  > "$PD/.intent/.ciclo0.json"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "gate segue passando com o arquivo de sinos do discuss" || erro "esperado 0, veio $rc" "$saida"
+BRF4="$PD/.intent/briefing-c1.md"
+[ "$(grep -c '^criterio_nao_fecha: AC-' "$BRF4")" = 2 ] && ok "as duas linhas criterio_nao_fecha: aparecem no briefing (seção Sinos de discuss)" || erro "criterio_nao_fecha ausente do briefing" "$(grep -n 'criterio_nao_fecha\|Sinos de' "$BRF4")"
+grep -q '^## Sinos de discuss' "$BRF4" && ok "sob o heading '## Sinos de discuss'" || erro "heading dos sinos do discuss"
+grep -q 'licao 1: aplicada' "$BRF4" && erro "resposta de lição vazou para o briefing" || ok "a resposta de lição do mesmo arquivo continua fora (R8)"
+rm -f "$PD/.intent/.sinos-discuss.txt"; mv -f "$PD/.intent/.ciclo0.json.bak" "$PD/.intent/.ciclo0.json"
+RUN "$PD" 24.3 1 >/dev/null 2>&1   # regera o briefing-c1 no estado anterior para os casos R8
+
 echo "== R8 — briefing sem lições, ROADMAP só da fase, Q1–Q3 e manifesto"
 BRF="$PD/.intent/briefing-c1.md"
 grep -q "LICOES\|Lição 1" "$BRF" && erro "lições continuam no briefing" || ok "lições saíram do briefing"

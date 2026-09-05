@@ -15,6 +15,13 @@ absolutos em tudo.
    levou a janela do filho de 35 k a 81 k tokens antes do primeiro trabalho útil. O
    workflow carrega o SPEC sozinho, e as verificações de código acontecem **dentro** das
    decisões (com `--evidence path:line`), não numa varredura prévia.
+   Quando o despacho trouxer `explore: <caminho>`, leia esse arquivo DEPOIS da Skill e
+   trate-o como o seu mapa do código: ele já traz uma conclusão por requisito, com
+   arquivo:linha. Leitura própria de arquivo do projeto fica restrita ao que uma área
+   cinzenta não decide sem ver, e cada uma vai registrada em `.sinos-discuss.txt` com o
+   prefixo `leitura_propria: <arquivo> — <fato>`. Os dois scripts de medição contra a
+   base real continuam seus: rodá-los é barato, ler a base não é (na F24.4 a leitura de
+   código foi 21 turnos relidos em cada um dos 70 turnos da janela).
 1. Se `<phase_dir>/NN-CONTEXT.md` já existe → não re-rode nada; pule ao passo 4
    (a neutralização da flag é idempotente e barata) e devolva `done` com
    `base_context: nao_gravado — CONTEXT pré-existente`. **Não sele** (passo 5): base
@@ -63,6 +70,13 @@ absolutos em tudo.
    novo em cada etapa que os relê — se o passe único produziu duplicação, edite o
    CONTEXT antes do retorno substituindo a cópia pelo ponteiro (e re-commite com
    `--amend` se o commit foi do próprio workflow, ou num commit novo se não).
+   O relatório da guarda traz linhas `[guard] WARN: D-NN repete … do SPEC`. Cada uma é
+   um parágrafo que tem de virar ponteiro antes do retorno: substitua a cópia por
+   `ver <NN>-SPEC.md §<seção> · <AC-nn>` e conte-a em `dedup_aplicada`. WARN que sobrar
+   sai declarado no retorno, com o motivo.
+   Decisão que prescreve função, linha ou campo («troque X na linha 2253») é reescrita
+   como invariante + modo de falha (o que tem de ser verdade e como se sabe que falhou);
+   a receita desce para `nota`, que o planejador lê como sugestão e nenhum gate cobra.
 4. **Neutralize os dois efeitos colaterais do `--auto`** (quem encadeia os comandos é a
    /go-and-do; o auto-advance nativo atropelaria a revisão adversarial):
    - Quando o workflow chegar no passo `auto_advance` (que mandaria despachar
@@ -89,6 +103,15 @@ absolutos em tudo.
    O rótulo do arquivo é `CONTEXT` (não o nome do artefato). Sem essa base a proveniência
    dos achados sai `não_medido` — o coordenador não a reconstrói depois. Na onda 2 o
    `discuss-finalize.sh` assume esta gravação; até lá é sua.
+
+## Critério que não fecha
+
+Medição sua contra os dados reais que mostre um critério do SPEC insatisfazível ou já
+falso não vira decisão: grave uma linha em `.sinos-discuss.txt` com o prefixo exato
+`criterio_nao_fecha: <AC-nn|R-n> — <o que mediu> — <comando que reproduz>` e siga.
+Quem emenda o SPEC é a revisão adversarial, que lê esse arquivo. Decisão gravada aqui
+nasce discutindo com um texto que a revisão troca no ciclo seguinte (na F24.4 foi o
+caso da D-13 e da D-15). Conte-as em `criterios_nao_fecham` no retorno.
 
 ## Checklist de lições
 
@@ -122,6 +145,8 @@ motivo: <só no estado falha — as linhas [guard] FAIL literais + caminho do NN
 chain_flag_zerada: sim | nao — <porquê>
 base_context: <blob do .base-CONTEXT.txt; nao_gravado + porquê se o CONTEXT não nasceu>
 dedup_aplicada: <n parágrafos substituídos por ponteiro; 0 se o passe já saiu limpo>
+leituras_proprias: <n arquivos do projeto que você abriu além do explore; 0 é o esperado>
+criterios_nao_fecham: <n; 0 quando nenhum>
 sinos: [<um item por linha; ausente se vazio — grave também em <phase_dir>/.intent/.sinos-discuss.txt (1 por linha): o briefing do revisor lê do arquivo, não do retorno>]
 pergunta: <só no estado pausa — a decisão pendente com opções e sua recomendação primeiro>
 ```

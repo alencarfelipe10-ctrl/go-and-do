@@ -653,22 +653,39 @@ if [ "$ETAPA" = "1" ]; then
   # ── R2: as falhas do confere-pre-spec.sh ((a) MARCA-SEM-ID, (b) ID-INEXISTENTE e as
   # demais, inclusive AC-SEM-ORIGEM / AC-ORIGEM-INEXISTENTE — P12) REPROVAM;
   # EXTENSAO-SUSPEITA (c) e ORIGEM-NAO-CONFERIDA são AVISO — vão para `extrai.r2_avisos`,
-  # que o coordenador põe no briefing do revisor. Sem PRE-SPEC não há o que conferir.
+  # que o coordenador põe no briefing do revisor. Sem PRE-SPEC, o SPEC é conferido contra
+  # o REQUIREMENTS (modo sem pré-spec, id `r2_spec_sem_pre_spec`): o SPEC do dono e o SPEC
+  # gerado sem insumo passam pelas mesmas conferências de forma (D7c).
   # `--exige-origem` sempre (a go-and-do exige origem nos ACs a partir da v2.4.0) e
   # `--reqs` quando o REQUIREMENTS.md existe — sem ele `CANC-v3x-03` e afins entrariam
-  # sem conferência.
+  # sem conferência. Flag de classe não é passada: a classe liga só pelo marcador
+  # `<!-- spec-classe: v1 -->` do SPEC (com a flag aqui, todo SPEC anterior ao molde
+  # reprovaria no dia da instalação). Sinos de classe na família das falhas: AC-SEM-CLASSE,
+  # EXIGIDO-SEM-MOTIVO, EXIGIDO-SEM-REGUA, EXIGIDO-DIVERGE-SEM-MOTIVO, GOAL-SEM-COBERTURA;
+  # AC-ORIGEM-REPETIDA é bandeira (aviso) e vai ao briefing do revisor.
   R2_ST=nao_aplicavel; R2_AVISOS="[]"
-  if [ -f "$PRE_F" ] && [ -f "$SPEC_F" ] && [ -f "$CPS" ]; then
+  if [ -f "$SPEC_F" ] && [ -f "$CPS" ]; then
     REQS_F="$ROOT/.planning/REQUIREMENTS.md"
     R2_ARGS=(--exige-origem); [ -f "$REQS_F" ] && R2_ARGS+=(--reqs "$REQS_F")
-    r2rc=0; r2out=$(bash "$CPS" "${R2_ARGS[@]}" "$SPEC_F" "$PRE_F" 2>&1) || r2rc=$?
-    R2_AVISOS=$(printf '%s\n' "$r2out" | { grep -E '^(EXTENSAO-SUSPEITA|ORIGEM-NAO-CONFERIDA) ' || true; } | jq -R . | jq -cs .)
-    r2fal=$(printf '%s\n' "$r2out" | { grep -E '^(MARCA-SEM-ID|ID-INEXISTENTE|FATO-SEM-EVIDENCIA|RESSALVA-SEM-LIMITACAO|AC-POR-PONTEIRO|AC-SEM-ORIGEM|AC-ORIGEM-INEXISTENTE|BLOCO-AUSENTE|BLOCO-INVALIDO) ' || true; })
+    if [ -f "$PRE_F" ]; then
+      R2_ID=r2_pre_spec
+      r2rc=0; r2out=$(bash "$CPS" "${R2_ARGS[@]}" "$SPEC_F" "$PRE_F" 2>&1) || r2rc=$?
+    else
+      R2_ID=r2_spec_sem_pre_spec
+      r2rc=0; r2out=$(bash "$CPS" --sem-pre-spec "${R2_ARGS[@]}" "$SPEC_F" 2>&1) || r2rc=$?
+    fi
+    # O script emite falha e aviso no mesmo formato; um código de classe sem o marcador sai
+    # como aviso com o sufixo literal abaixo. Separar pelo sufixo, não pelo nome: senão o gate
+    # promoveria o aviso a falha e a classe viraria incondicional aqui (resposta 2 do dono).
+    AVISO_CLASSE='(aviso: SPEC sem `<!-- spec-classe: v1 -->`'
+    AVISO_CLASSE_RX='\(aviso: SPEC sem `<!-- spec-classe: v1 -->`'
+    R2_AVISOS=$(printf '%s\n' "$r2out" | { grep -E "^(EXTENSAO-SUSPEITA|ORIGEM-NAO-CONFERIDA|AC-ORIGEM-REPETIDA) |$AVISO_CLASSE_RX" || true; } | jq -R . | jq -cs .)
+    r2fal=$(printf '%s\n' "$r2out" | { grep -v -F "$AVISO_CLASSE" || true; } | { grep -E '^(MARCA-SEM-ID|ID-INEXISTENTE|FATO-SEM-EVIDENCIA|RESSALVA-SEM-LIMITACAO|AC-POR-PONTEIRO|AC-SEM-ORIGEM|AC-ORIGEM-INEXISTENTE|AC-SEM-CLASSE|EXIGIDO-SEM-MOTIVO|EXIGIDO-SEM-REGUA|EXIGIDO-DIVERGE-SEM-MOTIVO|GOAL-SEM-COBERTURA|BLOCO-AUSENTE|BLOCO-INVALIDO) ' || true; })
     ROTA_MODO=""; [ -f "$ROTA_F" ] && ROTA_MODO=$(jq -r '.mode // empty' "$ROTA_F" 2>/dev/null || true)
     if [ -z "$r2fal" ]; then
       R2_ST=ok
-      RES=$(jq -c --arg d "confere-pre-spec.sh sem falhas ($(printf '%s' "$R2_AVISOS" | jq 'length') aviso(s) EXTENSAO-SUSPEITA/ORIGEM-NAO-CONFERIDA)" \
-        '. + [{id:"r2_pre_spec", resultado:"ok", detalhe:$d}]' <<<"$RES")
+      RES=$(jq -c --arg id "$R2_ID" --arg d "confere-pre-spec.sh sem falhas ($(printf '%s' "$R2_AVISOS" | jq 'length') aviso(s) EXTENSAO-SUSPEITA/ORIGEM-NAO-CONFERIDA/AC-ORIGEM-REPETIDA)" \
+        '. + [{id:$id, resultado:"ok", detalhe:$d}]' <<<"$RES")
     elif [ "$ROTA_MODO" = legacy ] && printf '%s' "$r2fal" | grep -q '^BLOCO-AUSENTE'; then
       # rota antiga autorizada pelo dono (§0.5): o bloco não existe por decisão dele —
       # a conferência não se aplica, e o sino `pre_spec_sem_bloco` é que carrega o custo.
@@ -676,8 +693,8 @@ if [ "$ETAPA" = "1" ]; then
       RES=$(jq -c '. + [{id:"r2_pre_spec", resultado:"aviso", detalhe:"PRE-SPEC sem bloco com rota `legacy` autorizada pelo dono — R2 não se aplica (sino pre_spec_sem_bloco)"}]' <<<"$RES")
     else
       R2_ST=falha
-      RES=$(jq -c --arg d "confere-pre-spec.sh reprovou: $(printf '%s' "$r2fal" | head -3 | tr '\n' ' ' | cut -c1-300)" \
-        '. + [{id:"r2_pre_spec", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      RES=$(jq -c --arg id "$R2_ID" --arg d "confere-pre-spec.sh reprovou: $(printf '%s' "$r2fal" | head -3 | tr '\n' ' ' | cut -c1-300)" \
+        '. + [{id:$id, resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
   fi
 

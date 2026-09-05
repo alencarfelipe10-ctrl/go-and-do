@@ -74,6 +74,15 @@
 # `hash_ausente` é gravado SEMPRE (mesmo vazio): a presença da chave é o que distingue
 # um `.aplicado` novo de um anterior a este conserto — o leitor usa isso como válvula.
 #
+# ÍNDICE DE DECISÕES (C6/C3, plano 2, 05/09/2026): o `.planning/DECISIONS-INDEX.md` só era
+# regravado no `finalize` do discuss; uma emenda de ciclo no CONTEXT deixava o índice stale
+# (inspired: 265.467 B em disco × 267.368 B regenerados). Quando o projeto JÁ TEM o índice e
+# um `*-CONTEXT.md` está entre os artefatos, o índice entra como alvo no `--inicio` (senão o
+# fecho o recusaria como "alvo novo no meio do ciclo") e, no fecho, é regenerado antes da
+# árvore candidata sempre que o blob do CONTEXT mudou. Gerador: `$GAD_DECISIONS_INDEX` ou
+# `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/decisions-index.py`; ausente
+# (projeto sem o fork) → nada acontece, em silêncio. Índice inexistente → não é criado aqui.
+#
 # Exit 0 ok · 2 uso inválido · 3 recusa/falha (nada promovido).
 
 set -uo pipefail
@@ -113,6 +122,12 @@ fi
 ROOT="$(gad_project_root "$PD")"
 git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1 || {
   echo "ERRO: $ROOT não é um repositório git" >&2; exit 3; }
+
+# índice de decisões como alvo (ver cabeçalho): só se já existe e há CONTEXT entre os artefatos
+IDX_REL=".planning/DECISIONS-INDEX.md"; IDX_GEN="${GAD_DECISIONS_INDEX:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/decisions-index.py}"
+IDX_ON=0; CTX_ALVO=""
+for a in ${ART[@]+"${ART[@]}"}; do case "$a" in *-CONTEXT.md) CTX_ALVO="$a" ;; esac; done
+if [ -n "$CTX_ALVO" ] && [ -f "$ROOT/$IDX_REL" ] && [ -f "$IDX_GEN" ]; then IDX_ON=1; ART+=("$ROOT/$IDX_REL"); fi
 
 ALVOS=(${ART[@]+"${ART[@]}"} ${DOCS[@]+"${DOCS[@]}"})
 [ ${#ALVOS[@]} -gt 0 ] || { echo "ERRO: nenhum alvo (--artefatos/--docs)" >&2; exit 2; }
@@ -197,6 +212,17 @@ IDX="$T/idx"
 falhar() { echo "RECUSA: $*" >&2; exit 3; }
 
 GIT_INDEX_FILE="$IDX" git -C "$ROOT" read-tree HEAD || falhar "read-tree HEAD falhou"
+
+# índice de decisões: regenera ANTES de montar a árvore, se o CONTEXT mudou neste ciclo
+if [ "$IDX_ON" = 1 ]; then
+  ctx_rel=$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$CTX_ALVO" "$ROOT")
+  ctx_pre=$(jq -r --arg p "$ctx_rel" '.alvos[] | select(.path==$p) | .blob_pre' "$BASE")
+  ctx_now=$(git -C "$ROOT" hash-object -- "$ROOT/$ctx_rel" 2>/dev/null || echo "")
+  if [ -n "$ctx_pre" ] && [ "$ctx_now" != "$ctx_pre" ]; then
+    python3 "$IDX_GEN" "$ROOT/.planning" >/dev/null 2>&1 \
+      || echo "aviso: decisions-index.py falhou — índice segue como estava" >&2
+  fi
+fi
 
 COMITADOS=(); MODOS=(); BLOBS_CAND=()
 for r in "${REL[@]}"; do

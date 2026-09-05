@@ -25,11 +25,21 @@
 # roda na raiz principal: commits feitos na cópia (worktree) chegam por merge e o filtro
 # por mensagem os encontra.
 #
+#   3. (informativo — C7, plano 2, 05/09/2026) Toda D-NN que o PLAN.md cita aparece no
+#      SUMMARY.md? Na F24.4 os PLANs citavam 23 decisões e os SUMMARYs 8 — 4 de 8 SUMMARYs
+#      não citavam nenhuma — e o `check.decision-coverage-verify` seguia verde porque o seu
+#      haystack inclui os PLANs. D-NN marcadas `informational` no CONTEXT (as decisões-ponteiro
+#      da PRE-SPEC) não exigem tarefa, logo não exigem linha: saem da conta. Sobra →
+#      `DECISAO-SEM-SUMMARY` em `informativos` (NUNCA em `codigos`: não muda `veredito` nem o
+#      exit — promoção a falha só depois de uma fase real medida por M12). Sem SUMMARY ou sem
+#      CONTEXT → `n/a`.
+#
 # Uso: confere-plano.sh <phase_dir> <plan_id>       (ex.: … 24.4-08)
 # Saída: JSON de uma linha {plan, tasks, commits, commits_tarefa, fora_da_lista, veredito,
-#        codigos} + espelho .planning/.gad/last-confere-plano-<plan>.json
+#        codigos, informativos, decisoes:{plan, summary, faltantes, informational}} + espelho
+#        .planning/.gad/last-confere-plano-<plan>.json
 # Exit: 0 ok · 1 falha (qualquer código) · 2 uso inválido. Quem aplica a reprovação à
-# etapa é o confere-etapa.sh 3, que lê `codigos` (hoje todos reprovam).
+# etapa é o confere-etapa.sh 3, que lê `codigos` (hoje todos reprovam); `informativos` só reporta.
 
 set -euo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
@@ -100,6 +110,23 @@ while IFS= read -r f; do
   [ "$dentro" = 1 ] || FORA+=("$f")
 done < <(tocados)
 
+# ── PLAN ⊆ SUMMARY nas D-NN citadas (informativo) ─────────────────────────────
+SUM_F="$PHASE_DIR/$PLAN-SUMMARY.md"; CTX_F=$(ls "$PHASE_DIR"/*-CONTEXT.md 2>/dev/null | head -1 || true)
+D_PLAN="[]"; D_SUM="[]"; D_FALT="[]"; D_INFO="[]"; D_ESTADO="n/a"; INFORMATIVOS=()
+dnn() { { grep -oE '\bD-[0-9]+\b' "$1" || true; } | sort -u; }
+if [ -f "$SUM_F" ] && [ -n "$CTX_F" ] && [ -f "$CTX_F" ]; then
+  D_ESTADO="ok"
+  # informational: tag no bullet `- **D-NN [..., informational]:**` do CONTEXT
+  INFO_IDS=$({ sed -n '/^<decisions>/,/^<\/decisions>/p' "$CTX_F" | grep -E '^\s*-\s+\*\*D-[0-9]+\s*\[[^]]*informational[^]]*\]' | grep -oE '\bD-[0-9]+\b' || true; } | sort -u)
+  PL_IDS=$(dnn "$PLAN_F"); SM_IDS=$(dnn "$SUM_F")
+  FALT=$(comm -23 <(printf '%s\n' "$PL_IDS" | sed '/^$/d') <(printf '%s\n' "$SM_IDS" | sed '/^$/d') | comm -23 - <(printf '%s\n' "$INFO_IDS" | sed '/^$/d'))
+  tojson() { printf '%s\n' "$1" | sed '/^$/d' | jq -R . | jq -cs .; }
+  D_PLAN=$(tojson "$PL_IDS"); D_SUM=$(tojson "$SM_IDS"); D_FALT=$(tojson "$FALT"); D_INFO=$(tojson "$INFO_IDS")
+  if [ -n "$FALT" ]; then
+    INFORMATIVOS+=("DECISAO-SEM-SUMMARY ($(printf '%s\n' "$FALT" | sed '/^$/d' | tr '\n' ' ' | sed 's/ $//'))")
+  fi
+fi
+
 # ── veredito ──────────────────────────────────────────────────────────────────
 CODIGOS=()
 [ ${#PERMITIDOS[@]} -gt 0 ] || CODIGOS+=("LISTA-VAZIA")
@@ -112,7 +139,9 @@ VER=ok; [ ${#CODIGOS[@]} -eq 0 ] || VER=falha
 JSON=$(jq -cn --arg plan "$PLAN" --argjson t "$N_TASKS" --argjson c "$N_COMMITS" --argjson ct "$N_TAREFA" \
   --argjson fora "$(printf '%s\n' ${FORA[@]+"${FORA[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
   --argjson cod "$(printf '%s\n' ${CODIGOS[@]+"${CODIGOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
-  --arg v "$VER" \
-  '{plan:$plan, tasks:$t, commits:$c, commits_tarefa:$ct, fora_da_lista:$fora, veredito:$v, codigos:$cod}')
+  --argjson inf "$(printf '%s\n' ${INFORMATIVOS[@]+"${INFORMATIVOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
+  --arg v "$VER" --arg de "$D_ESTADO" --argjson dp "$D_PLAN" --argjson ds "$D_SUM" --argjson df "$D_FALT" --argjson di "$D_INFO" \
+  '{plan:$plan, tasks:$t, commits:$c, commits_tarefa:$ct, fora_da_lista:$fora, veredito:$v, codigos:$cod,
+    informativos:$inf, decisoes:{estado:$de, plan:$dp, summary:$ds, faltantes:$df, informational:$di}}')
 (cd "$ROOT" && gad_json_out "confere-plano-$PLAN" "$JSON")
 [ "$VER" = ok ]

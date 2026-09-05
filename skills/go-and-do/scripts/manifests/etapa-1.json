@@ -55,6 +55,15 @@
       "min": 1,
       "nivel": "informativo",
       "desc": "tabelas de ciclo preservadas (evidência de auditoria; ausente em fase pré-major ou revisão pulada)"
+    },
+    {
+      "id": "criterios_nao_fecham",
+      "tipo": "grep",
+      "arquivo": "{fase}/{nn}-INTENT-REVIEW.md",
+      "regex": "criterio_nao_fecha:",
+      "min": 0,
+      "nivel": "informativo",
+      "desc": "critérios do SPEC que o discuss mediu como insatisfazíveis (C4: alerta + ponteiro no sino, nunca decisão no CONTEXT) — contagem para a métrica M11; nunca reprova"
     }
   ]
 }

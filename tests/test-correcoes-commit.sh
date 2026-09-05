@@ -178,6 +178,54 @@ if [ "$rc" != 0 ]; then erro "fecho falhou (rc=$rc)"; else
 fi
 limpa
 
+echo "== C6.1 — CONTEXT comitado no ciclo → DECISIONS-INDEX.md regravado no MESMO commit"
+# O gerador é o do fork (GAD_DECISIONS_INDEX aponta para ele — nada instalado). O índice já
+# existe no projeto (gerado antes do ciclo); a emenda muda uma D-NN do CONTEXT.
+GEN="$AQUI/../../gsd-optimize/gen5-patches/nossos/.claude/gsd-core/bin/nosso/decisions-index.py"
+if [ -f "$GEN" ]; then
+  monta_repo; set_alvos
+  printf '# Phase 24.3: Fase - Context\n\n<decisions>\n## Implementation Decisions\n\n### A\n- **D-01 [auto, R1]:** decisão original\n\n### Claude'"'"'s Discretion\n- nada\n\n</decisions>\n' > "$PD/24.3-CONTEXT.md"
+  python3 "$GEN" "$REPO/.planning" >/dev/null 2>&1
+  G add -A >/dev/null; G commit -qm "contexto + índice" >/dev/null
+  grep -q 'decisão original' "$REPO/.planning/DECISIONS-INDEX.md" && ok "fixture: índice existe e reflete o CONTEXT" || erro "fixture do índice"
+  GAD_DECISIONS_INDEX="$GEN" RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1 || erro "--inicio com índice falhou"
+  jq -e '.alvos[] | select(.path==".planning/DECISIONS-INDEX.md")' "$PD/.intent/.correcoes-c1.base.json" >/dev/null \
+    && ok "--inicio: o índice entrou nos alvos (senão o fecho o recusaria como alvo novo)" || erro "índice fora do --inicio"
+  sed -i 's/decisão original/decisão EMENDADA no ciclo/' "$PD/24.3-CONTEXT.md"
+  saida=$(GAD_DECISIONS_INDEX="$GEN" RUN "$PD" 1 --ids "c1-01" "${ALVOS[@]}" 2>&1); rc=$?
+  [ "$rc" = 0 ] && ok "fecho aceito" || erro "fecho falhou (rc=$rc)" "$saida"
+  G show HEAD:.planning/DECISIONS-INDEX.md | grep -q 'decisão EMENDADA no ciclo' \
+    && ok "índice regravado e comitado junto (sem stale)" || erro "índice no HEAD ainda é o velho"
+  jq -r '.caminhos[]' "$PD/.intent/.correcoes-c1.aplicado" | grep -qx '.planning/DECISIONS-INDEX.md' \
+    && ok ".aplicado lista o índice entre os caminhos" || erro "índice fora de caminhos[]"
+  G diff --quiet -- .planning/DECISIONS-INDEX.md && ok "worktree do índice limpo após o commit" || erro "índice sujo"
+  limpa
+
+  echo "== C6.2 — ciclo que NÃO toca o CONTEXT não mexe no índice; gerador ausente → silêncio"
+  monta_repo; set_alvos
+  printf '# Phase 24.3: Fase - Context\n\n<decisions>\n## Implementation Decisions\n\n### A\n- **D-01 [auto, R1]:** decisão\n\n### Claude'"'"'s Discretion\n- nada\n\n</decisions>\n' > "$PD/24.3-CONTEXT.md"
+  python3 "$GEN" "$REPO/.planning" >/dev/null 2>&1
+  G add -A >/dev/null; G commit -qm "contexto + índice" >/dev/null
+  IDX_BLOB=$(G rev-parse HEAD:.planning/DECISIONS-INDEX.md)
+  GAD_DECISIONS_INDEX="$GEN" RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1
+  echo "spec corrigida" >> "$PD/24.3-SPEC.md"
+  GAD_DECISIONS_INDEX="$GEN" RUN "$PD" 1 --ids "c1-01" "${ALVOS[@]}" >/dev/null 2>&1 || erro "fecho só-SPEC falhou"
+  [ "$(G rev-parse HEAD:.planning/DECISIONS-INDEX.md)" = "$IDX_BLOB" ] && ok "só o SPEC mudou → índice intocado" || erro "índice mudou sem CONTEXT mudar"
+  jq -r '.caminhos[]' "$PD/.intent/.correcoes-c1.aplicado" | grep -qx '.planning/DECISIONS-INDEX.md' \
+    && erro "índice comitado sem mudança" || ok "índice não entra em caminhos[] quando não muda"
+  # gerador ausente: o ciclo 2 toca o CONTEXT e nada acontece com o índice
+  GAD_DECISIONS_INDEX="/nao/existe.py" RUN "$PD" 2 --inicio "${ALVOS[@]}" >/dev/null 2>&1
+  jq -e '.alvos[] | select(.path==".planning/DECISIONS-INDEX.md")' "$PD/.intent/.correcoes-c2.base.json" >/dev/null 2>&1 \
+    && erro "gerador ausente e o índice entrou nos alvos" || ok "gerador ausente → índice fora dos alvos (silêncio)"
+  echo "emenda" >> "$PD/24.3-CONTEXT.md"
+  saida=$(GAD_DECISIONS_INDEX="/nao/existe.py" RUN "$PD" 2 --ids "c2-01" "${ALVOS[@]}" 2>&1); rc=$?
+  [ "$rc" = 0 ] && ok "gerador ausente → o ciclo comita normalmente (exit 0)" || erro "gerador ausente quebrou o ciclo" "$saida"
+  [ "$(G rev-parse HEAD:.planning/DECISIONS-INDEX.md)" = "$IDX_BLOB" ] && ok "gerador ausente → índice segue igual" || erro "índice mudou sem gerador"
+  limpa
+else
+  ok "gerador do fork não encontrado ao lado — casos C6 pulados"
+fi
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-correcoes-commit: TUDO OK" || echo "test-correcoes-commit: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

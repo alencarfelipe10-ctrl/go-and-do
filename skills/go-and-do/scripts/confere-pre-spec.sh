@@ -4,6 +4,14 @@
 # Uso:
 #   confere-pre-spec.sh [--exige-origem] [--reqs REQUIREMENTS.md] <NN-SPEC.md> <NN-PRE-SPEC.md>
 #   confere-pre-spec.sh --so-bloco <NN-PRE-SPEC.md>
+#   confere-pre-spec.sh --sem-pre-spec [--exige-origem] [--reqs REQUIREMENTS.md] <NN-SPEC.md>
+#
+# Modo sem pré-spec (D7c): fase sem NN-PRE-SPEC.md (SPEC do dono, ou gerado sem insumo). O
+# SPEC passa pelas conferências de forma que só existiam com PRE-SPEC — AC-POR-PONTEIRO,
+# AC-SEM-ORIGEM, AC-ORIGEM-INEXISTENTE (R-n/SC-n/REQ-ID contra o `--reqs`) e os sinos de
+# classe. Origem ou marca `PS-nn` vira AC-ORIGEM-INEXISTENTE / ID-INEXISTENTE com a mensagem
+# «a fase não tem PRE-SPEC» (mesma família de código: o confere-etapa.sh grepa a família).
+# RESSALVA-SEM-LIMITACAO e EXTENSAO-SUSPEITA não se aplicam. O resumo traz `modo=sem-pre-spec`.
 #
 # O bloco de decisões vive no PRE-SPEC entre os marcadores
 #   <!-- gad:decisoes:begin v1 -->  …JSON…  <!-- gad:decisoes:end -->
@@ -33,6 +41,23 @@
 #                                 padrão; R-n/SC-n/REQ-ID fora do `--reqs` quando passado.
 #   AVISO   ORIGEM-NAO-CONFERIDA  sem `--reqs`, os ids R-n/SC-n/REQ-ID foram aceitos pelo
 #                                 padrão, sem conferir no REQUIREMENTS.md (uma linha por rodada).
+#   Origens aceitas: PS-nn · AA-n (item n da seção `## Anexo A` do PRE-SPEC) · Goal (literal;
+#   o SPEC precisa de `## Goal` com texto) · AC-nn desta SPEC · R-n/SC-n/REQ-ID (`CANC-v3x-01`).
+#   Classe do critério (D2·D4·D9·D10) — FALHA com `<!-- spec-classe: v1 -->` no SPEC ou
+#   `--exige-classe`; sem os dois, AVISO, e só quando o SPEC tem tag de classe ou bloco
+#   `gsd:acs` (SPEC anterior ao molde sai como hoje):
+#   FALHA   AC-SEM-CLASSE         linha de AC sem `[exigido: …]` nem `[desejável]`, ou com os dois,
+#                                 ou classe da prosa ≠ classe do bloco `gsd:acs`, ou AC fora do
+#                                 bloco / entrada do bloco sem AC, ou bloco ausente/inválido.
+#   FALHA   EXIGIDO-SEM-MOTIVO    `[exigido]` sem `: <motivo>`, ou `motivo` vazio no bloco.
+#   FALHA   EXIGIDO-SEM-REGUA     `[exigido]` cujas origens são TODAS `AC-nn` (derivado não é
+#                                 régua de resultado — cite AA-n, PS-nn, Goal ou REQ-ID).
+#   FALHA   EXIGIDO-DIVERGE-SEM-MOTIVO  `[diverge: …]` sem `AA-n — <porquê>`, ou `diverge` no
+#                                 bloco sem `porque`.
+#   FALHA   GOAL-SEM-COBERTURA    sem `## Cobertura do Goal`, ou sem a linha `**Efeitos sem
+#                                 cobertura:**`, ou com ela em branco, ou com efeito descoberto.
+#   AVISO   AC-ORIGEM-REPETIDA    dois ou mais ACs com o MESMO conjunto de origens (bandeira
+#                                 da pergunta de unicidade — nunca reprova; ignora AC sem origem).
 #   AVISO   EXTENSAO-SUSPEITA     números, identificadores snake_case/CamelCase e literais
 #                                 (None, default, …) presentes na linha marcada
 #                                 `[pre-spec:PS-nn…]` e ausentes no span/decisao do PS-nn.
@@ -53,16 +78,22 @@ set -u
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null && trap 'gad_autoregistro "confere-pre-spec.sh" "$?"' EXIT || true
 
 MODO="completo"
-EXIGE_ORIGEM=0; REQS=""
+EXIGE_ORIGEM=0; EXIGE_CLASSE=0; REQS=""
 while :; do
   case "${1:-}" in
     --exige-origem) EXIGE_ORIGEM=1; shift ;;
+    --exige-classe) EXIGE_CLASSE=1; shift ;;
+    --sem-pre-spec) MODO="sem-pre"; shift ;;
     --reqs) REQS="${2:?uso: --reqs <REQUIREMENTS.md>}"; shift 2
             [ -f "$REQS" ] || { echo "ERRO: --reqs não encontrado: $REQS" >&2; exit 2; } ;;
     *) break ;;
   esac
 done
-if [ "${1:-}" = "--so-bloco" ]; then
+if [ "$MODO" = "sem-pre" ]; then
+  SPEC="${1:?uso: confere-pre-spec.sh --sem-pre-spec [--reqs REQUIREMENTS.md] <NN-SPEC.md>}"
+  PRE=""
+  [ -f "$SPEC" ] || { echo "ERRO: SPEC não encontrado: $SPEC" >&2; exit 2; }
+elif [ "${1:-}" = "--so-bloco" ]; then
   MODO="so-bloco"; shift
   PRE="${1:?uso: confere-pre-spec.sh --so-bloco <NN-PRE-SPEC.md>}"
   SPEC=""
@@ -71,13 +102,16 @@ else
   PRE="${2:?uso: confere-pre-spec.sh <NN-SPEC.md> <NN-PRE-SPEC.md>}"
   [ -f "$SPEC" ] || { echo "ERRO: SPEC não encontrado: $SPEC" >&2; exit 2; }
 fi
-[ -f "$PRE" ] || { echo "ERRO: PRE-SPEC não encontrado: $PRE" >&2; exit 2; }
+[ "$MODO" = "sem-pre" ] || [ -f "$PRE" ] || { echo "ERRO: PRE-SPEC não encontrado: $PRE" >&2; exit 2; }
 
-python3 - "$MODO" "$PRE" "$SPEC" "$EXIGE_ORIGEM" "$REQS" <<'PY'
+python3 - "$MODO" "$PRE" "$SPEC" "$EXIGE_ORIGEM" "$REQS" "$EXIGE_CLASSE" <<'PY'
 import json, re, sys
 
 MODO, PRE, SPEC = sys.argv[1], sys.argv[2], sys.argv[3]
 EXIGE_ORIGEM, REQS = sys.argv[4] == "1", sys.argv[5]
+EXIGE_CLASSE = sys.argv[6] == "1"
+SEM_PRE = MODO == "sem-pre"
+SEM_PRE_MSG = "a fase não tem PRE-SPEC"
 
 BEGIN = "<!-- gad:decisoes:begin v1 -->"
 END   = "<!-- gad:decisoes:end -->"
@@ -103,12 +137,16 @@ def morre_invalido(msg, linha=0):
     sys.exit(2)
 
 # ---------------------------------------------------------------- bloco
-linhas_pre = open(PRE, encoding="utf-8", errors="replace").read().split("\n")
+# Modo sem pré-spec: não há bloco a ler; `ps` fica vazio e tudo que cita PS-nn reprova
+# com a mensagem própria. O resto das conferências do SPEC roda igual.
+linhas_pre = [] if SEM_PRE else open(PRE, encoding="utf-8", errors="replace").read().split("\n")
 ini = fim = None
 for n, l in enumerate(linhas_pre, 1):
     if BEGIN in l and ini is None: ini = n
     elif END in l and ini is not None and fim is None: fim = n
-if ini is None or fim is None:
+if SEM_PRE:
+    ini = fim = 0
+elif ini is None or fim is None:
     print(f"BLOCO-AUSENTE {PRE}:0 não achei {BEGIN} … {END}")
     if MODO == "so-bloco":
         print("pre_spec_bloco: ausente")
@@ -116,7 +154,7 @@ if ini is None or fim is None:
         print("resumo: bloco ausente — nada foi conferido")
     sys.exit(1)
 
-bruto = "\n".join(linhas_pre[ini:fim-1])
+bruto = "[]" if SEM_PRE else "\n".join(linhas_pre[ini:fim-1])
 
 def sem_duplicata(pares):
     vistas = set()
@@ -203,7 +241,9 @@ for n, l in enumerate(linhas_spec, 1):
     for m in RE_MARCA_ID.finditer(l):
         psid = m.group(2)
         if psid not in ps:
-            falha("ID-INEXISTENTE", SPEC, n, f"marca cita {psid}, que não existe no bloco de {PRE}")
+            falha("ID-INEXISTENTE", SPEC, n,
+                  f"marca cita {psid} e {SEM_PRE_MSG}" if SEM_PRE
+                  else f"marca cita {psid}, que não existe no bloco de {PRE}")
         else:
             usados.add(psid)
 
@@ -256,10 +296,16 @@ RE_SO_PONTA = re.compile(
     r'[\s.,;]*$', re.I)
 
 RE_ORIGEM = re.compile(r'\[origem:\s*([^\]]*)\]', re.I)
+# Classe do critério (D4): `[exigido: motivo]` · `[desejável]` · `[diverge: AA-n — porquê]`.
+# São campos, não corpo — saem do corpo antes de julgar AC-POR-PONTEIRO, como a origem.
+RE_EXIG   = re.compile(r'\[exigido(?::\s*([^\]]*))?\]', re.I)
+RE_DESEJ  = re.compile(r'\[desej[aá]vel\]', re.I)
+RE_DIV    = re.compile(r'\[diverge:\s*([^\]]*)\]', re.I)
 
 def corpo_do_ac(l):
     c = RE_MARCA_ID.sub("", RE_MARCA_NUA.sub("", l))
     c = RE_ORIGEM.sub("", c)   # a origem é campo, não corpo (P12)
+    c = RE_DIV.sub("", RE_DESEJ.sub("", RE_EXIG.sub("", c)))   # a classe é campo, não corpo (D4)
     c = re.sub(r'^\s*(?:[-*+]|\d+\.)\s*', "", c)          # marcador de lista
     c = re.sub(r'^\s*\[[^\]]\]\s*', "", c)                 # checkbox `[ ]`/`[x]`/`[m]` (P12)
     c = c.replace("**", "").replace("`", "")
@@ -288,7 +334,10 @@ for n, l in enumerate(linhas_spec, 1):
 # Linha de DEFINIÇÃO de AC: item de lista, checkbox opcional, `AC-nn` no começo
 # (mesma âncora do etiqueta-achados.py). Menções no meio da linha (tabelas) não contam.
 RE_AC_DEF   = re.compile(r'^\s*(?:[-*+]|\d+\.)\s*(?:\[[^\]]\]\s*)?\*{0,2}(AC-\d+)\b')
-RE_ID_REQ   = re.compile(r'^[A-Z]{1,8}-?\d+$')
+# R2, SC-1, DESC-01 e os ids com segmento de versão do REQUIREMENTS real (CANC-v3x-01 — o
+# molde promete aceitá-los; o padrão antigo os rejeitava). Com `--reqs` o id é conferido
+# no arquivo de qualquer jeito; o padrão só decide o que é "fora do padrão".
+RE_ID_REQ   = re.compile(r'^[A-Z]{1,8}(?:-[A-Za-z0-9]+)*-?\d+$')
 MARCADOR    = "<!-- spec-origem: v1 -->"
 exige = EXIGE_ORIGEM or any(MARCADOR in l for l in linhas_spec)
 acs_def = {}
@@ -299,10 +348,39 @@ for n, l in enumerate(linhas_spec, 1):
 reqs_txt = open(REQS, encoding="utf-8", errors="replace").read() if REQS else None
 nao_conferidos = []
 sem_origem = falha if exige else aviso
+
+# Origens-régua da D2: `AA-n` = item n da seção `## Anexo A` do PRE-SPEC (lista `n.` até o
+# próximo heading); `Goal` = literal, aceito quando o SPEC tem `## Goal` não vazio. O Anexo A
+# real da 24.4 tem seis itens numerados sem PS-nn — sem token próprio a régua seria
+# impossível de escrever. Ordem dos ramos abaixo: PS → AA → Goal → AC → REQ-ID (`AA-1` casa o
+# padrão de REQ-ID e `Goal` não casa nada; os dois têm de ser decididos antes).
+RE_AA = re.compile(r'^AA-(\d+)$')
+def secao(linhas, titulo_rx):
+    ini = None
+    rx = re.compile(r'^\s{0,3}#{1,6}\s+' + titulo_rx + r'\b', re.I)
+    for n, l in enumerate(linhas, 1):
+        if rx.match(l):
+            ini = n
+            break
+    if ini is None:
+        return None, []
+    corpo = []
+    for l in linhas[ini:]:
+        if RE_HEADING.match(l):
+            break
+        corpo.append(l)
+    return ini, corpo
+anexo_ini, anexo_corpo = secao(linhas_pre, r'Anexo A')
+anexo_itens = {int(m.group(1)) for l in anexo_corpo for m in [re.match(r'^\s*(\d+)\.', l)] if m}
+goal_ini, goal_corpo = secao(linhas_spec, r'Goal')
+goal_ok = goal_ini is not None and any(l.strip() for l in goal_corpo)
+origens_por_ac = {}
+
 for acid, n in acs_def.items():
     l = linhas_spec[n-1]
     mo = RE_ORIGEM.search(l)
     ids = [x.strip() for x in mo.group(1).split(",") if x.strip()] if mo else []
+    origens_por_ac[acid] = ids
     if not ids:
         sem_origem("AC-SEM-ORIGEM", SPEC, n,
                    f"{acid} sem `[origem: <ids>]` — cite PS-nn, R-n/SC-n/REQ-ID ou AC-nn desta SPEC"
@@ -312,7 +390,21 @@ for acid, n in acs_def.items():
         u = oid.upper()
         if RE_ID.match(u):
             if u not in ps:
-                falha("AC-ORIGEM-INEXISTENTE", SPEC, n, f"{acid} cita {oid}, que não existe no bloco de {PRE}")
+                falha("AC-ORIGEM-INEXISTENTE", SPEC, n,
+                      f"{acid} cita {oid} e {SEM_PRE_MSG}" if SEM_PRE
+                      else f"{acid} cita {oid}, que não existe no bloco de {PRE}")
+        elif RE_AA.match(u):
+            k = int(RE_AA.match(u).group(1))
+            if SEM_PRE:
+                falha("AC-ORIGEM-INEXISTENTE", SPEC, n, f"{acid} cita {oid} e {SEM_PRE_MSG}")
+            elif anexo_ini is None:
+                falha("AC-ORIGEM-INEXISTENTE", SPEC, n, f"{acid} cita {oid} e {PRE} não tem seção `## Anexo A`")
+            elif k not in anexo_itens:
+                falha("AC-ORIGEM-INEXISTENTE", SPEC, n,
+                      f"{acid} cita {oid}, e o Anexo A de {PRE} não tem o item {k}. (itens: {sorted(anexo_itens)})")
+        elif u == "GOAL":
+            if not goal_ok:
+                falha("AC-ORIGEM-INEXISTENTE", SPEC, n, f"{acid} cita Goal e o SPEC não tem seção `## Goal` com texto")
         elif u.startswith("AC-") and RE_ID_REQ.match(u):
             if u == acid:
                 falha("AC-ORIGEM-INEXISTENTE", SPEC, n, f"{acid} cita a si mesmo como origem")
@@ -326,10 +418,106 @@ for acid, n in acs_def.items():
                 nao_conferidos.append(oid)
         else:
             falha("AC-ORIGEM-INEXISTENTE", SPEC, n,
-                  f"{acid} cita {oid!r}, fora do padrão (PS-nn, AC-nn, R-n, SC-n ou REQ-ID)")
+                  f"{acid} cita {oid!r}, fora do padrão (PS-nn, AA-n, Goal, AC-nn, R-n, SC-n ou REQ-ID)")
 if nao_conferidos:
     aviso("ORIGEM-NAO-CONFERIDA", SPEC, 0,
           f"sem --reqs: aceitos pelo padrão, sem conferir no REQUIREMENTS.md: {', '.join(nao_conferidos)}")
+
+# --- classe do critério (D2 · D4 · D9 · D10) ---------------------------------
+# Ligação: `--exige-classe` ou o marcador `<!-- spec-classe: v1 -->` no SPEC → os códigos são
+# FALHA. Sem ligação, só avisa — e só quando o SPEC mostra algum sinal do mecanismo (uma tag
+# de classe numa linha de AC ou o bloco `gsd:acs`); SPEC anterior ao molde, sem sinal nenhum,
+# sai byte a byte como hoje. AC-ORIGEM-REPETIDA é bandeira sempre (convite à pergunta de
+# unicidade, nunca o veredito dela) e ignora AC sem origem.
+MARC_CLASSE = "<!-- spec-classe: v1 -->"
+exige_classe = EXIGE_CLASSE or any(MARC_CLASSE in l for l in linhas_spec)
+ACS_BEGIN, ACS_END = "<!-- gsd:acs:begin -->", "<!-- gsd:acs:end -->"
+acs_ini = acs_fim = None
+for n, l in enumerate(linhas_spec, 1):
+    if ACS_BEGIN in l and acs_ini is None: acs_ini = n
+    elif ACS_END in l and acs_ini is not None and acs_fim is None: acs_fim = n
+tags_na_prosa = any(RE_EXIG.search(linhas_spec[n-1]) or RE_DESEJ.search(linhas_spec[n-1]) for n in acs_def.values())
+sinal_classe = exige_classe or acs_ini is not None or tags_na_prosa
+if sinal_classe:
+    cls = falha if exige_classe else aviso
+    sufixo = "" if exige_classe else " (aviso: SPEC sem `<!-- spec-classe: v1 -->` e sem --exige-classe)"
+    acs_bloco = None
+    if acs_ini is None or acs_fim is None:
+        cls("AC-SEM-CLASSE", SPEC, 0, f"bloco `{ACS_BEGIN} … {ACS_END}` ausente do SPEC — a classe é lida dele{sufixo}")
+    else:
+        try:
+            dados_acs = json.loads("\n".join(linhas_spec[acs_ini:acs_fim-1]), object_pairs_hook=lambda p: dict(p))
+            if not isinstance(dados_acs, list) or not all(isinstance(e, dict) and isinstance(e.get("id"), str) for e in dados_acs):
+                raise ValueError("array de objetos com `id`")
+            acs_bloco = {}
+            for e in dados_acs:
+                if e["id"].upper() in acs_bloco:
+                    cls("AC-SEM-CLASSE", SPEC, acs_ini, f"{e['id']} aparece duas vezes no bloco gsd:acs{sufixo}")
+                acs_bloco[e["id"].upper()] = e
+        except (json.JSONDecodeError, ValueError) as e:
+            cls("AC-SEM-CLASSE", SPEC, acs_ini, f"bloco gsd:acs inválido ({e}){sufixo}")
+    for acid, n in acs_def.items():
+        l = linhas_spec[n-1]
+        ex, de, dv = RE_EXIG.search(l), RE_DESEJ.search(l), RE_DIV.search(l)
+        if ex and de:
+            cls("AC-SEM-CLASSE", SPEC, n, f"{acid} traz `[exigido…]` e `[desejável]` ao mesmo tempo{sufixo}")
+            continue
+        classe_prosa = "exigido" if ex else ("desejavel" if de else None)
+        if classe_prosa is None:
+            cls("AC-SEM-CLASSE", SPEC, n, f"{acid} sem `[exigido: <motivo>]` nem `[desejável]`{sufixo}")
+        ent = acs_bloco.get(acid) if acs_bloco is not None else None
+        if acs_bloco is not None:
+            if ent is None:
+                cls("AC-SEM-CLASSE", SPEC, n, f"{acid} ausente do bloco gsd:acs{sufixo}")
+            elif classe_prosa and str(ent.get("classe", "")).lower() != classe_prosa:
+                cls("AC-SEM-CLASSE", SPEC, n,
+                    f"{acid}: prosa diz `{classe_prosa}` e o bloco gsd:acs diz {ent.get('classe')!r} — os dois têm de dizer o mesmo{sufixo}")
+        if classe_prosa != "exigido":
+            continue
+        motivo = (ex.group(1) or "").strip()
+        if not motivo or (ent is not None and not str(ent.get("motivo") or "").strip()):
+            cls("EXIGIDO-SEM-MOTIVO", SPEC, n, f"{acid} é `[exigido]` sem motivo — escreva `[exigido: <régua em uma frase>]` e `motivo` no bloco{sufixo}")
+        ids = [x.upper() for x in origens_por_ac.get(acid, [])]
+        if ids and all(x.startswith("AC-") for x in ids):
+            cls("EXIGIDO-SEM-REGUA", SPEC, n,
+                f"{acid} é `[exigido]` e só cita outro AC como origem — critério derivado não é régua de resultado; cite AA-n, PS-nn, Goal ou o REQ-ID{sufixo}")
+        if dv is not None:
+            m = re.match(r'^\s*(AA-\d+)\s*(?:[—–:-]+\s*(\S.*))?$', dv.group(1).strip())
+            if not m or not (m.group(2) or "").strip():
+                cls("EXIGIDO-DIVERGE-SEM-MOTIVO", SPEC, n, f"{acid}: `[diverge: …]` sem `AA-n — <porquê>`{sufixo}")
+        if ent is not None and ent.get("diverge") is not None:
+            d = ent["diverge"]
+            if not isinstance(d, dict) or not str(d.get("porque") or "").strip():
+                cls("EXIGIDO-DIVERGE-SEM-MOTIVO", SPEC, n,
+                    f"{acid}: `diverge` no bloco gsd:acs sem `porque` — divergir do Anexo A é permitido, em silêncio não{sufixo}")
+    if acs_bloco is not None:
+        for k, e in acs_bloco.items():
+            if k not in acs_def:
+                cls("AC-SEM-CLASSE", SPEC, acs_ini, f"{e['id']} está no bloco gsd:acs e não é AC desta SPEC{sufixo}")
+    # GOAL-SEM-COBERTURA: a seção existe e não pode ficar em branco nem contradizer a si mesma.
+    cob_ini, cob_corpo = secao(linhas_spec, r'Cobertura do Goal')
+    if cob_ini is None:
+        cls("GOAL-SEM-COBERTURA", SPEC, 0, f"SPEC sem seção `## Cobertura do Goal`{sufixo}")
+    else:
+        linha_ef = next((l for l in cob_corpo if l.strip().startswith("**Efeitos sem cobertura:**")), None)
+        if linha_ef is None:
+            cls("GOAL-SEM-COBERTURA", SPEC, cob_ini, f"`## Cobertura do Goal` sem a linha `**Efeitos sem cobertura:**`{sufixo}")
+        else:
+            valor = linha_ef.split("**Efeitos sem cobertura:**", 1)[1].strip()
+            if not valor or valor.startswith("["):
+                cls("GOAL-SEM-COBERTURA", SPEC, cob_ini, f"`**Efeitos sem cobertura:**` em branco — escreva `nenhum` ou um efeito por linha{sufixo}")
+            elif valor.lower().rstrip(".") != "nenhum":
+                cls("GOAL-SEM-COBERTURA", SPEC, cob_ini, f"efeito do Goal sem exigido que o cubra: {valor}{sufixo}")
+
+# AC-ORIGEM-REPETIDA (bandeira): dois ou mais ACs com o mesmo conjunto de origens.
+grupos = {}
+for acid, ids in origens_por_ac.items():
+    if ids:
+        grupos.setdefault(frozenset(x.upper() for x in ids), []).append(acid)
+for chave, acs in grupos.items():
+    if len(acs) > 1:
+        aviso("AC-ORIGEM-REPETIDA", SPEC, acs_def[acs[0]],
+              f"{', '.join(acs)} têm o mesmo conjunto de origens ({', '.join(sorted(chave))}) — qual verificação derruba só cada um? (bandeira, não veredito)")
 
 # --- EXTENSAO-SUSPEITA (aviso, token-level) --------------------------------
 RE_IDS_DOC   = re.compile(r'\b(?:PS|AC|R|SC|D|REQ|Q)-?\d+\b')
@@ -379,6 +567,7 @@ for cod, *_ in falhas + avisos:
     conta[cod] = conta.get(cod, 0) + 1
 detalhe = " · ".join(f"{k}={v}" for k, v in sorted(conta.items())) or "nenhum achado"
 print(f"resumo: falhas={len(falhas)} · avisos={len(avisos)} · entradas={len(ps)} · "
-      f"marcas_usadas={len(usados)}/{len(ps)} · {detalhe}")
+      f"marcas_usadas={len(usados)}/{len(ps)} · {detalhe}"
+      + (" · modo=sem-pre-spec" if SEM_PRE else ""))
 sys.exit(1 if falhas else 0)
 PY

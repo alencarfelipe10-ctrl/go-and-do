@@ -2,7 +2,7 @@
 # confere-reconciliacao.sh — reconciliação mecânica VEREDITO × APLICADO da revisão
 # adversarial, e trava de ordem releitura→correção na SAÍDA (item A5 do PLANO-A).
 #
-# Uso: confere-reconciliacao.sh <phase_dir> [<ciclo>] [--ordem]
+# Uso: confere-reconciliacao.sh <phase_dir> [<ciclo>] [--ordem] [--final]
 #
 # POR QUE ESTE SCRIPT EXISTE
 # Os dois lados do dado já estavam gravados e ninguém os juntava:
@@ -35,23 +35,43 @@
 # `.releitura-c<C>.json` com a data do commit registrado em `.correcoes-c<C>.aplicado`.
 # Correção promovida DEPOIS da releitura = correção que ninguém releu → ORDEM-VIOLADA.
 #
+# D-NN-DESATUALIZADA (C3, plano 2 / 05/09/2026) — mexeu no SPEC, tem de olhar o CONTEXT.
+# Na F24.4 quatro dos cinco ciclos emendaram critérios do SPEC sem tocar o CONTEXT, e seis
+# decisões continuaram citando critérios que já não existiam. Dois detectores, ambos
+# INFORMATIVOS (a lista é insumo da releitura, que devolve `ok: false` e dispara a correção
+# `c<C>b`; um exit 1 aqui reprovaria a etapa antes do laço que conserta):
+#   · por ciclo: `git diff -U20 <commit>^..<commit> -- <SPEC>` do `.correcoes-c<C>.aplicado`;
+#     colhe os `AC-nn`/`R-n` citados nas linhas +/- e o AC dono de cada hunk; toda D-NN do
+#     CONTEXT vigente que cita um desses ids, não foi tocada no mesmo commit (CONTEXT fora
+#     dos `caminhos`, ou dentro mas com o bullet intacto) e não traz a tag `superada-c<N>`
+#     → `D-NN-DESATUALIZADA c<C> <D-NN> — cita <ids> (SPEC mudou em <sha>); <motivo>`.
+#   · `--final`: mesma régua entre os blobs selados `.intent/.base-SPEC.txt` /
+#     `.base-CONTEXT.txt` (o original) e o worktree — pega o que mudou fora de um `.aplicado`
+#     (o passe «b»): linhas `D-NN-DESATUALIZADA final <D-NN> — …`. Fase sem base selada →
+#     `final: n/a`.
+#   Uma linha por decisão, o id como terceiro token (a releitura e o plano 3 leem assim), e
+#   a contagem em `informativos: D-NN-DESATUALIZADA=<n>`. Nunca entra no `exit`.
+#
 # SAÍDA: uma linha por achado fora do `ok`, mais um resumo com a contagem de cada classe
 # e `reconciliacao: ok|falha` (e `ordem: ok|violada|n/a` quando --ordem).
 #
 # EXIT: 0 = tudo ok (ou n/a) · 1 = INVERSAO, CONFIRMADO-NAO-APLICADO,
 #       APLICADO-SEM-VEREDITO ou ORDEM-VIOLADA · 2 = uso inválido.
+#       D-NN-DESATUALIZADA nunca muda o exit (informativo por desenho — ver acima).
 #
-# SOMENTE LEITURA: o script não escreve nada em disco — por isso NÃO sourceia o
+# SOMENTE LEITURA: o script não escreve nada no projeto — por isso NÃO sourceia o
 # lib/gsd-shim.sh nem instala o trap `gad_autoregistro` que os outros gates usam (aquele
 # helper grava no run-log da fase; aqui isso violaria a regra 7 do item A5a e sujaria a
-# telemetria de uma fase que a auditoria lê a posteriori).
+# telemetria de uma fase que a auditoria lê a posteriori). A única escrita é um
+# `mktemp -d` em $TMPDIR para os diffs do detector C3, apagado no EXIT.
 
 set -u
 
-PD=""; CICLO=""; ORDEM=0
+PD=""; CICLO=""; ORDEM=0; FINAL=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --ordem) ORDEM=1; shift ;;
+    --final) FINAL=1; shift ;;
     -h|--help) sed -n '2,45p' "$0"; exit 0 ;;
     --*) echo "flag desconhecida: $1" >&2; exit 2 ;;
     *)
@@ -62,7 +82,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-[ -n "$PD" ] || { echo "uso: confere-reconciliacao.sh <phase_dir> [<ciclo>] [--ordem]" >&2; exit 2; }
+[ -n "$PD" ] || { echo "uso: confere-reconciliacao.sh <phase_dir> [<ciclo>] [--ordem] [--final]" >&2; exit 2; }
 [ -d "$PD" ] || { echo "ERRO: phase_dir inexistente: $PD" >&2; exit 2; }
 case "$CICLO" in ""|*[!0-9]*) [ -z "$CICLO" ] || { echo "ERRO: ciclo deve ser numérico: $CICLO" >&2; exit 2; } ;; esac
 
@@ -85,7 +105,9 @@ if [ -z "$ciclos" ]; then
   # adversarial pulada ainda tem ciclo 0 (`.correcoes-c0.aplicado` + `.releitura-c0.json`)
   # e uma correção promovida depois daquela releitura é exatamente o que este gate existe
   # para pegar. Sair 0 aqui seria reportar verde no caso a conferir (fail-open).
-  [ "$ORDEM" = 1 ] || exit 0
+  # Idem para o detector de D-NN desatualizadas: o c0 da 24.4 não tem vereditos e é
+  # justamente onde o SPEC mais mudou.
+  [ "$ORDEM" = 1 ] || [ "$FINAL" = 1 ] || ls "$IN"/.correcoes-c*.aplicado >/dev/null 2>&1 || exit 0
 fi
 
 # ── helpers ─────────────────────────────────────────────────────────────────────
@@ -197,6 +219,133 @@ if [ -n "$ciclos" ]; then
 
   echo "resumo: ok=$n_ok INVERSAO=$n_inv CONFIRMADO-NAO-APLICADO=$n_cna APLICADO-SEM-VEREDITO=$n_asv VEREDITO-ILEGIVEL=$n_ileg fora-do-escopo=$n_fora"
   if [ "$falha" -eq 0 ]; then echo "reconciliacao: ok"; else echo "reconciliacao: falha"; fi
+fi
+
+# ── C3 — D-NN desatualizadas (informativo; ver cabeçalho) ───────────────────────
+# Um bloco python por ser leitura de diff com estado (AC dono do hunk, bullet dono da linha);
+# só lê git e arquivos — nada é escrito.
+n_desat=0
+ROOT_GIT=$(git -C "$PD" rev-parse --show-toplevel 2>/dev/null || true)
+CTX_VIG=$(ls "$PD"/*-CONTEXT.md 2>/dev/null | head -1 || true)
+SPEC_VIG=$(ls "$PD"/*-SPEC.md 2>/dev/null | grep -v -E 'AI-SPEC|PRE-SPEC' | head -1 || true)
+desatualizadas() { # <rótulo: c<C>|final> <diff do SPEC (arquivo)> <diff do CONTEXT (arquivo, pode ser vazio)> <sha curto> <motivo quando o CONTEXT não mudou>
+  python3 - "$@" "$CTX_VIG" <<'PYD'
+import re, sys
+rot, dspec, dctx, sha, motivo_ctx, ctx = sys.argv[1:7]
+AC = re.compile(r"\bAC-\d+\b"); RN = re.compile(r"\bR-?(\d+)\b")
+def ids(t):
+    return set(AC.findall(t)) | {"R" + n for n in RN.findall(t)}
+mudados = set()
+for ln in open(dspec, encoding="utf-8", errors="replace"):
+    if ln.startswith(("+++", "---", "diff ", "index ")):
+        continue
+    if ln.startswith("@@"):
+        dono = None; continue
+    corpo = ln[1:] if ln[:1] in "+- " else ln
+    m = AC.search(corpo)
+    if m:
+        dono = m.group(0)          # AC dono do hunk = último id visto no contexto (-U20)
+    if ln[:1] in "+-":
+        mudados |= ids(corpo)
+        if dono:
+            mudados.add(dono)
+if not mudados:
+    print(f"nota {rot}: nenhum AC-nn/R-n mudou no SPEC — nada a conferir")
+    sys.exit(0)
+tocadas = set()
+if dctx:
+    dono = None
+    for ln in open(dctx, encoding="utf-8", errors="replace"):
+        if ln.startswith(("+++", "---", "diff ", "index ")):
+            continue
+        if ln.startswith("@@"):
+            dono = None; continue
+        corpo = ln[1:] if ln[:1] in "+- " else ln
+        m = re.match(r"^\s*-\s+\*\*(D-[0-9A-Za-z_-]+)", corpo)
+        if m:
+            dono = m.group(1)
+        if ln[:1] in "+-" and dono:
+            tocadas.add(dono)
+try:
+    texto = open(ctx, encoding="utf-8").read()
+except Exception:
+    print(f"nota {rot}: CONTEXT vigente ausente — nada a conferir"); sys.exit(0)
+m = re.search(r"<decisions>\n(.*?)\n</decisions>", texto, re.S)
+bul, cur = [], None
+for ln in (m.group(1) if m else "").splitlines():
+    h = re.match(r"^\s*-\s+\*\*(D-[0-9A-Za-z_-]+)((?:\s*\[[^\]]*\])?)[^:*]*:\*\*", ln)
+    if h:
+        cur = [h.group(1), h.group(2), [ln]]; bul.append(cur); continue
+    if cur and ln.startswith("  "):
+        cur[2].append(ln)
+    elif ln.startswith("###") or not ln.strip():
+        cur = None
+n = 0
+for did, tags, lines in bul:
+    if re.search(r"superada-c\d+", tags):
+        continue
+    cita = ids("\n".join(lines)) & mudados
+    if not cita:
+        continue
+    if did in tocadas:
+        continue
+    n += 1
+    motivo = motivo_ctx if not dctx else "bullet intacto no commit que mudou o SPEC"
+    print(f"D-NN-DESATUALIZADA {rot} {did} — cita {', '.join(sorted(cita))} (SPEC mudou em {sha}); {motivo}")
+print(f"desatualizadas {rot}: {n} (ids mudados no SPEC: {len(mudados)})")
+PYD
+}
+if [ -n "$ROOT_GIT" ] && [ -n "$CTX_VIG" ]; then
+  TMPD=$(mktemp -d "${TMPDIR:-/tmp}/gad-desat-XXXXXX"); trap 'rm -rf "$TMPD"' EXIT
+  for A in "$IN"/.correcoes-c*.aplicado; do
+    [ -f "$A" ] || continue
+    c=$(printf '%s' "$A" | sed -n 's/.*\.correcoes-c\([0-9][0-9]*\)\.aplicado$/\1/p'); [ -n "$c" ] || continue
+    [ -z "$CICLO" ] || [ "$c" = "$CICLO" ] || continue
+    commit=$(campo_json "$A" commit); [ -n "$commit" ] || continue
+    git -C "$ROOT_GIT" cat-file -e "$commit^{commit}" 2>/dev/null || { echo "nota c$c: commit $(curto "$commit") não está no repositório — D-NN desatualizadas não conferidas"; continue; }
+    # A passada «b» sobrescreve o .aplicado IN-PLACE (correcoes-commit.sh, cabeçalho): o commit
+    # registrado é o último do ciclo. Os anteriores têm a mensagem canônica do mesmo script
+    # (`… correções do ciclo C — …`) e entram pelo grep no histórico — cada um com o seu diff.
+    NNF=$(basename "$SPEC_VIG" | sed -nE 's/^([0-9]+(\.[0-9]+)*)-.*$/\1/p')   # `docs(fase 24.4): correções do ciclo C — …`
+    commits=$( { git -C "$ROOT_GIT" log --format=%H --fixed-strings --grep="(fase ${NNF:-?}): correções do ciclo $c —" HEAD 2>/dev/null; printf '%s\n' "$commit"; } | awk '!v[$0]++' )
+    SPEC_REL=$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$SPEC_VIG" "$ROOT_GIT" 2>/dev/null || true)
+    CTX_REL=$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$CTX_VIG" "$ROOT_GIT" 2>/dev/null || true)
+    for cm in $commits; do
+      git -C "$ROOT_GIT" cat-file -e "$cm^{commit}" 2>/dev/null || continue
+      spec_c=$(git -C "$ROOT_GIT" diff --name-only "$cm^..$cm" -- "$SPEC_REL" 2>/dev/null | head -1 || true)
+      ctx_c=$(git -C "$ROOT_GIT" diff --name-only "$cm^..$cm" -- "$CTX_REL" 2>/dev/null | head -1 || true)
+      [ -n "$spec_c" ] || { echo "nota c$c: SPEC fora dos caminhos do commit $(curto "$cm") — nada a conferir"; continue; }
+      git -C "$ROOT_GIT" diff -U20 "$cm^..$cm" -- "$spec_c" > "$TMPD/spec-c$c.diff" 2>/dev/null || : > "$TMPD/spec-c$c.diff"
+      dctx=""
+      if [ -n "$ctx_c" ]; then dctx="$TMPD/ctx-c$c.diff"; git -C "$ROOT_GIT" diff -U0 "$cm^..$cm" -- "$ctx_c" > "$dctx" 2>/dev/null || : > "$dctx"
+      else echo "nota c$c: CONTEXT ausente dos caminhos do commit $(curto "$cm")"; fi
+      out=$(desatualizadas "c$c" "$TMPD/spec-c$c.diff" "$dctx" "$(curto "$cm")" "CONTEXT fora dos caminhos do ciclo")
+      printf '%s\n' "$out"
+      n_desat=$((n_desat + $(printf '%s\n' "$out" | grep -c '^D-NN-DESATUALIZADA ')))
+    done
+  done
+  if [ "$FINAL" = 1 ]; then
+    BS=$(cat "$IN/.base-SPEC.txt" 2>/dev/null | tr -d ' \n'); BC=$(cat "$IN/.base-CONTEXT.txt" 2>/dev/null | tr -d ' \n')
+    if [ -z "$BS" ] || [ -z "$SPEC_VIG" ] || ! git -C "$ROOT_GIT" cat-file -e "$BS" 2>/dev/null; then
+      echo "final: n/a (sem .base-SPEC.txt resolvível — fase anterior à selagem)"
+    else
+      # blob selado × ARQUIVO do worktree (não `git diff <blob> <blob>`: o worktree sujo não tem blob
+      # no object store e o diff morreria em "bad object" — fail-open com «nada mudou»). Só leitura.
+      git -C "$ROOT_GIT" cat-file blob "$BS" > "$TMPD/spec-base" 2>/dev/null || : > "$TMPD/spec-base"
+      diff -U20 "$TMPD/spec-base" "$SPEC_VIG" > "$TMPD/spec-final.diff" 2>/dev/null || true
+      dctx=""
+      if [ -n "$BC" ] && git -C "$ROOT_GIT" cat-file -e "$BC" 2>/dev/null; then
+        dctx="$TMPD/ctx-final.diff"; git -C "$ROOT_GIT" cat-file blob "$BC" > "$TMPD/ctx-base" 2>/dev/null || : > "$TMPD/ctx-base"
+        diff -U0 "$TMPD/ctx-base" "$CTX_VIG" > "$dctx" 2>/dev/null || true
+      fi
+      out=$(desatualizadas "final" "$TMPD/spec-final.diff" "$dctx" "$(curto "$BS")→worktree" "CONTEXT sem base selada")
+      printf '%s\n' "$out"
+      n_desat=$((n_desat + $(printf '%s\n' "$out" | grep -c '^D-NN-DESATUALIZADA ')))
+    fi
+  fi
+  echo "informativos: D-NN-DESATUALIZADA=$n_desat"
+elif [ "$FINAL" = 1 ]; then
+  echo "final: n/a (phase_dir fora de um repositório git ou sem CONTEXT)"
 fi
 
 # ── A5b — trava de ordem na saída ───────────────────────────────────────────────

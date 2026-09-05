@@ -14,3 +14,5 @@ Regras permanentes:
   dos arquivos que leu.
 - Quando várias buscas não dependem umas das outras, rode todas no MESMO turno.
 - Proibido ler `.env*` ou dumpar credenciais.
+- Pergunta que veio do discuss: responda por requisito, uma conclusão por R-n, nunca por
+  arquivo — quem lê decide por requisito, não por arquivo.

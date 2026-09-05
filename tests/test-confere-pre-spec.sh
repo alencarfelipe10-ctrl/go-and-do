@@ -99,6 +99,55 @@ roda "spec antiga (sem sufixo, sem marcador) → só avisos, exit 0" 0 \
      'AC-SEM-ORIGEM=2' -- "$F/ok-SPEC.md" "$F/ok-PRE-SPEC.md"
 roda "spec antiga + --exige-origem → exit 1" 1 'AC-SEM-ORIGEM=2' -- --exige-origem "$F/ok-SPEC.md" "$F/ok-PRE-SPEC.md"
 roda "--reqs inexistente → exit 2" 2 'ERRO: --reqs' -- --reqs "$F/nao-existe.md" "$F/ok-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "REQ-ID com segmento de versão (CANC-v3x-01) casa o padrão e é conferido no --reqs" 1 \
+     'AC-ORIGEM-INEXISTENTE .*:17 AC-08 cita AC-42' -- --reqs "$F/origem-REQUIREMENTS.md" "$F/origem-SPEC.md" "$F/ok-PRE-SPEC.md"
+
+echo "-- classe do critério (D2 · D4 · D9 · D10, plano 1)"
+roda "SPEC com classe limpo (AA-n, Goal, diverge com porquê, Cobertura do Goal) → exit 0" 0 \
+     'falhas=0 .*nenhum achado' -- "$F/classe-ok-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "AC-SEM-CLASSE: AC sem tag" 1 'AC-SEM-CLASSE .*:15 AC-05 sem ' -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "AC-SEM-CLASSE: prosa ≠ bloco gsd:acs" 1 "AC-SEM-CLASSE .*:17 AC-07: prosa diz .desejavel. e o bloco gsd:acs diz 'exigido'" -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "AC-SEM-CLASSE: AC ausente do bloco / entrada do bloco sem AC" 1 \
+     'AC-SEM-CLASSE .*:20 AC-10 ausente do bloco' -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "…AC-11 só no bloco" 1 'AC-SEM-CLASSE .*AC-11 está no bloco gsd:acs e não é AC' -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "EXIGIDO-SEM-MOTIVO: [exigido] sem ': motivo'" 1 'EXIGIDO-SEM-MOTIVO .*:14 AC-04' -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "EXIGIDO-SEM-REGUA: exigido cuja única origem é outro AC" 1 'EXIGIDO-SEM-REGUA .*:13 AC-03' -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "EXIGIDO-DIVERGE-SEM-MOTIVO: [diverge: AA-2] sem porquê na prosa E no bloco (2 linhas)" 1 \
+     'EXIGIDO-DIVERGE-SEM-MOTIVO=2' -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "GOAL-SEM-COBERTURA: efeito descoberto nomeado" 1 'GOAL-SEM-COBERTURA .*:22 efeito do Goal sem exigido que o cubra: 9 janelas' -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "AA-9 inexistente no Anexo A → AC-ORIGEM-INEXISTENTE com os itens existentes" 1 \
+     'AC-ORIGEM-INEXISTENTE .*:18 AC-08 cita AA-9, e o Anexo A .* não tem o item 9. \(itens: \[1, 2, 3\]\)' -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "AC-ORIGEM-REPETIDA é bandeira: 2 grupos (R2 · PS-01), contam como aviso" 1 \
+     'AC-ORIGEM-REPETIDA .*:12 AC-02, AC-10 têm o mesmo conjunto de origens \(R2\)' -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "contagem exata dos sinos de classe" 1 \
+     'falhas=10 · avisos=3 .*AC-ORIGEM-REPETIDA=2 · AC-SEM-CLASSE=4 · EXIGIDO-DIVERGE-SEM-MOTIVO=2 · EXIGIDO-SEM-MOTIVO=1 · EXIGIDO-SEM-REGUA=1 · GOAL-SEM-COBERTURA=1' -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+nao_casa "classe é campo, não corpo: nenhum AC-POR-PONTEIRO nas fixtures de classe" \
+     'AC-POR-PONTEIRO' -- "$F/classe-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "sem marcador e sem --exige-classe → tudo aviso, exit 0" 0 \
+     'falhas=0 · avisos=13 .*AC-SEM-CLASSE=4' -- "$F/classe-sem-marcador-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "…cada aviso diz por quê é aviso" 0 'AC-SEM-CLASSE .*\(aviso: SPEC sem `<!-- spec-classe: v1 -->` e sem --exige-classe\)' -- "$F/classe-sem-marcador-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "sem marcador + --exige-classe → os mesmos viram FALHA" 1 'falhas=9 · avisos=4 ' -- --exige-classe "$F/classe-sem-marcador-SPEC.md" "$F/anexo-PRE-SPEC.md"
+roda "AA-n sem seção Anexo A no PRE-SPEC → AC-ORIGEM-INEXISTENTE" 1 \
+     'AC-ORIGEM-INEXISTENTE .*AC-01 cita AA-1 e .* não tem seção `## Anexo A`' -- "$F/classe-ok-SPEC.md" "$F/ok-PRE-SPEC.md"
+roda "AA-n no modo sem pré-spec → AC-ORIGEM-INEXISTENTE 'a fase não tem PRE-SPEC'" 1 \
+     'AC-ORIGEM-INEXISTENTE .*AC-01 cita AA-1 e a fase não tem PRE-SPEC' -- --sem-pre-spec "$F/classe-ok-SPEC.md"
+nao_casa "SPEC anterior ao molde (sem tag, sem bloco, sem marcador) não recebe sino de classe algum" \
+     'AC-SEM-CLASSE|GOAL-SEM-COBERTURA|EXIGIDO-|AC-ORIGEM-REPETIDA' -- "$F/origem-sem-marcador-SPEC.md" "$F/ok-PRE-SPEC.md"
+
+echo "-- modo sem pré-spec (D7c)"
+roda "SPEC sem PRE-SPEC, origens no REQUIREMENTS → limpo, exit 0, modo no resumo" 0 \
+     'falhas=0 .*modo=sem-pre-spec' -- --sem-pre-spec --reqs "$F/origem-REQUIREMENTS.md" "$F/spec-sem-pre.md"
+nao_casa "modo sem pré-spec: sem RESSALVA-SEM-LIMITACAO nem EXTENSAO-SUSPEITA (não há PS)" \
+     'RESSALVA-SEM-LIMITACAO|EXTENSAO-SUSPEITA|BLOCO-AUSENTE' -- --sem-pre-spec --reqs "$F/origem-REQUIREMENTS.md" "$F/spec-sem-pre.md"
+roda "modo sem pré-spec, sem --reqs: REQ-IDs aceitos com ORIGEM-NAO-CONFERIDA" 0 \
+     'ORIGEM-NAO-CONFERIDA .*R2, DESC-01, CANC-v3x-01' -- --sem-pre-spec "$F/spec-sem-pre.md"
+roda "modo sem pré-spec: AC sem origem → AC-SEM-ORIGEM (o marcador liga a falha)" 1 \
+     'AC-SEM-ORIGEM .*origem-SPEC.md:14 AC-05' -- --sem-pre-spec "$F/origem-SPEC.md"
+roda "modo sem pré-spec: origem PS-nn órfã → AC-ORIGEM-INEXISTENTE 'a fase não tem PRE-SPEC'" 1 \
+     'AC-ORIGEM-INEXISTENTE .*:10 AC-01 cita PS-01 e a fase não tem PRE-SPEC' -- --sem-pre-spec "$F/origem-SPEC.md"
+roda "modo sem pré-spec: marca [pre-spec:PS-nn] → ID-INEXISTENTE com a mesma mensagem" 1 \
+     'ID-INEXISTENTE .*:6 marca cita PS-01 e a fase não tem PRE-SPEC' -- --sem-pre-spec "$F/origem-SPEC.md"
+roda "modo sem pré-spec: SPEC inexistente → exit 2" 2 'ERRO: SPEC' -- --sem-pre-spec "$F/nao-existe.md"
 
 echo "test-confere-pre-spec.sh: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

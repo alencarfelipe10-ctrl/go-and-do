@@ -116,6 +116,15 @@ roda 3
 eq "pre_spec apontado no dir certo" "$(campo "$J" .pre_spec) " \
    "$ROOT/.planning/phases/RLR-03-deploy-operacao/03-PRE-SPEC.md "
 
+# ══════════════════════════ caso 6: inventário da fase (D7) coerente com o disco
+echo "── caso 6: inventario spec/context/pre_spec relata o disco, sem decidir ──"
+eq "só o PRE-SPEC no disco" "$(campo "$J" .inventario)" "spec=nao context=nao pre_spec=sim"
+printf '# SPEC\n' > "$ROOT/.planning/phases/RLR-03-deploy-operacao/03-SPEC.md"
+printf '# CONTEXT\n' > "$ROOT/.planning/phases/RLR-03-deploy-operacao/03-CONTEXT.md"
+roda 3
+eq "SPEC e CONTEXT escritos → inventário muda"  "$(campo "$J" .inventario)" "spec=sim context=sim pre_spec=sim"
+eq "etapa_1 continua sendo relato do disco (despachar)" "$(campo "$J" .etapa_1)" "despachar"
+
 echo
 echo "abre-rodada: $OK ok · $FALHAS falhas"
 [ "$FALHAS" -eq 0 ]

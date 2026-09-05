@@ -88,6 +88,11 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    cirúrgico direto no(s) PLAN.md afetado(s) + UMA re-review de confirmação. Fechou
    0/0 → siga, com o sino "achado de tooling fechado por fix cirúrgico, sem ciclo
    extra". Não fechou → `veredito: escalou` (o fix ter falhado é informação nova).
+   Quando o SPEC traz classe (bloco `gsd:acs`), a régua de materialidade é a classe: achado
+   contra critério `[exigido]` sustenta ciclo novo; achado contra `[desejável]` sai por fix
+   cirúrgico ou vira sobra do resumo executivo (D1). Nunca replan por desejável — um critério
+   que não decide a fase não pode reabri-la. O achado é corrigido do mesmo jeito; só não paga
+   ciclo, e o que não couber no fix vai ao registro de dívidas.
 5. **Convergiu → grave o marcador durável:**
    ```bash
    $HOME/.claude/skills/go-and-do/scripts/grava-convergence.sh "<phase_dir>" "<NN>" \

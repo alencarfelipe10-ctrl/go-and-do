@@ -110,6 +110,11 @@ fi
 # do spec/discuss e a camada 0 o declara no sumário executivo.
 PRE_SPEC=""
 [ -f "$PHASE_DIR/$NN-PRE-SPEC.md" ] && PRE_SPEC="$PHASE_DIR/$NN-PRE-SPEC.md"
+# Inventário da fase (D7): só relata o que existe no disco — a decisão de rota é do
+# setup-intencao.sh. SPEC e CONTEXT presentes vencem o PRE-SPEC (o insumo não trava
+# uma intenção já escrita), e o coordenador declara o inventário no primeiro turno.
+sn() { [ -f "$1" ] && echo sim || echo nao; }
+INVENTARIO="spec=$(sn "$PHASE_DIR/$NN-SPEC.md") context=$(sn "$PHASE_DIR/$NN-CONTEXT.md") pre_spec=$(sn "$PHASE_DIR/$NN-PRE-SPEC.md")"
 
 # ── 4. gate de contexto embutido ─────────────────────────────────────────────
 linha=$("$GAD_SCRIPTS_DIR/context-check.sh" 2>/dev/null || echo "tokens=0 limit=0 pct=0 status=unknown reason=context-check-falhou")
@@ -206,7 +211,8 @@ if [ "$DRY" = 0 ]; then
   gad_runlog "$PHASE_DIR" "$NN" run "0 abertura" \
     ${MODELO:+--modelo "$MODELO"} --camada 0 \
     --kv hook_instalado=$HOOK --kv etapa_1="$ETAPA1" --kv etapa_2="$ETAPA2" \
-    --kv pre_spec="$([ -n "$PRE_SPEC" ] && echo detectado || echo ausente)"
+    --kv pre_spec="$([ -n "$PRE_SPEC" ] && echo detectado || echo ausente)" \
+    --kv inventario="$INVENTARIO"
   ABERTA=true
 fi
 
@@ -217,10 +223,10 @@ gad_json_out abre-rodada "$(jq -cn \
   --arg e1 "$ETAPA1" --arg e2 "$ETAPA2" \
   --argjson valerta "$VAULT_ALERTA" --arg vtermos "$VAULT_TERMOS" \
   --argjson anin "$ANIN" --argjson hook "$HOOK" --argjson tasks "$TASKS" --argjson aberta "$ABERTA" \
-  --arg ps "$PRE_SPEC" \
+  --arg ps "$PRE_SPEC" --arg inv "$INVENTARIO" \
   '{args:{fase:$fase, ui:$ui, ai:$ai, no_ship:$ns, vault:$va, obs:$obs},
     retrato:$retrato, contexto:$ctx,
-    pre_spec:(if $ps != "" then $ps else null end),
+    pre_spec:(if $ps != "" then $ps else null end), inventario:$inv,
     etapa_1:$e1, etapa_2:$e2,
     vault_alerta:(if $valerta then {alerta:true, termos:$vtermos,
       pergunta:"A fase parece ter UI autenticada e a rodada veio SEM --vault — sem credenciais o UAT queima a fase (24/31 balde-3 da série eram login). Confirmar vault antes de começar?"} else false end),

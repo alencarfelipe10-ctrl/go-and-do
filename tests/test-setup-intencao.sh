@@ -87,6 +87,25 @@ eq "bloco válido → rota estruturada persistida"     "$(jq -r .mode "$PD/.inte
 bash "$S" "$PD" 99 --pre-spec-route legacy >/dev/null 2>&1
 eq "--pre-spec-route sem --resposta → exit 2 (a rota é decisão do dono)" "$?" "2"
 
+# ═══════════════════════════════════ D7/D8: SPEC + CONTEXT no disco vencem o PRE-SPEC
+echo "── precedência: SPEC e CONTEXT prontos + PRE-SPEC sem bloco → a rota do §0.5 não roda ──"
+R="$(monta_proj prec)"; PD="$(monta_fase "$R" 99)"
+cp "$FP/sem-bloco-PRE-SPEC.md" "$PD/99-PRE-SPEC.md"
+printf '# SPEC da bancada\n'    > "$PD/99-SPEC.md"
+printf '# CONTEXT da bancada\n' > "$PD/99-CONTEXT.md"
+J="$(roda "$PD" 99)"
+eq "entrada: revisao"                                  "$(campo "$J" .entrada)" "revisao"
+eq "PRE-SPEC sem bloco NÃO para a intenção pronta"     "$(campo "$J" .needs_decision)" "null"
+eq "pre_spec_bloco: nao_aplicavel (a rota não rodou)"  "$(campo "$J" .pre_spec_bloco)" "nao_aplicavel"
+eq "pre_spec_mode: null"                               "$(campo "$J" .pre_spec_mode)" "null"
+eq "precedência declarada para o sumário"              "$(campo "$J" .pre_spec_precedencia)" "spec_e_context_em_disco"
+eq "pre_spec continua apontado (é insumo do briefing)" "$(campo "$J" .pre_spec)" "$PD/99-PRE-SPEC.md"
+[ -f "$PD/.intent/pre-spec-route.json" ] && falha "não podia gravar rota" "gravou" || ok "nenhuma rota gravada fora de spec|discuss"
+rm "$PD/99-SPEC.md"
+J="$(roda "$PD" 99)"
+eq "sem SPEC → entrada: spec e a pergunta do §0.5 volta" "$(campo "$J" .entrada)|$(campo "$J" .needs_decision.motivo)" "spec|pre_spec_bloco: ausente · rota: ausente"
+eq "em spec|discuss a precedência é null"              "$(campo "$J" .pre_spec_precedencia)" "null"
+
 # ═══════════════════════════════════════════════════════════════════ R2
 echo "── R2: SPEC × PRE-SPEC ──"
 R="$(monta_proj r2)"; PD="$(monta_fase "$R" 99)"
@@ -96,9 +115,16 @@ eq "sem SPEC ainda → r2: nao_aplicavel (chave sempre presente)" "$(campo "$J" 
 
 cp "$FP/ok-SPEC.md" "$PD/99-SPEC.md"
 J="$(roda "$PD" 99)"
-eq "SPEC conforme → r2.status ok"                   "$(campo "$J" .r2.status)" "ok"
+# ok-SPEC.md é spec antiga (2 ACs sem origem): o r2 roda com --exige-origem como o
+# confere-etapa.sh 1 — o primeiro turno deixa de ser otimista por omissão (P12 fiado aqui).
+eq "spec antiga: r2 com --exige-origem → status falha (paridade com o confere-etapa.sh 1)" "$(campo "$J" .r2.status)" "falha"
+eq "…as 2 AC-SEM-ORIGEM entram em r2.falhas"        "$(campo "$J" '[.r2.falhas[]|select(startswith("AC-SEM-ORIGEM"))]|length')" "2"
 casa "EXTENSAO-SUSPEITA sai como AVISO (vai ao briefing)" "$(campo "$J" '.r2.avisos|join("|")')" 'EXTENSAO-SUSPEITA'
-eq "aviso não vira falha"                           "$(campo "$J" '.r2.falhas|length')" "0"
+eq "aviso não vira falha (só as 2 de origem)"       "$(campo "$J" '.r2.falhas|length')" "2"
+printf '# SPEC\n\n- [ ] AC-01 — o DRE agrega por responsável-mês e o Δ fecha em zero. [origem: PS-01]\n- [ ] AC-02 — MUST NOT: nenhuma linha do razão é rateada por aluno. [origem: BANC-01]\n\n## Limitações declaradas\n\n- PS-01: aceito nesta fase.\n' > "$PD/99-SPEC.md"
+J="$(roda "$PD" 99)"
+eq "ACs com origem conferida no REQUIREMENTS → r2.status ok" "$(campo "$J" .r2.status)" "ok"
+eq "…--reqs passado: sem ORIGEM-NAO-CONFERIDA"      "$(campo "$J" '.r2.avisos|length')" "0"
 
 cp "$FP/ruim-SPEC.md" "$PD/99-SPEC.md"
 J="$(roda "$PD" 99)"

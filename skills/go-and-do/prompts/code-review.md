@@ -48,7 +48,10 @@ retomada antes de te despachar — não re-cheque. Scripts em
    é o piso do gate 22 (não bloqueia, PC-6 vale só para a revisão adversarial).
 1b. Invoque `Skill` → `gsd-code-review` com os `args` (+ o `--files=` do passo 0,
    quando houver). Sem `--all` — Info é cosmético, não vale o risco do fixer mexer às
-   cegas.
+   cegas. Confira no eco do despacho do `gsd-code-reviewer` que o `<config>` levou
+   `phase_dir`: é por ele que o revisor lê o bloco `<decisions>` do CONTEXT (fork) e
+   reporte `decisoes_lidas: sim|nao` no retorno — sem isso a leitura acontece em
+   silêncio e a `/audit-gad` não a mede.
 2. Deixe o comando trabalhar: o fixer corrige Critical+Warning em worktree isolado, num
    loop corrige→re-revisa de até 3 iterações, commitando as correções. Correções de
    lógica ele marca `requires human verification` — essas viram insumo do UAT (Etapa 5)
@@ -124,6 +127,7 @@ review: <caminho absoluto do NN-REVIEW.md>
 veredito: clean | criticals_restantes
 iteracoes_fixer: <n>
 achados: critical <encontrados>/<corrigidos>/<restantes> · warning <e>/<c>/<r>
+decisoes_lidas: sim | nao — <phase_dir chegou ao <config> do revisor? achados que citam D-NN, se houver>
 uat_humano: [<1 linha por item "requires human verification"; ausente se nenhum>]
 incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido; sem desvio, escreva literalmente: nenhum>]
 sinos: [<ex.: "2 Criticals restantes: <resumo>"; ausente se vazio>]
