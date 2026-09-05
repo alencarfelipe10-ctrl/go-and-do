@@ -2,6 +2,198 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.5.0] — 2026-09-05
+
+Pacote dos **erros de julgamento da F24.4** (tarefas 40–43 da evolução; planos, relatórios e
+fiações em `go-and-do-evolucao/planos-acao-f24.4-julgamento/`). Quatro planos de ação escritos
+por subagentes Opus 5 em 04/09, auditados entre si (7 conflitos resolvidos, 14 perguntas
+respondidas pelo dono) e executados em 05/09 por quatro subagentes Fable 5.1, um por plano, na
+ordem P4 → (P1 ∥ P2) → P3, cada item provado em sandbox com os artefatos reais da F24.4. A parte
+do GSD (fork seletivo: absorção de `gsd-planner`, `gsd-plan-checker`, `gsd-verifier`,
+`gsd-code-reviewer`, `planner-guidance`, `templates/summary.md`; `roda-suite.sh`; `plan-gate`
+com lastro e hub; vista recortada do índice de decisões; classe dos ACs no `spec.md`) mora no
+`gen5-patches` (manifesto 48 → 55 entradas) e não é versionada aqui.
+
+**O que mudou de entendimento:** o AC-12 da 24.4 nasceu na spec sem ninguém pedir e reprovou a
+fase por uma cota; o CONTEXT chegou ao planner 2× e com decisões que só apontavam a spec; a
+revisão adversarial achava por achar (8 de 21 achados serviram ao Goal) porque a contabilidade
+do loop pagava por achado, não por vínculo; e a fase saiu serial porque o planner não sabia
+dividir por dono. Nenhum dos consertos cria gate por número — classe, vínculo, lastro e forma.
+
+### Ondas largas (plano 4 — A1–A4, B1–B5, C1–C3; tarefa 43)
+
+Pacote das **ondas largas** (tarefa 43 da evolução; decisões A1–A4, B1–B5, C1–C3 de 04/09/2026,
+plano e relatório em `go-and-do-evolucao/planos-acao-f24.4-julgamento/`). A parte do GSD (fork
+seletivo: `roda-suite.sh`, `plan-gate.py` com sonda de lastro, absorção de `gsd-planner.md`,
+`gsd-plan-checker.md`, `planner-guidance.md` e `templates/summary.md`) mora no `gen5-patches`.
+
+**Adicionado**
+- `confere-etapa.sh 3`: assert `prova_por_reexecucao` — "N de M … verdes/passed" num SUMMARY sem o
+  comando rodado e a saída colada na mesma seção reprova quando o SUMMARY traz o marcador
+  `<!-- gad_prova: v1 -->` do template do fork; sem o marcador vira aviso em `extrai.prova_avisos`
+  (A4). Na 24.4 real: `24.4-05-SUMMARY.md:71` e `:223`, e só elas.
+- `confere-etapa.sh 3`: onda planejada com 2+ planos que rodou em série vira um `incidente` por
+  onda no run-log, com a janela entre os despachos (C2); `paralelismo_observado` ganha
+  `duracao_onda_s` e `plano_mais_lento_s`; `extrai.suite` conta lançamentos, recusas por lock e
+  tempo do `roda-suite.sh` (C3).
+- `pre-despacho.sh 3`: bloqueio `plan_gate_ausente_ou_reprovado` — exige
+  `.planning/.gad/last-plan-gate.json` com `passed: true` **e** `resumo.fase` da fase corrente
+  (C1, no lugar de absorver `execute-phase.md`); sino `sem_onda_larga` + `incidente` quando
+  nenhuma onda tem 2 planos (C2).
+- `manifests/etapa-2.json`: `plan_gate` extrai também `fase` e `razao`.
+
+
+**Alterado**
+
+- `confere-etapa.sh 3`: `COMMITS-A-MENOS` e `SEM-COMMIT` passam a reprovar a etapa (A1) — na 24.4
+  real os planos 02, 06 e 09 (1/3, 2/3, 2/3) entram na frase de reprovação; `confere-plano.sh`
+  (cabeçalho).
+- `prompts/execute.md`: waiters encadeados de ≤ 590 s com `timeout: 600000` na tool no lugar do
+  "único until"; suíte completa uma vez, pelo host, depois da última onda, por `roda-suite.sh`;
+  plano com menos commits de tarefa do que tarefas é falha do passo; degrade para serial
+  (`Running these plans sequentially…`, base-check) entra em `incidentes:` (A1/A2/C2).
+- `prompts/plan.md`: avisos do portão de forma (`ARQUIVO-HUB`, `LARGURA-MAXIMA-1`) são para
+  relatar em `sinos:`, não para travar (B5).
+- `hooks/gad-bash-guard.sh`: a mensagem de negativa aponta o `roda-suite.sh` e o waiter
+  encadeado; lógica intocada.
+- Testes: `test-confere-etapa.sh` (+14), `test-pre-despacho.sh` (+11), `test-gad-bash-guard.sh` (+3).
+
+### Intenção — classe do critério de aceite (plano 1, decisões D1–D10 da F24.4)
+
+- **`[exigido]`/`[desejável]` por critério** (`templates/spec.md`, fork): cada AC declara a classe
+  com motivo e origem-régua (`AA-n` do Anexo A da pré-spec, `PS-nn`, `Goal`, não-regressão);
+  seções novas `## Critérios exigidos` e `## Cobertura do Goal`; linha `**Goal coberto:**` na
+  `## Consistência interna`; bloco `gsd:acs` irmão do `gsd:scope` (classe ASCII
+  `exigido|desejavel`). Ligado pelo marcador `<!-- spec-classe: v1 -->` — SPEC antigo segue sem
+  classe e sem os sinos (mesmo desenho do P12).
+- **Step 6 do spec-phase** (fork): três perguntas por critério — classe (o Goal ainda está
+  atingido se este falhar?), régua (item do Anexo A, `PS-nn`, não-regressão, Goal; divergir é
+  permitido e escrito) e unicidade (qual verificação derruba só este?) — mais a pergunta de fecho
+  da cobertura do Goal. Sem cota.
+- **`confere-pre-spec.sh`**: sinos `AC-SEM-CLASSE`, `EXIGIDO-SEM-MOTIVO`, `EXIGIDO-SEM-REGUA`,
+  `EXIGIDO-DIVERGE-SEM-MOTIVO`, `GOAL-SEM-COBERTURA` (falha com o marcador ou `--exige-classe`;
+  aviso sem eles) e a bandeira `AC-ORIGEM-REPETIDA` (nunca reprova); origens `AA-n` e `Goal`;
+  modo `--sem-pre-spec` (fase sem PRE-SPEC: SPEC do dono ou gerado sem insumo passa pelas mesmas
+  conferências de forma; citar `PS-nn` reprova com «a fase não tem PRE-SPEC»); ids do
+  REQUIREMENTS com segmento de versão (`CANC-v3x-01`) passam a casar o padrão. Fixtures novas
+  sintéticas (fase 99).
+- **`confere-etapa.sh 1`**: item `r2_spec_sem_pre_spec` quando a fase não tem PRE-SPEC (antes a
+  etapa saía sem conferência de AC nenhuma); a família de falhas ganha os cinco códigos de classe
+  e a de avisos ganha `AC-ORIGEM-REPETIDA`. O gate **não** passa `--exige-classe` (classe só por
+  marcador; origem continua incondicional — assimetria deliberada, medir uma fase).
+- **`setup-intencao.sh`**: SPEC e CONTEXT no disco vencem o PRE-SPEC — a rota do §0.5 só roda em
+  `entrada: spec|discuss`; fora delas `pre_spec_bloco: nao_aplicavel` e o campo novo
+  `pre_spec_precedencia` (`spec_e_context_em_disco` | `estado_do_intent_review`). Um PRE-SPEC sem
+  bloco deixa de parar uma intenção pronta. O R2 do primeiro turno passa a rodar com
+  `--exige-origem` e `--reqs` (paridade com o gate: fiação do P12 que não tinha chegado ao setup).
+- **`abre-rodada.sh`**: campo `inventario: spec=<sim|nao> context=<sim|nao> pre_spec=<sim|nao>`
+  (JSON e evento `run`).
+- **Fork — `gsd-verifier.md` absorvido** (base 1.12.0, diff de 8 linhas): extrai
+  `must_haves.desejaveis` (reportado, nunca pontuado), regra 1 do Step 9 reprova só por truth,
+  seção `## Desejáveis pendentes` no VERIFICATION.md. `gsd-planner.md` (`derive_must_haves`:
+  truths só de `[exigido]` quando há `gsd:acs`; desejáveis em `must_haves.desejaveis`),
+  `gsd-plan-checker.md` (desejável sem tarefa é WARNING, exigido sem tarefa segue BLOCKER),
+  `planner-prompt.md` (lift por classe, item de checklist «todo exigido tem truth», leitura por
+  faixa com `sed -n` — o RTK truncou o `cat STATE.md` da 24.4 para 3 %).
+- **`prompts/convergence.md`**: materialidade por classe — achado contra `[exigido]` sustenta
+  ciclo; contra `[desejável]` sai por fix cirúrgico ou vira sobra; nunca replan por desejável.
+- **Sondas** (`probes.md` + digests, fork): dispensa por prevalência medida zero em `--auto`
+  (só com comando e número na razão e só onde há corpus); shapes conservadores e `shapes: []`
+  como opt-out (na 24.4, R7+R8 passam de 11 células para 1); estágio 2 mantém a proibição que
+  espelha Out-of-scope (única fiação até o verifier); `judgment` que repete prosa é bandeira,
+  não tarefa.
+- Testes: `test-setup-intencao.sh` 58→69, `test-abre-rodada.sh` 14→17,
+  `test-confere-pre-spec.sh` 37→64, `test-confere-etapa.sh` 84→97 (skill);
+  `test-spec-workflow.sh` 75→106, `test-agentes-classe.sh` novo (24) (fork).
+
+### Intenção · discuss (plano 2, decisões C1–C8 da F24.4)
+- `prompts/intent-discuss.md`: o discuss deixa de ler o projeto por conta própria — aceita `explore: <caminho>`
+  (pré-varredura pelo `gad-explore`, feita pela camada 1) e registra cada leitura própria em
+  `.sinos-discuss.txt` (`leitura_propria:`); retorno ganha `leituras_proprias` e `criterios_nao_fecham`;
+  WARN de repetição literal do SPEC tratado e contado em `dedup_aplicada`; decisão que prescreve mecanismo
+  vira invariante + modo de falha, receita em `nota`; seção «Critério que não fecha» — medição vira sino
+  `criterio_nao_fecha:` (alerta + ponteiro), nunca decisão no CONTEXT.
+- `agents/gad-explore.md`: pergunta vinda do discuss é respondida por requisito (uma conclusão por R-n).
+- `scripts/confere-reconciliacao.sh`: classe `D-NN-DESATUALIZADA` (informativa, uma linha por decisão, id
+  no 3º token) por ciclo — enumera todos os commits `correções do ciclo C —`, porque a passada «b»
+  sobrescreve o `.aplicado` — e `--final` contra as bases seladas; `informativos:` no rodapé; exit intocado.
+- `scripts/correcoes-commit.sh`: `.planning/DECISIONS-INDEX.md` entra como alvo no `--inicio` e é regravado
+  no fecho quando o CONTEXT mudou (índice do inspired estava stale: 265.467 × 267.368 B); gerador ausente → silêncio.
+- `scripts/confere-plano.sh`: `informativos` + `decisoes {plan, summary, faltantes, informational}` — código
+  `DECISAO-SEM-SUMMARY` (nasce informativo; não muda `veredito` nem exit); D-NN `informational` saem da conta.
+- `prompts/code-review.md`: confere que `phase_dir` chegou ao revisor e reporta `decisoes_lidas: sim|nao`.
+- `manifests/etapa-1.json`: assert informativo `criterios_nao_fecham` (grep no INTENT-REVIEW; métrica M11).
+- Testes: `test-contrato-intent-discuss.sh` (novo), casos novos em `test-confere-reconciliacao.sh`,
+  `test-correcoes-commit.sh`, `test-confere-plano.sh`, `test-briefing-build.sh`.
+
+### Fork gen5-patches (plano 2)
+- `workflows/discuss-phase.md`: licença de leitura do `scout_codebase` troca «Grep/Read para confirmar» por
+  «leia a conclusão do arquivo de exploração»; ponteiro «Group areas by object»; campo `nota` (núcleo a
+  20.464 B, folga 16 B do teto de 20.480).
+- `discuss-phase/modes/auto.md`: forma da decisão (`answer` = invariante + modo de falha, `evidence` prova,
+  `nota` sugere); agrupamento de áreas por objeto (sem alvo numérico); medição que mostra requisito
+  insatisfazível não é decisão (7.045 B de 7.168).
+- `bin/nosso/decisions-index.py`: `--vista --out --recent N --linha-max 160` — visão recortada com
+  compactação incondicional e ponteiro ` → <arquivo>#D-NN`; o canônico segue completo e intocado.
+- `bin/nosso/discuss-init.sh`: o prior.txt leva a vista (`features.decisions_index_recent`, advisory, default 1;
+  fail-open para o arquivo inteiro). No inspired: 265.467 B → 82.043 B (N=1) / 47.537 B (N=0).
+- `bin/nosso/context-render.py`: decisão `pre-spec` com `source_id` (ou `pointer: true`) sai em forma de
+  ponteiro, uma linha, tag `informational` (gate de cobertura 23 → 14 na 24.4, verde); campo `nota` →
+  `### Implementation Notes` (última seção, invisível ao parser); `superada: c<N>` → `superada-c<N>, informational`.
+- `bin/nosso/context-guard.sh`: checagem 8 — corrida ≥ `GUARD_SHINGLE` (15) palavras do SPEC dentro de um bullet
+  → `WARN: D-NN repete <k> palavras do SPEC literalmente — use ponteiro (§C1)`; nunca FAIL. 24.4: 6 WARN
+  (D-01, D-04, D-05, D-06, D-07, D-09), 0 sobre o re-render.
+- `bin/nosso/checkpoint-write.py`: `--nota-file`; `nota`/`nota_file` e `superada` no `--batch`.
+- `bin/nosso/scout.py` + `discuss-phase/templates/context.md`: Integration Points = só conexões; risco e
+  restrição vão à Regression Surface do SPEC (achado P2).
+- `agents/gsd-code-reviewer.md` absorvido (manifesto 53 → 54; diff de 6 linhas contra o instalado): passo 1b
+  lê `<decisions>` do CONTEXT pelo `phase_dir` do `<config>`; item 4 «Locked decisions»; achado cita `per D-NN`.
+- `templates/summary.md`: `decisions-honored: []` ao lado de `key-decisions:` (lido pelo gate sem mudança).
+- Testes novos: `test-decisions-index-vista.sh`, `test-code-reviewer-fork.sh`; casos novos em
+  `test-discuss-init.sh`, `test-context-render.sh`, `test-context-guard.sh`, `test-checkpoint-write.sh`.
+
+### Consultoria especializada de intenção (plano 3 da F24.4 — R1–R5, R7–R10; tarefa 42)
+- A etapa «revisão adversarial de intenção» passa a chamar-se **consultoria especializada de
+  intenção**; quem escreve o parecer é o consultor. Só a prosa muda: nomes de arquivo
+  (`pareceres/NN-parecer-*.md`, `.intent/*`), a tag `<adversarial_review>` do `intent.md`, os
+  campos de frontmatter (`revisores_efetivos`) e os regexes dos gates ficam como estavam.
+- **R1** — o briefing traz o `## Goal` do SPEC verbatim («Goal desta fase») e pede, por achado,
+  uma linha de campo `vinculo_goal:` com o efeito medido do Goal em risco; achado verdadeiro sem
+  vínculo entra como dívida registrada, não como moeda de ciclo. A licença de zero cobre o
+  parecer inteiro. O `confere-ciclo.sh` ignora a linha de campo na contagem de achados.
+- **R2** — `confirmado_irrelevante`: quarto valor do veredito (mesmo campo, nunca um quinto —
+  o `decide-ciclo.sh` lê quatro). Não conta ciclo, não gera `CONFIRMADO-NAO-APLICADO`; aplicado
+  mesmo assim sai como `DISPENSADO-APLICADO` (informativo). O INTENT-REVIEW ganha a seção
+  `## Dívidas registradas` e o frontmatter `achados_dispensados: N`; achado A/B dispensado vai
+  também ao `deferred-items.md` (leitores: `uat.cjs`, check 7 do forensic-audit). O
+  `gsd-code-reviewer.md` do fork lê a seção; o `prompts/plan.md` recebe a linha por fiação.
+- **R3** — `decide-ciclo.sh` conta `dispensados` e não deixa o motivo de `para-zerou` dizer
+  «nenhum achado» quando houve dispensa; a regra de desempate da `categorias-achados.md` vale nos
+  dois eixos (categoria para cima; vínculo para baixo fora de A-produto). Nenhum limiar novo.
+  Medido nos dados da 24.4: o loop não pararia antes (2/1/2/3 achados com vínculo ainda compram
+  os quatro ciclos); o ganho é contagem honesta e registro de dispensa.
+- **R4** — «`não — irrelevante para o Goal: <efeito>, ver <AC-nn|arquivo:linha>`» ganha o rótulo
+  `nao_irrelevante_fundamentado` e o contador `irrelevante_fundamentada`; a palavra solta segue
+  fraca; só o `supported_no` do verificador tira a pergunta da conta.
+- **R5** — o briefing do ciclo 1 traz «Obrigação do ciclo 1»: SPEC × régua do PRE-SPEC (ou ×
+  REQUIREMENTS sem PRE-SPEC), CONTEXT como alvo, conjunto nomeado enumerado — e três perguntas
+  dirigidas do montante (Q4–Q6, qids atribuídos pelo script).
+- **R7** — `--mudancas` validado por forma: só `## O que corrigi` e `## Achados resolvidos`
+  entram; heading fora do contrato é omitido com aviso `MUDANCAS-SECAO-FORA-DO-CONTRATO`.
+- **R8** — a revalidação do ciclo 0 vira uma pergunta só (Q7 no c1); os sinos corrigidos
+  continuam listados; a frase «evidência = o diff do commit» saiu.
+- **R9** — a releitura grava em disco o objeto inteiro (`v: 2`) com `contradiz`,
+  `prescreve_mecanismo`, `omissoes_novas`, `cardinalidade` (número declarado × lista),
+  `unicidade` (c0), `consistencia` e `ok`; o `briefing-build.sh` exige as chaves e reprova
+  `ok: false`; o `confere-reconciliacao.sh --ordem` acusa `RELEITURA-ABERTA` no último ciclo.
+  Formato legado (sem `v`) passa com aviso nomeado. A releitura do ciclo 0 lê também o texto
+  original (Anexo A, `gsd:acs`, `<decisions>` do CONTEXT) — regras consolidadas dos planos 1 e 2.
+- `prompts/intent.md` consolidado com as fiações dos planos 1, 2 e 4 (inventário da fase,
+  modo sem pré-spec, códigos de classe, pré-varredura pelo `gad-explore`, contrato dos ciclos
+  sobre SPEC do dono, `criterio_nao_fecha:`/`leitura_propria:`); `intent-spec.md` idem;
+  `intent-verifica.md` com o waiter em `timeout 590` (plano 4).
+- `tests/test-decide-ciclo.sh` criado — o script estava sem teste.
+
 ## [2.4.0] — 2026-09-02
 
 Pacote dos **consertos do GSD (fork e padrão) e do paralelismo da F24.4** (tarefa 39 da

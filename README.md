@@ -6,7 +6,7 @@ Este repositório contém **três skills** que trabalham juntas:
 
 | Skill | O que faz |
 |-------|-----------|
-| **go-and-do** | Roda uma fase GSD inteira: intenção (spec + discuss automáticos + revisão adversarial cross-AI) → planejamento → revisão cruzada do plano → execução → code review → auditorias de qualidade (UI/AI/segurança/Nyquist) → UAT automatizado interativo (um subagente dirige o navegador de verdade) → resumo executivo narrativo → fechamento com PR. |
+| **go-and-do** | Roda uma fase GSD inteira: intenção (spec + discuss automáticos + consultoria especializada cross-AI) → planejamento → revisão cruzada do plano → execução → code review → auditorias de qualidade (UI/AI/segurança/Nyquist) → UAT automatizado interativo (um subagente dirige o navegador de verdade) → resumo executivo narrativo → fechamento com PR. |
 | **close-phase** | Fecha uma fase depois do UAT: extract-learnings → promove a verificação → cria o PR. É invocada pela go-and-do na etapa de ship, mas também funciona sozinha. |
 | **end-mile** | Finaliza um milestone: audit → summary → complete (com tag git). Gate do audit decide se pode arquivar. |
 

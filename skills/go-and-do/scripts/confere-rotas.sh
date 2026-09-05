@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# confere-rotas.sh — enforcement mecânico da rota de verificação da revisão adversarial
+# confere-rotas.sh — enforcement mecânico da rota de verificação da consultoria especializada
 # (v1.8.2; decisão do dono 04/08 após a F22: ciclos c3=10 e c4=3 brutos verificados
 # inline contra o teto de 2 — disclosure houve, rede não; a regra deixa de ser prosa).
 #

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# decide-ciclo.sh — parada por RENDIMENTO do loop de revisão adversarial (decisão 1.10).
+# decide-ciclo.sh — parada por RENDIMENTO do loop da consultoria especializada de
+# intenção (decisão 1.10).
 #
 # Os tetos viraram meta (1 de 9 rodadas multi-ciclo convergiu antes do teto) e os
 # ciclos tardios rendem quase só C/D (11 A em 128 acionáveis nas 6 fases). Um ciclo
@@ -11,7 +12,11 @@
 # Fonte: <phase_dir>/.intent/.vereditos-c<C>.txt, escrito pelo gad-verificador ao fim
 # do ciclo — uma linha por achado: `id | classe | veredito | categoria`
 #   classe   ∈ novo | reformulado | reaberto      (reformulado é eco, não sinal)
-#   veredito ∈ confirmado | nao_sustentado | ja_coberto
+#   veredito ∈ confirmado | nao_sustentado | ja_coberto | confirmado_irrelevante
+#              (confirmado_irrelevante = confirmado mas sem vínculo ao Goal — registrado
+#              como dívida, não conta: R2/R3 do plano 3; o loop continua por proteção do
+#              Goal, não por achado. O formato NÃO ganhou campo: um 5º campo cairia dentro
+#              de `categoria` no `read` abaixo, em silêncio.)
 #   categoria∈ A-produto | B-viabilidade | C-instrumentacao | D-documental |
 #              E-decisao-do-dono | (vazia → conta como A/B, regra fail-up 1.8)
 #
@@ -42,11 +47,12 @@ if [ ! -f "$V" ]; then
   exit 3
 fi
 
-novos=0; novos_ab=0; lote_cd=()
+novos=0; novos_ab=0; disp=0; lote_cd=()
 while IFS='|' read -r id classe veredito categoria; do
   id=$(echo "$id" | tr -d ' '); classe=$(echo "$classe" | tr -d ' ')
   veredito=$(echo "$veredito" | tr -d ' '); categoria=$(echo "$categoria" | tr -d ' ')
   [ -n "$id" ] || continue
+  [ "$veredito" = confirmado_irrelevante ] && disp=$((disp+1))
   [ "$veredito" = confirmado ] || continue
   case "$classe" in novo|reaberto) ;; *) continue ;; esac
   novos=$((novos+1))
@@ -75,7 +81,12 @@ NREP=${#REPROV[@]}
 
 CINT=$(printf '%s' "$C" | tr -cd '0-9'); : "${CINT:=1}"
 if [ "$novos" = 0 ] && [ "$NREP" = 0 ]; then
-  DEC=para-zerou; MOT="ciclo $C: nenhum achado novo confirmado — convergiu"
+  DEC=para-zerou
+  if [ "$disp" -gt 0 ]; then
+    MOT="ciclo $C: nenhum achado novo com vínculo ao Goal — convergiu ($disp dispensado(s) registrado(s))"
+  else
+    MOT="ciclo $C: nenhum achado novo confirmado — convergiu"
+  fi
 elif [ "$novos" = 0 ] && [ "$CINT" -lt 4 ]; then
   DEC=continua; MOT="ciclo $C: zero achados, mas lane(s) reprovada(s) por parecer_informe (${REPROV[*]}) — zero por silêncio não é convergência"
 elif [ "$CINT" -ge 4 ]; then
@@ -90,5 +101,5 @@ LOTE=$(printf '%s\n' ${lote_cd[@]+"${lote_cd[@]}"} | jq -R . | jq -cs 'map(selec
 REPJ=$(printf '%s\n' ${REPROV[@]+"${REPROV[@]}"} | jq -R . | jq -cs 'map(select(length>0))')
 gad_autoregistro "decide-ciclo.sh" 0 "$DEC ($MOT)" || true
 gad_json_out decide-ciclo "$(jq -cn --arg c "$C" --arg d "$DEC" --arg m "$MOT" \
-  --argjson n "$novos" --argjson ab "$novos_ab" --argjson l "$LOTE" --argjson r "$REPJ" \
-  '{ciclo:$c, decisao:$d, motivo:$m, novos_confirmados:$n, novos_ab:$ab, lote_cde:$l, lanes_reprovadas:$r}')"
+  --argjson n "$novos" --argjson ab "$novos_ab" --argjson di "$disp" --argjson l "$LOTE" --argjson r "$REPJ" \
+  '{ciclo:$c, decisao:$d, motivo:$m, novos_confirmados:$n, novos_ab:$ab, dispensados:$di, lote_cde:$l, lanes_reprovadas:$r}')"

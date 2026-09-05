@@ -1,6 +1,7 @@
 <!-- prompts/intent-verifica.md — filho de camada 2 (agente gad-verificador) que funde,
-     deduplica e verifica os pareceres adversariais de UM ciclo. Lido do disco PELO
-     FILHO. Ele devolve VEREDITOS; o destino de cada achado é da camada 1. -->
+     deduplica e verifica os pareceres da consultoria especializada de UM ciclo. Lido do
+     disco PELO FILHO. Ele devolve VEREDITOS em dois eixos (a alegação se sustenta? ela
+     protege o Goal?); o destino de cada achado é da camada 1. -->
 
 # Filho da intenção — verificação de pareceres (ciclo C)
 
@@ -19,8 +20,10 @@ Comece todo bloco Bash com `cd "<project_root>"`.
    nasce. A autoridade de cada lane é `<phase_dir>/.intent/.status-c<C>-<lane>.json` **com
    o mesmo `run_id` que o despacho te deu** — status com `run_id` diferente é de um run
    anterior: ignore-o e continue esperando. Espere primeiro o do Codex (chega antes) com um
-   loop barato num único Bash (`until … ; do sleep 15; done`, teto = deadline, testando o
-   `run_id` com `jq`), execute os passos 1–4 sobre esse parecer enquanto o agy termina,
+   loop barato em Bash (`timeout 590 bash -c 'until … ; do sleep 15; done'`, chamado de novo
+   enquanto a deadline não vence, testando o `run_id` com `jq` — a tool morre aos 600 s, e
+   um `until` com teto igual à deadline morre junto com ela e você conclui que a lane
+   morreu), execute os passos 1–4 sobre esse parecer enquanto o agy termina,
    depois espere o status do agy e incorpore o parecer dele (funda com o que já verificou —
    só o que ele acrescenta ou corrobora gera trabalho novo).
    O status traz dois eixos:
@@ -40,7 +43,7 @@ Comece todo bloco Bash com `cd "<project_root>"`.
    fusão parte desse esqueleto: cada linha dele precisa de destino na sua tabela final
    (é o piso anti-omissão; prosa sem marcador o script não vê — a sua leitura cobre o
    resto). **Leia os pareceres do ciclo e funda-os.** O mesmo achado apontado pelos dois
-   revisores vira UMA entrada com `fontes: [codex, agy]` — convergência independente de
+   consultores vira UMA entrada com `fontes: [codex, agy]` — convergência independente de
    dois modelos é sinal de força; anote-a.
 2. **Classifique cada achado contra o histórico** (ciclo 2+, lendo a tabela do
    INTENT-REVIEW): `novo` (alegação sobre fato/decisão que nenhum achado anterior
@@ -49,15 +52,18 @@ Comece todo bloco Bash com `cd "<project_root>"`.
    reformulado) · `reaberto` (achado descartado antes, agora com evidência NOVA — só a
    evidência nova reabre; a mesma evidência re-apresentada é `reformulado`).
    `reformulado` de achado já resolvido/descartado não se verifica de novo: entra no
-   retorno com o ponteiro para a entrada original.
+   retorno com o ponteiro para a entrada original. A seção `## Dívidas registradas` do
+   INTENT-REVIEW também é histórico: achado dispensado que volta com as mesmas palavras é
+   `reformulado`, com `ref_anterior` para a entrada da dívida — só evidência nova o reabre
+   (na F24.4 a mesma omissão de cardinalidade foi achada e verificada duas vezes).
 3. **Cheque os ponteiros mecanicamente antes de julgar:** rode
    `$HOME/.claude/skills/go-and-do/scripts/spot-check-ponteiros.sh <parecer>` para cada
    parecer — ele confere se cada citação `arquivo:linha` existe e devolve as quebradas.
-   Ponteiro quebrado não mata o achado sozinho (o revisor pode ter errado a linha e
+   Ponteiro quebrado não mata o achado sozinho (o consultor pode ter errado a linha e
    acertado a tese) — mas rebaixa a confiança e obriga você a localizar a evidência
    real antes de confirmar. **`referencias_vistas=0` no sumário (nenhuma citação) =
    parecer não aterrado** — mesma régua do carimbo `[reviewed-without-source-citations]`
-   do GSD 1.11.0 (#3194): o revisor leu o texto colado, não o repositório. Não descarte (a tese
+   do GSD 1.11.0 (#3194): o consultor leu o texto colado, não o repositório. Não descarte (a tese
    pode estar certa), mas TODO achado dessa lane só vira `confirmado` com evidência sua,
    e a lane entra em `pareceres_sem_citacao` no retorno — quem te despachou rebaixa o
    peso dela na triagem.
@@ -69,19 +75,34 @@ Comece todo bloco Bash com `cd "<project_root>"`.
      evita re-litigar o mesmo falso achado no ciclo seguinte).
    - `ja_coberto` — os artefatos já cobrem a alegação; ponteiro para a seção do
      SPEC/CONTEXT (ou achado anterior) onde está coberto.
+   - `confirmado_irrelevante` — a alegação se sustenta **e** você não achou efeito medido
+     do Goal que ela proteja. Evidência própria do fato, mais uma linha de motivo dizendo
+     o que você procurou no Goal e não achou. É registro, não descarte: o achado segue
+     para as dívidas e pode virar tarefa de plano ou de code-review.
+
+   O `vinculo_goal` de cada achado é seu, não do consultor: o parecer traz uma linha
+   `vinculo_goal:` e você a julga contra o `## Goal` do SPEC — se o vínculo alegado não se
+   sustenta, reescreva-o (ou ponha `nenhum`); o consultor propõe, você decide. Desempate
+   do eixo de vínculo (proposta do plano 3, marcada como tal): na dúvida, achado
+   `A-produto` fica `confirmado` — o custo de errar para baixo é defeito em produção;
+   achado `B`, `C` ou `D` fica `confirmado_irrelevante` com a dúvida escrita no motivo —
+   quem te despachou pode promovê-lo, e promover custa uma linha.
 4b. **Revalide a categoria de cada achado** pela régua canônica de
    `$HOME/.claude/skills/go-and-do/prompts/categorias-achados.md` (a MESMA que o
-   revisor recebeu): confirme a tag `[A-E]-*` que o revisor pôs ou reclassifique.
-   **Regra fail-up obrigatória:** na dúvida entre A/B e C/D, classifique para cima —
-   a parada por custo marginal do loop (`decide-ciclo.sh`) só olha A/B, e um achado A
-   fantasiado de C encerraria a revisão cedo demais. Achado sem tag → você classifica.
+   consultor recebeu): confirme a tag `[A-E]-*` que ele pôs ou reclassifique.
+   **Regra de desempate obrigatória** (a régua canônica, nos dois eixos): na dúvida
+   entre A/B e C/D, classifique para cima — a parada por custo marginal do loop
+   (`decide-ciclo.sh`) só olha A/B, e um achado A fantasiado de C encerraria a revisão
+   cedo demais. Achado sem tag → você classifica.
 5. Você **não** decide destino (correção factual × pausa de negócio × transparência) —
    isso é alçada de quem te despachou. Seu produto termina no veredito.
 6. **Vereditos em disco (insumo do decide-ciclo.sh):** grave
    `<phase_dir>/.intent/.vereditos-c<C>.txt` — uma linha por achado, formato exato:
-   `id | classe | veredito | categoria` (ex.: `c2-03 | novo | confirmado | A-produto`).
+   `id | classe | veredito | categoria` (ex.: `c2-03 | novo | confirmado | A-produto`;
+   `confirmado_irrelevante` é o quarto valor do terceiro campo — nunca um quinto campo: o
+   `decide-ciclo.sh` lê quatro e um excedente cairia dentro de `categoria` em silêncio).
 6b. **Vereditos das perguntas dirigidas (R8) — arquivo próprio, ao lado dos achados.**
-   O briefing pediu ao revisor uma linha `- Q<n>: sim|não|incerto — evidência` na seção
+   O briefing pediu ao consultor uma linha `- Q<n>: sim|não|incerto — evidência` na seção
    `## Respostas dirigidas`. Toda resposta **`não`** é provisória: só sai da contagem de
    brutos se VOCÊ sustentar a exclusão. Grave `<run_dir>/vereditos-dirigidos.json` — array
    JSON, **uma entrada por `(lane, qid)`** do manifesto, sem duplicata:
@@ -111,7 +132,7 @@ Comece todo bloco Bash com `cd "<project_root>"`.
 ```
 ciclo: <C>
 achados_brutos: <n no(s) parecer(es), antes da fusão>
-achados_fundidos: <n após dedup entre revisores>
+achados_fundidos: <n após dedup entre consultores>
 convergencias: <n achados com fontes: [codex, agy]>
 ponteiros_quebrados: <n reportados pelo spot-check; 0 se nenhum>
 pareceres_sem_citacao: [<lanes cujo parecer não tem nenhuma citação arquivo:linha; [] se todas citam>]
@@ -124,10 +145,11 @@ achados:
     fontes: [codex|agy|codex, agy]
     classe: novo | reformulado | reaberto
     ref_anterior: <id do achado original — só p/ reformulado/reaberto>
-    veredito: confirmado | nao_sustentado | ja_coberto   ← ausente p/ reformulado
-    categoria: A-produto | B-viabilidade | C-instrumentacao | D-documental | E-decisao-do-dono   ← revalidada por você (fail-up)
+    veredito: confirmado | nao_sustentado | ja_coberto | confirmado_irrelevante   ← ausente p/ reformulado
+    categoria: A-produto | B-viabilidade | C-instrumentacao | D-documental | E-decisao-do-dono   ← revalidada por você (desempate para cima)
     evidencia: <arquivo:linha própria da SUA verificação, ou o porquê da queda, ou o ponteiro do já-coberto>
+    vinculo_goal: <o efeito medido do Goal que fica em risco, 1 linha, com o AC-nn ou o trecho do Goal> | nenhum — <o que você procurou no Goal e não achou>   ← julgado por você, não copiado do parecer
     independente: sim | nao   ← nao = lane com independent:false (exige evidência sua)
-    severidade: <a estimada pelo revisor, mantida para a triagem>
+    severidade: <a estimada pelo consultor, mantida para a triagem>
     toca_requisito_ou_criterio: sim | nao   ← sim = candidato a pausa de negócio na triagem
 ```

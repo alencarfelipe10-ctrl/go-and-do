@@ -1,9 +1,10 @@
 <!-- ============================================================ -->
 <!-- prompts/categorias-achados.md — taxonomia canônica ÚNICA dos -->
-<!-- achados da revisão adversarial (decisão 1.8 do gad-major).   -->
-<!-- Injetado pelo briefing-build.sh no briefing dos revisores E  -->
-<!-- referenciado pelo gad-verificador — revisor e verificador    -->
-<!-- julgam pela MESMA régua; duas redações derivariam.           -->
+<!-- achados da consultoria especializada de intenção (decisão   -->
+<!-- 1.8 do gad-major). Injetado pelo briefing-build.sh no        -->
+<!-- briefing dos consultores E referenciado pelo gad-verificador -->
+<!-- — consultor e verificador julgam pela MESMA régua; duas      -->
+<!-- redações derivariam.                                         -->
 <!-- ============================================================ -->
 
 # Categorias de achado (classifique TODO achado em exatamente uma)
@@ -21,10 +22,13 @@
 - **E-decisao-do-dono** — não é defeito: é escolha de escopo/risco que só o dono pode
   fazer. *Ex.: aceitar ou não janela de indisponibilidade no deploy.*
 
-**Regra fail-up (obrigatória para o verificador):** na dúvida entre A/B e C/D,
-classifique PARA CIMA (A/B). A parada por custo marginal do loop só olha A/B — um
-achado A fantasiado de C encerraria a revisão cedo demais; o custo do fail-up é um
-ciclo a mais, o custo do fail-down é defeito em produção.
+**Regra de desempate (obrigatória para o verificador):** na dúvida entre A/B e C/D,
+classifique para cima — a parada por custo marginal só olha A/B, e um achado A
+fantasiado de C encerraria a revisão cedo demais. Na dúvida sobre o **vínculo ao
+Goal**, o desempate é o inverso fora de A-produto: sem efeito medido que o achado
+proteja, ele entra como `confirmado_irrelevante`, porque o custo do falso A é um ciclo
+mais uma emenda — e a emenda é o que criou o defeito seguinte em três dos quatro ciclos
+da fase medida. Achado `A-produto` na dúvida vai para cima nos dois eixos.
 
 **Agrupamento:** achados C e D da mesma classe de erro entram como UM item de classe
 com a lista de ocorrências, não N itens repetidos.

@@ -1,6 +1,6 @@
 ---
 name: go-and-do
-description: "Runs a GSD phase end-to-end: intent (spec + discuss in auto mode + adversarial cross-AI intent review by Codex + Antigravity when installed — skipped with loud disclosure in the executive summary when no external reviewer is available) → design contracts (UI/AI) → plan → plan-review → execute → code-review → quality audits (UI/AI/security/Nyquist) → interactive automated UAT (a Sonnet subagent drives the browser: clicks, fills forms, walks flows, proves objectively) → narrative executive summary → close (extract-learnings → ship/PR). Every phase runs the full pipeline at maximum rigor; anything that does not run (a config gate off, a tool unavailable) is disclosed, never silent. Layered orchestration: every verbose stage (intent, plan, plan convergence, execute, code review, eval review, secure, validate, UAT, summary, close/ship) runs in a disposable subagent window and returns a compact status, keeping the orchestrator window lean across a long phase. Decision triage (always on): questions the user would merely rubber-stamp are auto-decided by layer 0 and logged to NN-DECISOES.md (disclosed in the executive summary, with an undo path); hard gates — external info only the user has, scope/intent changes, irreversible actions beyond the PR, or any question without a confident recommendation — still stop and wait, and during the night quiet window (23h–07h local) a hard gate becomes a graceful pause instead of a prompt hanging till morning. By default goes all the way to the PR; `--no-ship` stops before shipping (after the automated UAT). Resumable — run again to continue where it left off."
+description: "Runs a GSD phase end-to-end: intent (spec + discuss in auto mode + specialist cross-AI intent consultancy by Codex + Antigravity (every finding names the Goal effect it protects) when installed — skipped with loud disclosure in the executive summary when no external reviewer is available) → design contracts (UI/AI) → plan → plan-review → execute → code-review → quality audits (UI/AI/security/Nyquist) → interactive automated UAT (a Sonnet subagent drives the browser: clicks, fills forms, walks flows, proves objectively) → narrative executive summary → close (extract-learnings → ship/PR). Every phase runs the full pipeline at maximum rigor; anything that does not run (a config gate off, a tool unavailable) is disclosed, never silent. Layered orchestration: every verbose stage (intent, plan, plan convergence, execute, code review, eval review, secure, validate, UAT, summary, close/ship) runs in a disposable subagent window and returns a compact status, keeping the orchestrator window lean across a long phase. Decision triage (always on): questions the user would merely rubber-stamp are auto-decided by layer 0 and logged to NN-DECISOES.md (disclosed in the executive summary, with an undo path); hard gates — external info only the user has, scope/intent changes, irreversible actions beyond the PR, or any question without a confident recommendation — still stop and wait, and during the night quiet window (23h–07h local) a hard gate becomes a graceful pause instead of a prompt hanging till morning. By default goes all the way to the PR; `--no-ship` stops before shipping (after the automated UAT). Resumable — run again to continue where it left off."
 argument-hint: "<phase> [--ui] [--ai] [--no-ship] [--vault <profile>] [--obs \"<texto livre>\"]"
 allowed-tools:
   - Read
@@ -20,7 +20,7 @@ allowed-tools:
 Run a single GSD phase end-to-end, so the user does not have to babysit the machine.
 Orchestrate the native GSD commands in order:
 
-**spec-phase `--auto` → discuss-phase `--auto` → revisão adversarial de intenção (Codex + agy) →
+**spec-phase `--auto` → discuss-phase `--auto` → consultoria especializada de intenção (Codex + agy) →
 ui-phase (`--ui`) / ai-integration-phase (`--ai`) → plan → plan-review-convergence →
 execute → code-review → ui-review (`--ui`) → eval-review (`--ai`) → secure-phase →
 validate-phase → UAT interativo automatizado → resumo executivo → close (extract-learnings → ship/PR).**
@@ -37,7 +37,7 @@ it refuses to ship unless the UAT is genuinely clean.
 
 **Intenção primeiro (Etapa 1):** quando a fase ainda não tem SPEC/CONTEXT, a skill os gera
 sozinha (`gsd-spec-phase --auto` → `gsd-discuss-phase --auto`, cada escolha logada `[auto]`) e
-submete a intenção a uma **revisão adversarial cross-AI**: dois revisores externos (Codex +
+submete a intenção a uma **consultoria especializada cross-AI**: dois consultores externos (Codex +
 Antigravity) leem o dossiê
 (PROJECT/ROADMAP/REQUIREMENTS/SPEC/CONTEXT) e o código real e tentam derrubar as decisões; o
 Claude verifica cada achado contra o código antes de aceitar (loop por convergência: continua
@@ -194,7 +194,7 @@ Phase number + flags: $ARGUMENTS
 `NN-PRE-SPEC.md` (exact name, zero-padded NN), the opening detects it automatically (`abre-rodada.sh` → `pre_spec` field)
 and Etapa 1 uses it as input: spec and discuss adopt its decisions as user-locked (marked
 `[pre-spec]`, never re-asked or overridden; irreconcilable conflicts ring a bell), the
-adversarial briefing discloses their origin, and the executive summary declares the file was
+consultancy briefing discloses their origin, and the executive summary declares the file was
 used. `--obs` is no longer the vehicle for this.
 
 **PRE-SPEC decisions block (mandatory contract):** the decisions must be machine-readable —

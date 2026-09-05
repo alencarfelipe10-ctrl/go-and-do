@@ -34,8 +34,13 @@ em resumo herdado — leia o estado real antes de agir.
 <julgamento>
 ## Julgamento inicial (1º turno, ANTES de invocar o plan-phase)
 
-Leia `NN-SPEC.md`, `NN-CONTEXT.md` e confira a existência de `NN-RESEARCH.md`. Decida
-os três vereditos e traduza em flags — cada decisão vira 1 linha no `NN-DECISOES.md`
+Leia `NN-SPEC.md`, `NN-CONTEXT.md`, a seção `## Dívidas registradas` do
+`NN-INTENT-REVIEW.md` (`sed -n '/^## Dívidas registradas/,/^## /p'`) e confira a existência
+de `NN-RESEARCH.md`. Cada dívida com `destino: plan-phase` é insumo do plano — vira tarefa
+ou entra no `## Out-of-scope` do plano com o motivo — porque é um achado verdadeiro que a
+consultoria dispensou do ciclo, não do registro; um planner que não a vê é o que a torna
+dívida perdida. Decida os três vereditos e traduza em flags — cada decisão vira 1 linha no
+`NN-DECISOES.md`
 (Sub-rotina I: `[auto] pesquisa=X mapper=Y granularidade=Z — motivo`) e um campo do
 retorno:
 

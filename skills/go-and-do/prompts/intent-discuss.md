@@ -78,7 +78,7 @@ absolutos em tudo.
    como invariante + modo de falha (o que tem de ser verdade e como se sabe que falhou);
    a receita desce para `nota`, que o planejador lê como sugestão e nenhum gate cobra.
 4. **Neutralize os dois efeitos colaterais do `--auto`** (quem encadeia os comandos é a
-   /go-and-do; o auto-advance nativo atropelaria a revisão adversarial):
+   /go-and-do; o auto-advance nativo atropelaria a consultoria especializada):
    - Quando o workflow chegar no passo `auto_advance` (que mandaria despachar
      `Skill gsd-plan-phase N --auto`), **não despache** — para você, o discuss termina
      no CONTEXT.md commitado.
@@ -109,7 +109,7 @@ absolutos em tudo.
 Medição sua contra os dados reais que mostre um critério do SPEC insatisfazível ou já
 falso não vira decisão: grave uma linha em `.sinos-discuss.txt` com o prefixo exato
 `criterio_nao_fecha: <AC-nn|R-n> — <o que mediu> — <comando que reproduz>` e siga.
-Quem emenda o SPEC é a revisão adversarial, que lê esse arquivo. Decisão gravada aqui
+Quem emenda o SPEC é a consultoria especializada, que lê esse arquivo. Decisão gravada aqui
 nasce discutindo com um texto que a revisão troca no ciclo seguinte (na F24.4 foi o
 caso da D-13 e da D-15). Conte-as em `criterios_nao_fecham` no retorno.
 

@@ -106,7 +106,7 @@ Regras da entrevista:
 - Quando a escolha for cara ou sem volta, pergunte na mesma tela **por quê** aceitar o custo:
   essa frase é a `justificativa` obrigatória do bloco.
 - Registre as opções descartadas com o motivo. Elas viram §6 e `opcoes_descartadas` — memória do
-  porquê, para o revisor adversarial da intenção não reabrir o assunto.
+  porquê, para a consultoria especializada da intenção não reabrir o assunto.
 
 ## Passo 4 — escrever o documento
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# confere-reconciliacao.sh — reconciliação mecânica VEREDITO × APLICADO da revisão
-# adversarial, e trava de ordem releitura→correção na SAÍDA (item A5 do PLANO-A).
+# confere-reconciliacao.sh — reconciliação mecânica VEREDITO × APLICADO da consultoria
+# especializada de intenção, e trava de ordem releitura→correção na SAÍDA (item A5 do PLANO-A).
 #
 # Uso: confere-reconciliacao.sh <phase_dir> [<ciclo>] [--ordem] [--final]
 #
@@ -8,7 +8,9 @@
 # Os dois lados do dado já estavam gravados e ninguém os juntava:
 #   · vereditos → <phase_dir>/.intent/.vereditos-c<C>.txt, uma linha por achado no
 #     formato `id | classe | veredito | categoria`, com
-#     veredito ∈ confirmado | nao_sustentado | ja_coberto (formato: decide-ciclo.sh:11-16);
+#     veredito ∈ confirmado | nao_sustentado | ja_coberto | confirmado_irrelevante
+#     (formato: decide-ciclo.sh, cabeçalho; `confirmado_irrelevante` = confirmado sem
+#     vínculo ao Goal, registrado como dívida — R2 do plano 3, 05/09/2026);
 #   · aplicados → <phase_dir>/.intent/.correcoes-c<C>.aplicado, JSON
 #     {v,ciclo,ids,correcoes:[{id,hash}],commit,caminhos,blobs,mensagem}
 #     (schema: correcoes-commit.sh, bloco de cabeçalho).
@@ -27,6 +29,14 @@
 #     segue o padrão estrito `c<N>-<NN>` — aí é `fora-do-escopo` e NÃO conta (é o caso
 #     das passadas "b" documentadas, `c<N>b-<NN>`, e de correções de outra origem).
 #   nao_sustentado/ja_coberto + AUSENTE  → ok (não aplicar é o esperado)
+#   confirmado_irrelevante + AUSENTE     → ok (a dispensa tira o ciclo, não obriga correção)
+#   confirmado_irrelevante + presente    → DISPENSADO-APLICADO — classe declarada, NÃO
+#     bloqueante («nada se descarta»: o coordenador pode corrigir um achado dispensado)
+#
+# RELEITURA-ABERTA (R9, plano 3): com --ordem, no último ciclo, `.releitura-c<C>.json` com
+#   `v: 2` e `ok: false` é uma releitura que reprovou sem correção `c<C>b` — bloqueante
+#   (o briefing do ciclo seguinte pegaria isso, mas o último ciclo não abre briefing).
+#   Sem `v` → aviso legado (formato anterior ao R9, veredito não conferível).
 #
 # --ordem (A5b): a ordem releitura→commit só é travada na ABERTURA do ciclo seguinte
 # (briefing-build.sh, gate E2c/R1). O furo é na SAÍDA: a rota `para-custo-marginal` aplica
@@ -56,8 +66,8 @@
 # e `reconciliacao: ok|falha` (e `ordem: ok|violada|n/a` quando --ordem).
 #
 # EXIT: 0 = tudo ok (ou n/a) · 1 = INVERSAO, CONFIRMADO-NAO-APLICADO,
-#       APLICADO-SEM-VEREDITO ou ORDEM-VIOLADA · 2 = uso inválido.
-#       D-NN-DESATUALIZADA nunca muda o exit (informativo por desenho — ver acima).
+#       APLICADO-SEM-VEREDITO, VEREDITO-ILEGIVEL, ORDEM-VIOLADA ou RELEITURA-ABERTA · 2 = uso inválido.
+#       D-NN-DESATUALIZADA e DISPENSADO-APLICADO nunca mudam o exit (informativos por desenho).
 #
 # SOMENTE LEITURA: o script não escreve nada no projeto — por isso NÃO sourceia o
 # lib/gsd-shim.sh nem instala o trap `gad_autoregistro` que os outros gates usam (aquele
@@ -101,8 +111,8 @@ if [ -z "$ciclos" ]; then
   # Sem vereditos não há o que reconciliar. Não inventamos falha em fase sem ciclos
   # (regra 6 do A5a) — mas a ausência é declarada, nunca silenciosa.
   echo "reconciliacao: n/a (nenhum .vereditos-c*.txt em $IN$([ -n "$CICLO" ] && echo " para o ciclo $CICLO"))"
-  # ATENÇÃO — não saia aqui quando `--ordem` foi pedido: uma fase com a revisão
-  # adversarial pulada ainda tem ciclo 0 (`.correcoes-c0.aplicado` + `.releitura-c0.json`)
+  # ATENÇÃO — não saia aqui quando `--ordem` foi pedido: uma fase com a consultoria
+  # especializada pulada ainda tem ciclo 0 (`.correcoes-c0.aplicado` + `.releitura-c0.json`)
   # e uma correção promovida depois daquela releitura é exatamente o que este gate existe
   # para pegar. Sair 0 aqui seria reportar verde no caso a conferir (fail-open).
   # Idem para o detector de D-NN desatualizadas: o c0 da 24.4 não tem vereditos e é
@@ -132,14 +142,14 @@ id_de_achado() { printf '%s' "$1" | grep -qE '^c[0-9]+-[0-9]+$'; }
 
 curto() { printf '%s' "${1:-}" | cut -c1-8; }  # hash abreviado para a saída
 
-# Terceiro campo fora de confirmado|nao_sustentado|ja_coberto: classe própria e declarada,
-# nunca absorvida no contador `ok` (mesmo fail-closed do SEM-INSUMO do confere-rotas.sh).
+# Terceiro campo fora do enum: classe própria e declarada, nunca absorvida no contador
+# `ok` (mesmo fail-closed do SEM-INSUMO do confere-rotas.sh).
 veredito_ilegivel() { # <ciclo> <id> <veredito lido>
-  echo "VEREDITO-ILEGIVEL c$1 $2 — terceiro campo '$3' fora de confirmado|nao_sustentado|ja_coberto"
+  echo "VEREDITO-ILEGIVEL c$1 $2 — terceiro campo '$3' fora de confirmado|nao_sustentado|ja_coberto|confirmado_irrelevante"
   n_ileg=$((n_ileg+1)); falha=1
 }
 
-n_ok=0; n_inv=0; n_cna=0; n_asv=0; n_fora=0; n_ileg=0
+n_ok=0; n_inv=0; n_cna=0; n_asv=0; n_fora=0; n_ileg=0; n_disp=0; n_disp_ap=0
 falha=0
 
 # ── reconciliação, ciclo a ciclo ────────────────────────────────────────────────
@@ -175,6 +185,9 @@ for C in $ciclos; do
           echo "INVERSAO c$C $id veredito=nao_sustentado — mas foi aplicado${commit_c:+ no commit $(curto "$commit_c")}"
           n_inv=$((n_inv+1)); falha=1 ;;
         confirmado|ja_coberto) n_ok=$((n_ok+1)) ;;
+        confirmado_irrelevante)
+          echo "DISPENSADO-APLICADO c$C $id veredito=confirmado_irrelevante — corrigido mesmo sem vínculo ao Goal (não bloqueante)"
+          n_disp=$((n_disp+1)); n_disp_ap=$((n_disp_ap+1)) ;;
         *) veredito_ilegivel "$C" "$id" "$ver" ;;
       esac
     else
@@ -183,6 +196,7 @@ for C in $ciclos; do
           echo "CONFIRMADO-NAO-APLICADO c$C $id veredito=confirmado — ausente do .correcoes-c$C.aplicado"
           n_cna=$((n_cna+1)); falha=1 ;;
         nao_sustentado|ja_coberto) n_ok=$((n_ok+1)) ;;
+        confirmado_irrelevante) n_ok=$((n_ok+1)); n_disp=$((n_disp+1)) ;;
         # Fail-closed dos dois lados: absorver uma linha ilegível no contador `ok` só
         # porque o achado não foi aplicado inflaria o verde em silêncio.
         *) veredito_ilegivel "$C" "$id" "$ver" ;;
@@ -217,7 +231,7 @@ if [ -n "$ciclos" ]; then
     done
   fi
 
-  echo "resumo: ok=$n_ok INVERSAO=$n_inv CONFIRMADO-NAO-APLICADO=$n_cna APLICADO-SEM-VEREDITO=$n_asv VEREDITO-ILEGIVEL=$n_ileg fora-do-escopo=$n_fora"
+  echo "resumo: ok=$n_ok INVERSAO=$n_inv CONFIRMADO-NAO-APLICADO=$n_cna APLICADO-SEM-VEREDITO=$n_asv VEREDITO-ILEGIVEL=$n_ileg fora-do-escopo=$n_fora dispensados=$n_disp dispensados_aplicados=$n_disp_ap"
   if [ "$falha" -eq 0 ]; then echo "reconciliacao: ok"; else echo "reconciliacao: falha"; fi
 fi
 
@@ -351,7 +365,7 @@ fi
 # ── A5b — trava de ordem na saída ───────────────────────────────────────────────
 if [ "$ORDEM" = 1 ]; then
   # O ciclo da ordem é derivado INDEPENDENTE da enumeração dos vereditos: uma fase com a
-  # revisão adversarial pulada não tem `.vereditos-c*.txt` nenhum e ainda assim tem ciclo 0
+  # consultoria especializada pulada não tem `.vereditos-c*.txt` nenhum e ainda assim tem ciclo 0
   # com releitura e correção — é lá que a ordem pode quebrar sem ninguém ver.
   C="$CICLO"
   if [ -z "$C" ]; then
@@ -366,6 +380,24 @@ if [ "$ORDEM" = 1 ]; then
   [ -n "$C" ] || { echo "ordem: n/a (nenhum ciclo com releitura ou correção em $IN)"; exit "$falha"; }
   R="$IN/.releitura-c$C.json"
   A="$IN/.correcoes-c$C.aplicado"
+  # R9 (plano 3): o último ciclo não abre briefing, logo ninguém lê o veredito da releitura
+  # dele. Aqui é o único gate que olha esse arquivo na saída.
+  if [ -f "$R" ]; then
+    if command -v jq >/dev/null 2>&1 && jq -e . "$R" >/dev/null 2>&1; then
+      # `.ok // ""` não serve: o `//` do jq trata `false` como nulo e apagaria o veredito
+      rel_v=$(jq -r 'if has("v") then (.v|tostring) else "" end' "$R")
+      rel_ok=$(jq -r 'if has("ok") then (.ok|tostring) else "" end' "$R")
+    else
+      rel_v=$(sed -n 's/.*"v"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' "$R" | head -1)
+      rel_ok=$(sed -n 's/.*"ok"[[:space:]]*:[[:space:]]*\(true\|false\).*/\1/p' "$R" | head -1)
+    fi
+    if [ -z "$rel_v" ]; then
+      echo "aviso: releitura c$C em formato legado (v ausente) — veredito não conferível"
+    elif [ "$rel_ok" = false ]; then
+      echo "RELEITURA-ABERTA c$C — .releitura-c$C.json declara ok: false e nenhuma correção c${C}b fechou a emenda (último ciclo: nenhum briefing seguinte vai cobrar)"
+      falha=1
+    fi
+  fi
   if [ ! -f "$R" ]; then
     echo "ordem: n/a (sem .releitura-c$C.json — a ausência de releitura é problema de outro gate)"
   elif [ ! -f "$A" ]; then

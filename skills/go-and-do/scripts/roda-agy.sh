@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# roda-agy.sh — lane Antigravity da revisão adversarial (decisão 2.5-D do gad-major).
+# roda-agy.sh — lane Antigravity da consultoria especializada de intenção (decisão 2.5-D do gad-major).
 #
 # Absorve os invariantes provados empiricamente (2026-07/08): log fixado por invocação
 # (o last_conversations.json aponta a run mais recente do WORKSPACE, não a sua — a

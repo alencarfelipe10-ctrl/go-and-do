@@ -23,7 +23,7 @@
       "arquivo": "{fase}/{nn}-INTENT-REVIEW.md",
       "regex": "^intent_review: (done|skipped)",
       "min": 1,
-      "desc": "revisão adversarial fechada (needs_decision/blocked NÃO concluem)"
+      "desc": "consultoria especializada fechada (needs_decision/blocked NÃO concluem)"
     },
     {
       "id": "chain_flag_zerada",

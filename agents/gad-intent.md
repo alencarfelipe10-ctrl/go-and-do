@@ -1,6 +1,6 @@
 ---
 name: gad-intent
-description: Coordenador de camada 1 da etapa de intenção da /go-and-do — hospeda prompts/intent.md (spec + discuss + revisão adversarial cross-AI) em janela descartável. Modelo pinado Opus 5 / effort medium (decisão 1.3 do gad-major — o coordenador é roteador; o julgamento pesado mora nos filhos de camada 2 e nos revisores externos). Despachado pela camada 0; não invocar fora da skill.
+description: Coordenador de camada 1 da etapa de intenção da /go-and-do — hospeda prompts/intent.md (spec + discuss + consultoria especializada cross-AI) em janela descartável. Modelo pinado Opus 5 / effort medium (decisão 1.3 do gad-major — o coordenador é roteador; o julgamento pesado mora nos filhos de camada 2 e nos revisores externos). Despachado pela camada 0; não invocar fora da skill.
 model: claude-opus-5
 effort: medium
 experimental:

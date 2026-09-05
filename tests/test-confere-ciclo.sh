@@ -188,6 +188,48 @@ grep -qx 'parecer_informe: ruido devolver' "$TMP/t16.txt" && ok "canário e rubr
 "$SCRIPT" "$TMP/24.3-parecer-ruido-c1.md" "$TMP/24.3-parecer-curto-c1.md" > "$TMP/t17.txt" 2>/dev/null
 grep -q 'parecer_informe' "$TMP/t17.txt" && ok "modo padrão (parecer + resumo) também avisa parecer_informe" || erro "modo padrão mudo" "$(cat "$TMP/t17.txt")"
 
+echo "== R4 (plano 3, 05/09/2026) — «irrelevante, com evidência do Goal» é resposta forte; a palavra solta segue fraca"
+printf '{"v":1,"ciclo":"1","qids":["Q1","Q2","Q3","Q4"],"detalhe":[]}\n' > "$TMP/perguntas-r4.json"
+cat > "$TMP/24.3-parecer-goal-c1.md" <<'EOF'
+# Parecer
+
+### Achado 0 — nenhum achado novo
+
+## Respostas dirigidas
+
+- Q1: não — irrelevante
+- Q2: não — irrelevante para o Goal: o Δ da Urca não passa por este código, ver AC-15
+- Q3: não — N/A
+- Q4: sim — quebra o teste x
+EOF
+"$SCRIPT" --tabela --perguntas "$TMP/perguntas-r4.json" "$TMP/24.3-parecer-goal-c1.md" > "$TMP/t18.txt" 2>/dev/null
+grep -qE 'Q1: não — irrelevante \|  \| dirigida \|$' "$TMP/t18.txt" && ok "Q1 \`não — irrelevante\` (palavra solta) continua fraca → incerto" || erro "palavra solta deixou de ser fraca" "$(grep Q1 "$TMP/t18.txt")"
+grep -qE 'Q2.*\| nao_irrelevante_fundamentado \|$' "$TMP/t18.txt" && ok "Q2 com Goal + citação ganha o rótulo nao_irrelevante_fundamentado" || erro "rótulo forte ausente" "$(grep Q2 "$TMP/t18.txt")"
+[ "$(campo "$TMP/t18.txt" brutas)" = 4 ] && ok "…e CONTINUA contando (brutas = 4): o rótulo não tira da conta" || erro "brutas" "$(resumo "$TMP/t18.txt")"
+[ "$(campo "$TMP/t18.txt" irrelevante_fundamentada)" = 1 ] && ok "contador irrelevante_fundamentada = 1 no JSON (métrica 7)" || erro "contador" "$(resumo "$TMP/t18.txt")"
+printf '[{"lane":"goal","qid":"Q2","raw":"não","verdict":"supported_no","evidence":"src/urca.py:10"}]\n' > "$TMP/ver-r4-sup.json"
+"$SCRIPT" --tabela --perguntas "$TMP/perguntas-r4.json" --vereditos "$TMP/ver-r4-sup.json" "$TMP/24.3-parecer-goal-c1.md" > "$TMP/t19.txt" 2>/dev/null
+grep -qE 'Q2.*\| dirigida-excluida \|$' "$TMP/t19.txt" && [ "$(campo "$TMP/t19.txt" brutas)" = 3 ] \
+  && ok "só o supported_no do verificador tira a Q2 da conta (4 → 3)" || erro "supported_no não excluiu" "$(resumo "$TMP/t19.txt")"
+printf '[{"lane":"goal","qid":"Q2","raw":"não","verdict":"unsupported_no","evidence":"não achei"}]\n' > "$TMP/ver-r4-unsup.json"
+"$SCRIPT" --tabela --perguntas "$TMP/perguntas-r4.json" --vereditos "$TMP/ver-r4-unsup.json" "$TMP/24.3-parecer-goal-c1.md" > "$TMP/t20.txt" 2>/dev/null
+grep -qE 'Q2.*\| nao_irrelevante_fundamentado \|$' "$TMP/t20.txt" && [ "$(campo "$TMP/t20.txt" brutas)" = 4 ] \
+  && ok "unsupported_no: rótulo mantido, brutas = 4 (o verificador segue soberano)" || erro "unsupported_no" "$(resumo "$TMP/t20.txt")"
+
+echo "== R1 (plano 3) — a linha de campo \`vinculo_goal:\` do achado não é contada como achado"
+cat > "$TMP/24.3-parecer-vg-c1.md" <<'EOF'
+# Parecer
+
+### Achado 1 [A-produto] — o alvo antigo continua asseverado
+vinculo_goal: Δ Receita Botafogo → 0,00 (AC-12) — ver c1-02
+- **Confiança:** alta
+EOF
+"$SCRIPT" --tabela "$TMP/24.3-parecer-vg-c1.md" > "$TMP/t21.txt" 2>/dev/null
+[ "$(total "$TMP/t21.txt")" = 1 ] && ok "parecer com headings: 1 achado, a linha vinculo_goal não infla" || erro "total" "$(cat "$TMP/t21.txt")"
+printf '# P\n\n- HIGH achado um\nvinculo_goal: nenhum (ver c1-02)\n- MEDIUM achado dois\n- vinculo_goal: nenhum (ver c1-02)\n- LOW achado três\n- **vinculo_goal:** AC-12 (ver c1-02)\n' > "$TMP/24.3-parecer-vgfb-c1.md"
+"$SCRIPT" --tabela "$TMP/24.3-parecer-vgfb-c1.md" > "$TMP/t22.txt" 2>/dev/null
+[ "$(total "$TMP/t22.txt")" = 3 ] && ok "fallback sem headings: 3 achados — a linha de campo (sem \`- \`, com \`- \` ou \`- **…**\`) fica de fora" || erro "fallback inflou" "$(cat "$TMP/t22.txt")"
+
 echo "== manifesto ilegível não zera a contagem (fail-closed)"
 "$SCRIPT" --tabela --perguntas "$TMP/nao-existe.json" "$CODEX" > "$TMP/t7.txt" 2>/dev/null
 [ "$(campo "$TMP/t7.txt" brutas)" -ge 1 ] && ok "manifesto ausente vira bruto, não zero" || erro "guarda cega"

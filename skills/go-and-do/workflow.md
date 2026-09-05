@@ -81,11 +81,11 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 4. 🎌 `--ui` (ou UI-SPEC existente) → leia `workflow-ui.md` agora (única leitura da rodada); `--ai` idem → `workflow-ai.md`; fase com server → `workflow-dev-server.md` quando chegar no 1º passo que o usa.
 5. Banner e libera.
 
-**Etapa 1 — Intenção: spec + discuss + revisão adversarial** *(⏭️ obedece `etapa_1` do abre-rodada)*
+**Etapa 1 — Intenção: spec + discuss + consultoria especializada** *(⏭️ obedece `etapa_1` do abre-rodada)*
 6. ⏭️ `etapa_1: pular` → Etapa 1.5 (a intenção já virou plano ou o review está `done`/`skipped`).
-7. 🔒 ⏭️ `pre-despacho.sh 1` → despacha o agente **`gad-intent`** (Opus 5 medium) com `prompts/intent.md` — um único despacho cobre SPEC + CONTEXT + revisão adversarial; a retomada fina por arquivo é do subagente (`setup-intencao.sh`). Dentro dele: filho `gad-spec` hospeda `gsd-spec-phase N --auto` (termina no SPEC, sem auto-advance).
+7. 🔒 ⏭️ `pre-despacho.sh 1` → despacha o agente **`gad-intent`** (Opus 5 medium) com `prompts/intent.md` — um único despacho cobre SPEC + CONTEXT + consultoria especializada; a retomada fina por arquivo é do subagente (`setup-intencao.sh`). Dentro dele: filho `gad-spec` hospeda `gsd-spec-phase N --auto` (termina no SPEC, sem auto-advance).
 8. ↳ *(filho `gad-discuss`)* CONTEXT: `gsd-discuss-phase N --auto`, sem executar o `auto_advance`, zerando `workflow._auto_chain_active` na volta.
-9. ↳ *(no subagente)* Revisão adversarial: Codex + agy criticam (lanes lançadas em background por `roda-lanes.sh`, pareceres em `<phase_dir>/pareceres/`, autoridade = `.intent/.status-c<C>-<lane>.json`) ↔ filho `gad-verificador` verifica cada achado **no mesmo turno do lançamento** e relê a emenda de cada ciclo antes do briefing seguinte (modo `releitura`); loop com parada por custo marginal (`decide-ciclo.sh`, teto duro 4); factual → corrige · requisito/critério/oráculo → `needs_decision` ⏸️ sobe · tradeoff → adota + transparência. UM revisor falho → segue com o outro, sino; os DOIS instalados-mas-falhos → `blocked` ⏸️; NENHUM instalado → `skipped` com sino gritante e segue.
+9. ↳ *(no subagente)* Consultoria especializada: Codex + agy apontam o que põe o Goal em risco (lanes lançadas em background por `roda-lanes.sh`, pareceres em `<phase_dir>/pareceres/`, autoridade = `.intent/.status-c<C>-<lane>.json`) ↔ filho `gad-verificador` verifica cada achado **no mesmo turno do lançamento** e relê a emenda de cada ciclo antes do briefing seguinte (modo `releitura`); loop com parada por custo marginal (`decide-ciclo.sh`, teto duro 4); factual → corrige · requisito/critério/oráculo → `needs_decision` ⏸️ sobe · tradeoff → adota + transparência. UM consultor falho → segue com o outro, sino; os DOIS instalados-mas-falhos → `blocked` ⏸️; NENHUM instalado → `skipped` com sino gritante e segue.
 9b. **Gate de rota (camada 0, ao receber o `done`):** `confere-rotas.sh <phase_dir>/.intent` — exit 1 → devolve ao MESMO subagente (passo 7b do intent.md, fail-closed). Exit 0 → `confere-etapa.sh 1` (cancela + `end` medido). Turnos do coordenador viraram régua de auditoria (transcript), não medição em sessão — o conta-turnos.py foi removido na v2.2.0 (4 fases sem disparar).
 
 **Etapa 1.5 — Contratos de design** *(🎌 só com a flag · retomada por existência de arquivo)*
@@ -101,7 +101,7 @@ Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ po
 **Etapa 3 — Construção**
 16. ⏭️ `has_verification` → pula a Etapa 3 inteira.
 18. 🔒 ⏭️ `pre-despacho.sh 2.5` decide (pular · skip_config declarado · ⏸️ bloqueio_sem_revisor = fail-closed PC-6 · ok) → Convergência via **subagente** (Sub-rotina H + `prompts/convergence.md`, hospedando `gsd-plan-review-convergence --codex --agy --max-cycles 3`; lanes por `roda-codex.sh`/`roda-agy.sh`). Não convergiu (`escalou`) → ⏸️ para.
-18b. **Paralelismo** — o `pre-despacho.sh 3` que abre o item 19 (🔒) é a autoridade: lê `use_worktrees`/`parallelization`, aplica `baseRef: head` via `worktree set-baseref`, roda o `base-check` e mede as ondas de ≥2 planos incompletos. `despacho: ok` → siga ao 19 sem mais nada. `despacho: bloqueio_paralelismo` (exit 4) → ⏸️ AskUserQuestion com a `pergunta_ao_dono` do JSON, que já traz a `message` real do `base-check` — não diagnostique por conta própria nem aplique antídoto à mão: o motivo real da F24.x era `origin/HEAD unresolved`, não "base mismatch", e o script mede em vez de presumir. O fecho (`confere-etapa.sh 3`) extrai `paralelismo_observado` do run-log e reprova se `use_worktrees` virar `false` durante a etapa.
+18b. **Paralelismo** — o `pre-despacho.sh 3` que abre o item 19 (🔒) é a autoridade: lê `use_worktrees`/`parallelization`, aplica `baseRef: head` via `worktree set-baseref`, roda o `base-check` e mede as ondas de ≥2 planos incompletos. `despacho: ok` → siga ao 19 sem mais nada. `despacho: bloqueio_paralelismo` (exit 4) → ⏸️ AskUserQuestion com a `pergunta_ao_dono` do JSON, que já traz a `message` real do `base-check` (ou, quando o `motivo` começa por `plan_gate_ausente_ou_reprovado:`, a escolha «replanejar (volta à etapa 2) ou aceitar o despacho sabendo que a onda pode serializar») — não diagnostique por conta própria nem aplique antídoto à mão: o motivo real da F24.x era `origin/HEAD unresolved`, não "base mismatch", e o script mede em vez de presumir. O fecho (`confere-etapa.sh 3`) extrai `paralelismo_observado` do run-log (com `duracao_onda_s`/`plano_mais_lento_s`), `suite` (lançamentos do `roda-suite.sh`) e `prova_avisos`/`prova_falhas` dos SUMMARYs — informativos, para o briefing da `/audit-gad` — e reprova se `use_worktrees` virar `false` durante a etapa.
 19. 🔒 Execução via **subagente** (Sub-rotina H + `prompts/execute.md`) — sobrou `autonomous: false` (exceção rara pós-2.4b) → **inline** (`Skill gsd-execute-phase --auto --no-transition`).
 20. Checa completude: plano sem SUMMARY (ação humana travou ondas) → ⏸️ Sub-rotina D. Senão status: passed → segue · human_needed → anota (insumo da Etapa 5) e segue · gaps_found → 21.
 21. *(gaps)* Fecha 1×: despacho da 2.3 (`prompts/plan.md`, args `N --gaps`) → re-execução pela regra de rota da 3.3 → re-verifica. ⏸️ Persistiu → Sub-rotina D.
@@ -242,7 +242,7 @@ orquestrador.
 ## Sub-rotina D — parada graciosa (pause-work)
 
 Use quando sobra **trabalho de implementação** que depende do dono: ação humana
-(`human-action`), ondas travadas por ela, revisores de intenção `blocked`, gaps persistentes
+(`human-action`), ondas travadas por ela, consultores de intenção `blocked`, gaps persistentes
 (3.5), ameaça aberta (4.4), bug de UAT persistente (5.5), ship `uat_reprovado`, gate duro na
 janela de silêncio (Sub-rotina I), ou o teto de contexto (Sub-rotina A). Feche com handoff
 limpo:
@@ -612,12 +612,12 @@ TaskList, evento `run` + ponteiro da rodada. Exit ≠ 0 → **pare** com o motiv
 
 </stage>
 
-<stage id="1" name="Intenção — spec + discuss + revisão adversarial">
+<stage id="1" name="Intenção — spec + discuss + consultoria especializada">
 
-## Etapa 1 — Intenção (spec + discuss + revisão adversarial)
+## Etapa 1 — Intenção (spec + discuss + consultoria especializada)
 
 > Troca o carimbo humano por um **cético de máquina**: SPEC e CONTEXT saem em `--auto` (cada
-> escolha logada) e a intenção passa por revisão adversarial cross-AI — dois revisores
+> escolha logada) e a intenção passa por consultoria especializada cross-AI — dois consultores
 > externos tentam derrubar as decisões lendo o código de verdade, e um verificador confere
 > cada achado antes de aceitar. O usuário só é chamado quando um achado mexe no que é da
 > alçada dele. Autocontida de propósito (candidata a capability `discuss:post` no futuro).
@@ -628,18 +628,23 @@ resposta · `despachar` → 1.2. A retomada fina por arquivo é do subagente
 (`setup-intencao.sh`).
 
 **1.2 — Despacho.** `pre-despacho.sh 1` → despache o agente **`gad-intent`** (def própria:
-Opus 5 medium — coordenador roteia; o julgamento pesado mora nos filhos e nos revisores) com
+Opus 5 medium — coordenador roteia; o julgamento pesado mora nos filhos e nos consultores externos) com
 `prompts/intent.md`, levando `N`, `NN`, `phase_dir`, `project_root` absolutos e, numa
 continuação, a resposta verbatim. Se o abre-rodada reportou `pre_spec` não-nulo
 (`NN-PRE-SPEC.md` detectado no diretório da fase — decisões pré-travadas pelo usuário numa
 sessão interativa anterior; a rota normal para produzi-lo é `/gad-pre-spec NN`, que já grava o
-bloco `gad:decisoes`), repasse o caminho no despacho e declare o uso no sumário
-executivo — o `setup-intencao.sh` classifica o bloco de decisões (`pre_spec_bloco:
+bloco `gad:decisoes`. Com `NN-SPEC.md` e `NN-CONTEXT.md` já no disco, o PRE-SPEC entra só como
+insumo do briefing: a rota do §0.5 não roda e a etapa vai à revisão — o abre-rodada traz o
+campo `inventario` e o setup devolve `pre_spec_precedencia`), repasse o caminho no despacho e
+declare o uso no sumário executivo — o `setup-intencao.sh` classifica o bloco de decisões (`pre_spec_bloco:
 ok|ausente|invalido`) e o `pre_spec_mode: structured|legacy` vai explícito no despacho dos dois
 filhos. Dentro dele: filho `gad-spec` (SPEC `--auto`) → filho
-`gad-discuss` (CONTEXT `--auto`, auto_advance neutralizado) → revisão adversarial (Codex +
+`gad-discuss` (CONTEXT `--auto`, auto_advance neutralizado; a camada 1 roda o `scout.sh` e um
+`gad-explore` antes e entrega `explore: <phase_dir>/.intent/.explore-discuss.md` — o discuss só
+abre arquivo do projeto para o que uma área cinzenta não decide sem ver, e registra cada um) →
+consultoria especializada (Codex +
 agy — **agy = Gemini 3.7 Flash** — ↔ `gad-verificador`; loop por `decide-ciclo.sh`, teto 4;
-fail-closed no piso "≥1 revisor").
+fail-closed no piso "≥1 consultor").
 
 **Nunca passe `model` nem `effort` no `Agent` de um `gad-*`** (E7): a def pina os dois, e o
 `gad-lifecycle.sh` nega a chamada com `deny` + evento `incidente`. O mesmo hook nega a retomada
@@ -662,7 +667,9 @@ transcript, não contagem em sessão.
 
 **1.3 — Roteamento do retorno.**
 - **`done`** → gate de rota 9b (`confere-rotas.sh`; exit 1 devolve ao MESMO subagente) +
-  `confere-etapa.sh 1` (cancela mecânica —
+  `confere-etapa.sh 1` (inclui `confere-reconciliacao.sh --final`: lista as D-NN que citam
+  critério mudado desde a base selada, `D-NN-DESATUALIZADA`, informativo até uma fase real medir
+  M9; cancela mecânica —
   SPEC/CONTEXT/review fechado/chain zerada/limpeza `.intent/` — e o `end` medido; exit 1
   devolve ao MESMO subagente). Guarde do retorno: `transparencia`
   (insumo da 6.2), `sinos` (pro banner) e anuncie `pausas_de_negocio` numa linha. Sinos com
@@ -672,8 +679,9 @@ transcript, não contagem em sessão.
   por definição — critério 2 da Sub-rotina I; janela de silêncio → parada graciosa) →
   `AskUserQuestion` (recomendação primeiro) e **continue o MESMO subagente** com as respostas
   verbatim; roteie o novo retorno por esta lista.
-  - **Sub-caso `pre_spec_bloco: ausente|invalido`** (fail-closed do §0.5 do SKILL.md — PRE-SPEC
-    presente sem o bloco `gad:decisoes` legível por máquina, ou com bloco inválido): a pergunta
+  - **Sub-caso `pre_spec_bloco: ausente|invalido`** (só quando o SPEC ou o CONTEXT ainda não
+    existem; fail-closed do §0.5 do SKILL.md — PRE-SPEC presente sem o bloco `gad:decisoes`
+    legível por máquina, ou com bloco inválido): a pergunta
     tem duas saídas — **(a) migrar** o PRE-SPEC para o bloco (`scripts/pre-spec-migra.py` gera
     um rascunho a partir da prosa **para o dono revisar** — ele não decide nada; é ferramenta de
     legado, só para PRE-SPECs anteriores à 2.2.0) ou **(b)
@@ -681,7 +689,7 @@ transcript, não contagem em sessão.
     `pre_spec_sem_bloco` é obrigatório no retorno e no INTENT-REVIEW. Nunca siga com "zero
     decisões" em silêncio. A resposta é durável (`.intent/pre-spec-route.json`) e vale enquanto
     o hash do PRE-SPEC não mudar.
-- **`blocked`** — os DOIS revisores instalados mas falhos sem nenhum ciclo completo
+- **`blocked`** — os DOIS consultores instalados mas falhos sem nenhum ciclo completo
   (fail-closed, decisão de 02/07: sem segunda opinião a intenção não segue; UM falho desce
   degradado com sino; NENHUM instalado vira `skipped` no pré-check) → **Sub-rotina D**. O
   `intent_review: blocked` já está no disco (a próxima invocação re-tenta). Handoff: "🔔
@@ -940,7 +948,10 @@ rota; lê o veredito.
 **6.2 — Monta o "🔔 O que precisa de você agora" + transparência.** Junte o que merece
 atenção mesmo tendo seguido: Criticals do review (+ `uat_humano`), pilares de UI 1–2 /
 Registry Safety, eval abaixo de PRODUCTION READY, validação partial, `ciclo_final_nao_rodou`
-da intenção. As listas de transparência já vieram EXTRAÍDAS na 6.1 (balde 4 · balde 3 ·
+da intenção, e as **Sobras** — os critérios `[desejável]` não atendidos, um por linha, com o
+plano em que ficaram (`must_haves.desejaveis` dos PLAN.md × `## Desejáveis pendentes` do
+VERIFICATION.md). Sobra é informação de fecho, não pendência de replan (D1). As listas de
+transparência já vieram EXTRAÍDAS na 6.1 (balde 4 · balde 3 ·
 `transparencia:` do INTENT-REVIEW · skips do run-log · `riscos_aceitos` do secure — aceite de
 risco é assinatura do dono: ele REVÊ no resumo, não descobre no código). Seu trabalho é só
 REDIGIR.

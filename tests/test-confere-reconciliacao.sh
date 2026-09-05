@@ -104,6 +104,39 @@ printf '%s' "$saida" | grep -q "VEREDITO-ILEGIVEL c1 c1-01" && [ "$rc" = 1 ] \
   && ok "veredito vazio e NÃO aplicado também acusa (não é absorvido no contador ok)" \
   || erro "linha ilegível inflou o ok em silêncio" "$saida"
 
+echo "== R2 (plano 3, 05/09/2026) — confirmado_irrelevante: quarto valor do veredito, não quinto campo"
+D=$(fase disp-ausente); vereditos "$D" 3 "c3-01|novo|confirmado|A-produto" "c3-05|novo|confirmado_irrelevante|B-viabilidade"; aplicado "$D" 3 c3-01
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "VEREDITO-ILEGIVEL c" && erro "confirmado_irrelevante lido como ilegível" "$saida" || ok "confirmado_irrelevante não é VEREDITO-ILEGIVEL"
+printf '%s' "$saida" | grep -q "CONFIRMADO-NAO-APLICADO c3 c3-05" && erro "dispensado ausente do .aplicado cobrado como CNA" "$saida" \
+  || ok "dispensado ausente do .aplicado → ok (a dispensa tira o ciclo, não obriga correção)"
+printf '%s' "$saida" | grep -q "dispensados=1 dispensados_aplicados=0" && [ "$rc" = 0 ] \
+  && ok "resumo traz dispensados=1 dispensados_aplicados=0 e exit 0" || erro "resumo/exit" "$saida"
+
+D=$(fase disp-aplicado); vereditos "$D" 3 "c3-05|novo|confirmado_irrelevante|B-viabilidade"; aplicado "$D" 3 c3-05
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "^DISPENSADO-APLICADO c3 c3-05 veredito=confirmado_irrelevante" && [ "$rc" = 0 ] \
+  && ok "dispensado presente no .aplicado → DISPENSADO-APLICADO, exit 0 (não bloqueante: nada se descarta)" || erro "DISPENSADO-APLICADO" "$saida"
+printf '%s' "$saida" | grep -q "reconciliacao: ok" && ok "…e a reconciliação segue ok" || erro "classe informativa virou falha" "$saida"
+printf '%s' "$saida" | grep -q "dispensados=1 dispensados_aplicados=1" && ok "resumo: dispensados=1 dispensados_aplicados=1" || erro "resumo" "$saida"
+
+echo "== R9 (plano 3) — RELEITURA-ABERTA no último ciclo (--ordem); legado avisa"
+D=$(fase rel-aberta); vereditos "$D" 4 "c4-01|novo|confirmado|A-produto"; aplicado "$D" 4 c4-01
+touch -d '2026-08-30 09:00:00' "$D/.intent/.correcoes-c4.aplicado"
+echo '{"v":2,"ciclo":4,"commit":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","artefatos":[],"contradiz":[{"ac_a":"AC-1","ac_b":"AC-2","porque":"x"}],"prescreve_mecanismo":[],"omissoes_novas":[],"cardinalidade":[],"consistencia":"não_disponível","ok":false}' > "$D/.intent/.releitura-c4.json"
+touch -d '2026-08-30 09:05:00' "$D/.intent/.releitura-c4.json"
+saida=$("$SCRIPT" "$D" --ordem 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "^RELEITURA-ABERTA c4" && [ "$rc" = 1 ] \
+  && ok "releitura v:2 com ok:false no último ciclo → RELEITURA-ABERTA + exit 1" || erro "releitura aberta passou" "$saida"
+printf '%s' "$saida" | grep -q "^ordem: ok" && ok "…e a ordem em si continua ok (o exit 1 veio da releitura aberta)" || erro "ordem acusada indevidamente" "$saida"
+sed -i 's/"ok":false/"ok":true/' "$D/.intent/.releitura-c4.json"; touch -d '2026-08-30 09:05:00' "$D/.intent/.releitura-c4.json"
+saida=$("$SCRIPT" "$D" --ordem 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "RELEITURA-ABERTA" && erro "ok:true acusado" "$saida" || { [ "$rc" = 0 ] && ok "mesmo arquivo com ok:true → exit 0" || erro "rc=$rc" "$saida"; }
+echo '{"commit":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","artefatos":[]}' > "$D/.intent/.releitura-c4.json"; touch -d '2026-08-30 09:05:00' "$D/.intent/.releitura-c4.json"
+saida=$("$SCRIPT" "$D" --ordem 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "^aviso: releitura c4 em formato legado" && [ "$rc" = 0 ] \
+  && ok "releitura sem \`v\` (os stubs da F24.4) → aviso legado, exit 0" || erro "legado" "$saida"
+
 echo "== fase sem ciclos e usos inválidos"
 D=$(fase vazia)
 saida=$("$SCRIPT" "$D" 2>&1); rc=$?

@@ -18,7 +18,11 @@
 #   --status-dir  diretório com os `.status-c<C>-<lane>.json` do roda-lanes.sh: lane
 #                 `usable:false` não tem suas Q contadas (já é `sem_parecer`).
 # A tabela ganha a coluna `elicitacao` (estrutural | dirigida | dirigida-ausente |
-# nao_provisorio | dirigida-excluida) e `achados_estruturais_total` JÁ INCLUI os dirigidos.
+# nao_provisorio | nao_irrelevante_fundamentado | dirigida-excluida) e
+# `achados_estruturais_total` JÁ INCLUI os dirigidos.
+#   R4 (plano 3, 05/09): `não — irrelevante para o Goal: <efeito>, ver <AC-nn|R-n|arquivo:linha>`
+#   ganha o rótulo `nao_irrelevante_fundamentado` e o contador `irrelevante_fundamentada` no
+#   JSON; não pode ser rebaixada a `incerto`, mas CONTINUA contando até o `supported_no`.
 #
 # C7 (01/09) — coluna `categoria` própria. A tabela passou a ter 5 colunas:
 #   | lane | linha | achado (trecho) | categoria | elicitacao |
@@ -80,7 +84,10 @@ SEV='HIGH|MEDIUM|LOW|CRITICAL|BLOCKER|ALTA|ALTO|M[ÉE]DIA|M[ÉE]DIO|BAIXA|BAIXO|
 # Fix F24 (10/08): "- **Confiança:** alta" casava na SEV ("alta") e headings de SEÇÃO
 # do parecer ("### 1. Parecer de Convergência...") casavam no padrão numerado —
 # inflavam a tabela com ruído e escondiam a subcontagem dos achados reais.
-RUIDO='^[0-9]+:(prova_leitura:|.*\*\*Token de Leitura|.*PROVA-)|n[íi]vel (geral )?de risco|risco geral|overall risk|risk level|confian[çc]a|^[0-9]+:#{2,4} +[0-9]+[.:] *(parecer|resumo|metodologia|conclus)'
+# R1 (plano 3, 05/09): a linha de campo `vinculo_goal:` de cada achado cita AC-nn e, às
+# vezes, o id de um achado anterior (`ver c1-02`) — no fallback sem headings ela seria
+# contada como achado pelo padrão `cN-NN`. É campo do achado, não achado.
+RUIDO='^[0-9]+:(prova_leitura:|.*\*\*Token de Leitura|.*PROVA-|[[:space:]]*[*-]?[[:space:]]*\*{0,2}vinculo_goal:)|n[íi]vel (geral )?de risco|risco geral|overall risk|risk level|confian[çc]a|^[0-9]+:#{2,4} +[0-9]+[.:] *(parecer|resumo|metodologia|conclus)'
 
 # `### Achado 0 …` é o gabarito de "nenhum achado novo" (P15): sai da lista aqui.
 ACHADO_ZERO='^[0-9]+:#{2,4} +Achado +0([^0-9]|$)'
@@ -207,7 +214,8 @@ def norm(s):
     s = "".join(c for c in s if not unicodedata.combining(c))
     return re.sub(r"[\s*`_.,;:!?()\[\]-]+", " ", s).strip().lower()
 
-resumo = {"brutas": 0, "excluidas": 0, "nao_provisorio": 0, "total": 0, "avisos": []}
+resumo = {"brutas": 0, "excluidas": 0, "nao_provisorio": 0, "irrelevante_fundamentada": 0,
+          "total": 0, "avisos": []}
 linhas = []
 
 try:
@@ -243,6 +251,13 @@ SEP  = re.compile(r"\s(?:—|–|--|-)\s")
 FRACA = {"", "n a", "n/a", "na", "n/d", "nd", "nao", "nao aplicavel", "nao se aplica",
          "nenhuma", "nada", "porque nao", "pq nao", "obvio", "sem evidencia",
          "sem evidencias", "nao ha", "irrelevante"}
+# R4 (plano 3) — "irrelevante, com evidência do Goal": a palavra sozinha continua vazia
+# (fica em FRACA); com o efeito do Goal nomeado e uma citação (AC-nn, R-n, D-nn ou
+# arquivo:linha) é resposta com lastro — ROTULADA aqui, julgada pelo verificador. O rótulo
+# não tira a resposta da contagem: só `supported_no` com evidência faz isso (abaixo).
+RE_IRRELEV_FORTE = re.compile(
+    r"irrelevante\b.*\bgoal\b.*(?:AC-\d+|R-?\d+|D-\d+|[\w./-]+\.\w+:\d+)",
+    re.IGNORECASE | re.DOTALL)
 
 def le_respostas(path):
     """Linhas `- Q<n>: ...` da seção `## Respostas dirigidas` (fallback: arquivo todo)."""
@@ -313,6 +328,7 @@ for entrada in LANES.strip().splitlines():
         m = SEP.split(resto, 1)
         cabeca = norm(m[0])
         evid = norm(m[1]) if len(m) > 1 else ""
+        evid_bruto = m[1] if len(m) > 1 else ""   # sem norm(): o regex precisa do `:` e do `.`
         if cabeca in ("sim", "yes", "s"):
             r = "sim"
         elif cabeca in ("nao", "no", "n"):
@@ -328,7 +344,10 @@ for entrada in LANES.strip().splitlines():
             r = "incerto"
             resumo["avisos"].append("%s/%s duplicada — vira incerto" % (lane, qid))
         if r == "nao":
-            if evid in FRACA or len(evid) < 3 or re.fullmatch(r"[. ]*", evid or "."):
+            forte = bool(RE_IRRELEV_FORTE.search(evid_bruto))
+            if forte:
+                resumo["irrelevante_fundamentada"] = resumo.get("irrelevante_fundamentada", 0) + 1
+            if not forte and (evid in FRACA or len(evid) < 3 or re.fullmatch(r"[. ]*", evid or ".")):
                 r = "incerto"
             else:
                 k = (lane, qid)
@@ -338,7 +357,7 @@ for entrada in LANES.strip().splitlines():
                     rot, conta = "dirigida-excluida", False
                     resumo["excluidas"] += 1
                 else:
-                    rot = "nao_provisorio"
+                    rot = "nao_irrelevante_fundamentado" if forte else "nao_provisorio"
                     resumo["nao_provisorio"] += 1
         if extra:
             resumo["avisos"].append("%s/%s fora do manifesto — contada assim mesmo" % (lane, qid))

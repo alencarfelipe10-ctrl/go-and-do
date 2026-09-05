@@ -176,7 +176,7 @@ INTENQ=true; [ "$ETAPA1" = pular ] && [ "$(tem SPEC.md)" = false ] && INTENQ=fal
 TASKS=$(jq -cs '.' <<EOF
 $(tl 1  "Intenção — SPEC" $INTENQ "$(tem SPEC.md)")
 $(tl 2  "Intenção — CONTEXT" $INTENQ "$(tem CONTEXT.md)")
-$(tl 3  "Revisão adversarial de intenção" $INTENQ "$(gr INTENT-REVIEW.md '^intent_review: (done|skipped)')")
+$(tl 3  "Consultoria especializada de intenção" $INTENQ "$(gr INTENT-REVIEW.md '^intent_review: (done|skipped)')")
 $(tl 4  "Contrato de UI" $UI "$(tem UI-SPEC.md)")
 $(tl 5  "Contrato de IA" $AI "$(tem AI-SPEC.md)")
 $(tl 6  "Planejar" true "$HAS_PLANS")

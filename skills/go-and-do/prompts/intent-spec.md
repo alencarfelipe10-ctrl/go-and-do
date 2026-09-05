@@ -74,15 +74,24 @@ PRE-SPEC, `pre_spec_mode: structured|legacy` + o insumo correspondente. Traz ain
      citando o `PS-nn` e o que a ressalva custa; ressalva que você julgou irrelevante
      entra como `PS-nn descartada: <porquê>`. Ressalva sem linha reprova
      (`RESSALVA-SEM-LIMITACAO`).
-7. **Conferência mecânica antes de devolver** (só quando há PRE-SPEC):
+7. **Conferência mecânica antes de devolver.** <!-- plano 1, P-02 e P-04 — fiacao-P1-P-02.md §2, fiacao-P1-P-04.md §2 --> Com PRE-SPEC:
    `$HOME/.claude/skills/go-and-do/scripts/confere-pre-spec.sh --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-PRE-SPEC.md"`.
+   Sem PRE-SPEC na fase:
+   `$HOME/.claude/skills/go-and-do/scripts/confere-pre-spec.sh --sem-pre-spec --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md"`
+   — nesse modo não há `EXTENSAO-SUSPEITA` nem `RESSALVA-SEM-LIMITACAO`, e citar `PS-nn` reprova
+   (a fase não tem PRE-SPEC).
    `MARCA-SEM-ID`, `ID-INEXISTENTE`, `FATO-SEM-EVIDENCIA`, `RESSALVA-SEM-LIMITACAO`,
-   `AC-POR-PONTEIRO`, `AC-SEM-ORIGEM`, `AC-ORIGEM-INEXISTENTE` = **falha**: corrija o SPEC e
-   re-rode até sair limpo. Um AC sem `[origem: …]` é um AC que ninguém pediu — cite o PS-nn,
-   o requisito ou o AC de que ele deriva; não invente a origem para calar a cancela. Exit 2
-   (bloco inválido) → sino, não conserto seu. `EXTENSAO-SUSPEITA` e `ORIGEM-NAO-CONFERIDA`
-   são **aviso** — não corrija por eles; liste cada linha em `r2_avisos` no retorno (o
-   coordenador decide, o revisor lê).
+   `AC-POR-PONTEIRO`, `AC-SEM-ORIGEM`, `AC-ORIGEM-INEXISTENTE`, `AC-SEM-CLASSE`,
+   `EXIGIDO-SEM-MOTIVO`, `EXIGIDO-SEM-REGUA`, `EXIGIDO-DIVERGE-SEM-MOTIVO`, `GOAL-SEM-COBERTURA`
+   = **falha**: corrija o SPEC e re-rode até sair limpo. Um AC sem `[origem: …]` é um AC que
+   ninguém pediu — cite o PS-nn, o `AA-n` do Anexo A, o Goal, o requisito ou o AC de que ele
+   deriva; não invente a origem para calar a cancela. Um exigido sem régua de resultado
+   (`EXIGIDO-SEM-REGUA`) não vira exigido por ganhar uma origem inventada: ou acha a régua, ou é
+   `[desejável]`. Exit 2 (bloco inválido) → sino, não conserto seu. `EXTENSAO-SUSPEITA`,
+   `ORIGEM-NAO-CONFERIDA` e `AC-ORIGEM-REPETIDA` são **aviso** — não corrija por eles; liste
+   cada linha em `r2_avisos` no retorno (o coordenador decide, o consultor lê). A
+   `AC-ORIGEM-REPETIDA` é a pergunta de unicidade do Step 6 voltando: responda-a no SPEC
+   (fundir ou distinguir), não a cale.
 7b. **Re-commite antes de selar.** O workflow commitou o SPEC no passo 2; os passos 4–7
    o editaram depois. Feche tudo num commit só — `--amend` se o commit foi do próprio
    workflow, commit novo se não — incluindo a reconciliação do ROADMAP (R6 exige o mesmo

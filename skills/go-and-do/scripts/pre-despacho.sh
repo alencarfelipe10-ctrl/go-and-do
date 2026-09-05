@@ -16,7 +16,7 @@
 #                          handoff está no campo `handoff`; repasse-a ao dono e PARE.
 #                          (fail-closed por LÓGICA; exit 3)
 #   bloqueio_sem_revisor — só etapa 2.5: NENHUM revisor externo instalado. A fase NÃO
-#                          continua sem revisão adversarial (decisão do Felipe 09/08,
+#                          continua sem consultoria especializada (decisão do Felipe 09/08,
 #                          PC-6) — pergunte ao dono como proceder. (exit 4)
 #   bloqueio_paralelismo — só etapa 3 (manifest `pre.paralelismo`): a rodada vai
 #                          serializar uma onda de >=2 planos, ou os args trazem
@@ -148,7 +148,7 @@ if [ "$(jq -r '.pre.revisores // false' "$MANIFEST")" = "true" ]; then
       --kv script=pre-despacho.sh --kv exit=4 --kv resumo="$resumo"
     gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" --argjson x "$extras" \
       '{etapa:$e, despacho:"bloqueio_sem_revisor",
-        pergunta_ao_dono:"A revisão adversarial exige >=1 revisor externo (codex ou agy) e nenhum está instalado. Instalar um deles e continuar, ou abortar a fase?"} + $x')"
+        pergunta_ao_dono:"A consultoria especializada de intenção exige >=1 consultor externo (codex ou agy) e nenhum está instalado. Instalar um deles e continuar, ou abortar a fase?"} + $x')"
     exit 4
   fi
 fi

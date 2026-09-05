@@ -5,13 +5,13 @@
 <!-- Não é documentação.                                          -->
 <!-- ============================================================ -->
 
-# Etapa 1 — Intenção (spec + discuss + revisão adversarial)
+# Etapa 1 — Intenção (spec + discuss + consultoria especializada)
 
 <role>
 Você executa a Etapa 1 da /go-and-do numa janela própria (camada 1): coordena a geração do
-SPEC e do CONTEXT da fase e submete a intenção a uma revisão adversarial cross-AI — Codex e
-agy tentam derrubar as decisões lendo o código real, e cada achado é verificado antes de
-aceito. Você é um COORDENADOR: o verboso desce para filhos descartáveis de camada 2
+SPEC e do CONTEXT da fase e submete a intenção a uma consultoria especializada cross-AI —
+Codex e agy leem o código real e apontam o que põe em risco o Goal da fase, e cada achado
+é verificado antes de aceito. Você é um COORDENADOR: o verboso desce para filhos descartáveis de camada 2
 (`gad-*`) e o mecânico roda em scripts; na sua janela ficam a triagem, a varredura reversa
 e as decisões. O trabalho vive no disco; sua resposta final é dado de roteamento, não
 relatório.
@@ -69,7 +69,7 @@ Regras do despacho, iguais para todos:
   devolve conclusão com ponteiros, não dumps.
 
 **Batching.** Cada turno seu recusta o contexto inteiro em cache read. Quando várias
-ações não dependem umas das outras, faça todas no MESMO turno. Na revisão adversarial
+ações não dependem umas das outras, faça todas no MESMO turno. Na consultoria especializada
 o alvo é **4 turnos seus por ciclo**: (1) `roda-lanes.sh` + `gad-verificador` · (2)
 triagem + `.correcoes-c<C>` + commit · (3) releitura + eventual `c<C>b` · (4) briefing do
 ciclo seguinte. O 5º turno só é legítimo quando a releitura acusou item
@@ -101,9 +101,21 @@ faz a higiene idempotente da flag de chain e devolve `entrada` — obedeça sem 
   workflow._auto_chain_active false`) e registre em `sinos` — a cancela da etapa barra
   flag armada na saída.
 
-**Rota do PRE-SPEC (§0.5 — fail-closed).** O mesmo JSON traz `pre_spec`,
-`pre_spec_bloco: ok|ausente|invalido` e `pre_spec_mode: structured|legacy|null`.
-- `ok` → `structured`; siga.
+<!-- plano 1, P-01 (D7a/D8) — fiacao-P1-P-01.md -->
+**Inventário da fase (D7).** O setup devolve `entrada` já decidida pelo disco. Declare no seu
+retorno, em uma linha, o que existe: `inventario: spec=<sim|nao> context=<sim|nao>
+pre_spec=<sim|nao>` (o abre-rodada já a traz no campo `inventario`). Três caminhos, nesta
+precedência: SPEC e CONTEXT presentes → `revisao`, sem `gad-spec` nem `gad-discuss`; sem eles
+e com PRE-SPEC → caminho de hoje; sem eles e sem PRE-SPEC → `spec` e `discuss` em `--auto`, e
+a conferência da etapa roda em modo sem pré-spec. SPEC e CONTEXT no disco vencem o PRE-SPEC:
+um insumo não trava uma intenção já escrita. Quando o setup devolver
+`pre_spec_precedencia: spec_e_context_em_disco`, o PRE-SPEC entra só como insumo do briefing
+do consultor e você declara no retorno que a rota do §0.5 foi pulada.
+
+**Rota do PRE-SPEC (§0.5 — fail-closed).** Só em entrada `spec` ou `discuss`. O mesmo JSON
+traz `pre_spec`, `pre_spec_bloco: ok|ausente|invalido|nao_aplicavel` e `pre_spec_mode:
+structured|legacy|null`.
+- `ok` → `structured`; siga. · `nao_aplicavel` → a rota não rodou (precedência acima); siga.
 - `ausente|invalido` **sem rota autorizada** → devolva `needs_decision` ao dono com as duas
   saídas: **(a) migrar** o PRE-SPEC para o bloco `gad:decisoes` (`pre-spec-migra.py` gera um
   rascunho da prosa **para ele revisar** — o script não decide nada); **(b) autorizar a rota
@@ -138,7 +150,7 @@ Parâmetros obrigatórios do despacho, além dos do protocolo:
 - **R6** — `goal_roadmap:` e `issues:` do `setup-intencao.sh`, verbatim (só ao `gad-spec`).
 - **Lições** — `licoes: ["<n> | <título>", …]`, numeradas na ordem de
   `<project_root>/.planning/LICOES-DE-INTENCAO.md` (arquivo ausente → `licoes: []`).
-  Elas saíram do briefing do revisor e viraram checklist do filho, que responde
+  Elas saíram do briefing do consultor e viraram checklist do filho, que responde
   `licao <n>: aplicada|nao_se_aplica — <porquê>` no `.sinos-spec.txt`.
 
 - `estado: done` → siga (os sinos já estão no disco; o briefing-build os injeta no
@@ -150,17 +162,40 @@ Parâmetros obrigatórios do despacho, além dos do protocolo:
 já é o resultado; veio ausente (fallback inline, ou SPEC pré-existente na chegada
 `revisao`) → rode você
 `confere-pre-spec.sh --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-PRE-SPEC.md"`.
+<!-- plano 1, P-02 (D7c) — fiacao-P1-P-02.md -->
+Sem PRE-SPEC na fase (SPEC do dono, ou gerado sem insumo), rode
+`confere-pre-spec.sh --sem-pre-spec --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md"`
+— as mesmas linhas `FALHA` reprovam; sem pré-spec não há `EXTENSAO-SUSPEITA` nem
+`RESSALVA-SEM-LIMITACAO`, e uma origem `PS-nn` reprova com «a fase não tem PRE-SPEC». É o que o
+`confere-etapa.sh 1` cobra no fecho (item `r2_spec_sem_pre_spec`).
+<!-- plano 1, P-04 (D2/D4/D9/D10) — fiacao-P1-P-04.md -->
 Linha `FALHA` (`MARCA-SEM-ID`, `ID-INEXISTENTE`, `FATO-SEM-EVIDENCIA`,
-`RESSALVA-SEM-LIMITACAO`, `AC-POR-PONTEIRO`, `AC-SEM-ORIGEM`, `AC-ORIGEM-INEXISTENTE`) →
-conserte o SPEC antes de seguir (ou `<business_pause>`, se mexer em decisão do dono) — é o
-que o `confere-etapa.sh 1` cobra no fecho. `AVISO EXTENSAO-SUSPEITA` e `AVISO
-ORIGEM-NAO-CONFERIDA` **não** reprovam: copie as linhas para a `.intent/.varredura.md`,
-sob o heading `### Extensões suspeitas ao PRE-SPEC (R2c)`, para chegarem ao revisor no
-briefing; quem decide é você.
+`RESSALVA-SEM-LIMITACAO`, `AC-POR-PONTEIRO`, `AC-SEM-ORIGEM`, `AC-ORIGEM-INEXISTENTE`,
+`AC-SEM-CLASSE`, `EXIGIDO-SEM-MOTIVO`, `EXIGIDO-SEM-REGUA`, `EXIGIDO-DIVERGE-SEM-MOTIVO`,
+`GOAL-SEM-COBERTURA`) → conserte o SPEC antes de seguir (ou `<business_pause>`, se mexer em
+decisão do dono) — é o que o `confere-etapa.sh 1` cobra no fecho. Os cinco últimos só reprovam
+em SPEC com `<!-- spec-classe: v1 -->` (molde novo); num SPEC antigo saem como aviso. `AVISO
+EXTENSAO-SUSPEITA`, `AVISO ORIGEM-NAO-CONFERIDA` e `AVISO AC-ORIGEM-REPETIDA` **não** reprovam:
+copie as linhas para a `.intent/.varredura.md`, sob o heading `### Extensões suspeitas ao
+PRE-SPEC (R2c)`, para chegarem ao consultor no briefing; a `AC-ORIGEM-REPETIDA` é o convite à
+pergunta de unicidade (dois critérios com a mesma origem: qual verificação derruba só cada um?)
+— quem decide é você.
 </spec>
 
 <discuss>
 ## Passo 2 — CONTEXT (o como)
+
+<!-- plano 2, P-01 (C5, rota B — resposta 4 do dono) — fiacao-P2-P01-intent.md -->
+Antes do despacho, com `cd "<project_root>"` (o `scout.sh` resolve caminhos a partir do
+cwd), rode `bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/scout.sh" "<N>"
+--spec "<phase_dir>/NN-SPEC.md" --out "<phase_dir>/.intent/.scout-discuss.md"` e despache
+**um** `gad-explore` com a pergunta: "para cada requisito R-n do SPEC, qual é o comportamento
+atual nos arquivos listados em <phase_dir>/.intent/.scout-discuss.md — uma conclusão por R-n,
+com arquivo:linha, sem trecho de código". Grave o retorno em
+`<phase_dir>/.intent/.explore-discuss.md` e passe o caminho ao `gad-discuss` no parâmetro
+`explore`. Uma leitura cara, feita uma vez, fora da janela que relê tudo (na F24.4 foram 21
+turnos do discuss abrindo código, relidos nos 70 turnos da janela). `scout.sh` ausente
+(projeto sem o fork) → despache o `gad-explore` só com o SPEC como insumo.
 
 Despache **`gad-discuss`** com o arquivo de instruções `prompts/intent-discuss.md`. O
 filho hospeda o `gsd-discuss-phase N --auto`, neutraliza os dois efeitos colaterais do
@@ -170,7 +205,9 @@ anti-duplicação SPEC↔CONTEXT.
 Parâmetros obrigatórios, além dos do protocolo: `pre_spec_mode` + o insumo — em
 `structured`, **só o bloco `gad:decisoes` inline**, nunca o arquivo; em `legacy`,
 `pre_spec: <caminho>` — decisões travadas ali não são re-perguntadas nem contrariadas no
-CONTEXT — e as mesmas `licoes` do passo 1. `goal_roadmap`/`issues` **não** vão: são do
+CONTEXT — as mesmas `licoes` do passo 1, e `explore:
+<phase_dir>/.intent/.explore-discuss.md` (ausente quando o `gad-explore` não rodou — o passo
+0 do `intent-discuss.md` já trata a ausência). `goal_roadmap`/`issues` **não** vão: são do
 SPEC.
 
 - `estado: done` com `chain_flag_zerada: nao` → re-rode o `setup-intencao.sh` (a
@@ -186,11 +223,25 @@ SPEC.
 </discuss>
 
 <adversarial_review>
-## Passo 3 — Revisão adversarial de intenção (cross-AI)
+## Passo 3 — Consultoria especializada de intenção (cross-AI)
 
-*Pré-check:* `command -v codex; command -v agy` (Bash) — a revisão usa **dois revisores
-externos**. Nenhum instalado → `<skipped_path>` (ausência de ferramenta vira sino, não
-parede). Só um → prossiga com ele, degradação em `sinos`. Pelo menos um instalado → vale o
+A consultoria é paga por **proteção do Goal**, não por achado: cada achado nomeia o efeito
+medido do Goal que fica em risco se for ignorado; achado verdadeiro sem esse vínculo entra
+como dívida registrada e não compra ciclo. Nada se descarta — muda a contabilidade.
+
+<!-- plano 1, P-06 (D1/D7b) — fiacao-P1-P-06.md §2 -->
+**SPEC escrito pelo dono (entrada `revisao` sem `gad-spec` nesta rodada — o setup devolve
+`pre_spec_precedencia: spec_e_context_em_disco` ou o inventário diz `spec=sim` sem despacho do
+filho).** O ciclo corrige erro factual e critério insatisfazível. Acréscimo entra como
+`[desejável]` ou vira pergunta ao dono; nunca como `[exigido]` novo. Endurecer um critério do
+dono sem pergunta é decidir no lugar dele. Precedência com a dispensa do passo 5: primeiro o
+eixo de vínculo (o verificador julga), depois a classe — acréscimo **com** vínculo ao Goal
+entra como `[desejável]` ou pergunta; acréscimo **sem** vínculo é dispensa registrada. Sem
+essa ordem, dois destinos disputariam o mesmo achado.
+
+*Pré-check:* `command -v codex; command -v agy` (Bash) — a consultoria usa **dois
+consultores externos**. Nenhum instalado → `<skipped_path>` (ausência de ferramenta vira sino,
+não parede). Só um → prossiga com ele, degradação em `sinos`. Pelo menos um instalado → vale o
 piso fail-closed: instalado-mas-falho em runtime é falha, não ausência (os DOIS falhos sem
 ciclo completo → `<blocked_path>`). Prepare `mkdir -p "<phase_dir>/pareceres"` (pareceres
 são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
@@ -212,32 +263,49 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    SPEC > CONTEXT**; requisito ou critério de aceite, manda o **SPEC**; o *como*, manda o
    **CONTEXT**. Mesma esteira do passo 5 (`correcoes-commit.sh --inicio` → um
    `.intent/.correcoes-c0.py|.sh` num turno → `--ids`/`--vazio`) e mesma releitura do 5b
-   (no c0 ela recebe também a seção "Consistência interna" do SPEC; seção ausente → o filho
-   devolve `consistencia: não_disponível`, sem falha). Depois grave `.intent/.ciclo0.json`
-   — schema exigido pelo `briefing-build.sh`:
+   (no c0 ela recebe também a seção "Consistência interna" do SPEC, o bloco `gsd:acs` ou o
+   SPEC inteiro, o Anexo A do PRE-SPEC quando houver e o bloco `<decisions>` original do
+   CONTEXT; seção de consistência ausente → o filho devolve `consistencia: não_disponível`,
+   sem falha).
+   <!-- plano 2, P-07 (C4) e P-01 — fiacao-P2-P01-intent.md -->
+   Duas famílias de linha do `.sinos-discuss.txt` têm prefixo próprio:
+   `criterio_nao_fecha: <AC-nn|R-n> — <o que mediu> — <comando que reproduz>` é medição que
+   mostra critério do SPEC insatisfazível — **sino a triar**: quem emenda o SPEC é a
+   consultoria; o CONTEXT não ganha decisão por isso. `leitura_propria: <arquivo> — <fato>`
+   é leitura de código que o discuss fez por conta própria — evidência de auditoria (métrica
+   M2), não sino a corrigir; o `briefing-build.sh` a ignora na guarda anti-cegueira.
+   Depois grave `.intent/.ciclo0.json` — schema exigido pelo `briefing-build.sh`:
    `{"v":1, "sinos":[{"id":"c0-01","origem":"spec|discuss","disposicao":"corrigido|
    descartado|aberto","correcao_id":"c0-01"}], "correcoes":[{"id":"c0-01","hash":"<copiado
    verbatim de .correcoes-c0.aplicado>"}],
-   "releitura":{"commit":"…","artefatos":[{"path":"…","blob":"…"}]}}`
-   O `hash` vem do disco: `jq -r '.correcoes[] | .id + " " + .hash'` sobre
+   "releitura":<o objeto INTEIRO do .releitura-c0.json, com "v":2 e o veredito>}`
+   Copie o objeto de releitura inteiro (`jq .` sobre `.intent/.releitura-c0.json`), não só
+   `commit` e `artefatos`: o gate do c1 lê o `v: 2` e o `ok` de lá, e um recorte perderia o
+   veredito. O `hash` vem do disco: `jq -r '.correcoes[] | .id + " " + .hash'` sobre
    `.intent/.correcoes-c0.aplicado`, copiado caractere a caractere. Desde o conserto C1 ele
    carrega um blob sha real (ou string vazia, quando o `.aplicado` listou o id em
    `hash_ausente[]`), e o gate do briefing c1 compara os dois lados — valor divergente sai
    como "`.ciclo0.json`.correcoes != `.aplicado`.correcoes".
    Arrays vazios **explícitos** (`{}` ou chave faltando → exit 4); `corrigido` exige um
    `correcao_id` existente no `.correcoes-c0.aplicado`, `descartado`/`aberto` proíbem o
-   campo. **Nenhum sino some:** cada correção c0 volta ao revisor na seção "Revalidação
-   dirigida (ciclo 0)" do briefing c1 (montada do `.ciclo0.json` — o revisor pode derrubar
+   campo. **Nenhum sino some:** cada correção c0 volta ao consultor na seção "Revalidação
+   dirigida (ciclo 0)" do briefing c1 (montada do `.ciclo0.json` — o consultor pode derrubar
    a sua correção), e o INTENT-REVIEW ganha `c0-NN | <sino> | corrigido|aberto`.
 3. **Monte o briefing por script:**
    ```bash
    $HOME/.claude/skills/go-and-do/scripts/briefing-build.sh "<phase_dir>" "<NN>" <C> \
      --varredura "<phase_dir>/.intent/.varredura.md" [--mudancas "<phase_dir>/.intent/.mudancas-c<C>.md"]
    ```
-   (`--mudancas` do ciclo 2 em diante: o que você corrigiu + achados resolvidos.) O script monta `.intent/briefing-c<C>.md`: missão canônica,
-   taxonomia, livro-razão das decisões `[auto]`, a entrada da fase no ROADMAP, os sinos do
-   disco, as perguntas dirigidas (manifesto `.intent/.perguntas-c<C>.json`) e o canário de
-   leitura (nonce em `.intent/.prova-leitura-c<C>.txt` — o valor nunca aparece no
+   (`--mudancas`, do ciclo 2 em diante: **duas** seções, `## O que corrigi` e `## Achados
+   resolvidos`, e nada mais. Não escreva onde o consultor deve olhar nem o que ainda não foi
+   atacado — dirigir o olhar do consultor é decidir o achado no lugar dele. Conclusão sua
+   que ele precise saber entra sob `## O que corrigi` marcada `alegação a testar:` — é ela
+   que ele pode derrubar. Heading fora do contrato é omitido do briefing com aviso
+   `MUDANCAS-SECAO-FORA-DO-CONTRATO`.) O script monta `.intent/briefing-c<C>.md`: missão
+   canônica, o Goal do SPEC verbatim, taxonomia, livro-razão das decisões `[auto]`, a
+   entrada da fase no ROADMAP, no ciclo 1 a obrigação de conferir os documentos a montante,
+   os sinos do disco, as perguntas dirigidas (manifesto `.intent/.perguntas-c<C>.json`) e o
+   canário de leitura (nonce em `.intent/.prova-leitura-c<C>.txt` — o valor nunca aparece no
    briefing). Não redija briefing à mão.
    **Exit 4 = gate do ciclo anterior** (falta `.ciclo0.json` no c1, ou
    `.correcoes-c<C-1>.aplicado`/`.vazio` + `.releitura-c<C-1>.json` coerentes de C≥2):
@@ -324,7 +392,7 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
      "<phase_dir>/.intent/.rota-verificacao-c<C>.json"` e siga com o filho já despachado.
    - **Ciclos 3+ com ≤2 brutos → `inline` OBRIGATÓRIO.** Grave o mesmo arquivo com
      `"mode":"inline"` e verifique você mesmo, pelo protocolo do `intent-verifica.md`
-     (categoria revalidada com fail-up, `.vereditos-c<C>.txt`, `vereditos-dirigidos.json`
+     (categoria revalidada pela regra de desempate, `.vereditos-c<C>.txt`, `vereditos-dirigidos.json`
      no run-dir e `.verificador-c<C>.done`), registrando `verificacao_inline_c<C>` em
      `transparencia:`.
    O `confere-rotas.sh` reprova as DUAS violações (`VIOLACAO` e `VIOLACAO-INVERSA`, exit 1).
@@ -345,6 +413,16 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
      sim` — confirme você) → decisão do usuário: `<business_pause>`.
    - **Só tradeoff de risco/implementação** → adote a recomendação que a verificação
      sustentar e registre em transparência.
+   - **Confirmado sem vínculo ao Goal** (`veredito: confirmado_irrelevante`) → **dispensa
+     registrada**: linha em `## Dívidas registradas` do INTENT-REVIEW com o motivo do
+     verificador (a linha `vinculo_goal: nenhum — …` dele) e o destino (`plan-phase`,
+     `code-review`, `deferred` ou `dono`), e entrada em `<phase_dir>/deferred-items.md`
+     quando a categoria for `A-produto` ou `B-viabilidade`. Dispensa não é descarte: o achado
+     sai da conta do ciclo, não do registro. Promover um dispensado a `confirmado` é seu
+     direito — escreva o porquê na mesma linha.
+   Bug de código que o consultor achou lendo o repositório é sempre registrado, mesmo sem
+   vínculo com esta fase: entrada em `deferred-items.md`, que a verificação de trabalho e a
+   auditoria forense do GSD leem, e linha em `## Dívidas registradas`.
    Os `nao_sustentado`/`ja_coberto` entram na tabela do INTENT-REVIEW com o
    porquê/ponteiro do filho — destino registrado, não filtro silencioso.
 
@@ -397,33 +475,60 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
 5b. **Releitura da emenda (R1b) — entre o commit e o briefing do ciclo seguinte.**
    Despache **`gad-verificador`** com `prompts/intent-releitura.md`, passando
    `project_root`, `phase_dir`, `NN`, `C`, o conteúdo do `.intent/.correcoes-c<C>.aplicado`
-   (ou o `.correcoes-c<C>.vazio`) e — só no ciclo 0 — a seção "Consistência interna" do
-   `NN-SPEC.md`. Ele grava `.intent/.releitura-c<C>.json` + `.releitura-c<C>.done`.
-   Devolveu item (`contradiz`, `prescreve_mecanismo`, `omissoes_novas`) → corrija **no
+   (ou o `.correcoes-c<C>.vazio`), `spec_do_dono: sim|nao` (o contrato da abertura deste
+   bloco) e, conforme o ciclo:
+   - **ciclo 0:** a seção "Consistência interna" do `NN-SPEC.md`, o bloco `gsd:acs` (ou o
+     SPEC inteiro), o Anexo A do `NN-PRE-SPEC.md` quando existir e o bloco `<decisions>`
+     original do `NN-CONTEXT.md` (`sed -n '/<decisions>/,/<\/decisions>/p'`) — é a única
+     releitura do texto original antes dos consultores;
+     <!-- plano 2, P-05 (C2) — fiacao-P2-P05-releitura.md -->
+   - **ciclo ≥ 1, quando os `caminhos` do `.aplicado` incluem o SPEC:** rode
+     `confere-reconciliacao.sh "<phase_dir>" <C>` e passe as linhas `D-NN-DESATUALIZADA
+     c<C> …` (informativas; uma por decisão, com o id) — a releitura as trata como
+     `omissoes_novas`. <!-- plano 2, P-06 (C3) — fiacao-P2-P06-releitura.md -->
+   Ele grava `.intent/.releitura-c<C>.json` (objeto inteiro, `v: 2`, com o veredito) +
+   `.releitura-c<C>.done`. Devolveu item (`contradiz`, `prescreve_mecanismo`,
+   `omissoes_novas`, `cardinalidade`, `unicidade` ou par em `consistencia`) → corrija **no
    mesmo turno** (rodada `c<C>b`: novo script, `--inicio` e `--ids` de novo — o `.aplicado`
-   é sobrescrito in-place) e **despache uma releitura nova**. Só com a releitura limpa você
-   monta o briefing seguinte; sem esses arquivos o `briefing-build.sh` dá exit 4.
+   é sobrescrito in-place; uma `D-NN` desatualizada se emenda no CONTEXT ou ganha a tag
+   `superada-c<C>` no bullet, com `context-guard.sh` re-rodado) e **despache uma releitura
+   nova** — a segunda lista o conjunto de caminhos do `.aplicado` vigente, que pode ser
+   maior que o da primeira. Só com a releitura limpa (`ok: true` em disco) você monta o
+   briefing seguinte; `ok: false` ou arquivo incompleto dá exit 4 no `briefing-build.sh`, e
+   no último ciclo o `confere-reconciliacao.sh --ordem` cobra o mesmo (`RELEITURA-ABERTA`).
 6. **Convergência — rode o script e obedeça:**
    ```bash
    $HOME/.claude/skills/go-and-do/scripts/decide-ciclo.sh "<phase_dir>" <C>
    ```
-   - `continua` → passo 3 com o dossiê revisado (escreva `.mudancas-c<C+1>.md`).
+   - `continua` → passo 3 com o dossiê revisado (escreva `.mudancas-c<C+1>.md` pelo
+     contrato do passo 3 — duas seções, sem indicação de alvo).
    - `para-zerou` / `para-teto` (teto duro: **4 ciclos**) → passo 7.
    - `para-custo-marginal` → aplique os achados do `lote_cde` como **lote único** na saída
-     (sem re-submeter aos revisores) e vá ao passo 7.
+     (sem re-submeter aos consultores) e vá ao passo 7.
    - `sem_dados` → o verificador não fechou o ciclo; complete a rota do passo 5 antes.
    Antes de aplicar lote com 2+ alterações de decisão/critério, cheque se elas são
-   simultaneamente satisfazíveis. Esses são os freios COMPLETOS — seu juízo de "o revisor
+   simultaneamente satisfazíveis. Esses são os freios COMPLETOS — seu juízo de "o consultor
    não teria mais o que achar" não encerra o loop.
 7. **Escreva o `<phase_dir>/NN-INTENT-REVIEW.md`** com frontmatter:
    `intent_review: done` · `revisores_efetivos: [...]` · `codex_model_evidencia:` /
    `agy_model_evidencia:` · `ciclos: N` · `motivo_encerramento:` (decisão do
    decide-ciclo, verbatim) · `achados_confirmados: N` · `achados_descartados: N` ·
-   `pausas_de_negocio: N` · `transparencia:` (lista do 3º destino). No corpo: a
-   contagem de novos confirmados POR CICLO (com a categoria) e a tabela de achados —
+   `achados_dispensados: N` (os `confirmado_irrelevante`, somados dos `dispensados` do
+   `decide-ciclo.sh`) · `pausas_de_negocio: N` · `transparencia:` (lista do 3º destino). No
+   corpo: a contagem de novos confirmados POR CICLO (com a categoria) e a tabela de achados —
    alegação → veredito → destino → ação tomada → `proposicao` (T3), enumerando **100% dos
    achados brutos** (fundidos com `fontes:`; "já cobertos"/"reformulados" com os ponteiros
    do filho), mais as linhas do ciclo 0 (`c0-NN | <sino> | corrigido|aberto`).
+   **Seção `## Dívidas registradas`, antes do commit** — uma linha por achado
+   `confirmado_irrelevante` ou `confirmado` com `vinculo_goal: nenhum`:
+   `id | alegação | evidência | dono | destino`, com `destino ∈ plan-phase | code-review |
+   deferred | dono`. Achado de categoria `A-produto` ou `B-viabilidade` vai também a
+   `<phase_dir>/deferred-items.md`, na convenção do GSD (um heading por item, campos como
+   bullets `- **Campo:** …`, fechado por `status: resolved`): é o único registro que a
+   verificação de trabalho (`uat.cjs`) e o check 7 da auditoria forense leem, e o que morde
+   em produção precisa de um leitor mecânico. Achado C/D vai só à seção. Nenhuma dívida,
+   nenhuma seção vazia: escreva `## Dívidas registradas` com «nenhuma» — a seção é lida pelo
+   planner e pelo code-reviewer rio abaixo.
    **Sinos estruturados, verbatim no corpo:** os literais `req_ausente: <id>`,
    `fase_sem_req` e `pre_spec_sem_bloco` TÊM de aparecer aqui exatamente como escritos — a
    limpeza do 7b apaga os `.sinos-*.txt`, e é neste arquivo que o `confere-etapa.sh 1` vai
@@ -443,7 +548,7 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    citadas) nos artefatos que VOCÊ escreveu; ponteiro quebrado → conserte antes de commitar.
    ```bash
    cd "<project_root>"
-   git commit --only -m "docs(fase NN): revisão adversarial de intenção (M ciclos, K achados)" -- \
+   git commit --only -m "docs(fase NN): consultoria especializada de intenção (M ciclos, K achados)" -- \
      <só os caminhos que existem: NN-PRE-SPEC.md NN-SPEC.md NN-CONTEXT.md NN-INTENT-REVIEW.md pareceres/NN-parecer-*.md>
    ```
    **`--only` com pathspec, nunca `git add` nem commit sem pathspec:** o worktree do
@@ -492,24 +597,24 @@ Você não fala com o usuário — o orquestrador fala. O caminho:
 </business_pause>
 
 <blocked_path>
-## Caminho bloqueado (OS DOIS revisores indisponíveis ou falhos sem ciclo completo)
+## Caminho bloqueado (OS DOIS consultores indisponíveis ou falhos sem ciclo completo)
 
 1. Escreva o `NN-INTENT-REVIEW.md` com `intent_review: blocked` e `motivo: <por
-   revisor>`. Commite (padrão do passo 7) — é este registro que faz a próxima
+   consultor>`. Commite (padrão do passo 7) — é este registro que faz a próxima
    invocação re-tentar.
 2. Devolva `blocked` pelo `<return_contract>`. Quem para a fase é a camada 0 — a
    descida não afrouxa o fail-closed; ele apenas sobe com motivo.
 </blocked_path>
 
 <skipped_path>
-## Caminho pulado (NENHUM revisor externo instalado no pré-check)
+## Caminho pulado (NENHUM consultor externo instalado no pré-check)
 
 1. Escreva o `NN-INTENT-REVIEW.md` com `intent_review: skipped` · `motivo: "nenhum
-   revisor externo instalado (codex e agy ausentes no pré-check)"` ·
+   consultor externo instalado (codex e agy ausentes no pré-check)"` ·
    `revisores_efetivos: []` · `ciclos: 0` — `skipped` é estado final (quem instalar um
-   revisor depois e quiser a revisão apaga este arquivo e re-roda). Commite.
-2. Devolva `done` com o sino obrigatório: `"revisão adversarial de intenção PULADA —
-   nenhum revisor externo (codex/agy) instalado"`. Este sino TEM que chegar ao bloco
+   consultor depois e quiser a consultoria apaga este arquivo e re-roda). Commite.
+2. Devolva `done` com o sino obrigatório: `"consultoria especializada de intenção PULADA —
+   nenhum consultor externo (codex/agy) instalado"`. Este sino TEM que chegar ao bloco
    de transparência do resumo executivo.
 </skipped_path>
 
@@ -530,6 +635,8 @@ ciclos: <n>
 motivo_encerramento: <verbatim do decide-ciclo.sh>
 achados_confirmados: <n>
 achados_descartados: <n>
+achados_dispensados: <n>   ← confirmado_irrelevante; 0 quando não houve
+inventario: spec=<sim|nao> context=<sim|nao> pre_spec=<sim|nao>
 pausas_de_negocio: <n>
 transparencia: [<um item por linha; ausente se vazio>]
 incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido; sem desvio, escreva literalmente: nenhum>]
@@ -542,7 +649,7 @@ review: <caminho absoluto do NN-INTENT-REVIEW.md (parcial, needs_decision)>
 progresso_gravado: <1 linha: o que já está aplicado e commitado>
 perguntas:
   - id: <q1>
-    alegacao: <o que o revisor alega, 1-2 linhas>
+    alegacao: <o que o consultor alega, 1-2 linhas>
     verificacao: <o que a verificação confirmou no código, 1-2 linhas>
     opcoes:
       - <rótulo curto — tradeoff em 1 linha>   ← a sua recomendação vem PRIMEIRO
@@ -554,7 +661,7 @@ perguntas:
 ```
 estado: blocked
 review: <caminho absoluto do NN-INTENT-REVIEW.md (intent_review: blocked)>
-motivo: <por revisor — ex.: "codex indisponível; agy falhou: stdout vazio">
-acao_do_usuario: <1 linha — ex.: "autentique um dos revisores (codex login / agy) e re-rode /go-and-do N">
+motivo: <por consultor — ex.: "codex indisponível; agy falhou: stdout vazio">
+acao_do_usuario: <1 linha — ex.: "autentique um dos consultores (codex login / agy) e re-rode /go-and-do N">
 ```
 </return_contract>

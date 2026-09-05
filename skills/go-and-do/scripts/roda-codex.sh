@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# roda-codex.sh — lane Codex da revisão adversarial (decisão 2.5-D do gad-major).
+# roda-codex.sh — lane Codex da consultoria especializada de intenção (decisão 2.5-D do gad-major).
 #
 # Absorve a disciplina operacional que vivia em prosa (fallback silencioso de modelo,
 # effort xhigh estourando 10min, path fixo servindo parecer velho, bypass negado pelo

@@ -40,7 +40,7 @@
 | — nada — | — | — | — | — |
 
 ## 6. Hipóteses falsificadas / opções descartadas
-<!-- Memória do porquê. Isto NÃO é pergunta em aberto: a spec e o revisor adversarial não devem reabrir. -->
+<!-- Memória do porquê. Isto NÃO é pergunta em aberto: a spec e a consultoria especializada não devem reabrir. -->
 
 — nada —
 

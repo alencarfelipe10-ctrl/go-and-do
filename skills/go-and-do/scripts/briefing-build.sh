@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# briefing-build.sh — monta o briefing dos revisores adversariais (decisões 1.6/1.7/1.8/1.9).
+# briefing-build.sh — monta o briefing dos consultores especializados de intenção (decisões 1.6/1.7/1.8/1.9).
 #
 # O briefing deixa de ser redigido pelo coordenador: das peças, só a varredura reversa
 # (e, no ciclo 2+, o "o que mudou") é julgamento — o resto é montagem. A missão tem
 # texto CANÔNICO num lugar só (impossível nascer uma whitelist improvisada como a que
-# ancorou o revisor na F21) e a taxonomia vem de prompts/categorias-achados.md (mesma
+# ancorou o consultor na F21) e a taxonomia vem de prompts/categorias-achados.md (mesma
 # régua do verificador).
 #
 # v2.2.0 (ajustes da intenção — E2c, R1, R3, R8):
@@ -18,7 +18,8 @@
 #           passa); um `.aplicado` SEM esse campo é anterior ao conserto C1 (legado) e
 #           passa com aviso — senão toda fase antiga travaria.
 #   R3   → seção "Revalidação dirigida (ciclo 0)" no c1: cada correção do ciclo 0 volta
-#          ao revisor como pedido de confirmação. Nenhum sino sai do briefing.
+#          ao consultor como pedido de confirmação (desde a v2.5.0, numa pergunta única —
+#          ver R8 abaixo). Nenhum sino sai do briefing.
 #   R8   → (1) seção "Perguntas dirigidas" com resposta estruturada obrigatória em
 #          `## Respostas dirigidas` + manifesto `.intent/.perguntas-c<C>.json`;
 #          (2) ROADMAP = SÓ a entrada da fase (antes: fase + vizinhas);
@@ -28,10 +29,26 @@
 #              `.intent/.licoes-c<C>.txt` — nunca voltam ao briefing;
 #          (4) ciclo >= 2: "o que mudou" logo após a Missão.
 #
+# v2.5.0 (consultoria especializada — plano 3 da F24.4, R1/R5/R7/R8/R9):
+#   R1   → seção "Goal desta fase" (verbatim do `## Goal` do SPEC) e a Missão pede uma
+#          linha de campo `vinculo_goal:` por achado (sem marcador de lista — o fallback do
+#          `extrai_achados` do confere-ciclo.sh contaria um bullet com id `cN-NN`).
+#   R5   → ciclo 1 ganha "Obrigação do ciclo 1" (SPEC × régua a montante, CONTEXT como
+#          alvo, conjunto nomeado enumerado) e três perguntas dirigidas do montante.
+#   R7   → `--mudancas` validado por FORMA: só `## O que corrigi` e `## Achados resolvidos`
+#          entram; o resto é omitido com aviso `MUDANCAS-SECAO-FORA-DO-CONTRATO: <heading>`.
+#   R8   → revalidação do ciclo 0 vira UMA pergunta (bloco único); a lista de sinos
+#          corrigidos continua inteira; a frase "evidência = o diff do commit" saiu.
+#   R9   → `valida_releitura` exige o veredito em disco quando `v: 2` (chaves `ciclo`,
+#          `contradiz`, `prescreve_mecanismo`, `omissoes_novas`, `cardinalidade`,
+#          `consistencia`, `ok`; `unicidade` no c0) e reprova `ok: false`; sem `v` = legado
+#          com aviso nomeado (retrocompatibilidade da F24.4).
+#
 # Uso: briefing-build.sh <phase_dir> <NN> <ciclo> [--varredura ARQ] [--mudancas ARQ]
 #   --varredura  arquivo com a seção "Asserções existentes que esta fase falsifica"
 #                (escrita pelo coordenador — único insumo de modelo do ciclo 1)
-#   --mudancas   ciclo 2+: o que mudou desde o ciclo anterior + achados já resolvidos
+#   --mudancas   ciclo 2+: DUAS seções e nada mais — `## O que corrigi` e
+#                `## Achados resolvidos`; heading fora disso é omitido com aviso
 #
 # Saída: JSON 1 linha + espelho PC-5. Exit 0 ok · 2 uso inválido · 4 gate reprovado.
 
@@ -126,9 +143,42 @@ def valida_hashes(aplicado, sem_hash, rotulo, avisos):
         "mais de um caminho e o id não disse qual)" % (rotulo, len(sem_hash)))
 
 
-def valida_releitura(rel, aplicado, vazio, rotulo):  # noqa: C901
-    """rel = {commit, artefatos:[{path, blob}]}; amarra a commit + blobs."""
+def valida_veredito_releitura(rel, rotulo, ciclo):
+    """R9 (plano 3) — o arquivo em disco é o objeto de retorno, não um recibo.
+
+    `v: 2` → exige as chaves de veredito, com tipo, e `ok: false` reprova (a correção
+    `c<C>b` não fechou). `v` ausente → legado: vale só `commit`/`artefatos`, com aviso
+    nomeado — os `.releitura-c1/c2.json` de 235 B da F24.4 são o prompt antigo
+    obedecido, não corrupção, e reprová-los travaria toda fase anterior.
+    """
+    v = rel.get("v")
+    if v is None:
+        info["avisos"].append(
+            "releitura %s em formato legado (v ausente) — veredito não conferível" % ciclo)
+        return
+    if v != 2:
+        die("%s: schema v=%s desconhecido (esperado v=2 ou ausente=legado)" % (rotulo, v))
+    listas = ["contradiz", "prescreve_mecanismo", "omissoes_novas", "cardinalidade"]
+    if str(ciclo) == "c0":
+        listas.append("unicidade")
+    faltando = [k for k in ["ciclo", *listas, "consistencia", "ok"] if k not in rel]
+    if faltando:
+        die("%s: chave obrigatória faltando: %s — a releitura v2 responde às perguntas "
+            "em disco, não só no retorno" % (rotulo, ", ".join(faltando)))
+    for k in listas:
+        if not isinstance(rel[k], list):
+            die("%s.%s não é lista" % (rotulo, k))
+    if not isinstance(rel["ok"], bool):
+        die("%s.ok não é booleano" % rotulo)
+    if rel["ok"] is False:
+        die("%s: a releitura do ciclo anterior reprovou (ok: false) e a correção do tipo "
+            "`c<C>b` não fechou — corrija e despache uma releitura nova" % rotulo)
+
+
+def valida_releitura(rel, aplicado, vazio, rotulo, ciclo):  # noqa: C901
+    """rel = {commit, artefatos:[{path, blob}], (v:2 + veredito)}; amarra a commit + blobs."""
     exige_chaves(rel, ["commit", "artefatos"], rotulo)
+    valida_veredito_releitura(rel, rotulo, ciclo)
     arts = rel["artefatos"]
     if not isinstance(arts, list):
         die("%s.artefatos não é lista" % rotulo)
@@ -240,11 +290,13 @@ if str(C) == "1":
             p = os.path.join(IN, nome)
             if not os.path.exists(p):
                 continue
-            # as respostas do checklist de lições (R8(3)) moram no mesmo arquivo e NÃO
-            # são sinos — um arquivo só com elas não contradiz `sinos: []`.
+            # as respostas do checklist de lições (R8(3)) e as linhas `leitura_propria:`
+            # do discuss (evidência de auditoria, plano 2/C5) moram no mesmo arquivo e
+            # NÃO são sinos — um arquivo só com elas não contradiz `sinos: []`.
             with open(p, encoding="utf-8", errors="replace") as fh:
                 reais = [l for l in fh
-                         if l.strip() and not re.match(r"^\s*licao \d+:", l)]
+                         if l.strip()
+                         and not re.match(r"^\s*(licao \d+:|leitura_propria:)", l)]
             if reais:
                 die("`.ciclo0.json`.sinos=[] mas %s tem sino real — sino sumindo (R3)" % nome)
 
@@ -260,7 +312,7 @@ if str(C) == "1":
     # C1: o veredito da válvula vem AQUI — logo depois de carregar o `.aplicado` e
     # ANTES da releitura. Assim "hash vazio" nunca se disfarça de erro de releitura.
     valida_hashes(aplicado, sem_hash, "`.ciclo0.json`.correcoes", info["avisos"])
-    valida_releitura(z["releitura"], aplicado, False, "`.ciclo0.json`.releitura")
+    valida_releitura(z["releitura"], aplicado, False, "`.ciclo0.json`.releitura", "c0")
 
     if not os.path.exists(os.path.join(IN, ".releitura-c0.done")):
         die("`.intent/.releitura-c0.done` ausente (R1: a releitura do ciclo 0 não fechou)")
@@ -299,7 +351,8 @@ else:
                       "`.correcoes-c%d.aplicado`.correcoes" % prev, info["avisos"])
     rel = carrega(os.path.join(IN, ".releitura-c%d.json" % prev),
                   "`.intent/.releitura-c%d.json` (R1)" % prev)
-    paths = valida_releitura(rel, aplicado, tem_vaz, "`.releitura-c%d.json`" % prev)
+    paths = valida_releitura(rel, aplicado, tem_vaz, "`.releitura-c%d.json`" % prev,
+                             "c%d" % prev)
     info["ciclo_anterior"] = prev
     info["correcoes_vazio"] = tem_vaz
     info["artefatos_relidos"] = paths
@@ -322,8 +375,10 @@ NONCE="PROVA-$(od -An -N3 -tx1 /dev/urandom | tr -d ' ')"
 echo "Token de prova de leitura do ciclo $C: $NONCE" > "$PROVA"
 
 # ── perguntas dirigidas (R8): Q1–Q3 são canônicas e SEMPRE existem — manifesto
-# estável é o que dá sentido a "Q ausente vira bruto incerto". A revalidação do
-# ciclo 0 (R3) entra a partir de Q4.
+# estável é o que dá sentido a "Q ausente vira bruto incerto". No ciclo 1 entram, nesta
+# ordem, as três do montante (R5, plano 3) e UMA de revalidação do ciclo 0 (R8 do plano
+# 3: bloco único — 13 perguntas de bênção renderam 25 ratificações e 1 achado na F24.4).
+# Nenhum número de pergunta é escrito à mão: o `add_q` atribui e o texto interpola.
 QIDS=(); QTIPO=(); QREF=()
 add_q() { QIDS+=("Q$(( ${#QIDS[@]} + 1 ))"); QTIPO+=("$1"); QREF+=("${2:-}"); }
 add_q varredura
@@ -335,19 +390,36 @@ add_q raio_de_explosao
 LICOES="$PD/.intent/.licoes-c$C.txt"
 : > "$LICOES"
 
-REVAL=()   # linhas "qid|sino|origem|correcao_id"
+REVAL=()   # linhas "sino|origem|correcao_id" — a lista continua inteira (nenhum sino some)
+QMONT1=""; QMONT2=""; QMONT3=""; QREVAL=""
 if [ "$C" = 1 ]; then
+  add_q montante_prespec;  QMONT1="${QIDS[${#QIDS[@]}-1]}"
+  add_q montante_context;  QMONT2="${QIDS[${#QIDS[@]}-1]}"
+  add_q montante_conjunto; QMONT3="${QIDS[${#QIDS[@]}-1]}"
   while IFS='|' read -r sid sorig sdisp scid; do
     [ -n "$sid" ] || continue
     case "$sid" in licao\ [0-9]*|licao[0-9]*) continue ;; esac
     [ "$sdisp" = corrigido ] || continue
-    add_q revalidacao_c0 "$sid"
-    REVAL+=("${QIDS[${#QIDS[@]}-1]}|$sid|$sorig|$scid")
+    REVAL+=("$sid|$sorig|$scid")
   done < <(printf '%s' "$GATE_JSON" | jq -r '.sinos[]? | [.id,.origem,.disposicao,.correcao_id] | join("|")')
+  if [ ${#REVAL[@]} -gt 0 ]; then
+    # `ref` = os ids dos sinos unidos por `;` — campo de auditoria, ninguém o parseia
+    add_q revalidacao_c0 "$(printf '%s\n' "${REVAL[@]}" | cut -d'|' -f1 | paste -sd';' -)"
+    QREVAL="${QIDS[${#QIDS[@]}-1]}"
+  fi
 fi
 
+# Goal da fase (R1, plano 3): o alvo de todo achado, verbatim da seção `## Goal` do SPEC
+GOAL_TXT=""
+if [ -f "$PD/$NN-SPEC.md" ]; then
+  GOAL_INI=$(grep -n '^## Goal' "$PD/$NN-SPEC.md" | head -1 | cut -d: -f1 || true)
+  [ -n "$GOAL_INI" ] && GOAL_TXT=$(awk -v s="$GOAL_INI" 'NR>s { if ($0 ~ /^## /) exit; print }' "$PD/$NN-SPEC.md")
+fi
+[ -n "$(printf '%s' "$GOAL_TXT" | tr -d '[:space:]')" ] \
+  || AVISOS+=("SPEC sem seção \`## Goal\` — o briefing sai sem o alvo dos achados")
+
 {
-  echo "# Briefing da revisão adversarial de intenção — fase $NN, ciclo $C"
+  echo "# Briefing da consultoria especializada de intenção — fase $NN, ciclo $C"
   echo
   echo "## Missão"
   echo
@@ -360,18 +432,46 @@ fi
   echo "\`C-instrumentacao\`, \`D-documental\`, \`E-decisao-do-dono\` (marque a categoria"
   echo "no título do achado, ex.: \`### Achado 3 [A-produto] — ...\`). Achados C e D da"
   echo "mesma classe de erro: reporte como UM item de classe com a lista de ocorrências."
-  echo "Não há número certo de achados — zero achados A é um resultado válido se a"
-  echo "intenção estiver sólida. Cada achado com: alegação, evidência (arquivo:linha"
-  echo "quando houver) e confiança (alta/média/baixa)."
+  echo "Não há número certo de achados — nenhum achado, de nenhuma categoria, é um resultado"
+  echo "válido se a intenção estiver sólida. Cada achado com: alegação, evidência (arquivo:linha"
+  echo "quando houver), confiança (alta/média/baixa) e uma linha de campo \`vinculo_goal:\`,"
+  echo "sem marcador de lista, nomeando qual efeito medido do Goal (seção \"Goal desta fase\","
+  echo "abaixo) fica em risco se o achado for ignorado — o trecho do Goal ou o \`AC-nn\` que o"
+  echo "carrega. Forma: \`vinculo_goal: <efeito medido do Goal> (AC-nn)\`. Achado do tipo"
+  echo "\"a fase deveria também fazer X\" é fora de alvo, a menos que X seja condição necessária"
+  echo "para o que a fase promete. Não invente achado para preencher. Achado verdadeiro que você"
+  echo "não consegue amarrar ao Goal entra assim mesmo, com \`vinculo_goal: nenhum\` — ele vira"
+  echo "dívida registrada e segue para o planejamento; o que ele não faz é comprar mais um"
+  echo "ciclo. Bug de código que morde em produção é sempre achado, com ou sem vínculo."
   echo "Sem achado novo, escreva literalmente \`### Achado 0 — nenhum achado novo\`: o contador só lê o gabarito, e um parecer só em prosa é devolvido para reformatação."
   echo
-  # Ciclo 2+: "o que mudou" logo após a Missão (R8.4) — o revisor precisa do delta
+  # Ciclo 2+: "o que mudou" logo após a Missão (R8.4) — o consultor precisa do delta
   # ANTES de decidir onde gastar leitura, não num rodapé.
+  # R7 (plano 3): o arquivo é validado por FORMA. Só entram as seções `## O que corrigi`
+  # e `## Achados resolvidos`; heading fora da lista, ou texto antes do primeiro heading,
+  # é omitido com aviso — no c3 da F24.4 o coordenador escreveu ali "o que ainda não foi
+  # atacado", e dirigir o olhar do consultor é decidir o achado no lugar dele. Omitir em
+  # vez de reprovar: um erro de redação do coordenador não deve travar o ciclo.
   if [ -n "$MUDANCAS" ] && [ -f "$MUDANCAS" ]; then
-    echo "## Ciclo $C — o que mudou desde o ciclo anterior (não repita o já resolvido)"
-    echo
-    cat "$MUDANCAS"
-    echo
+    MUD_RAW=$(awk '
+      /^## / { sec=$0; sub(/[[:space:]]+$/, "", sec)
+               keep=(sec=="## O que corrigi" || sec=="## Achados resolvidos")
+               if (!keep) print "F\t" sec }
+      sec=="" { if ($0 ~ /[^[:space:]]/ && !pre) { print "F\ttexto antes do primeiro heading"; pre=1 }; next }
+      keep { print "K\t" $0 }
+    ' "$MUDANCAS")
+    while IFS= read -r h; do
+      [ -n "$h" ] && AVISOS+=("MUDANCAS-SECAO-FORA-DO-CONTRATO: $h")
+    done < <(printf '%s\n' "$MUD_RAW" | sed -n 's/^F\t//p')
+    MUD_TXT=$(printf '%s\n' "$MUD_RAW" | sed -n 's/^K\t//p')
+    if [ -n "$(printf '%s' "$MUD_TXT" | tr -d '[:space:]')" ]; then
+      echo "## Ciclo $C — o que mudou desde o ciclo anterior (não repita o já resolvido)"
+      echo
+      printf '%s\n' "$MUD_TXT"
+      echo
+    else
+      AVISOS+=("ciclo $C sem --mudancas: o briefing não diz o que mudou (arquivo inteiro fora do contrato: só \`## O que corrigi\` e \`## Achados resolvidos\` entram)")
+    fi
   elif [ "$C" != 1 ]; then
     AVISOS+=("ciclo $C sem --mudancas: o briefing não diz o que mudou")
   fi
@@ -383,6 +483,15 @@ fi
   echo "Abra \`$PROVA\` e transcreva o token dele na primeira linha do parecer, no"
   echo "formato \`prova_leitura: <token>\`."
   echo
+  if [ -n "$(printf '%s' "$GOAL_TXT" | tr -d '[:space:]')" ]; then
+    echo "## Goal desta fase (o alvo de todo achado)"
+    echo
+    printf '%s\n' "$GOAL_TXT"
+    echo
+    echo "Este é o efeito medido que a fase promete. Todo achado seu diz qual parte dele fica"
+    echo "em risco se for ignorado — é isso que separa um achado de uma nota."
+    echo
+  fi
   echo "## Artefatos (leia dos caminhos — qualquer arquivo do repositório é elegível)"
   echo
   echo "- \`$PD/$NN-SPEC.md\`"
@@ -396,6 +505,38 @@ fi
   [ -f "$ROOT/.planning/REQUIREMENTS.md" ] && echo "- \`$ROOT/.planning/REQUIREMENTS.md\`"
   echo "- Repositório sob revisão: \`$ROOT\`"
   echo
+  # R5 (plano 3) — obrigação do ciclo 1: os documentos a montante são objeto, não
+  # autoridade. Foi aqui que o AC-12 da F24.4 cairia: o PRE-SPEC proibia medir pelo Δ
+  # agregado, o AC media por Δ agregado, e nenhum dos quatro ciclos cruzou os dois.
+  if [ "$C" = 1 ]; then
+    echo "## Obrigação do ciclo 1 — os documentos a montante são objeto"
+    echo
+    echo "Antes de procurar defeito novo, faça estas três conferências e responda a elas nas"
+    echo "perguntas dirigidas $QMONT1, $QMONT2 e $QMONT3."
+    echo
+    if [ -f "$PD/$NN-PRE-SPEC.md" ]; then
+      echo "1. **SPEC × régua do PRE-SPEC.** Para cada critério de aceite do SPEC, ache a régua"
+      echo "   candidata correspondente no \`$PD/$NN-PRE-SPEC.md\` (Anexo A e itens \`PS-nn\`)."
+      echo "   Critério que mede de um jeito que a régua candidata proíbe, sem uma linha de motivo"
+      echo "   no SPEC, é achado — a régua pode ter sido superada, mas a superação tem de estar"
+      echo "   escrita."
+    else
+      echo "1. **SPEC × REQUIREMENTS.** Para cada critério de aceite, ache o requisito \`REQ-*\` que"
+      echo "   ele fecha em \`$ROOT/.planning/REQUIREMENTS.md\`. Critério sem requisito que o"
+      echo "   sustente, ou requisito da fase que nenhum critério fecha, é achado."
+    fi
+    echo "2. **CONTEXT como alvo.** Leia o \`$PD/$NN-CONTEXT.md\` procurando decisão que contradiz"
+    echo "   outra, decisão que o SPEC já superou e decisão que prescreve como implementar em vez"
+    echo "   de dizer o que tem de ser verdade. O CONTEXT não é prova de nada: é mais um documento"
+    echo "   sob revisão."
+    echo "3. **Conjunto nomeado é conjunto enumerado.** Critério que fala de \"os 8 alunos\", \"as 4"
+    echo "   escolas\" ou \"os 3 mecanismos\" exige, no documento, a lista com os elementos."
+    echo "   Cardinalidade sem enumeração é achado: ninguém pode provar o critério."
+    echo
+    echo "A decisão marcada \`[pre-spec]\` continua tendo dono: não ataque a escolha do usuário;"
+    echo "ataque o SPEC que não a honra, ou a consequência técnica dela."
+    echo
+  fi
   # ROADMAP: SÓ a entrada da fase (R8.2 — antes vinham as vizinhas junto)
   RM="$ROOT/.planning/ROADMAP.md"
   if [ -f "$RM" ]; then
@@ -442,7 +583,7 @@ fi
   fi
   # Sinos dos filhos (lidos do disco — 1.5). R8(3): o checklist de lições que o filho
   # responde vive no MESMO arquivo de sinos (`licao <n>: aplicada|nao_se_aplica — …`).
-  # Isso é evidência de auditoria, não insumo do revisor: despejá-lo aqui devolveria ao
+  # Isso é evidência de auditoria, não insumo do consultor: despejá-lo aqui devolveria ao
   # briefing exatamente o que o R8(3) tirou dele. Nenhum SINO é filtrado.
   for s in "$PD/.intent/".sinos-*.txt; do
     [ -f "$s" ] || continue
@@ -494,20 +635,36 @@ fi
   echo "- **Q3** (raio de explosão): a intenção subestima o raio de explosão real — o"
   echo "  que ela toca de compartilhado, que contrato cria ou muda, o que não tem"
   echo "  análogo no código, quem depende dela nas fases seguintes?"
+  if [ "$C" = 1 ]; then
+    echo "- **$QMONT1** (SPEC × régua a montante): existe critério de aceite que mede de um"
+    echo "  jeito que a régua candidata do documento a montante proíbe, sem motivo registrado"
+    echo "  no SPEC?"
+    echo "- **$QMONT2** (CONTEXT como alvo): existe decisão do CONTEXT contraditória, superada"
+    echo "  pelo SPEC ou que prescreve mecanismo em vez de comportamento?"
+    echo "- **$QMONT3** (conjunto nomeado): existe critério que fala de um conjunto cujos"
+    echo "  elementos o documento não enumera?"
+  fi
+  echo "- Resposta \`não\` a qualquer pergunta que só vale porque o ponto não toca o Goal:"
+  echo "  escreva na forma \`não — irrelevante para o Goal: <o efeito medido que não é tocado>,"
+  echo "  ver <AC-nn | R-n | arquivo:linha>\` — a palavra \`irrelevante\` sozinha é resposta vazia."
   if [ ${#REVAL[@]} -gt 0 ]; then
     echo
     echo "### Revalidação dirigida (ciclo 0)"
     echo
-    echo "O coordenador já corrigiu, antes deste ciclo, os sinos abaixo. Para cada um:"
-    echo "**confirme ou derrube** — \`sim\` = a correção está errada, incompleta ou criou"
-    echo "problema novo."
+    echo "Antes deste ciclo o coordenador corrigiu os sinos abaixo, nos artefatos (commit"
+    echo "registrado em \`$PD/.intent/.correcoes-c0.aplicado\`). Responda à pergunta"
+    echo "**$QREVAL**: alguma dessas correções criou problema novo, ficou incompleta ou está"
+    echo "errada? \`sim\` exige qual e a evidência; \`não\` exige o que você conferiu para dizer"
+    echo "isso."
     echo
     for r in "${REVAL[@]}"; do
-      IFS='|' read -r q sid sorig scid <<< "$r"
-      echo "- **$q** (revalidação c0): sino \`$sid\` (origem: $sorig) → correção \`$scid\`"
-      echo "  aplicada nos artefatos; evidência = o diff do commit do ciclo 0 registrado"
-      echo "  em \`$PD/.intent/.correcoes-c0.aplicado\`. A correção resolveu o sino?"
+      IFS='|' read -r sid sorig scid <<< "$r"
+      echo "- sino \`$sid\` (origem: $sorig) → correção \`$scid\`"
     done
+    echo
+    echo "- **$QREVAL** (revalidação do ciclo 0): alguma correção do ciclo 0 criou problema"
+    echo "  novo, ficou incompleta ou está errada? \`sim\` exige qual e a evidência; \`não\`"
+    echo "  exige o que você conferiu."
   fi
 } > "$OUT"
 

@@ -540,7 +540,7 @@ PYSUITE
   # reprovado pelo script vira um `incidente` no run-log; um plano que falha não impede a
   # conferência dos outros, e plano sem SUMMARY é pulado.
   CPL="$GAD_SCRIPTS_DIR/confere-plano.sh"
-  PC_OK=0; PC_FALHA="[]"; PC_CODIGOS="{}"; PC_REPROVA=""
+  PC_OK=0; PC_FALHA="[]"; PC_CODIGOS="{}"; PC_REPROVA=""; PC_INFO="{}"
   if [ -f "$CPL" ]; then
     for sf in "$PHASE_DIR"/*-SUMMARY.md; do
       [ -f "$sf" ] || continue
@@ -549,6 +549,9 @@ PYSUITE
       pcrc=0; pcout=$(bash "$CPL" "$PHASE_DIR" "$pid" 2>/dev/null | tail -1) || pcrc=$?
       jq -e . >/dev/null 2>&1 <<<"$pcout" || pcout=$(jq -cn --arg p "$pid" --arg rc "$pcrc" \
         '{plan:$p, veredito:"falha", codigos:["ILEGIVEL (rc=\($rc))"], fora_da_lista:[]}')
+      # C7 (plano 2): informativos (DECISAO-SEM-SUMMARY) colhidos antes do `continue` — um plano
+      # `ok` pode ter faltantes.
+      PC_INFO=$(jq -c --arg p "$pid" --argjson i "$(jq -c '.informativos // []' <<<"$pcout")" 'if ($i|length)>0 then . + {($p): $i} else . end' <<<"$PC_INFO")
       if [ "$(jq -r '.veredito' <<<"$pcout")" = ok ]; then
         PC_OK=$((PC_OK+1)); continue
       fi
@@ -566,8 +569,8 @@ PYSUITE
         '. + [{id:"escopo_planos", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
   fi
-  EXTRAI=$(jq -c --argjson ok "$PC_OK" --argjson f "$PC_FALHA" --argjson c "$PC_CODIGOS" \
-    '. + {planos_conferidos:{ok:$ok, falha:$f, codigos:$c}}' <<<"$EXTRAI")
+  EXTRAI=$(jq -c --argjson ok "$PC_OK" --argjson f "$PC_FALHA" --argjson c "$PC_CODIGOS" --argjson i "$PC_INFO" \
+    '. + {planos_conferidos:{ok:$ok, falha:$f, codigos:$c, informativos:$i}}' <<<"$EXTRAI")
 
   # ── prova por reexecução (A4, plano 4 / 05/09/2026): "17 de 18 verdes" sem comando e saída
   # colados na mesma seção não é verificação. Na F24.4 o 24.4-05-SUMMARY.md:71 e :223
@@ -718,6 +721,21 @@ if [ "$ETAPA" = "1" ]; then
       RES=$(jq -c --arg d "confere-reconciliacao.sh não pôde conferir (rc=$recrc): $(printf '%s\n' "$recout" | tr '\n' ' ' | cut -c1-300)" \
         '. + [{id:"r5_reconciliacao", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
+  fi
+
+  # ── C3 (plano 2, 05/09/2026): D-NN que citam critério mudado desde a base selada e não foram
+  # emendadas nem marcadas superada-c<N>. Informativo até a métrica M9 medir uma fase real.
+  if [ -f "$CREC" ]; then
+    recfin=$(bash "$CREC" "$PHASE_DIR" --final 2>/dev/null || true)
+    ndes=$(printf '%s\n' "$recfin" | { grep -c '^D-NN-DESATUALIZADA final ' || true; })
+    ids=$(printf '%s\n' "$recfin" | { grep '^D-NN-DESATUALIZADA final ' || true; } | awk '{print $3}' | tr '\n' ' ')
+    if [ "${ndes:-0}" -gt 0 ]; then
+      RES=$(jq -c --arg d "D-NN-DESATUALIZADA: $ndes decisão(ões) citam critério do SPEC mudado desde a base selada e não foram emendadas: $ids— emende ou marque superada-c<N>" \
+        '. + [{id:"decisoes_desatualizadas", resultado:"aviso", detalhe:$d}]' <<<"$RES")
+    else
+      RES=$(jq -c '. + [{id:"decisoes_desatualizadas", resultado:"ok", detalhe:"nenhuma D-NN cita critério mudado sem emenda"}]' <<<"$RES")
+    fi
+    EXTRAI=$(jq -c --argjson n "${ndes:-0}" --arg ids "$ids" '. + {decisoes_desatualizadas:{n:$n, ids:$ids}}' <<<"$EXTRAI")
   fi
 
   # ── R6: cada issue estruturada emitida pelo setup tem de estar RESOLVIDA no disco —
