@@ -2,6 +2,44 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.5.1] — 2026-09-07
+
+Dieta da `SKILL.md` da go-and-do, primeiro achado do mapa de estudo `gsd-optimize/mapa-gad/`.
+A `SKILL.md` e o `workflow.md` entram juntos no mesmo prompt a cada invocação (a linha
+`@$HOME/.claude/skills/go-and-do/workflow.md`), e um mapa bloco a bloco mostrou que ~80 % do
+`<objective>` e ~97 % do `<process>` repetiam o workflow. A `description` do frontmatter, que
+entra na lista de skills de **toda sessão** (com ou sem go-and-do), tinha 1.669 caracteres.
+Nenhum script ou hook lê a `SKILL.md`, então a reescrita não toca em gate nenhum.
+
+### Changed
+- **`SKILL.md` reescrita**: 21.389 → 6.320 bytes (−70 %); 5.697 → 1.674 tokens cl100k (−71 %).
+  `description` 1.669 → 406 caracteres (371 → 96 tokens, custo em toda sessão). Corpo em inglês
+  (idioma de instrução do modelo); só a linha sobre a saída ao usuário fica em pt-BR. Ficou o que
+  o workflow não tem: contrato dos argumentos e flags (semântica do `--vault` × baldes, `--obs`
+  não persiste entre sessões, `--ui` sobe o dev server, `--no-ship` inclui o UAT), contrato
+  completo do bloco `gad:decisoes` do PRE-SPEC, `confere-pre-spec.sh` como gate, rota de
+  re-habilitação da revisão de intenção, as três devoluções ao humano (human-action × balde 3 ×
+  `human_needed`), gates de config checados na camada 0 antes do despacho. `<execution_context>`
+  subiu para antes do `<context>` (dado longo no topo, instrução no fim).
+- **Divergências resolvidas pelo lado do workflow** (a SKILL.md carregava fatos velhos): teto da
+  consultoria é 4 ciclos (não 5); resumo executivo é Sonnet 5 (não 4.6); o custo dos subagentes é
+  `tokens_reais`/`custo_usd` (não existe `subagent_tokens`); não há "teste Playwright de
+  regressão" deixado pelo UAT (`uat-playbook.md` nega); o merge automático é rota sancionada
+  (não "só abre o PR"); marca do PRE-SPEC é `[pre-spec:PS-nn, R-n]` (a forma `[pre-spec]` sem
+  id é reprovada pelo `confere-pre-spec.sh`). O literal do aviso de balde 4 mora em
+  `prompts/resumo.md`, não aqui.
+- **Boas práticas Opus 5 aplicadas**: sem ênfase em caixa alta/negrito fora de gate real; sem
+  instrução de auto-verificação (as cercas mecânicas `pre-despacho.sh`/`confere-etapa.sh` são
+  scripts e ficam no workflow); história (dimmer, `gsd-autonomous`) reduzida a uma frase com
+  ponteiro para o CHANGELOG.
+
+### Fixed
+- **`allowed-tools`** ganhou `Edit`, `TaskStop`, `ListAgents` e `ToolSearch`: o workflow manda
+  usá-los (6.4c, Sub-rotina D, Sub-rotina C) e a lista antiga não os declarava.
+- Tag `</output>` órfã no fim da `SKILL.md` removida.
+- `workflow.md` (sub-caso `pre_spec_bloco`) apontava para um "§0.5 do SKILL.md" que não existia;
+  agora aponta para o `confere-pre-spec.sh`, o gate real.
+
 ## [2.5.0] — 2026-09-05
 
 Pacote dos **erros de julgamento da F24.4** (tarefas 40–43 da evolução; planos, relatórios e

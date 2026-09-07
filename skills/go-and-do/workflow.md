@@ -680,7 +680,7 @@ transcript, não contagem em sessão.
   `AskUserQuestion` (recomendação primeiro) e **continue o MESMO subagente** com as respostas
   verbatim; roteie o novo retorno por esta lista.
   - **Sub-caso `pre_spec_bloco: ausente|invalido`** (só quando o SPEC ou o CONTEXT ainda não
-    existem; fail-closed do §0.5 do SKILL.md — PRE-SPEC presente sem o bloco `gad:decisoes`
+    existem; fail-closed do `confere-pre-spec.sh` — PRE-SPEC presente sem o bloco `gad:decisoes`
     legível por máquina, ou com bloco inválido): a pergunta
     tem duas saídas — **(a) migrar** o PRE-SPEC para o bloco (`scripts/pre-spec-migra.py` gera
     um rascunho a partir da prosa **para o dono revisar** — ele não decide nada; é ferramenta de
