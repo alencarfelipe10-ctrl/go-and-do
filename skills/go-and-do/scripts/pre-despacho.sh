@@ -158,7 +158,7 @@ if [ "$(jq -r '.pre.git_remote // false' "$MANIFEST")" = "true" ]; then
   extras=$(jq -cn --argjson gr "$gr" --argjson prev "$extras" '$prev + {git_remote: $gr}')
 fi
 
-# ── paralelismo (etapa 3, manifest `pre.paralelismo`) — o 18b do workflow vira dente ──
+# ── paralelismo (etapa 3, manifest `pre.paralelismo`) — o 3.2 do workflow vira dente ──
 # Antes era prosa dirigida à camada 0, com um antídoto (`baseRef: head`) que o predicado do
 # GSD ignorava; a serialização virava fato consumido dentro do gsd-execute-phase sem
 # ninguém medir (F20, F24.x). Aqui o script lê as três fontes que decidem o paralelismo

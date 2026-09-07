@@ -104,10 +104,10 @@ re-asks. `scripts/confere-pre-spec.sh` is the gate (it runs inside `setup-intenc
 </context>
 
 <process>
-Execute end-to-end following workflow.md: its master checklist, operating rules, stop points
-and sub-routines are the specification. Honor every gate and stop point as written there; route
+Execute end-to-end following workflow.md: its operating rules, stages, stop points and
+sub-routines are the specification. Honor every gate and stop point as written there; route
 every would-be question through the decision triage (Sub-rotina I); dispatch the stages marked
-"via subagente" through Sub-rotina H and route their compact return. A step that does not run
+"via subagent" through Sub-rotina H and route their compact return. A step that does not run
 is never silent.
 
 Toda a saída ao usuário — banners, anúncios de status, linhas de sino — é em pt-BR.

@@ -2,6 +2,54 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.5.2] — 2026-09-07
+
+Dieta do `workflow.md`, segundo achado do mapa de estudo `gsd-optimize/mapa-gad/` (passo 3: o
+Claude Code embute o workflow no prompt da camada 0 a cada invocação). Um mapa bloco a bloco
+mostrou que o `<master_checklist>` era, com uma única exceção (o item 18b, paralelismo), um
+resumo dos próprios `<stage>`; que ~70 linhas descreviam o interior do trabalho dos subagentes,
+já escrito nos `prompts/*.md` que só eles leem; e que ~45 linhas eram narrativa de incidentes
+passados. Uma auditoria independente (segundo subagente, arquivo antigo × novo × prompts)
+conferiu que nenhum fato operacional se perdeu e devolveu 14 pontos reinseridos antes da
+instalação. Sem prova em fase real ainda: a próxima rodada da `/go-and-do` é a validação.
+
+### Changed
+- **`workflow.md` reescrito**: 72.893 → 60.011 bytes (−18 %); 23.545 → 16.773 tokens cl100k
+  (−29 %); 1.060 → 941 linhas. Corpo em inglês; fica em pt-BR, byte a byte, tudo o que o
+  usuário lê ou que outro arquivo grepa: banners, linhas `🔔`/`🤖`, handoffs, mensagens de
+  commit, bloco `DECISAO-DO-DONO`, rótulos de decisão, prompt literal do despacho do UAT,
+  proibição de credenciais. Nenhum nome de etapa, sub-rotina, código (`PC-6`, `4.D`, `6.D`,
+  `E7`…), campo JSON, arquivo, evento do run-log ou valor de enum mudou — lista de 400
+  literais conferida mecanicamente contra o arquivo novo.
+- **Estrutura**: `<master_checklist>` vira um índice de 9 linhas (`<pipeline_index>`); o
+  item 18b passa a ser o **3.2 — Paralelismo** dentro da Etapa 3; a Etapa 2.5 ganha
+  `<stage>` próprio (estava dentro do `<stage id="3">`); `<stop_points>` vai para depois das
+  sub-rotinas; a nota das 5h vira uma regra de operação; os `##` que repetiam o título da
+  tag saem. Ordem: role → rules → índice → stages → sub-rotinas → stop_points.
+- **Cortes**: interior dos subagentes (mecânica das lanes da intenção, viés de pesquisa 2.D,
+  funil Codex 4.D, economia de testes da 3.3, mastigação 4.E — tudo vive nos prompts);
+  anedotas (F22, F24.x, 461 perguntas, tarefa 32e…); as 11 repetições de "continue o MESMO
+  subagente", as 4 do gate de contexto e as 3 de "não leia o prompt antes de despachar" viram
+  uma menção na sub-rotina dona + referências curtas. Ênfase (bold/CAPS) só nos gates reais.
+
+### Fixed
+- Checklist mandava `--codex --agy --max-cycles 3`; o corpo da 2.5 e `prompts/convergence.md`
+  usam `--agy-revisor` (a lane `--agy` morre por soft-deny). Ficou só a forma certa.
+- `commita-artefatos.sh uat` sem os argumentos obrigatórios `<phase_dir> <NN>`.
+- `aninhamento: ok|falha` / `aninhamento: probe_necessario` tratavam dois campos do objeto como
+  valores; agora `aninhamento.resultado` e `aninhamento.probe_necessario`.
+- Vocabulário canônico de `etapa` omitia `verificacao`, que o `run-log.sh` aceita.
+- Sub-rotina A não listava `bloqueio_paralelismo` entre os exit 4.
+- Etapa 2.5 não era pulada quando `has_verification` já existia (o skip do 3.1 só a cobria por
+  posição); agora o skip é explícito.
+- 5.4 não abria cerca (`pre-despacho.sh 5`) numa retomada que caía direto na execução do UAT —
+  o 🔒 existia só no checklist; agora está no passo.
+- Evento `stop` do ship bloqueado usava `pausa: …` no rótulo da etapa, contra a regra da
+  Sub-rotina D; agora etapa `ship` + motivo no 10º argumento.
+- `SKILL.md` citava "master checklist" e "via subagente" (o workflow diz "via subagent");
+  `prompts/codex-code-review.md` e `prompts/ui-review.md` citavam "gate 22"/"o 23" (números do
+  checklist antigo) → `4.1`/`4.2`; comentário do `pre-despacho.sh` cita `3.2` em vez de `18b`.
+
 ## [2.5.1] — 2026-09-07
 
 Dieta da `SKILL.md` da go-and-do, primeiro achado do mapa de estudo `gsd-optimize/mapa-gad/`.

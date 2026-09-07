@@ -1,566 +1,90 @@
 <!-- ============================================================ -->
-<!-- workflow.md — o miolo executável da skill go-and-do.        -->
-<!-- Embutido no SKILL.md via @ (carregado na ativação).         -->
-<!-- Instruções imperativas para o orquestrador. Não é doc.      -->
-<!-- Formato híbrido (T.3): aqui mora só o residente — roteiro,  -->
-<!-- contratos por etapa e sub-rotinas sempre-ativas. O detalhe  -->
-<!-- de cada etapa mora nos prompts/*.md (lidos pelo subagente); -->
-<!-- o condicional mora em workflow-ui.md / workflow-ai.md /     -->
-<!-- workflow-dev-server.md (lidos sob demanda).                 -->
+<!-- workflow.md — the executable core of the go-and-do skill.   -->
+<!-- Embedded into SKILL.md via @ (loaded on activation).        -->
+<!-- Imperative instructions for the orchestrator; not docs.     -->
+<!-- Hybrid layout (T.3): only the resident part lives here —     -->
+<!-- the stage script, per-stage contracts and always-on         -->
+<!-- sub-routines. Per-stage detail lives in prompts/*.md (read  -->
+<!-- by the subagent); conditional material lives in             -->
+<!-- workflow-ui.md / workflow-ai.md / workflow-dev-server.md    -->
+<!-- (read on demand).                                           -->
 <!-- ============================================================ -->
 
-# go-and-do — execução
+# go-and-do — execution
 
 <role>
 You are the orchestrator. You run one GSD phase by invoking native GSD commands in order and
 chaining them. You do not reimplement GSD logic.
 
-Toda a sua saída ao usuário — banners, anúncios de status, linhas de "🔔" —
-é em **pt-BR**. (As tags estruturais e o papel aqui estão em inglês por convenção; a
-operação e tudo que o usuário lê, em pt-BR.)
+Language: this file is in English. Everything the user reads is in pt-BR and its wording is
+fixed — banners, `🔔` and `🤖` lines, handoff text, the commit messages quoted below, the
+`DECISAO-DO-DONO` block and the decision labels. Emit those strings exactly as written here.
 </role>
 
 <operating_rules>
-Operating rules — read once, apply throughout:
+Read once, apply throughout:
 
 - Invoke GSD commands via the `Skill` tool — inline in layer 0 only where the stage block says
   so; most stages dispatch a layer-1 host subagent that invokes the command in its own window
-  (Sub-rotina H). Either way, wait for one step to finish before starting the next — you
-  control the chaining.
-- **Every main step runs between two mechanical fences (par 2.C):** `pre-despacho.sh <id>`
-  opens it (context gate + checkpoint + route: `ok`/`pular`/`skip`/`stop`/`bloqueio`) and
-  `confere-etapa.sh <id>` closes it (manifest asserts against the DISK + canonical verdict
-  extraction + the `end` telemetry event with measured tokens). You never re-read a gate
-  report and never accept a subagent's `done` over a failing fence — exit 1 sends the work
-  back. Scripts compute; you judge and route.
-- Reuse, don't reinvent — three declared deviations: (1) the UAT reuses the verify-work
-  scenario-derivation logic inline via subagent (verify-work has no "generate and stop" mode);
-  (2) the UAT drives the browser via subagent + `uat-playbook.md` (no native interactive-UAT
-  command); (3) Etapa 1 suppresses the discuss `auto_advance` side-effect and resets its chain
-  flag (this skill owns the chaining). All deliberate; the right fix for each is upstream.
-  The close is NOT an exception — it reuses the native `/close-phase` skill.
-- Don't read artifact bodies into your own window — layer 0 decides by frontmatter, by the
-  SDK's JSON status fields and by file existence. Whoever genuinely needs an artifact's
-  content — verifying intent, reviewing plan/code, deriving the UAT, driving the browser,
-  narrating the summary — is the layer-1 subagent of that step, which reads/writes on disk and
-  returns only a compact status.
+  (Sub-rotina H). Either way, wait for one step to finish before starting the next.
+- Every main step runs between two mechanical fences: `pre-despacho.sh <id>` opens it
+  (context gate + checkpoint + route `ok`/`pular`/`skip`/`stop`/`bloqueio`) and
+  `confere-etapa.sh <id>` closes it (manifest asserts against the disk + canonical verdict
+  extraction + the `end` telemetry event with measured tokens). You never re-read a gate report
+  and never accept a subagent's `done` over a failing fence — exit 1 sends the work back with
+  the list of what is missing, whatever the subagent claimed. Scripts compute; you judge and
+  route.
+- Three declared deviations from "reuse, don't reinvent": the UAT reuses verify-work's
+  scenario derivation inline via subagent; the UAT drives the browser via subagent +
+  `uat-playbook.md`; Etapa 1 suppresses the discuss `auto_advance` side effect and resets its
+  chain flag. The close is not a deviation — it reuses the native `/close-phase` skill.
+- Do not read artifact bodies into your own window — layer 0 decides by frontmatter, by the
+  SDK's JSON fields and by file existence. Whoever needs an artifact's content is the layer-1
+  subagent of that step; it reads and writes on disk and returns a compact status.
 - Honor every stop point — never skip one to keep going. The hard stops: missing entry
   prerequisites (Etapa 0), incomplete execution blocked on the user (3.4 → Sub-rotina D),
   persistent gaps after one retry (3.5), no external reviewer at 2.5 (PC-6, fail-closed),
   open security threats (4.4), a UAT bug that survives one fix cycle (5.5 → D), and the
   anti-false-ship floor: ship only with the UAT objectively clean (no basket 2/3).
-- Everything is resumable. Re-running `/go-and-do N` must never redo finished work — the
-  `abre-rodada.sh` and each `pre-despacho.sh` decide resume mechanically from disk state.
-- Keep a live task list mirroring disk state (Sub-rotina C). Log telemetry only at your
-  assigned writer slots (Sub-rotina G) — every other event already has a script owner.
+- Everything is resumable. Re-running `/go-and-do N` never redoes finished work —
+  `abre-rodada.sh` and each `pre-despacho.sh` decide the resume mechanically from disk state.
+- Keep the TaskList mirroring disk state (Sub-rotina C). Write telemetry only at your writer
+  slots (Sub-rotina G); every other event has a script owner.
 - A step that does not run is never silent: one line to the user, a `skip` event, and an entry
   in the resumo's transparency block. Never mutate project config to make a step not run.
 - Paths: the skill lives at `$HOME/.claude/skills/go-and-do/`; `phase_dir`/`padded_phase`
-  (the `NN` prefix) come from the abre-rodada retrato. Dispatch paths are always absolute.
-- **Gates decidem sobre saída CRUA, nunca filtrada por wrapper.** Ambiente com hook que
-  reescreve Bash e compacta saída (ex.: RTK): todo comando cujo RESULTADO alimenta decisão de
-  gate (`wc -l`, teste de saída vazia, `grep` que roteia por exit code) roda com
-  `rtk proxy <cmd>`. Vale para TODAS as camadas e vai repassada nos briefings com
-  comandos-gate (caso real F22: 3 golpes na mesma rodada). Leitura exploratória continua
-  filtrada; só o comando-gate é cru. Os scripts da skill leem espelhos
-  `.planning/.gad/last-*.json` quando o stdout for capado (PC-5).
+  (the `NN` prefix) come from the abre-rodada snapshot. Dispatch paths are always absolute.
+- Gates decide on RAW output, never on wrapper-filtered output. Under a hook that rewrites
+  Bash and compacts output (e.g. RTK), every command whose result feeds a gate decision
+  (`wc -l`, empty-output test, `grep` routed by exit code) runs as `rtk proxy <cmd>`. Applies
+  to every layer and is passed down in briefings that carry gate commands. Exploratory reads
+  stay filtered. The skill's scripts read the mirrors `.planning/.gad/last-*.json` when stdout
+  is capped (PC-5).
+- Session usage (5h / weekly) is not readable by a skill, so there is no gate for it: if the
+  limit hits, re-run `/go-and-do N` after the reset and the run continues. Manual pause at any
+  time: `/gsd-pause-work`.
 </operating_rules>
 
 ---
 
-<master_checklist>
+<pipeline_index>
 
-## Roteiro-mestre (todas as ações, na ordem)
+Legend used in the stages: 🎌 flag-only · ⏭️ resume (skips if done) · ⏸️ may stop · 🔒 context
+gate (`pre-despacho.sh`) before it.
 
-Legenda: 🎌 só com a flag · ⏭️ retomada (pula se já feito) · ⏸️ pode parar · 🔒 gate de contexto antes
-
-**Etapa 0 — Preparação**
-1. Lê argumentos (fase + `--ui`/`--ai`/`--no-ship`/`--vault`/`--obs`). Sem número → ⏸️ para e pede.
-2. `abre-rodada.sh N [flags]` — portões, retrato, gate, retomada, vault_alerta, aninhamento, hook, retrato da TaskList, evento `run` + ponteiro, num script só. Exit ≠ 0 → ⏸️ para com o motivo.
-3. `confere-etapa.sh 0` (self-check da abertura); espelha a TaskList do retrato (Sub-rotina C), obedece `vault_alerta` (pergunta antes de gastar a fase) e `aninhamento: probe_necessario` (probe mínimo + `--registra-aninhamento`).
-4. 🎌 `--ui` (ou UI-SPEC existente) → leia `workflow-ui.md` agora (única leitura da rodada); `--ai` idem → `workflow-ai.md`; fase com server → `workflow-dev-server.md` quando chegar no 1º passo que o usa.
-5. Banner e libera.
-
-**Etapa 1 — Intenção: spec + discuss + consultoria especializada** *(⏭️ obedece `etapa_1` do abre-rodada)*
-6. ⏭️ `etapa_1: pular` → Etapa 1.5 (a intenção já virou plano ou o review está `done`/`skipped`).
-7. 🔒 ⏭️ `pre-despacho.sh 1` → despacha o agente **`gad-intent`** (Opus 5 medium) com `prompts/intent.md` — um único despacho cobre SPEC + CONTEXT + consultoria especializada; a retomada fina por arquivo é do subagente (`setup-intencao.sh`). Dentro dele: filho `gad-spec` hospeda `gsd-spec-phase N --auto` (termina no SPEC, sem auto-advance).
-8. ↳ *(filho `gad-discuss`)* CONTEXT: `gsd-discuss-phase N --auto`, sem executar o `auto_advance`, zerando `workflow._auto_chain_active` na volta.
-9. ↳ *(no subagente)* Consultoria especializada: Codex + agy apontam o que põe o Goal em risco (lanes lançadas em background por `roda-lanes.sh`, pareceres em `<phase_dir>/pareceres/`, autoridade = `.intent/.status-c<C>-<lane>.json`) ↔ filho `gad-verificador` verifica cada achado **no mesmo turno do lançamento** e relê a emenda de cada ciclo antes do briefing seguinte (modo `releitura`); loop com parada por custo marginal (`decide-ciclo.sh`, teto duro 4); factual → corrige · requisito/critério/oráculo → `needs_decision` ⏸️ sobe · tradeoff → adota + transparência. UM consultor falho → segue com o outro, sino; os DOIS instalados-mas-falhos → `blocked` ⏸️; NENHUM instalado → `skipped` com sino gritante e segue.
-9b. **Gate de rota (camada 0, ao receber o `done`):** `confere-rotas.sh <phase_dir>/.intent` — exit 1 → devolve ao MESMO subagente (passo 7b do intent.md, fail-closed). Exit 0 → `confere-etapa.sh 1` (cancela + `end` medido). Turnos do coordenador viraram régua de auditoria (transcript), não medição em sessão — o conta-turnos.py foi removido na v2.2.0 (4 fases sem disparar).
-
-**Etapa 1.5 — Contratos de design** *(🎌 só com a flag · retomada por existência de arquivo)*
-10. ⏭️ `setup-contratos.sh <phase_dir> <NN> [--ui] [--ai]` decide: ambos `pular`/`sem-flag` → pula a etapa inteira; flag × config off → flip declarado (flag vence).
-11. 🔒 🎌 Despacha o agente `gad-contratos` (Opus 5 medium) com `prompts/contratos.md` — hospeda `gsd-ui-phase` e `gsd-ai-integration-phase` inline (ordem UI → IA). Perguntas herdadas sobem como `needs_decision`; a resposta continua o MESMO subagente.
-12. Ao voltar: `confere-etapa.sh 1.5` (asserts por flag) — exit 1 devolve ao mesmo subagente.
-
-**Etapa 2 — Planejamento**
-13. ⏭️ Obedeça `etapa_2` do abre-rodada (`pular` → Etapa 2.5).
-14. 🔒 `pre-despacho.sh 2` → despacha o agente `gad-plan` (Opus 5 medium) com `prompts/plan.md` — ele julga pesquisa/mapper/granularidade (2.D/2.E/2.G) e hospeda o `gsd-plan-phase`.
-15. ⏸️ `confere-etapa.sh 2` (cancela mecânica; senão devolve ao subagente) + fecho 2.4b: classifica os `autonomous: false` — (a) pergunta agora · (b) `NN-ACAO-HUMANA.md` detalhado, executado e apagado · (c) defere ao UAT — e flipa os planos.
-
-**Etapa 3 — Construção**
-16. ⏭️ `has_verification` → pula a Etapa 3 inteira.
-18. 🔒 ⏭️ `pre-despacho.sh 2.5` decide (pular · skip_config declarado · ⏸️ bloqueio_sem_revisor = fail-closed PC-6 · ok) → Convergência via **subagente** (Sub-rotina H + `prompts/convergence.md`, hospedando `gsd-plan-review-convergence --codex --agy --max-cycles 3`; lanes por `roda-codex.sh`/`roda-agy.sh`). Não convergiu (`escalou`) → ⏸️ para.
-18b. **Paralelismo** — o `pre-despacho.sh 3` que abre o item 19 (🔒) é a autoridade: lê `use_worktrees`/`parallelization`, aplica `baseRef: head` via `worktree set-baseref`, roda o `base-check` e mede as ondas de ≥2 planos incompletos. `despacho: ok` → siga ao 19 sem mais nada. `despacho: bloqueio_paralelismo` (exit 4) → ⏸️ AskUserQuestion com a `pergunta_ao_dono` do JSON, que já traz a `message` real do `base-check` (ou, quando o `motivo` começa por `plan_gate_ausente_ou_reprovado:`, a escolha «replanejar (volta à etapa 2) ou aceitar o despacho sabendo que a onda pode serializar») — não diagnostique por conta própria nem aplique antídoto à mão: o motivo real da F24.x era `origin/HEAD unresolved`, não "base mismatch", e o script mede em vez de presumir. O fecho (`confere-etapa.sh 3`) extrai `paralelismo_observado` do run-log (com `duracao_onda_s`/`plano_mais_lento_s`), `suite` (lançamentos do `roda-suite.sh`) e `prova_avisos`/`prova_falhas` dos SUMMARYs — informativos, para o briefing da `/audit-gad` — e reprova se `use_worktrees` virar `false` durante a etapa.
-19. 🔒 Execução via **subagente** (Sub-rotina H + `prompts/execute.md`) — sobrou `autonomous: false` (exceção rara pós-2.4b) → **inline** (`Skill gsd-execute-phase --auto --no-transition`).
-20. Checa completude: plano sem SUMMARY (ação humana travou ondas) → ⏸️ Sub-rotina D. Senão status: passed → segue · human_needed → anota (insumo da Etapa 5) e segue · gaps_found → 21.
-21. *(gaps)* Fecha 1×: despacho da 2.3 (`prompts/plan.md`, args `N --gaps`) → re-execução pela regra de rota da 3.3 → re-verifica. ⏸️ Persistiu → Sub-rotina D.
-
-**Etapa 4 — Gates de qualidade** *(retomada por existência de arquivo)*
-22. 🔒 ⏭️ `pre-despacho.sh 4-code-review` → Code review via **subagente** (`prompts/code-review.md`, iteração 1 com lane Codex 4.D; 2+ estreitadas via `calcula-files.sh`). `confere-etapa.sh` extrai critical/warning/total → Critical restante 🔔; segue sempre.
-23. 🔒 🎌 UI review — conduza pelo `workflow-ui.md` (já lido no item 4).
-24. 🔒 🎌 Eval review — conduza pelo `workflow-ai.md` (já lido no item 4).
-25. 🔒 ⏭️ `pre-despacho.sh 4-secure` → Secure via **subagente** (`prompts/secure.md`); aceites chegam MASTIGADOS (4.E). ⏸️ `confere-etapa.sh 4-secure` exit ≠ 0 → **bloqueia** (único gate bloqueante). Secure tocou src/ → 4.1b re-review estreitado.
-26. 🔒 ⏭️ `pre-despacho.sh 4-validate` → Validate via **subagente** (`prompts/validate.md`). ⏸️ Gaps → `needs_decision` (Fix all recomendado).
-
-**Etapa 5 — UAT interativo automatizado** *(retomada por ESTADO do `NN-UAT.md`)*
-27. ⏭️ Retomada por estado (5.1): ausente → 28 · `pre_uat` ≠ `executed` → 29 · `executed` + `issue` sem marcador de fix → 30 · com marcador → ⏸️ D · sem `issue` em aberto → Etapa 6.
-28. 🔒 Gera o `NN-UAT.md` via subagente (classify-coverage MECÂNICO primeiro → find_summaries → extract_tests + cold-start → create_uat_file); frontmatter `pre_uat: generated`.
-29. 🔒 Despacha o **subagente de UAT** (Sonnet + `uat-playbook.md`) — **sempre, com ou sem GUI**. A janela dele gerencia o server; classifica nos 4 baldes, devolve só o QUALITATIVO. Ao voltar: `confere-etapa.sh 5` reconcilia do disco e — só ele — promove `pre_uat: executed`.
-30. *(balde 2)* 🔒 1 ciclo de conserto: replan `--gaps` → re-execução `--gaps-only` → re-review estreitado → re-UAT só nos `issue` → `confere-etapa.sh 5 --fix-cycle`. Persistiu → ⏸️ Sub-rotina D.
-
-**Etapa 6 — Encerramento + ship** *(roteamento por balde)*
-31. **Roteamento mecânico:** `pre-despacho.sh 6` → `rota` (pausa → ⏸️ D · handback → banner · ship) + `git_remote` (false → rota B 6.E) + `uat_passed_raw` + transparência extraída (6.2).
-32. Consolida o "🔔 O que precisa de você agora" + o bloco de transparência (as 5 listas já vêm extraídas — você só redige).
-33. Resumo executivo (modo final): **Sub-rotina F**. ⏭️ idempotente (`go_and_do_resumo: final`).
-34. `commita-artefatos.sh uat` (6.3b). 🔒 **Ship** (rota A): via **subagente** (`prompts/close.md`, hospedando `close-phase N` — learnings → promoção → PR → revisão auto-"Skip" carimbada → merge direto, 6.D). Rota B (sem remote): ship alternativo do projeto executado pela camada 0 (6.E). ⏸️ Bloqueio de ambiente → `blocked`; respeita e reporta. Depois: emenda factual do "Desfecho do ship" no resumo (6.4c) + commit.
-35. `confere-etapa.sh 6` (self-check PLAN×SUMMARY + anti-placeholder de ts) + banner final + evento `stop` + ponteiro removido + `commita-artefatos.sh runlog`, e devolve o controle.
-
-</master_checklist>
-
----
-
-<stop_points>
-
-## Paradas herdadas — quando um comando GSD te chama (não é bug)
-
-Os stops PRÓPRIOS desta skill estão no roteiro (gate de contexto, pausa da revisão de intenção,
-bloqueio sem revisor, gaps persistentes, ameaça aberta, bug de UAT persistente, balde 3 no
-ship). Os comandos GSD invocados têm stops deles — decisões que o comando não toma sozinho.
-Quando um disparar, roteie pela **triagem de decisão (Sub-rotina I)**: alçada do usuário chega
-a ele (nunca contorne a parada com flags); carimbo é auto-decidido e registrado no
-`NN-DECISOES.md`. Comando hospedado em subagente (Sub-rotina H) → o mesmo stop chega como
-`needs_decision` mastigado; a resposta continua o mesmo subagente. O stop é honrado igual; só
-muda o transporte.
-
-- **Etapa 1.5** (`gsd-ui-phase` / `gsd-ai-integration-phase`): os stops estão em
-  `workflow-ui.md` / `workflow-ai.md` (lidos com a flag).
-- **`gsd-plan-phase`**: decision-coverage gate (desligável por
-  `workflow.context_coverage_gate: false`) · requirements-coverage gap · source-audit gaps /
-  phase-split recommended (fase mal-dimensionada — melhor split que plano inchado) ·
-  revision-loop stall (3 iterações sem convergir).
-- **`gsd-execute-phase`** (o `--auto` da 3.3 não silencia estes): falha de teste de
-  regressão · schema drift · conflito pós-merge · checkpoint `human-action` (auth/2FA/
-  migrations que só o dono roda — nunca se automatizam; se ele defere, a 3.4 detecta a
-  execução incompleta e fecha pela Sub-rotina D em vez de deixar preso no prompt) ·
-  **`Gate: blocking-human`** (GSD 1.11.0, #3210: `<precondition>` de task não atendida
-  — env var, passo de `user_setup`, artefato de fase anterior — ou verificação de pacote
-  antes de instalar). Gate duro por definição: nunca é carimbável; precondição → mesma
-  rota da ação humana (`done · incompleto` → 3.4 → Sub-rotina D); pacote →
-  `needs_decision` irreversível → gate duro da Sub-rotina I.
-
-Regra de ouro: stop de decisão de design/escopo ou portão de realidade (regressão/schema/auth)
-é legítimo — pausa, anota no banner, e o usuário decide. A Sub-rotina I formaliza a régua.
-
-</stop_points>
-
----
-
-<subroutines>
-
-<subroutine name="A — gate de contexto (antes de cada comando principal)">
-
-## Sub-rotina A — gate de contexto (antes de CADA comando principal)
-
-O gate roda DENTRO do `pre-despacho.sh <etapa>` — todo passo 🔒 do roteiro já o executa ao
-abrir a cerca. Você não digita mais bloco de medição; obedece o exit code:
-
-- **exit 0** — `ok` (siga; anuncie numa linha o que mediu: "contexto em 180k/400k — seguindo"),
-  ou `pular`/`skip` (a etapa não roda; o evento já foi gravado).
-- **exit 3** — `stop`: teto de contexto. O script já gravou o evento, removeu o ponteiro e
-  devolveu o handoff pronto → **Sub-rotina D** com o motivo `contexto em NNk`.
-- **exit 4** — `bloqueio_sem_revisor` (só na 2.5): repasse a `pergunta_ao_dono` e ⏸️ pare.
-- `status=unknown` no JSON → siga, mas declare o `reason=` numa linha (fail-open de MEDIÇÃO,
-  deliberado — a retomabilidade cobre; o ganho é você não se achar protegido quando não está).
-
-Racional (não re-litigue): teto **absoluto de 400k tokens** — mede a quantidade carregada, não
-fração de janela (que varia 5× e era ilegível por skill); fica abaixo do auto-compact do
-harness (~460k) porque **parar-e-retomar fresh > compactar** (estado em disco + commits
-atômicos + handoff tornam a retomada superior à compactação com perdas). Ajustável via env
-`CONTEXT_TOKEN_LIMIT`. O gate SUB-mede de propósito (exclui turnos de advisor; só camada 0) —
-por isso o teto tem folga, não margem zero.
-
-**Detector de auto-compact (mecânico):** o `run-log.sh` grava `compact` quando os checkpoints
-da mesma sessão caem >100k. Ao vê-lo (ou notar a queda): anuncie numa linha e **re-ancore** —
-as sub-rotinas seguem valendo, o roteiro segue de onde o DISCO diz que está.
-
-**Granularidade (limitação conhecida):** o gate só mede ENTRE comandos — não interrompe um
-`Skill` no meio. Isso pesa quase só na rota inline da 3.3; se ela for inevitável numa fase
-enorme, quebre antes (`/gsd-phase`) ou pause manualmente (`/gsd-pause-work`).
-
-</subroutine>
-
-<subroutine name="B — dev server (ponteiro)">
-
-## Sub-rotina B — subir / derrubar o dev server
-
-Mecanizada no `scripts/dev-server.sh` (`up` = receita persistida ou heurística + espera de
-porta + auto-persistência; `down` = morte por sessão do PID). **A craft e as regras de dono da
-janela estão em `workflow-dev-server.md`** — leia quando a fase tiver server para subir (UI
-review / UAT); fase sem server, este arquivo nem entra na janela.
-
-</subroutine>
-
-<subroutine name="C — lista de tarefas ao vivo (TaskList)">
-
-## Sub-rotina C — lista de tarefas ao vivo (TaskList)
-
-A TaskList dá visibilidade ao vivo do pipeline. É **efêmera** (vive só na sessão) — nunca
-fonte da verdade: o estado real está no disco; a lista só **espelha**. Quem mexe nela é só o
-orquestrador.
-
-- **Quem calcula é script (S.C):** o retrato `tasklist` do `abre-rodada.sh` (e a reconciliação
-  do `confere-etapa.sh 6`) devolve tarefa → estado desejado, computado do disco (15 tarefas
-  possíveis: intenção 1–3, contratos 4–5, planejar 6, convergência 7, executar 8, gates 9–13,
-  UAT 14, encerramento 15 — criadas só as aplicáveis à rodada). Você só aplica
-  `TaskCreate`/`TaskUpdate` para espelhar. Numa retomada, a lista nasce fiel ao que já foi
-  feito.
-- **Disponibilidade primeiro:** os tools de task são flag de runtime (some sem changelog). Sem
-  `TaskCreate`/`TaskList` na janela (nem via `ToolSearch`), pule a sub-rotina inteira:
-  declare uma vez ("TaskList indisponível — seguindo pelo disco") e mencione no resumo.
-- **Disciplina:** ao despachar um passo 🔒 → `in_progress` na(s) tarefa(s) que ele cobre; ao
-  concluir (artefato no disco) → `completed`. Retorno `needs_decision` deixa `in_progress`
-  (o passo está no meio).
-- **Em parada:** a tarefa em curso fica `in_progress` — a montagem da próxima rodada relê o
-  disco e corrige. **No fecho (6.5):** varredura anti-órfã — tarefa `in_progress` sobrando =
-  🔔 (etapa que não vai mais rodar → complete com nota do porquê).
-
-</subroutine>
-
-<subroutine name="D — parada graciosa (pause-work)">
-
-## Sub-rotina D — parada graciosa (pause-work)
-
-Use quando sobra **trabalho de implementação** que depende do dono: ação humana
-(`human-action`), ondas travadas por ela, consultores de intenção `blocked`, gaps persistentes
-(3.5), ameaça aberta (4.4), bug de UAT persistente (5.5), ship `uat_reprovado`, gate duro na
-janela de silêncio (Sub-rotina I), ou o teto de contexto (Sub-rotina A). Feche com handoff
-limpo:
-
-1. **Encerre o trabalho vivo — inclusive o que o TaskStop não mata.** Nesta ordem:
-   1. `ListAgents` — enumere os subagentes vivos. A lista é a fonte da verdade: pare todos,
-      não só o ativo, porque um filho vivo continua gravando artefato depois da pausa.
-   2. `TaskStop` em cada filho que a lista devolveu.
-   3. `varre-orfaos.sh <phase_dir>` — os processos de fundo que sobrevivem ao TaskStop
-      (waiters de disco, codex; um waiter já durou 55min). Ele identifica por vínculo com o
-      `<phase_dir>`, agrupa por `pgid` e só relata. É o substituto da varredura por nome de
-      processo, que falhou duas vezes na F24.4.
-   4. Exit 1 (há órfãos) → `varre-orfaos.sh <phase_dir> --matar`: TERM no grupo, espera 5s,
-      então KILL. Ele recusa em três casos previstos — mais de 10 candidatos (`RECUSA:`),
-      `GRUPO-MISTO` e `GRUPO-PROPRIO`. Em qualquer recusa, leve os pids relatados para a
-      linha de handoff do passo 4 e siga.
-   5. `varre-worktrees.sh --projeto "$ROOT"` — as cópias (worktrees) que a pausa deixa
-      para trás. O `reap-orphans` do GSD só vê cópia com arquivo `locked` e já incorporada;
-      a da 24.2 ficou 11 dias invisível com 2 commits. Só relata. Cada `com-trabalho` ou
-      `suja` do JSON vira uma linha no handoff do passo 4: `cópia <branch>: <commits>
-      commits, <idade_dias> dias — arquivar com --arquivar; remoção com o dono`.
-   6. **`confere-etapa.sh pausa`** — fecha a etapa interrompida na telemetria: mede a janela
-      aberta com o mede-tokens e grava o `end` com o rótulo CANÔNICO do checkpoint +
-      `"interrompida":true`. Rótulo canônico, nunca variante; medição, nunca estimativa — na
-      F24 a pausa ficou sem medição e o rótulo fragmentou em 3 grafias, quebrando a agregação.
-2. **Resumo executivo (modo parcial):** Sub-rotina F com `modo: parcial` e o `motivo`. Falhou
-   ao gerar → não pare por isso; registre numa linha e siga (o handoff técnico é o que garante
-   a retomada).
-3. `Skill gsd-pause-work` — handoff durável (HANDOFF.json + `.continue-here.md`) + commit WIP.
-   Registre o evento `stop` com a etapa CANÔNICA em curso (ex.: `"2.5 convergencia"`) e o
-   motivo no campo próprio (10º posicional do run-log.sh) — nunca `pausa: <motivo>` no
-   rótulo da etapa.
-3.5. **STATE.md por último.** Depois do commit WIP, rode
-   `reconcilia-docs.sh --pausa --projeto "$ROOT" --fase N` e em seguida
-   `confere-etapa.sh pausa --pos-pausa --projeto "$ROOT" --fase N`. O pause-work nunca toca
-   o STATE.md e o HANDOFF.json anota hashes antes de existir o commit que o carrega — na
-   F24.4 o STATE.md ficou 16 commits atrás do HEAD e ninguém viu. O script grava
-   `status: paused`, o hash do WIP e o plano/tarefa do HANDOFF, e faz um commit próprio
-   `docs(state): STATE.md reconciliado na pausa`. A cancela reprova (exit 1) se o
-   `state_head` não for HEAD nem HEAD~1: nesse caso, não emende à mão — releia o JSON
-   (`pendentes`) e re-rode; exit 3 (`FORMATO-INESPERADO`) é status em frase, conserte o
-   token e re-rode.
-4. **Pare** com a linha de handoff `🔔`: o motivo, a ação exata (comando literal), os planos
-   pendentes, os pids que a varredura relatou e recusou matar (se houver) e onde está o
-   `NN-RESUMO-EXECUTIVO.md`. Retoma com `/go-and-do N`.
-
-> **Quando NÃO usar:** balde 3 (não-pude-verificar — falta verificação HUMANA; rota de
-> hand-back da Etapa 6, próximo passo `/gsd-verify-work`) e balde 4 (assumed — shipa com
-> transparência). Um HANDOFF.json sobrando desviaria a retomada. A régua: bug de
-> implementação → D; item não-verificável ou subjetivo → Etapa 6.
-
-</subroutine>
-
-<subroutine name="E — resolver o gsd-tools (lib)">
-
-## Sub-rotina E — resolver o `gsd-tools` (lib/gsd-shim.sh)
-
-O shim colável morreu: a resolução vive em `scripts/lib/gsd-shim.sh`, `source`d por todos os
-scripts da skill. Nos raros blocos Bash SEUS que consultam o SDK direto (ex.: 3.4):
-
-```bash
-. "$HOME/.claude/skills/go-and-do/scripts/lib/gsd-shim.sh"
-gsd_run query phase-plan-index N
-```
-
-A lib resolve o `gsd-tools.cjs` (runtime → `.claude/` do projeto → PATH → `~/.claude/`) e
-falha com a instrução de install (`npx -y @opengsd/gsd-core@latest --claude --local`) — isso é
-portão de entrada: **pare** e mostre o comando (o `abre-rodada.sh` já cobre a abertura).
-
-</subroutine>
-
-<subroutine name="F — resumo executivo (subagente Sonnet 5)">
-
-## Sub-rotina F — gerar o resumo executivo (via SUBAGENTE)
-
-Escreve o `NN-RESUMO-EXECUTIVO.md`: a história da fase em prosa, para o dono não-técnico.
-Chamada em dois momentos: `modo: final` (Etapa 6.3) e `modo: parcial` (toda parada da
-Sub-rotina D). As instruções completas moram em **`prompts/resumo.md`** (o subagente lê do
-disco — não leia antes de despachar).
-
-1. **Números com fonte mecânica:** ANTES do despacho, rode
-   `scripts/numeros-da-fase.sh <phase_dir> NN` e cole o bloco inteiro no despacho.
-2. **Despache** um `Agent` com `model: sonnet` e `run_in_background: false`, entregando: o
-   caminho de `prompts/resumo.md`, `NN`, `phase_dir` absoluto, `modo` e — no `final` — o
-   `desfecho` + as listas extraídas pela 6.2 (`itens_assumidos`, `itens_nao_verificados`,
-   `itens_intencao`, `itens_nao_rodados`, `riscos_aceitos`, incidentes da rodada) + a dica de
-   🔔; no `parcial` — o `motivo`.
-   > Por que subagente: narrar exige LER os artefatos verbosos — proibido na camada 0.
-   > Por que Sonnet: síntese/escrita, não precisa de Opus.
-3. **Confira na volta:** `numeros-da-fase.sh <phase_dir> NN --conferir <resumo>`. Exit 1 →
-   re-despache 1× com as divergências (ou emende pontual) e re-confira. Persistiu → siga com
-   🔔 `resumo com número sem fonte` no banner (nunca silencie).
-4. **Commit:** `git add <resumo> && git commit -m "docs(fase NN): resumo executivo"` (sem
-   footer). Falhou → não pare; registre numa linha.
-
-**Idempotência:** `modo: final` com `go_and_do_resumo: final` já no arquivo → pule. Um
-`parcial` anterior é sobrescrito pelo `final`. No `parcial` sempre regera.
-
-**Telemetria:** o despacho é cercado como comando principal (checkpoint/end — etapa
-`resumo final`/`resumo parcial`); é um dos subagentes mais caros da rodada e sem o `end` o
-custo dele some da conta.
-
-</subroutine>
-
-<subroutine name="G — telemetria da rodada (run-log)">
-
-## Sub-rotina G — telemetria da rodada (`NN-RUN-LOG.jsonl`)
-
-Retrato fiel da linha do tempo da fase: 1 linha JSONL por evento em
-`<phase_dir>/NN-RUN-LOG.jsonl`, com camada/modelo/effort/custo por etapa. A grade nasce
-COMPLETA por escrita mecânica — o run-log é a fonte primária de custo.
-
-**Regra do escritor único (T.2)** — cada evento tem exatamente um escritor; você NÃO grava o
-que já tem dono:
-
-| Evento | Escritor | Quando |
+| Etapa | what | how |
 |---|---|---|
-| `run` | `abre-rodada.sh` | abertura da rodada |
-| `checkpoint` | `pre-despacho.sh` | abre a janela da etapa, com a fotografia do contexto |
-| `end` | `confere-etapa.sh` | fecha a janela no pass, com `tokens_reais`/`custo_usd` do `mede-tokens.py` (transcript, nunca autodeclaração — `tokens_camada2` MORREU) |
-| `despacho`/`retorno` | hook `gad-lifecycle.sh` | início/fim de todo `Agent()`, com camada de origem e modelo/effort da def |
-| `script` | cada script da skill | auto-registro nome+exit+resumo em rodada ativa |
-| `stop` | `pre-despacho.sh` (teto) ou você (pausa/fim de rodada) | desfecho |
-| `compact` | o próprio `run-log.sh` | detector mecânico (queda >100k) |
+| 0 | preparation | `abre-rodada.sh` + `confere-etapa.sh 0` + banner |
+| 1 | intent: spec + discuss + specialist consultancy | 🔒 ⏭️ agent `gad-intent` + `prompts/intent.md` |
+| 1.5 | design contracts | 🎌 `setup-contratos.sh` → agent `gad-contratos` + `prompts/contratos.md` |
+| 2 | planning | 🔒 ⏭️ agent `gad-plan` + `prompts/plan.md`; 2.4b resolves `autonomous: false` |
+| 2.5 | plan convergence | 🔒 ⏭️ subagent + `prompts/convergence.md` (PC-6 fail-closed) |
+| 3 | build | 🔒 3.2 parallelism authority → subagent + `prompts/execute.md` → 3.4 crossroads → 3.5 gaps 1× |
+| 4 | quality gates | 🔒 ⏭️ per gate: code-review · 🎌 ui-review · 🎌 eval-review · secure (only blocking gate) · validate |
+| 5 | automated interactive UAT | resume by `NN-UAT.md` state; generate → run (Sonnet + `uat-playbook.md`) → 1 fix cycle |
+| 6 | close + ship | `pre-despacho.sh 6` routes pausa/handback/ship; Sub-rotina F; ship via `prompts/close.md`; `confere-etapa.sh 6` |
 
-O que SOBRA para você (chamada direta, `<phase_dir>` sempre ABSOLUTO):
-
-```bash
-bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> <skip|stop> "<etapa>" [tokens] [pct] "" [limit] "" "<motivo>"
-```
-
-- **`skip`** — todo passo que TERIA rodado e não roda fora das cercas mecânicas (as cercas já
-  gravam os delas): etapa = `"<id> (<motivo>)"`.
-- **`stop`** de pausa/fim de rodada — com medição final e o motivo no 10º argumento. Antes do
-  stop de fim de rodada: `run-log.sh <dir> <NN> audit` (fecha janelas abertas; sessão morta →
-  `close --sessao <id>`).
-
-**Vocabulário canônico da `etapa`:** começa com o ID novo (`0 abertura` · `1 intencao` ·
-`1.5 contratos` · `2 planejamento` · `2.5 convergencia` · `3 construcao` · `4.1 code-review`
-… `4.5 validate` · `5 uat` · `6 encerramento`) ou `preparacao` · `probe` · `resumo` ·
-`lateral <descrição>`. Sem ID estável, a agregação entre fases é inviável.
-
-O script nunca falha o pipeline (exit 0 sempre; `flock`; `seq` monotônico; auto-fechamento de
-janela órfã **medido** pelo `mede-tokens.py` — v2.1.9). Viu o aviso de janela fechada
-automaticamente? **Não grave um `end` corretivo à mão**: o número que você tem (contexto da
-sua janela) não é custo — na F24.3 isso registrou 251.511 como tokens de subagente e gerou
-um `compact` falso. Se a medição automática veio `indisponivel`, meça:
-`mede-tokens.py --sessao $CLAUDE_CODE_SESSION_ID --desde <ts do checkpoint> --ate <agora>`
-e só então um `end` com `--tokens-reais/--custo`. Um 2º `end` da mesma etapa declara
-`substitui:<seq>` (quem soma conta só o último). Telemetria é instrumento, não gate.
-
-</subroutine>
-
-<subroutine name="H — protocolo de subagentes (camada 1)">
-
-## Sub-rotina H — protocolo de subagentes (camada 1)
-
-Camadas: a **0** (esta conversa) decide, encadeia e fala com o usuário; a **1** são subagentes
-com janela descartável que executam o trabalho verboso de uma etapa; a **2** são os agentes
-que a 1 despacha ou hospeda (os internos do GSD + os filhos `gad-*` desta skill, defs em
-`~/.claude/agents/`). O porquê: a janela da camada 0 é o recurso mais escasso — foi o eco de
-orquestração inline que levou fases reais a ~90% da janela.
-
-**Despacho.** Etapa cujo bloco manda despachar roda num subagente `general-purpose` (modelo
-herdado, salvo pin declarado no bloco), **sempre síncrono: `run_in_background: false`
-explícito** — despacho background quebra o fluxo (a notificação não retoma o roteiro). O
-prompt de despacho é mínimo; as instruções moram no `prompts/<etapa>.md` que o SUBAGENTE lê do
-disco. **Não leia o prompt antes de despachar** — referencie o caminho (ler duplica na camada
-0 o que a arquitetura mandou pro disco). O despacho leva:
-
-- o caminho do arquivo de instruções (`$HOME/.claude/skills/go-and-do/prompts/<etapa>.md`);
-- `N`/`NN`, `phase_dir`, `project_root` e caminhos de entrada — **sempre absolutos** (o cwd do
-  subagente não é a raiz do projeto);
-- flags relevantes e `args` quando o bloco variar o comando;
-- havendo `obs_text` (`--obs`): o texto literal como primeira linha ("Nota do usuário para
-  esta rodada: …") — o subagente decide se é relevante; ignorar por não se aplicar é resposta
-  válida;
-- em retomada de pausa: a resposta do usuário, verbatim.
-
-**Credenciais (regra de nascença de todo despacho autenticado).** Tarefa que exige sessão
-logada ou toca segredos leva: (1) a **via sancionada** preparada pela camada 0 ANTES (wrapper
-que injeta credenciais no processo, ou helper que emite só o código efêmero — nunca o
-segredo); e (2) a proibição literal: "PROIBIDO ler, copiar ou imprimir `.env*`/segredos por
-qualquer via — leitura indireta é evasão. Login impossível pela via sancionada → balde 3 ou
-`blocked`, nunca contorne um controle." Constraint aplicada reativamente chega sempre um
-despacho tarde.
-
-**Background dentro do subagente:** subagentes NÃO recebem notificações de trabalho em
-background — os `prompts/*.md` carregam o protocolo: background só para trabalho >10min, com
-resultado em arquivo combinado e espera por UM waiter de disco bloqueante com
-`timeout: 600000` explícito (vale para TODA camada, orquestrador incluso) — nunca espera de
-notificação, nunca polling picado. Retorno fora do contrato (prosa em vez de bloco) → não
-aceite nem redespache: **continue o mesmo subagente** com "decida pelo estado do disco e
-finalize pelo return_contract".
-
-**Contrato de retorno.** Todo subagente da camada 1 devolve um bloco compacto — nunca
-conteúdo verboso (o retorno é dado de roteamento; corpo vive no disco):
-
-- **`done`** — veredito, caminhos, contagens. **Seção `incidentes:` obrigatória (regra 24a):**
-  todo desvio entre o anunciado e o executado, ou literalmente `nenhum`. Ausente → retorno
-  fora do contrato (reconciliação); item ≠ `nenhum` → **UM evento `incidente` no run-log POR
-  ITEM** (`--kv origem=<etapa/agente> --kv detalhe="<o item>"`; v2.1.9 — na F24.3 um evento
-  agregou 9 incidentes e 5 ficaram sem registro individual) + repasse ao despacho da
-  Sub-rotina F (o resumo os narra — incidente declarado numa camada e não repassado já
-  enganou o dono 2×).
-- **`needs_decision`** — o subagente gravou o progresso em disco e devolveu a pergunta
-  mastigada (opções + tradeoffs + `recomendacao` + `reversivel`). Roteie pela **Sub-rotina I**;
-  a resposta **continua o MESMO subagente** (não redespache: a continuação preserva o contexto
-  de graça). **Rótulo honesto:** "Decisão do usuário: X" só se ele de fato escolheu X;
-  resposta que é pergunta NÃO é decisão (responda e re-pergunte); delegação → "decisão da
-  camada 0 (usuário delegou): X"; triagem → "decisão da camada 0 (triagem): X".
-  **Bloco de proveniência (decisão que É do dono)** — repasse SEMPRE neste formato, e instrua
-  cada camada a repassá-lo verbatim ao descer (rótulo solto vira asserção de agente e um
-  executor rigoroso o recusa):
-
-  ```
-  DECISAO-DO-DONO
-  canal: AskUserQuestion | --obs | resposta direta no chat | retomada pós-pausa
-  ts: <ISO da resposta>
-  pergunta: <1 linha>
-  resposta_verbatim: "<palavra por palavra>"
-  ```
-
-  O `ts` é MECÂNICO: `date -Iseconds` no ato, colado — nunca de cabeça (minuto redondo `:00`
-  é red flag de placeholder). **A regra vale para TODO timestamp gravado em artefato por
-  qualquer camada** (frontmatters de VERIFICATION/UAT etc.) — o `confere-etapa.sh` linta
-  placeholders. **Alegação de consentimento exige ponteiro:** "aprovado pelo dono" só vale
-  com ponteiro para um bloco DECISAO-DO-DONO existente (arquivo + `ts`); sem ponteiro, é
-  relato e o item é NÃO-assinado — por quem escreve, revisa e verifica.
-- **`blocked`** — pré-condição indisponível. Trate pela semântica do bloco da etapa; a
-  descida para subagente **não afrouxa nenhum fail-closed** — o bloqueio sobe e é a camada 0
-  quem para.
-
-**Probe de aninhamento (S.H, cache mecânico).** Aninhamento (camada 1 spawnar camada 2) é
-capability que o runtime liga/desliga entre releases — nenhuma conclusão é atemporal. O
-`abre-rodada.sh` mantém o cache versão-condicionado (`~/.claude/.gad-aninhamento.json`):
-`aninhamento: ok|falha` → obedeça; `probe_necessario` (versão do CC mudou) → rode o probe
-mínimo (um `general-purpose` que responde se tem o tool `Agent`, ~2k tokens) e grave com
-`abre-rodada.sh --registra-aninhamento ok|falha`. Probe `falha` → **rota inline** para as
-etapas spawnadoras, com duas regras inegociáveis: (1) inline ⇒ **leia o `prompts/<etapa>.md`
-antes de conduzir** (a regra "não leia antes de despachar" INVERTE — você assume o papel do
-subagente e as disciplinas moram lá); (2) registro **versão-condicionado** no
-`NN-DECISOES.md`/`.continue-here.md` ("na CC <versão-exata>…"), nunca atemporal — na retomada
-ou bump de versão, o cache re-exige o probe.
-
-**Retomada cross-sessão.** Continuar um subagente só funciona na MESMA sessão. Em sessão
-nova, o estado está em disco: a camada 0 identifica a etapa pendente e redespacha; a retomada
-fina é do prompt da etapa (o `intent.md` tem chegada própria; os que só hospedam um comando
-GSD contam com a idempotência do próprio comando — um `needs_decision` desses não sobrevive à
-sessão: o redespacho re-roda e a pergunta re-emerge, custo aceito).
-
-</subroutine>
-
-<subroutine name="I — triagem de decisão (antes de todo AskUserQuestion)">
-
-## Sub-rotina I — triagem de decisão (antes de TODO `AskUserQuestion`)
-
-Base empírica (inventário 20/07, 461 perguntas): com opção recomendada, o usuário a escolheu
-em ~84–90% dos casos; o custo real eram perguntas penduradas fora do horário dele (16
-perguntas = 47h paradas). Decisão do dono (20/07, sempre-ligado): a camada 0 decide sozinha o
-que ele carimbaria — com registro e disclosure — e só o que é da alçada dele para o fluxo.
-
-Antes de QUALQUER `AskUserQuestion` — de `needs_decision`, stop herdado ou stop próprio —
-classifique:
-
-**Gate duro — para e espera o usuário** quando QUALQUER um vale:
-1. **Informação externa** — a resposta é fato que só ele tem (credencial, acesso, estado do
-   mundo). Ele fornece o insumo, não carimba.
-2. **Escopo/intenção** — requisito, critério de aceite, oráculo, SPEC/CONTEXT/ROADMAP (inclui
-   a pausa da revisão de intenção). Auto-aprovar aqui é o carimbo invertido.
-3. **Irreversível fora do trilho** — rotacionar/expor credencial, apagar dado, gastar
-   dinheiro, produção. (O trilho sancionado — fase verde até o merge do PR pós-UAT-limpo,
-   6.D, **inclusive o merge automático da rota B clean-room** (`ship.py --merge`; decisão do
-   dono 27/08: ele não revisa PR, confia nas etapas) — é o default e não pergunta. O que a
-   rota deve é o AVISO: o resumo/banner diz "mergeado", nunca deixa o dono descobrir.)
-4. **Sem recomendada** — sem convicção real, a confissão de incerteza sobe em qualquer
-   categoria.
-5. **Fail-closed existentes** — ameaça aberta, balde 2 persistente, balde 3, gaps, `blocked`,
-   gate de contexto, bloqueio_sem_revisor: a triagem não afrouxa nenhum.
-6. **`blocking-human` herdado do GSD** (1.11.0, #3210) — o próprio `--auto` do GSD já se
-   recusa a aprová-lo; a triagem respeita a recusa (um orquestrador que carimba o que o
-   executor se recusou a carimbar anula a guarda uma camada acima). Precondição não
-   atendida é critério 1 (informação/ação externa); verificação de pacote é critério 3.
-
-**Auto-decisão — decide, registra e segue** quando NENHUM critério vale E há recomendada com
-convicção E o erro é barato de desfazer. Desempate: a opção **mais rigorosa** (quando o
-usuário diverge, é para endurecer). Mecânica:
-1. Decida pela opção que você recomendaria (a `recomendacao` do subagente é insumo, não
-   veredito; `reversivel: nao` joga pro gate duro).
-2. Registre no `<phase_dir>/NN-DECISOES.md`: hora (`date "+%F %H:%M"`), etapa, pergunta em 1
-   linha, opções, escolhida, porquê e **como desfazer**. Linha ao usuário:
-   `🤖 decidi sozinho: <escolha> — registrado no NN-DECISOES.md` (auto-decisão silenciosa é
-   bug).
-3. Siga. Num `needs_decision`, continue o MESMO subagente com o rótulo honesto da Sub-H.
-
-**Decisões de timing também são decisões** — adiar pergunta, segurar aviso até o resumo:
-mesma mecânica, entrada no `NN-DECISOES.md` (a narração no chat se perde; o registro é o que
-o resumo e a auditoria releem).
-
-**Janela de silêncio (23h–07h):** antes de abrir gate duro com `AskUserQuestion`, rode
-`janela-silencio.sh` e siga o exit code — ele é a fonte única da regra. O campo
-`janela_silencio` do checkpoint é informativo e ninguém o consumia: foi por isso que uma
-pergunta de gate ficou pendurada das 23:58 às 05:50 na F24.4.
-1. exit 0 (`acao: pergunta`) → pergunte normalmente.
-2. exit 1 (`acao: pausa`) → **parada graciosa** (Sub-rotina D, motivo `gate duro em janela de
-   silêncio`), com a pergunta pendente (opções + recomendação) no handoff e no resumo
-   parcial; a retomada re-apresenta.
-
-Não se aplica à auto-decisão (que nunca para) nem muda os fail-closed. Um `blocking-human`
-de precondição na janela não é pergunta — é ação pendente: segue a rota 3.4 → Sub-rotina D
-com a precondição verbatim no handoff (`NN-ACAO-HUMANA.md` se houver passo a passo a dar).
-
-A transparência fecha o ciclo: o resumo executivo narra toda auto-decisão lendo o
-`NN-DECISOES.md` — a supervisão que era síncrona vira revisão assíncrona com rota de desfazer.
-
-</subroutine>
-
-</subroutines>
+</pipeline_index>
 
 ---
 
@@ -568,33 +92,33 @@ A transparência fecha o ciclo: o resumo executivo narra toda auto-decisão lend
 
 <stage id="0" name="Preparação">
 
-## Etapa 0 — Preparação
+**0.1 — Arguments.** Phase number (first number) + flags `--ui`, `--ai`, `--no-ship`,
+`--vault <profile>`, `--obs "<texto>"` (unquoted: everything up to the next flag). No number →
+stop and ask. Keep `--no-ship` (terminal route of Etapa 6), `vault_profile` (goes down to the
+UAT) and `obs_text` (note to every dispatch of the run — Sub-rotina H).
 
-**0.1 — Argumentos.** Número da fase (primeiro número) + flags: `--ui`, `--ai`, `--no-ship`,
-`--vault <profile>`, `--obs "<texto>"` (sem aspas: tudo até a próxima flag). Sem número →
-**pare** e peça. Guarde `--no-ship` (rota terminal da Etapa 6), `vault_profile` (desce no UAT)
-e `obs_text` (nota a todo despacho da rodada — Sub-rotina H).
+**0.2 — Atomic opening.** Run `$HOME/.claude/skills/go-and-do/scripts/abre-rodada.sh N [flags]`
+and obey the JSON (mirror in `.planning/.gad/last-abre-rodada.json`): entry gates, phase
+snapshot (`phase_dir`/`padded_phase`/`has_plans`/`has_verification`), context gate, resume
+decisions (`etapa_1`/`etapa_2`), `vault_alerta`, `aninhamento`, `hook_instalado`, TaskList
+snapshot, `run` event + run pointer — all in one script. Exit ≠ 0 → stop with the script's reason (exit 2 =
+gate/argument · 3 = context at the ceiling · 4 = phase not found). Missing entry
+prerequisites are the first hard stop (Etapa 0).
 
-**0.2 — Abertura atômica.** Rode
-`$HOME/.claude/skills/go-and-do/scripts/abre-rodada.sh N [flags]` e obedeça o JSON (espelho em
-`.planning/.gad/last-abre-rodada.json`): portões de entrada, retrato da fase
-(`phase_dir`/`padded_phase`/`has_plans`/`has_verification`), gate de contexto, decisões de
-retomada (`etapa_1`/`etapa_2`), `vault_alerta`, `aninhamento`, `hook_instalado`, retrato da
-TaskList, evento `run` + ponteiro da rodada. Exit ≠ 0 → **pare** com o motivo do script (exit
-2 = portão/argumento · 3 = contexto no teto · 4 = fase não encontrada).
+**0.3 — Obey the snapshot.**
+- `confere-etapa.sh 0` (self-check of the opening: pointer + `run` event on disk).
+- Mirror the TaskList (Sub-rotina C).
+- `vault_alerta` → ask BEFORE spending the phase (phase that looks like an authenticated UI
+  without `--vault`).
+- `aninhamento.probe_necessario: true` → minimal probe + `--registra-aninhamento`
+  (Sub-rotina H).
+- `hook_instalado: false` → declared degradation (one line; dispatch asserts become
+  informative).
+- `--ui`/UI-SPEC → read `workflow-ui.md`; `--ai`/AI-SPEC → `workflow-ai.md` (the only read of
+  the run). A phase with a server → `workflow-dev-server.md` at the first step that uses it
+  (Sub-rotina B).
 
-**0.3 — Obedecer o retrato.**
-- `confere-etapa.sh 0` (self-check da abertura: ponteiro + evento `run` no disco).
-- Espelhe a TaskList (Sub-rotina C).
-- `vault_alerta` → pergunte ANTES de gastar a fase (fase com cara de UI autenticada sem
-  `--vault`).
-- `aninhamento: probe_necessario` → probe mínimo + `--registra-aninhamento` (Sub-rotina H).
-- `hook_instalado: false` → degradação declarada (uma linha; asserts de despacho viram
-  informativos).
-- `--ui`/UI-SPEC → leia `workflow-ui.md`; `--ai`/AI-SPEC → `workflow-ai.md` (única leitura da
-  rodada).
-
-**0.4 — Banner.** Moldura ASCII dupla num bloco `text`:
+**0.4 — Banner.** Double ASCII frame in a `text` block:
 
 ```text
 ╔══════════════════════════════════════════════════╗
@@ -607,302 +131,280 @@ TaskList, evento `run` + ponteiro da rodada. Exit ≠ 0 → **pare** com o motiv
 ╚══════════════════════════════════════════════════╝
 ```
 
-`Rota` = `--no-ship` → "para no seu UAT, sem shipar"; padrão → "vai até abrir o PR". `Vault` e
-`Obs` só entram se existirem. Abaixo da caixa, uma linha solta: o usuário pode sair de perto.
+`Rota` = `--no-ship` → "para no seu UAT, sem shipar"; default → "vai até abrir o PR". `Vault`
+and `Obs` only when present. Below the box, one loose line: the user may step away.
 
 </stage>
 
 <stage id="1" name="Intenção — spec + discuss + consultoria especializada">
 
-## Etapa 1 — Intenção (spec + discuss + consultoria especializada)
+> Replaces the human stamp with a machine skeptic: SPEC and CONTEXT come out in `--auto` (each
+> choice logged) and the intent goes through cross-AI specialist consultancy — two external
+> consultants try to knock down the decisions reading the real code, and a verifier checks
+> each finding before it is accepted. The user is called only when a finding touches what is
+> theirs to decide.
 
-> Troca o carimbo humano por um **cético de máquina**: SPEC e CONTEXT saem em `--auto` (cada
-> escolha logada) e a intenção passa por consultoria especializada cross-AI — dois consultores
-> externos tentam derrubar as decisões lendo o código de verdade, e um verificador confere
-> cada achado antes de aceitar. O usuário só é chamado quando um achado mexe no que é da
-> alçada dele. Autocontida de propósito (candidata a capability `discuss:post` no futuro).
+**1.1 — Resume.** Obey `etapa_1` from abre-rodada: `pular` → Etapa 1.5 · `continuar_pergunta`
+→ re-present the pending question stored in the artifact and dispatch with the answer ·
+`despachar` → 1.2. Fine-grained per-file resume belongs to the subagent (`setup-intencao.sh`).
 
-**1.1 — Retomada.** Obedeça `etapa_1` do abre-rodada: `pular` → Etapa 1.5 ·
-`continuar_pergunta` → re-apresente a pergunta pendente gravada no artefato e despache com a
-resposta · `despachar` → 1.2. A retomada fina por arquivo é do subagente
-(`setup-intencao.sh`).
+**1.2 — Dispatch.** `pre-despacho.sh 1` → dispatch the agent `gad-intent` (own def: Opus 5
+medium — the coordinator routes; heavy judgment lives in the children and the external
+consultants) with `prompts/intent.md`, carrying absolute `N`, `NN`, `phase_dir`,
+`project_root` and, on a continuation, the verbatim answer. If abre-rodada reported a non-null
+`pre_spec` (`NN-PRE-SPEC.md` in the phase directory — decisions pre-locked by the user; the
+normal way to produce it is `/gad-pre-spec NN`, which writes the `gad:decisoes` block), pass
+its path in the dispatch and declare its use in the executive summary; `setup-intencao.sh`
+classifies the block (`pre_spec_bloco: ok|ausente|invalido`) and
+`pre_spec_mode: structured|legacy` goes explicitly to both children. With `NN-SPEC.md` and
+`NN-CONTEXT.md` already on disk, the PRE-SPEC is briefing input only (abre-rodada brings
+`inventario`, the setup returns `pre_spec_precedencia`). Inside: child `gad-spec` hosts
+`gsd-spec-phase N --auto` (ends at the SPEC, no auto-advance) → child `gad-discuss` hosts
+`gsd-discuss-phase N --auto` without running the `auto_advance`, zeroing
+`workflow._auto_chain_active` on return (layer 1 runs the scout and a `gad-explore` first and
+hands `explore: <phase_dir>/.intent/.explore-discuss.md`) → specialist consultancy (Codex +
+agy — agy = Gemini 3.7 Flash — ↔ `gad-verificador`, which also re-reads each cycle's committed
+amendment in `releitura` mode, `prompts/intent-releitura.md`; loop by `decide-ciclo.sh`, hard
+ceiling 4; fail-closed at the "≥1 consultant" floor). The lanes run in
+the background (`roda-lanes.sh`; lane authority is `.intent/.status-c<C>-<lane>.json`,
+`usable`/`independent`); the 4-turns-per-cycle budget (5 when the `releitura` corrected) is an
+audit ruler measured by `/audit-gad` in the transcript, not counted in session.
 
-**1.2 — Despacho.** `pre-despacho.sh 1` → despache o agente **`gad-intent`** (def própria:
-Opus 5 medium — coordenador roteia; o julgamento pesado mora nos filhos e nos consultores externos) com
-`prompts/intent.md`, levando `N`, `NN`, `phase_dir`, `project_root` absolutos e, numa
-continuação, a resposta verbatim. Se o abre-rodada reportou `pre_spec` não-nulo
-(`NN-PRE-SPEC.md` detectado no diretório da fase — decisões pré-travadas pelo usuário numa
-sessão interativa anterior; a rota normal para produzi-lo é `/gad-pre-spec NN`, que já grava o
-bloco `gad:decisoes`. Com `NN-SPEC.md` e `NN-CONTEXT.md` já no disco, o PRE-SPEC entra só como
-insumo do briefing: a rota do §0.5 não roda e a etapa vai à revisão — o abre-rodada traz o
-campo `inventario` e o setup devolve `pre_spec_precedencia`), repasse o caminho no despacho e
-declare o uso no sumário executivo — o `setup-intencao.sh` classifica o bloco de decisões (`pre_spec_bloco:
-ok|ausente|invalido`) e o `pre_spec_mode: structured|legacy` vai explícito no despacho dos dois
-filhos. Dentro dele: filho `gad-spec` (SPEC `--auto`) → filho
-`gad-discuss` (CONTEXT `--auto`, auto_advance neutralizado; a camada 1 roda o `scout.sh` e um
-`gad-explore` antes e entrega `explore: <phase_dir>/.intent/.explore-discuss.md` — o discuss só
-abre arquivo do projeto para o que uma área cinzenta não decide sem ver, e registra cada um) →
-consultoria especializada (Codex +
-agy — **agy = Gemini 3.7 Flash** — ↔ `gad-verificador`; loop por `decide-ciclo.sh`, teto 4;
-fail-closed no piso "≥1 consultor").
+Never pass `model` or `effort` in the `Agent` call of a `gad-*` (E7): the def pins both and
+`gad-lifecycle.sh` denies the call with `deny` + an `incidente` event. The same hook denies
+resuming a `gad-spec`/`gad-discuss` that already returned `done`, and a second dispatch of one
+when the artifact (`NN-SPEC.md`/`NN-CONTEXT.md`) is already on disk (E3). The denial carries
+the reason in `permissionDecisionReason` — read it and fix the route, do not retry.
 
-**Nunca passe `model` nem `effort` no `Agent` de um `gad-*`** (E7): a def pina os dois, e o
-`gad-lifecycle.sh` nega a chamada com `deny` + evento `incidente`. O mesmo hook nega a retomada
-de um `gad-spec`/`gad-discuss` que já devolveu `done` e o 2º despacho de um deles quando o
-artefato (`NN-SPEC.md`/`NN-CONTEXT.md`) já está no disco (E3). Negação traz a razão no
-`permissionDecisionReason` — **leia a razão e corrija a rota**, não re-tente.
-
-Por dentro da revisão (contrato que a camada 0 precisa saber para auditar, o detalhe é do
-`prompts/intent.md`): as lanes são lançadas em background por
-`scripts/roda-lanes.sh <phase_dir> <NN> <C> <briefing> --prova <arquivo>`, que retorna em < 1 s
-com `{run_id, pids, status_paths}`, e o `gad-verificador` é despachado **no mesmo turno** com
-esse `run_id` — nunca um turno só para esperar. A autoridade sobre a lane é o status
-`.intent/.status-c<C>-<lane>.json` (`usable` = o parecer serve · `independent` = nonce e modelo
-provados), **não** o marcador `.done`. Entre a triagem e o briefing do ciclo seguinte entra a
-**releitura** (R1): o `gad-verificador` em modo `releitura` (`prompts/intent-releitura.md`) relê
-a emenda commitada do ciclo e, se acusar item, a correção sai no mesmo turno antes do briefing.
-O orçamento — lanes+verificador · triagem+correções+commit · releitura · briefing = 4 turnos por
-ciclo (5 quando a releitura corrigiu) — é **régua de auditoria** medida pela `/audit-gad` no
-transcript, não contagem em sessão.
-
-**1.3 — Roteamento do retorno.**
-- **`done`** → gate de rota 9b (`confere-rotas.sh`; exit 1 devolve ao MESMO subagente) +
-  `confere-etapa.sh 1` (inclui `confere-reconciliacao.sh --final`: lista as D-NN que citam
-  critério mudado desde a base selada, `D-NN-DESATUALIZADA`, informativo até uma fase real medir
-  M9; cancela mecânica —
-  SPEC/CONTEXT/review fechado/chain zerada/limpeza `.intent/` — e o `end` medido; exit 1
-  devolve ao MESMO subagente). Guarde do retorno: `transparencia`
-  (insumo da 6.2), `sinos` (pro banner) e anuncie `pausas_de_negocio` numa linha. Sinos com
-  **revisão pulada** (`intent_review: skipped`) → evento `skip` + linha ao usuário + item
-  obrigatório nos `itens_nao_rodados` (transparência de topo, não rodapé). Siga.
-- **`needs_decision`** — achado que mexe em requisito/critério/oráculo, ou impasse (gate duro
-  por definição — critério 2 da Sub-rotina I; janela de silêncio → parada graciosa) →
-  `AskUserQuestion` (recomendação primeiro) e **continue o MESMO subagente** com as respostas
-  verbatim; roteie o novo retorno por esta lista.
-  - **Sub-caso `pre_spec_bloco: ausente|invalido`** (só quando o SPEC ou o CONTEXT ainda não
-    existem; fail-closed do `confere-pre-spec.sh` — PRE-SPEC presente sem o bloco `gad:decisoes`
-    legível por máquina, ou com bloco inválido): a pergunta
-    tem duas saídas — **(a) migrar** o PRE-SPEC para o bloco (`scripts/pre-spec-migra.py` gera
-    um rascunho a partir da prosa **para o dono revisar** — ele não decide nada; é ferramenta de
-    legado, só para PRE-SPECs anteriores à 2.2.0) ou **(b)
-    autorizar a rota antiga**, em que o filho lê o arquivo inteiro e o sino
-    `pre_spec_sem_bloco` é obrigatório no retorno e no INTENT-REVIEW. Nunca siga com "zero
-    decisões" em silêncio. A resposta é durável (`.intent/pre-spec-route.json`) e vale enquanto
-    o hash do PRE-SPEC não mudar.
-- **`blocked`** — os DOIS consultores instalados mas falhos sem nenhum ciclo completo
-  (fail-closed, decisão de 02/07: sem segunda opinião a intenção não segue; UM falho desce
-  degradado com sino; NENHUM instalado vira `skipped` no pré-check) → **Sub-rotina D**. O
-  `intent_review: blocked` já está no disco (a próxima invocação re-tenta). Handoff: "🔔
-  revisão de intenção bloqueada — autentique um dos revisores e re-rode `/go-and-do N`."
+**1.3 — Routing the return.**
+- `done` → route gate: `confere-rotas.sh <phase_dir>/.intent` (exit 1 → back to the SAME
+  subagent, step 7b of intent.md, fail-closed) → `confere-etapa.sh 1` (includes
+  `confere-reconciliacao.sh --final`: lists the D-NN citing a criterion changed since the
+  sealed base, `D-NN-DESATUALIZADA`, informative; mechanical fence — SPEC/CONTEXT/review
+  closed/chain zeroed/`.intent/` cleanup — and the measured `end`; exit 1 → same subagent).
+  Keep from the return: `transparencia` (input of 6.2), `sinos` (for the banner) and announce
+  `pausas_de_negocio` in one line. Bells with a skipped review (`intent_review: skipped`) →
+  `skip` event + a line to the user + mandatory item in `itens_nao_rodados`. Continue.
+- `needs_decision` — finding that touches requirement/criterion/oracle, or a deadlock (hard
+  gate by definition, criterion 2 of Sub-rotina I; silence window → graceful pause) →
+  `AskUserQuestion` (recommendation first) and continue the SAME subagent with the verbatim
+  answers; route the new return by this list.
+  - Sub-case `pre_spec_bloco: ausente|invalido` (only while SPEC or CONTEXT do not exist yet;
+    fail-closed of `confere-pre-spec.sh`): the question has two exits — (a) migrate the
+    PRE-SPEC to the block (`scripts/pre-spec-migra.py` drafts it from the prose for the owner to
+    review) or (b) authorize the legacy route (the child reads the whole file; the
+    `pre_spec_sem_bloco` bell is mandatory in the return and in the INTENT-REVIEW). Never
+    continue with "zero decisions" in silence. The answer is durable
+    (`.intent/pre-spec-route.json`) while the PRE-SPEC hash does not change.
+- `blocked` — BOTH consultants installed but failing with no complete cycle (fail-closed,
+  decision of 02/07: without a second opinion the intent does not proceed; ONE failing
+  continues degraded with a bell; NONE installed becomes `skipped` in the pre-check) →
+  Sub-rotina D. `intent_review: blocked` is already on disk (the next invocation retries).
+  Handoff: "🔔 revisão de intenção bloqueada — autentique um dos revisores e re-rode
+  `/go-and-do N`."
 
 </stage>
 
 <stage id="1.5" name="Contratos de design">
 
-## Etapa 1.5 — Contratos de design
+> Before planning because `gsd-plan-phase` consumes UI-SPEC/AI-SPEC as locked design and the
+> 4.2/4.3 gates audit against them.
 
-> Antes do planejamento porque o `gsd-plan-phase` consome UI-SPEC/AI-SPEC como design travado
-> e os gates 4.2/4.3 auditam contra eles.
+**1.5.1 — Mechanical setup.** `setup-contratos.sh <phase_dir> <NN> [--ui] [--ai]`: both
+`pular`/`sem-flag` → skip the whole stage. `config_corrigida` non-empty → transparency (the
+owner's flag beat a forgotten config — declared flip).
 
-**1.5.1 — Setup mecânico.** `setup-contratos.sh <phase_dir> <NN> [--ui] [--ai]`: ambos
-`pular`/`sem-flag` → pule a etapa inteira. `config_corrigida` não-vazio → transparência (flag
-do dono venceu config esquecida — flip declarado).
+**1.5.2 — Dispatch.** `pre-despacho.sh 1.5` → dispatch the agent `gad-contratos` (Opus 5
+medium, with Agent and Skill) with `prompts/contratos.md` + flags + the setup JSON. It hosts
+`gsd-ui-phase` and `gsd-ai-integration-phase` inline (order UI → IA).
 
-**1.5.2 — Despacho.** `pre-despacho.sh 1.5` → despache o agente **`gad-contratos`** (Opus 5
-medium, com Agent e Skill) com `prompts/contratos.md` + flags + JSON do setup. Ele hospeda
-`gsd-ui-phase` e `gsd-ai-integration-phase` INLINE (ordem UI → IA).
-
-**1.5.3 — Roteamento.** `done` → `confere-etapa.sh 1.5` (asserts por flag; exit 1 devolve);
-sinos → transparência. `needs_decision` (stops herdados — detalhe em
-`workflow-ui.md`/`workflow-ai.md`) → triagem I; resposta continua o MESMO subagente.
+**1.5.3 — Routing.** `done` → `confere-etapa.sh 1.5` (asserts per flag; exit 1 sends back);
+bells → transparency. `needs_decision` (inherited stops — detail in
+`workflow-ui.md`/`workflow-ai.md`) → Sub-rotina I; the answer continues the SAME subagent.
 `blocked` → Sub-rotina D.
 
 </stage>
 
 <stage id="2" name="Planejamento">
 
-## Etapa 2 — Planejamento
+**2.1 — Resume.** Obey `etapa_2` from abre-rodada: `pular` → Etapa 2.5; `despachar` → 2.2.
 
-**2.1 — Retomada.** Obedeça `etapa_2` do abre-rodada: `pular` → Etapa 2.5; `despachar` → 2.2.
+**2.2 — Exit fence.** `pre-despacho.sh 2`.
 
-**2.2 — Cancela de saída.** `pre-despacho.sh 2`.
+**2.3 — Plan (via subagent).** Dispatch the agent `gad-plan` (Opus 5 medium — the entry
+judgments have high leverage) with `prompts/plan.md` (`N`, `NN`, `phase_dir`, `project_root`,
+base args `N --tdd`): it judges research (2.D) · mapper (2.E) · granularity (2.G), invokes
+`gsd-plan-phase` and persists the checker trail (`.plan-checker/iter-N.yaml`, 2.B). Routing:
+`done · planejado` → 2.4 (note research/mapper/granularity/bells for transparency) ·
+`done · sem_plano` → `stop` event, stop · `needs_decision` → question + continuation ·
+`blocked` → `stop`, stop.
 
-**2.3 — Planejar (via subagente).** Despache o agente **`gad-plan`** (Opus 5 medium — os
-julgamentos de entrada têm alta alavancagem) com `prompts/plan.md` (`N`, `NN`, `phase_dir`,
-`project_root`, args-base `N --tdd`): ele julga pesquisa (2.D, viés pesquisar) · mapper
-(2.E, só fase que cria arquivo novo) · granularidade (2.G), invoca o `gsd-plan-phase` e
-persiste a trilha do checker (`.plan-checker/iter-N.yaml`, 2.B). Roteamento:
-`done · planejado` → 2.4 (anote pesquisa/mapper/granularidade/sinos p/ transparência) ·
-`done · sem_plano` → evento `stop`, **pare** · `needs_decision` → pergunta + continuação ·
-`blocked` → `stop`, **pare**.
+**2.4 — Arrival fence.** `confere-etapa.sh 2` — asserts + extraction of `nao_autonomos` +
+mapper bell. Exit 1 → send the list of what is missing back to the SAME subagent, whatever it claimed.
 
-**2.4 — Cancela de chegada.** `confere-etapa.sh 2` — asserts + extração `nao_autonomos` +
-sino do mapper. Exit 1 → devolva ao MESMO subagente a lista do que falta, não importa o que
-ele alegou.
+**2.4b — Close: `autonomous: false` resolved HERE (2.H).** For each plan in `nao_autonomos`,
+classify the checkpoint:
+- (a) decision answerable by text → ask NOW (the owner is present at the end of planning);
+  the answer becomes a `DECISAO-DO-DONO` block attached to the execution dispatch; flip the
+  plan to `autonomous: true`.
+- (b) foreseeable human action (key, migration, login) → write `<phase_dir>/NN-ACAO-HUMANA.md`
+  with the detailed step by step; the owner executes and confirms → flip the plan and delete
+  the file (the fact becomes one line in `NN-DECISOES.md`).
+- (c) runtime verification (`human-verify`) → deferred to the UAT (redundant with it): flip
+  and the item enters the Etapa 5 agenda.
+- (d) foreseeable `<precondition>` — beyond the `autonomous: false`, scan the PLAN.md for
+  `<precondition>` (env var, `user_setup` step, artifact of a previous phase). A precondition
+  you can check NOW that is false → it is a (b): goes into `NN-ACAO-HUMANA.md` before
+  execution instead of becoming `blocking-human` mid-wave. True or uncheckable → leave it
+  (the executor checks at run time).
 
-**2.4b — Fecho: `autonomous: false` resolvido AQUI (2.H).** Para cada plano em
-`nao_autonomos`, classifique o checkpoint:
-- **(a) decisão respondível por texto** → pergunte AGORA (o dono está presente no fim do
-  planejamento); a resposta vira bloco `DECISAO-DO-DONO` anexado ao despacho da execução;
-  flipe o plano para `autonomous: true`.
-- **(b) ação humana antecipável** (chave, migration, login) → escreva
-  `<phase_dir>/NN-ACAO-HUMANA.md` com o passo a passo DETALHADO; o dono executa e confirma →
-  flipe o plano e **apague o arquivo** (o fato vira 1 linha no `NN-DECISOES.md`).
-- **(c) verificação de runtime** (`human-verify`) → deferida ao UAT (redundante com ele):
-  flipe e o item entra na pauta da Etapa 5.
-- **(d) `<precondition>` antecipável** — além dos `autonomous: false`, varra os PLAN.md por
-  `<precondition>` (GSD 1.11.0: env var, passo de `user_setup`, artefato de fase anterior).
-  Precondição que você consegue checar AGORA e está falsa → é uma (b): entra no
-  `NN-ACAO-HUMANA.md` antes da execução, em vez de virar `blocking-human` no meio de uma
-  onda. Verdadeira ou incheckável → deixe (o executor checa na hora).
-Efeito: a rota inline da Etapa 3 vira exceção raríssima.
+</stage>
+
+<stage id="2.5" name="Convergência do plano">
+
+- `has_verification` (phase already built and verified) → skip 2.5, go to Etapa 3.
+- `pre-despacho.sh 2.5` and obey `despacho`: `pular` (marker present) → Etapa 3 ·
+  `skip_config` → declared degradation (`itens_nao_rodados`) and continue ·
+  `bloqueio_sem_revisor` (exit 4 — PC-6: NO external reviewer installed, the phase does NOT
+  continue) → ⏸️ relay `pergunta_ao_dono` and stop · `ok` → dispatch (one absent = continue
+  with the other; the `revisores` field says which).
+- Dispatch via Sub-rotina H with `prompts/convergence.md`: the subagent hosts
+  `gsd-plan-review-convergence --codex --agy-revisor --max-cycles 3` (lanes via
+  `roda-codex.sh`/`roda-agy.sh`), registers cycles (`registra-ciclo.sh`) and writes the marker
+  (`grava-convergence.sh`).
+- Routing: `done · convergiu` → `confere-etapa.sh 2.5`; note `revisores_efetivos`/`sinos` and
+  continue · `done · escalou` → `stop`, stop with the digested impasse · `needs_decision` →
+  question + continuation · `blocked` → `stop`, stop.
 
 </stage>
 
 <stage id="3" name="Construção">
 
-## Etapa 3 — Construção
+**3.1 — Resume.** `has_verification` → skip the whole Etapa 3 (plans arrive already flipped
+by 2.4b).
 
-**3.1 — Retomada.** `has_verification` → pule a Etapa 3 inteira. (A pré-detecção de ações
-humanas MORREU aqui — o fecho 2.4b já resolveu; os planos chegam flipados.)
+**3.2 — Parallelism (mechanical authority).** The `pre-despacho.sh 3` that opens 3.3 (🔒)
+reads `use_worktrees`/`parallelization`, applies `baseRef: head` via `worktree set-baseref`,
+runs the `base-check` and measures the waves of ≥2 incomplete plans.
+- `despacho: ok` → go to 3.3.
+- `despacho: bloqueio_paralelismo` (exit 4) → ⏸️ `AskUserQuestion` with the JSON's
+  `pergunta_ao_dono`, which already carries the real `base-check` message — or, when `motivo`
+  starts with `plan_gate_ausente_ou_reprovado:`, the choice «replanejar (volta à etapa 2) ou
+  aceitar o despacho sabendo que a onda pode serializar». Do not diagnose on your own nor
+  apply an antidote by hand: the script measures instead of presuming.
+- The close of 3.3 (`confere-etapa.sh 3`) extracts `paralelismo_observado` from the run-log (with
+  `duracao_onda_s`/`plano_mais_lento_s`), `suite` (launches of `roda-suite.sh`) and
+  `prova_avisos`/`prova_falhas` from the SUMMARYs — informative, for the `/audit-gad`
+  briefing — and fails if `use_worktrees` turned `false` during the stage.
 
-**2.5 — Convergência do plano (via subagente).**
-- `pre-despacho.sh 2.5` e obedeça `despacho`: `pular` (marcador presente) → 3.3 ·
-  `skip_config` → degradação declarada (itens_nao_rodados) e siga · `bloqueio_sem_revisor`
-  (exit 4 — PC-6: NENHUM revisor externo instalado, a fase NÃO continua) → ⏸️ repasse a
-  `pergunta_ao_dono` e pare · `ok` → despache (um ausente = segue com o outro; o campo
-  `revisores` diz quais).
-- Despache pela Sub-rotina H com `prompts/convergence.md`: o subagente monta o briefing
-  direcionado (trilha do plan-checker como "não re-litigue" + ênfase A-domínio/B-mundo),
-  hospeda `gsd-plan-review-convergence --codex --agy-revisor --max-cycles 3` (lanes por
-  `roda-codex.sh`/`roda-agy.sh` — frescor, evidência de modelo e canário em exit code),
-  registra ciclos (`registra-ciclo.sh`) e grava o marcador (`grava-convergence.sh`).
-- Roteamento: `done · convergiu` → `confere-etapa.sh 2.5`; anote `revisores_efetivos`/`sinos`
-  e siga · `done · escalou` → `stop`, **pare** com o impasse mastigado · `needs_decision` →
-  pergunta + continuação · `blocked` → `stop`, **pare**.
+**3.3 — Execution.** The fence opened in 3.2 (`pre-despacho.sh 3`). Default route = subagent (re-check `nao_autonomos`):
+- All autonomous (normal case) → subagent with `prompts/execute.md` (args
+  `N --auto --no-transition`): hosts `gsd-execute-phase` — executor waves (layer 2) → code +
+  commits + SUMMARY → verification. Inherited stops become `needs_decision`; human action →
+  `done · incompleto`. Routing: `done` (any verdict) → 3.4 (the crossroads reads the DISK,
+  not the return) · `needs_decision` → question + continuation · `blocked` → `stop`, stop.
+- Some `autonomous: false` left → inline (`Skill gsd-execute-phase --auto --no-transition` in
+  layer 0 — human interaction is native here). `--auto` auto-approves verification checkpoints
+  and takes option 1 at decision ones; `--no-transition` prevents auto-advance. `--auto` does
+  NOT silence regression/schema/conflict/`human-action`/`blocking-human` (see stop_points);
+  if the owner defers an action, 3.4 closes via Sub-rotina D on the way back. Test-suite
+  discipline (suite as gate, at most 1× per wave) lives in `prompts/execute.md`.
 
-**3.3 — Execução.** `pre-despacho.sh 3`. Rota padrão = subagente (re-confira
-`nao_autonomos`):
-- **Todos autônomos (caso normal) → subagente** com `prompts/execute.md` (args
-  `N --auto --no-transition`): hospeda o `gsd-execute-phase` — ondas de executor (camada 2) →
-  código + commits + SUMMARY → verificação. Paradas herdadas viram `needs_decision`; ação
-  humana → `done · incompleto`. Roteamento: `done` (qualquer veredito) → siga pra 3.4 (a
-  encruzilhada apura pelo DISCO, não pelo retorno) · `needs_decision` → pergunta +
-  continuação · `blocked` → `stop`, pare.
-- **Sobrou `autonomous: false` → inline** (`Skill gsd-execute-phase --auto --no-transition`
-  na camada 0 — a interação humana é nativa aqui). `--auto` auto-aprova checkpoints de
-  verificação e pega a 1ª opção nos de decisão; `--no-transition` impede o auto-avanço. ✋
-  `--auto` NÃO silencia regressão/schema/conflito/`human-action`/`blocking-human` (ver
-  Paradas herdadas); se o dono defere uma ação, a 3.4 fecha pela Sub-rotina D na volta.
-
-> ⚖️ Trade-off do `--auto` (consciente): decisões de arquitetura saem no automático (1ª
-> opção). Aceitável porque a skill manda toda "lógica" pro UAT e trata `human_needed`.
-> 🧪 Economia de testes (princípio agnóstico de stack): suíte completa é gate, não feedback —
-> no máximo 1× por wave; o feedback do TDD são os testes do escopo tocado. Timeout de suíte
-> dimensionado pela duração medida (folga ≥2×). Parâmetros por projeto no CLAUDE.md do
-> projeto.
-
-**3.4 — Encruzilhada.** Primeiro a completude: `gsd_run query phase-plan-index N` (lib da
-Sub-E) — sobrou plano sem `SUMMARY.md` → **execução incompleta — bloqueada** → Sub-rotina D
-com a ação exata (não trate como `human_needed`). Senão, o status do VERIFICATION.md:
-- **ausente** (verificação nunca rodou) → re-execute pela regra da 3.3 (idempotência pula os
-  prontos). Persistiu → D.
-- `passed` → Etapa 4 · `human_needed` → anota (vira PENDING do UAT) e segue ·
+**3.4 — Crossroads.** Completeness first: `gsd_run query phase-plan-index N` (lib of
+Sub-rotina E) — a plan without `SUMMARY.md` → execution incomplete, blocked → Sub-rotina D with
+the exact action (never treat it as `human_needed`). Otherwise, the VERIFICATION.md status:
+- absent (verification never ran) → re-execute by the 3.3 rule (idempotence skips the done
+  ones). Persisted → D.
+- `passed` → Etapa 4 · `human_needed` → note it (becomes PENDING of the UAT) and continue ·
   `gaps_found` → 3.5.
 
-**3.5 — Fechamento de gaps (1× só).** Replaneja (`prompts/plan.md`, args `N --gaps`) →
-**1b:** ancore a re-convergência: acrescente ao frontmatter do `NN-CONVERGENCE.md` a linha
-`gap_replan: "<data> — N planos gap_closure; commits <shas>"` e commite (sem isso a 2ª
-revisão só existe no git) → re-executa (regra da 3.3) → re-verifica. `passed`/`human_needed`
-→ Etapa 4; ainda `gaps_found` → **Sub-rotina D** (`gaps persistentes`). Só 1 tentativa — o
-resto merece decisão humana.
+**3.5 — Gap closure (1× only).** Replan (`prompts/plan.md`, args `N --gaps`) → anchor the
+re-convergence: add to the `NN-CONVERGENCE.md` frontmatter the line
+`gap_replan: "<data> — N planos gap_closure; commits <shas>"` and commit → re-execute (3.3
+rule) → re-verify. `passed`/`human_needed` → Etapa 4; still `gaps_found` → Sub-rotina D
+(`gaps persistentes`). One attempt only.
 
 </stage>
 
 <stage id="4" name="Gates de qualidade">
 
-## Etapa 4 — Gates de qualidade
+> Layer 0 fully mechanized (4.A): for EACH gate, `pre-despacho.sh 4-<gate>` resolves
+> flag/config/resume into an exit code and `confere-etapa.sh 4-<gate>` asserts the artifact
+> and extracts the canonical verdict. What remains for judgment: digesting `needs_decision`
+> and the 🔔 prose at the close.
 
-> Camada 0 100% mecanizada (4.A): para CADA gate, `pre-despacho.sh 4-<gate>` resolve
-> flag/config/retomada num exit code e `confere-etapa.sh 4-<gate>` asserta o artefato E
-> extrai o veredito canônico — você NUNCA relê relatório de gate; roteia pelo dado extraído.
-> O que fica de julgamento: mastigação de `needs_decision` e a prosa do 🔔 no fecho.
+### 4.1 — Code review (via subagent)
+- `pre-despacho.sh 4-code-review` → `ok`? Dispatch via Sub-rotina H with
+  `prompts/code-review.md` (`iteracao: 1`): hosts `gsd-code-review N --fix --auto` with the
+  parallel Codex lane (4.D, merged as `fonte: codex`; codex absent does not block). Iterations
+  2+ and the 4.1b gate dispatch with `iteracao: 2+` — the subagent narrows via
+  `calcula-files.sh` (4.C).
+- On return: `confere-etapa.sh 4-code-review` (extracts `status`/`critical`/`warning`/
+  `total`). Always continues; remaining `critical` → strong 🔔. Keep `uat_humano` (input of
+  5.3). `needs_decision` → question + continuation. `blocked` → `stop`, stop.
 
-### 4.1 — Code review (via subagente)
-- `pre-despacho.sh 4-code-review` → `ok`? Despache pela Sub-rotina H com
-  `prompts/code-review.md` (`iteracao: 1`): hospeda `gsd-code-review N --fix --auto` COM a
-  lane Codex paralela (4.D: parecer bruto → funil `gad-verificador` → merge com
-  `fonte: codex` — codex ausente não bloqueia, o reviewer interno é o piso). Iterações 2+ e o
-  gate 4.1b despacham com `iteracao: 2+` — o subagente estreita via `calcula-files.sh` (diff
-  desde o último review + dependentes reversos de 1 salto, 4.C).
-- Ao voltar: `confere-etapa.sh 4-code-review` (extrai `status`/`critical`/`warning`/`total`).
-  Sempre segue; `critical` restante → 🔔 forte. Guarde `uat_humano` (insumo da 5.3).
-  `needs_decision` → pergunta + continuação. `blocked` → `stop`, pare.
+### 4.2 — UI review · only with `--ui` → conduct by `workflow-ui.md`.
 
-### 4.2 — UI review · só com `--ui` → conduza pelo `workflow-ui.md`.
+### 4.3 — Eval review · only with `--ai` → conduct by `workflow-ai.md`.
 
-### 4.3 — Eval review · só com `--ai` → conduza pelo `workflow-ai.md`.
+### 4.4 — Secure phase (via subagent)
+- `pre-despacho.sh 4-secure` → `ok`? Dispatch with `prompts/secure.md`. A threat decision
+  comes up as `needs_decision` already digested (4.E: threat, severity, options with the
+  recommendation first).
+- On return: `confere-etapa.sh 4-secure` — exit ≠ 0 (`threats_open` > 0 or acceptance
+  without owner) is the ONLY blocking gate of the stage: ⏸️ stop. Secure touched src/ AFTER
+  the review → gate 4.1b: `calcula-files.sh --tocados "<arquivos>"` → narrowed re-dispatch of
+  4.1.
 
-### 4.4 — Secure phase (via subagente)
-- `pre-despacho.sh 4-secure` → `ok`? Despache com `prompts/secure.md`. Decisão de ameaça sobe
-  (`needs_decision`) — **mastigação antecipada (4.E):** prepare a decisão mastigada (ameaça,
-  severidade, opções com recomendação primeiro) ao recebê-la — o custo real do gate era a
-  espera da pergunta crua.
-- Ao voltar: `confere-etapa.sh 4-secure` — exit ≠ 0 (threats_open > 0 ou aceite sem dono) é o
-  ÚNICO bloqueio da etapa: ⏸️ pare. Secure tocou src/ DEPOIS do review → gate 4.1b:
-  `calcula-files.sh --tocados "<arquivos>"` → re-despacho da 4.1 estreitado.
-
-### 4.5 — Validate phase (via subagente)
-- `pre-despacho.sh 4-validate` → `ok`? Despache com `prompts/validate.md`. ⏸️ Gaps →
-  `needs_decision` (Fix all recomendado). Ao voltar: `confere-etapa.sh 4-validate`. Segue.
+### 4.5 — Validate phase (via subagent)
+- `pre-despacho.sh 4-validate` → `ok`? Dispatch with `prompts/validate.md`. ⏸️ Gaps →
+  `needs_decision` (Fix all recommended). On return: `confere-etapa.sh 4-validate`. Continue.
 
 </stage>
 
 <stage id="5" name="UAT interativo automatizado">
 
-## Etapa 5 — UAT interativo automatizado
+> Own UAT, not raw `verify-work`: we reuse the derivation LOGIC (5.3) and drive the browser
+> ourselves (5.4, subagent + `uat-playbook.md`). The UAT interacts for real and proves
+> objectively (HTTP status + console + persisted state).
 
-> UAT próprio, não `verify-work` cru: reusamos a LÓGICA de derivação (5.3) e dirigimos o
-> browser por conta própria (5.4, subagente + `uat-playbook.md`). O UAT **interage de
-> verdade** e **prova objetivamente** (status HTTP + console + estado persistido).
+The 4 baskets (full craft in `uat-playbook.md`; here you only route): 1 · pass — objective
+proof closed · 2 · issue — failed objectively → fix cycle (5.5) · 3 · não-pude-verificar —
+login without vault, 2FA, captcha → `[pending]`/`blocked`, blocks the ship (hand-back) ·
+4 · assumed — only subjective judgment left → ships with a warning in the resumo.
 
-**Os 4 baldes** (a craft completa está no `uat-playbook.md`; aqui você só roteia):
-- **1 · pass** — prova objetiva fechou.
-- **2 · issue** — falhou objetivamente → ciclo de conserto (5.5).
-- **3 · não-pude-verificar** — login sem vault, 2FA, captcha → `[pending]`/`blocked`;
-  **bloqueia o ship** (hand-back).
-- **4 · assumed** — só sobra juízo subjetivo → shipa **com aviso** no resumo.
+**5.1 — Resume (by STATE of `NN-UAT.md`).** Absent → 5.3 · without `pre_uat: executed` → 5.4
+(the subagent is idempotent per scenario) · `executed` + `issue` without
+`pre_uat_fix_cycle: done` → 5.5 · with the marker → Sub-rotina D (never a 2nd cycle) ·
+`executed` without open `issue` → Etapa 6.
 
-**5.1 — Retomada (por ESTADO do `NN-UAT.md`).** Ausente → 5.3 · sem `pre_uat: executed` →
-5.4 (o subagente é idempotente por cenário) · `executed` + `issue` sem
-`pre_uat_fix_cycle: done` → 5.5 · com o marcador → **Sub-rotina D** (nunca um 2º ciclo) ·
-`executed` sem `issue` em aberto → Etapa 6.
-
-**5.3 — Geração do `NN-UAT.md` (via SUBAGENTE).** `pre-despacho.sh 5`. Despache um `Agent`
-(`model: sonnet`, síncrono) para reusar a derivação do verify-work:
-- (a0) **classificador mecânico primeiro (5.D):** `gsd_run query uat.classify-coverage
-  --summary` — deliverable coberto por teste automatizado passando entra `pass, source:
-  automated` sem virar cenário de browser (fail-safe: never drop a deliverable);
-- (a) find_summaries → (b) extract_tests — comportamentos user-observáveis; cenários visuais
-  do UI-SPEC (ou SUMMARY sem `--ui`); **cold-start smoke** só quando um SUMMARY tocou
-  server/app/db/migrations/seed/docker, limitado a boot + health ("clear ephemeral state" é
-  destrutivo → `[pending]` pro humano);
+**5.3 — Generate `NN-UAT.md` (via SUBAGENT).** `pre-despacho.sh 5`. Dispatch an `Agent`
+(`model: sonnet`, synchronous) to reuse the verify-work derivation:
+- (a0) mechanical classifier first (5.D): `gsd_run query uat.classify-coverage --summary` — a
+  deliverable covered by a passing automated test enters as `pass, source: automated` without
+  becoming a browser scenario (fail-safe: never drop a deliverable);
+- (a) find_summaries → (b) extract_tests — user-observable behaviors; visual scenarios from
+  the UI-SPEC (or SUMMARY without `--ui`); cold-start smoke only when a SUMMARY touched
+  server/app/db/migrations/seed/docker, limited to boot + health ("clear ephemeral state" is
+  destructive → `[pending]` for the human);
 - (c) create_uat_file — template `$HOME/.claude/gsd-core/templates/UAT.md`,
-  `status: testing`, tudo `[pending]`, frontmatter `pre_uat: generated`;
-- (d) **insumos dos revisores no despacho:** `uat_humano` da 4.1 + `human_needed` da 3.4 — é
-  aqui que o "vira UAT" prometido se materializa.
+  `status: testing`, all `[pending]`, frontmatter `pre_uat: generated`;
+- (d) reviewers' input in the dispatch: `uat_humano` from 4.1 + `human_needed` from 3.4 —
+  this is where the promised "becomes UAT" materializes.
 
-**5.4 — Execução do UAT (via SUBAGENTE — SEMPRE, com ou sem GUI).**
-> O subagente — não você — dirige o browser (trabalho verboso; janela própria). Fase sem GUI
-> NÃO é motivo para inline: o playbook tem `<non_gui_surfaces>` (CLI/API/lib — prova por
-> saída objetiva) e `<push_on_it>` (probes 🔍), que só operam se o subagente for despachado
-> com ele. Prova ao vivo atrás de segredos → a camada 0 PREPARA a via sancionada (wrapper) e
-> o subagente a roda.
+**5.4 — Run the UAT (via SUBAGENT — ALWAYS, with or without GUI).**
+> The subagent — not you — drives the browser. A phase without GUI is not a reason for
+> inline: the playbook has `<non_gui_surfaces>` (CLI/API/lib — proof by objective output) and
+> `<push_on_it>` (🔍 probes), which only operate if the subagent is dispatched with it. Live
+> proof behind secrets → layer 0 PREPARES the sanctioned path (wrapper) and the subagent runs
+> it.
 
-1. **O server é da janela do UAT (5.A):** o subagente sobe/derruba via `dev-server.sh`
-   (`workflow-dev-server.md`). Fase sem server: declare no prompt ("use
-   `<non_gui_surfaces>`").
-2. **Despacho:** `Agent` `model: sonnet`, `general-purpose`, síncrono. Prompt mínimo: "Leia
+1. The server belongs to the UAT window (5.A): the subagent brings it up/down via
+   `dev-server.sh` (`workflow-dev-server.md`). Phase without server: declare it in the prompt
+   ("use `<non_gui_surfaces>`").
+2. 🔒 `pre-despacho.sh 5` (context gate + checkpoint of the run; a resume that lands here
+   directly still opens the fence). Dispatch: `Agent` `model: sonnet`, `general-purpose`,
+   synchronous. Minimal prompt: "Leia
    `$HOME/.claude/skills/go-and-do/uat-playbook.md` e conduza o UAT da fase NN à risca. O
    `NN-UAT.md` está em `<uat_path>`. Sua janela é dona do dev server. Use a sessão
    `uat-fase-NN`. [Sem GUI: cenários são api/logic/cli — use `<non_gui_surfaces>`.] [Wrapper:
@@ -910,138 +412,129 @@ resto merece decisão humana.
    `<profile>`.] Classifique nos 4 baldes, aplique `<push_on_it>` no balde 1, escreva
    results/Gaps/evidências no `NN-UAT.md`. Devolva só o qualitativo do `<return_contract>` —
    números são contados por script."
-3. **Cancela:** `confere-etapa.sh 5` — reconcilia baldes/probes/evidência do disco, linta o
-   gap-YAML, roda o predicado nativo `uat-passed`, varre SEGREDOS (padrão-gitleaks, NUNCA PII
-   genérica) e, no pass, promove `pre_uat: executed` (escritor único — 5.C/5.E). Exit 1 →
-   devolva ao MESMO subagente. **Não** ingira o `NN-UAT.md`.
+3. Fence: `confere-etapa.sh 5` — reconciles baskets/probes/evidence from disk, lints the
+   gap-YAML, runs the native `uat-passed` predicate, scans for SECRETS (gitleaks-style
+   patterns, never generic PII) and, on pass, promotes `pre_uat: executed` (single writer —
+   5.C/5.E). Exit 1 → back to the SAME subagent. Do not ingest `NN-UAT.md`.
 
-> Regra cardeal do playbook: **nunca `pass` no ambíguo** — incerteza → balde 3. (O antigo
-> subagente de conversão de balde 3 morreu, 5.B: o balde 3 real é parede de login/2FA.)
+> Cardinal rule of the playbook: never `pass` on the ambiguous — uncertainty → basket 3 (the
+> real basket 3 is a login/2FA wall).
 
-**5.5 — Ciclo de conserto (1× só) quando há balde 2.**
-1. `pre-despacho.sh 5` (checkpoint do ciclo).
-2. Replaneja (`prompts/plan.md`, args `N --gaps` — lê os gaps do `NN-UAT.md`).
-3. Re-executa (regra da 3.3, args `... --gaps-only` — escopo estrito).
-4. **Re-review** nos arquivos do fix: despacho da 4.1 com `iteracao: 2+` — sem a checagem de
-   retomada (o `NN-REVIEW.md` existente é esperado; pular furaria a garantia "auditado antes
-   do ship" pro código novo).
-5. **Re-UAT só nos cenários `issue`** — mesma janela-dona-do-server, que sobe o server NOVO
-   (código pós-fix; superfície buildada → re-rodar build antes).
-6. `confere-etapa.sh 5 --fix-cycle` valida e carimba `pre_uat_fix_cycle: done` (escritor
-   único — a 5.1 usa isso pra nunca disparar um 2º ciclo).
-- Fechou → Etapa 6. Persistiu → **Sub-rotina D** (`bug de UAT persistente`).
+**5.5 — Fix cycle (1× only) when there is basket 2.**
+1. `pre-despacho.sh 5` (cycle checkpoint).
+2. Replan (`prompts/plan.md`, args `N --gaps` — reads the gaps from `NN-UAT.md`).
+3. Re-execute (3.3 rule, args `... --gaps-only` — strict scope).
+4. Re-review on the fix's files: 4.1 dispatch with `iteracao: 2+` — without the resume check
+   (the existing `NN-REVIEW.md` is expected; skipping would break "audited before ship" for
+   the new code).
+5. Re-UAT only on the `issue` scenarios — same server-owning window, which brings up the NEW
+   server (post-fix code; built surface → re-run the build first).
+6. `confere-etapa.sh 5 --fix-cycle` validates and stamps `pre_uat_fix_cycle: done` (single
+   writer — 5.1 uses it to never fire a 2nd cycle).
+- Closed → Etapa 6. Persisted → Sub-rotina D (`bug de UAT persistente`).
 
 </stage>
 
 <stage id="6" name="Encerramento + ship">
 
-## Etapa 6 — Encerramento + ship
+Two terminal routes: ship (happy path) and hand-back (returns without shipping).
 
-Duas rotas terminais: **ship** (caminho feliz) e **hand-back** (devolve sem shipar).
+**6.1 — Route the outcome (mechanical).** `pre-despacho.sh 6` and obey `rota`: `pausa`
+(basket 2 left) → Sub-rotina D · `handback` (basket 3 or `--no-ship`) → 6.4-HB · `ship` →
+6.4-SHIP. The JSON brings `git_remote` (trigger of route B), `uat_passed_raw` (the MEASURED
+native predicate — paste it into the ship briefing) and `transparencia` (5 extracted lists). You do not decide the route; you read the verdict.
 
-**6.1 — Roteia o desfecho (mecânico).** `pre-despacho.sh 6` e obedeça `rota`: `pausa`
-(sobrou balde 2) → Sub-rotina D · `handback` (balde 3 ou `--no-ship`) → 6.4-HB · `ship` →
-6.4-SHIP. O JSON traz `git_remote` (gatilho da rota B), `uat_passed_raw` (o predicado nativo
-MEDIDO — cola no briefing do ship) e `transparencia` (5 listas extraídas). Você não decide
-rota; lê o veredito.
+**6.2 — Compose "🔔 O que precisa de você agora" + transparency.** Gather what deserves
+attention even though the run continued: review Criticals (+ `uat_humano`), UI pillars 1–2 /
+Registry Safety, eval below PRODUCTION READY, partial validation, `ciclo_final_nao_rodou` from
+the intent, and the leftovers — the `[desejável]` criteria not met, one per line, with the
+plan they stayed in (`must_haves.desejaveis` of the PLAN.md × `## Desejáveis pendentes` of the
+VERIFICATION.md). A leftover is closing information, not a replan pending. The transparency
+lists already came EXTRACTED in 6.1 (basket 4 · basket 3 · `transparencia:` of the
+INTENT-REVIEW · run-log skips · `riscos_aceitos` from secure — a risk acceptance is the
+owner's signature: they REVIEW it in the resumo, they do not discover it in the code). Your job is to write the prose.
 
-**6.2 — Monta o "🔔 O que precisa de você agora" + transparência.** Junte o que merece
-atenção mesmo tendo seguido: Criticals do review (+ `uat_humano`), pilares de UI 1–2 /
-Registry Safety, eval abaixo de PRODUCTION READY, validação partial, `ciclo_final_nao_rodou`
-da intenção, e as **Sobras** — os critérios `[desejável]` não atendidos, um por linha, com o
-plano em que ficaram (`must_haves.desejaveis` dos PLAN.md × `## Desejáveis pendentes` do
-VERIFICATION.md). Sobra é informação de fecho, não pendência de replan (D1). As listas de
-transparência já vieram EXTRAÍDAS na 6.1 (balde 4 · balde 3 ·
-`transparencia:` do INTENT-REVIEW · skips do run-log · `riscos_aceitos` do secure — aceite de
-risco é assinatura do dono: ele REVÊ no resumo, não descobre no código). Seu trabalho é só
-REDIGIR.
+**6.3 — Executive summary (final mode).** Sub-rotina F with `modo: final`, the outcome and
+the 6.2 lists. F writes the transparency block at the TOP. Idempotent. Commit as per F.
+> Order: the resumo is committed BEFORE the close — it enters the tree the ship packages.
 
-**6.3 — Resumo executivo (modo final).** **Sub-rotina F** com `modo: final`, o desfecho e as
-listas da 6.2. A F escreve o bloco de transparência no TOPO. Idempotente. Commit conforme a
-F.
-> Ordem: o resumo é commitado ANTES do close — entra na árvore que o ship empacota.
-
-**6.3b — Árvore limpa pro ship.** `commita-artefatos.sh <phase_dir> <NN> uat` (escritor
-único; vale para ambas as rotas). **Evidência movida = `NN-UAT.md` emendado no mesmo passo:**
-evidência estacionada fora do git (ex.: PDF com segredo) → o campo `evidencia:` do cenário
-aponta o paradeiro REAL com o motivo — path fantasma é defeito de fecho (a prova deixa de ser
-auditável).
-Exit 1 = recusa do teto de segurança (`uat-evidencia/` com mais de 20 arquivos): trate como
-bloqueio de ambiente, não como o best-effort dos outros modos. Não siga para o ship; repasse
-a mensagem de `RECUSA:` ao dono — ela já traz a contagem e o caminho — e aguarde a seleção
-manual dos arquivos legítimos. Na recusa o script sai antes de qualquer `git add`, então o
-`NN-UAT.md` também não foi commitado; e re-rodar devolve a mesma recusa.
+**6.3b — Clean tree for the ship.** `commita-artefatos.sh <phase_dir> <NN> uat` (single
+writer; both routes). Moved evidence = `NN-UAT.md` amended in the same step: evidence parked
+outside git (e.g. a PDF with a secret) → the scenario's `evidencia:` field points to the REAL
+location with the reason (a ghost path makes the proof unauditable). Exit 1 = refusal of the
+safety ceiling (`uat-evidencia/` with more than 20 files): treat as an environment block, not
+best-effort. Do not proceed to the ship; relay the `RECUSA:` message to the owner — it carries
+the count and the path — and wait for manual selection of the legitimate files. On refusal
+the script exits before any `git add`, so `NN-UAT.md` is not committed either; re-running
+returns the same refusal.
 
 **6.4-SHIP — Ship.**
-- **Rota B (`git_remote: false` — 6.E, julgamento seu):** o projeto shipa por caminho próprio
-  por design. Descubra o ship alternativo nos artefatos do PRÓPRIO projeto (skills do
-  projeto, CLAUDE.md) e **execute com autorização prévia** (decisão do dono 09/08 — sem
-  perguntar nem hand-back), registrando escolha e porquê no `NN-DECISOES.md`. Não achou
-  caminho → `blocked` honesto. NENHUMA config canônica nova — a fonte é o projeto, o juiz é
-  você. **Merge automático** do caminho próprio (ex.: `ship.py --merge`) é rota aprovada
-  (dono, 27/08) — não pergunte; mas guarde o nº/URL do PR e o fato "mergeado" para a 6.4c
-  e o banner (o que faltou na F24.3 foi o aviso, não a ação).
-- **Rota A (com remote) — via subagente** com `prompts/close.md`: hospeda a skill
-  `close-phase N` (learnings → promoção com evidência "UAT automatizado" → commit docs → PR →
-  revisão auto-"Skip" carimbada → merge direto, 6.D). Freio herdado: só promove/shipa com o
-  predicado nativo `phase uat-passed` limpo — ⚠️ **`assumed` (balde 4) REPROVA nesse
-  predicado** e o freio segura-e-pergunta (por design). **Não afirme o estado do gate no
-  briefing** — cole o `uat_passed_raw` MEDIDO da 6.1 (estado de gate se mede, não se
-  presume).
-- Roteamento: `done · shipado` → guarde PR (#N e URL) e siga pra 6.4c · `done ·
-  uat_reprovado` → o freio agiu (investigue `motivo_reprovacao` pelo disco) → **Sub-rotina
-  D** · `needs_decision` (uat-passed bloqueia-e-pergunta) → pergunta + continuação ·
-  `blocked` (ambiente: sem origin, gh não autenticado, branch errado) → **respeite**: evento
-  `stop` (`pausa: ship bloqueado — <motivo>`), anote no banner e pare (re-rodar retoma no
-  ship).
+- Route B (`git_remote: false` — 6.E, your judgment): the project ships by its own path by
+  design. Find the alternative ship in the PROJECT's own artifacts (project skills, CLAUDE.md)
+  and execute with prior authorization (owner's decision 09/08 — no question, no hand-back),
+  recording choice and reason in `NN-DECISOES.md`. No path found → honest `blocked`. No new
+  canonical config — the source is the project, the judge is you. Automatic merge of the own
+  path (e.g. `ship.py --merge`) is an approved route (owner, 27/08) — do not ask; keep the PR
+  number/URL and the fact "mergeado" for 6.4c and the banner.
+- Route A (with remote) — via subagent with `prompts/close.md`: hosts the skill
+  `close-phase N` (learnings → promotion with evidence "UAT automatizado" → docs commit → PR
+  → auto-"Skip" review stamped → direct merge, 6.D). Inherited brake: it only promotes/ships
+  with the native `phase uat-passed` predicate clean — `assumed` (basket 4) FAILS that
+  predicate and the brake holds-and-asks (by design). Do not assert the gate state in the
+  briefing — paste the MEASURED `uat_passed_raw` from 6.1.
+- Routing: `done · shipado` → keep the PR (#N and URL) and go to 6.4c ·
+  `done · uat_reprovado` → the brake acted (investigate `motivo_reprovacao` on disk) →
+  Sub-rotina D · `needs_decision` (uat-passed blocks-and-asks) → question + continuation ·
+  `blocked` (environment: no origin, gh not authenticated, wrong branch) → respect it: `stop`
+  event (etapa `ship`, reason `ship bloqueado — <motivo>` in the 10th argument), note it in
+  the banner and stop (re-running
+  resumes at the ship).
 
-**6.4c — Emenda do desfecho no resumo.** Substitua o placeholder `## Desfecho do ship` do
-`NN-RESUMO-EXECUTIVO.md` por 2–3 linhas FACTUAIS (Edit direto): `shipado` → PR real + o
-próximo passo verdadeiro DESTE fluxo (auto-merge → diga que mergeou; nunca prometa revisão
-que o fluxo não tem) · `blocked` → o motivo + o caminho real de publicação (nenhum PR existe
-— não sugira que existe). **Reconcilie o corpo com o estado pós-close** (promoção
-`human_needed` → `passed`: emende a menção antiga ou anexe nota — sem isso o documento nasce
-contraditório). A emenda obedece à regra do estado do mundo (`prompts/resumo.md`): consulta
-real, fonte+data, ou omita. Commite (best-effort). Idempotente: seção já preenchida → não
-reescreva. A emenda relata o RETORNO do ship, nunca uma expectativa.
+**6.4c — Amend the outcome in the resumo.** Replace the `## Desfecho do ship` placeholder of
+`NN-RESUMO-EXECUTIVO.md` with 2–3 FACTUAL lines (direct Edit): `shipado` → real PR + the true
+next step of THIS flow (auto-merge → say it merged; never promise a review the flow does not
+have) · `blocked` → the reason + the real publication path (no PR exists — do not suggest one
+does). Reconcile the body with the post-close state (promotion `human_needed` → `passed`:
+amend the old mention or append a note). The amendment obeys the state-of-the-world rule
+(`prompts/resumo.md`): real lookup, source+date, or omit. Commit (best-effort). Idempotent:
+section already filled → do not rewrite. The amendment reports the ship's RETURN, never an
+expectation.
 
-**6.4-HB — Hand-back (não shipa).** Banner na moldura padrão — título `GO-AND-DO · Fase NN —
-pronta para o seu UAT`, campos `Balde 3` (quantos) e `Resumo` (caminho) — e as pendências:
-1. `/gsd-verify-work N` — retoma exatamente nos cenários balde 3.
-2. `/gsd-add-tests N` — suíte ampla.
-3. `/close-phase N` depois do UAT limpo *(ou re-rode `/go-and-do N` sem `--no-ship`)*.
+**6.4-HB — Hand-back (no ship).** Banner in the standard frame — title
+`GO-AND-DO · Fase NN — pronta para o seu UAT`, fields `Balde 3` (how many) and `Resumo`
+(path) — and the pending items:
+1. `/gsd-verify-work N` — resumes exactly at the basket-3 scenarios.
+2. `/gsd-add-tests N` — broad suite.
+3. `/close-phase N` after the clean UAT *(or re-run `/go-and-do N` without `--no-ship`)*.
 
-**6.5 — Reconciliação + self-check + banner final.** Na rota ship, ANTES da cancela:
-`reconcilia-docs.sh --pr "#N <url>" [--proxima M]` (v2.1.9, tarefa 32e — 3 fases seguidas
-terminaram com STATE.md `executing`, ROADMAP `[ ]`, REVIEW.md `issues_found` com re-review
-clean e REVIEWS.md sem frontmatter; a rota B não roda o gsd-ship e a rota A só toca 2 campos).
-Exit 3 (`FORMATO-INESPERADO`) → pare antes da cancela: o `status` do STATE.md está numa forma
-que nenhum dos dois sabe julgar (tipicamente uma frase, onde se espera o token `executing` ou
-`between_phases`). Corrija o campo para o token e re-rode o script — o `confere-etapa.sh 6`
-reprova o mesmo caso pelo assert `state_formato`, de propósito: os dois deixaram de
-compartilhar o ponto cego. Exit 2 segue sendo uso inválido; exit 0, "rodou, pendências no
-banner".
-Leia `acoes`/`pendentes` do JSON; pendente = anote no banner. Commite (best-effort:
-`docs(fase NN): reconcilia espelhos de estado pós-ship`). Então `confere-etapa.sh 6` —
-PLAN×SUMMARY (plano sem SUMMARY = falha) + anti-placeholder de timestamps + **AC parcial no
-SUMMARY × VERIFICATION `passed`** (falha 5 da F24.3) + **STATE.md ainda `executing`** (a
-reconciliação não rodou); 🔔 em divergência (ts divergente → corrija para o ts real do git e
-registre em `incidentes:`). Reconcilie a TaskList (anti-órfã S.C). Rode
-`varre-worktrees.sh --projeto "$ROOT"` (só relato): toda cópia `com-trabalho` ou `suja` do
-JSON entra no resumo executivo como pendência com o dono (`cópia <branch>: <commits> commits,
-<idade_dias> dias`); uma fase não fecha com trabalho escondido numa cópia. Depois:
-- **Ship:** moldura com título `— shipada`, campos `PR` (com o estado REAL: `#N — mergeado`
-  ou `#N — aberto`) e `Resumo`; abaixo: URL do PR, bloco de transparência e add-tests como
-  passo **pós-PR**. Encerre.
-- **Hand-back:** a moldura da 6.4-HB (não duplique a caixa) + itens balde 3 + pendências.
-Em ambas: evento `stop` (etapa `ship`/`handback`), **remova o ponteiro**
-`.planning/.gad-rodada-ativa.json` (PC-3) e `commita-artefatos.sh <phase_dir> <NN> runlog`
-(append não-commitado do run-log já se perdeu em sync de branch). Idempotente: re-rodar
-depois de shipado cai direto aqui e reimprime.
+**6.5 — Reconciliation + self-check + final banner.** On the ship route, BEFORE the fence:
+`reconcilia-docs.sh --pr "#N <url>" [--proxima M]` (needed because route B does not run
+gsd-ship and route A only touches 2 fields — STATE.md/ROADMAP/REVIEWS would stay stale). Exit 3 (`FORMATO-INESPERADO`) → stop before the fence: the STATE.md
+`status` is in a form neither script can judge (typically a sentence where the token
+`executing` or `between_phases` is expected). Fix the field to the token and re-run the
+script — `confere-etapa.sh 6` fails the same case via the `state_formato` assert, on purpose.
+Exit 2 = invalid usage; exit 0 = "ran, pendings in the banner". Read `acoes`/`pendentes` from
+the JSON; pending = note in the banner. Commit (best-effort:
+`docs(fase NN): reconcilia espelhos de estado pós-ship`). Then `confere-etapa.sh 6` —
+PLAN×SUMMARY (plan without SUMMARY = failure) + timestamp anti-placeholder + partial AC in a
+SUMMARY × VERIFICATION `passed` + STATE.md still `executing` (reconciliation did not run);
+🔔 on divergence (divergent ts → fix to the real git ts and record in `incidentes:`).
+Reconcile the TaskList (anti-orphan, Sub-rotina C). Run `varre-worktrees.sh --projeto "$ROOT"`
+(report only): every `com-trabalho` or `suja` copy in the JSON enters the executive summary
+as a pending item with the owner (`cópia <branch>: <commits> commits, <idade_dias> dias`); a
+phase does not close with work
+hidden in a copy. Then:
+- Ship: frame with title `— shipada`, fields `PR` (with the REAL state: `#N — mergeado` or
+  `#N — aberto`) and `Resumo`; below: PR URL, transparency block and add-tests as a post-PR
+  step. End.
+- Hand-back: the 6.4-HB frame (do not duplicate the box) + basket-3 items + pendings.
+In both: `stop` event (etapa `ship`/`handback`), remove the pointer
+`.planning/.gad-rodada-ativa.json` (PC-3) and `commita-artefatos.sh <phase_dir> <NN> runlog`.
+Idempotent: re-running after the ship lands here and reprints.
 
-**6.6 — Guarda.** Se o self-check revelar plano sem `SUMMARY.md` (ação humana que escapou),
-**não** shipe: volte pra **Sub-rotina D** (a D gera um `parcial` que sobrescreve o `final` —
-o disco fica correto).
+**6.6 — Guard.** If the self-check reveals a plan without `SUMMARY.md` (a human action that
+escaped), do not ship: go back to Sub-rotina D (D generates a `parcial` that overwrites the
+`final` — the disk stays correct).
 
 </stage>
 
@@ -1049,12 +542,400 @@ o disco fica correto).
 
 ---
 
-<note title="sem freio para o limite de 5h">
+<subroutines>
 
-## Nota — sem freio para o limite de 5h
+<subroutine name="A — gate de contexto (antes de cada comando principal)">
 
-O uso da sessão de 5h não é legível por uma skill (não está no transcript). Não há gate de
-5h — confia na retomabilidade: estourou, re-rode `/go-and-do N` após o reset e a skill
-continua de onde parou. Pausa manual via `/gsd-pause-work` a qualquer momento.
+The gate runs INSIDE `pre-despacho.sh <etapa>` — every 🔒 step already executes it when
+opening the fence. Obey the exit code:
 
-</note>
+- exit 0 — `ok` (continue; announce in one line what it measured: "contexto em 180k/400k —
+  seguindo"), or `pular`/`skip` (the stage does not run; the event is already written).
+- exit 3 — `stop`: context ceiling. The script already wrote the event, removed the pointer
+  and returned the ready handoff → Sub-rotina D with reason `contexto em NNk`.
+- exit 4 — `bloqueio_sem_revisor` (2.5 only) or `bloqueio_paralelismo` (3 only): relay
+  `pergunta_ao_dono` and ⏸️ stop.
+- `status=unknown` in the JSON → continue, but state the `reason=` in one line (deliberate
+  fail-open of MEASUREMENT — resumability covers it).
+
+Rationale (do not re-litigate): absolute ceiling of 400k tokens loaded (not window fraction),
+below the harness auto-compact (~460k), because stop-and-resume fresh beats compaction
+(state on disk + atomic commits + handoff). Adjustable via env `CONTEXT_TOKEN_LIMIT`. The gate
+under-measures on purpose (layer 0 only, no advisor turns), hence the slack.
+
+Auto-compact detector (mechanical): `run-log.sh` writes `compact` when checkpoints of the same
+session drop by >100k. On seeing it (or noticing the drop): announce in one line and re-anchor
+— the sub-routines still apply, the script continues from where the DISK says it is.
+
+Known limitation: the gate only measures BETWEEN commands — it does not interrupt a `Skill`
+midway. This matters almost only on the inline route of 3.3; if unavoidable on a huge phase,
+split first (`/gsd-phase`) or pause manually (`/gsd-pause-work`).
+
+</subroutine>
+
+<subroutine name="B — dev server (ponteiro)">
+
+Mechanized in `scripts/dev-server.sh` (`up` = persisted recipe or heuristic + port wait +
+auto-persistence; `down` = kill by PID session). The craft and the window-owner rules are in
+`workflow-dev-server.md` — read it when the phase has a server to bring up (UI review / UAT);
+a phase without server never loads that file.
+
+</subroutine>
+
+<subroutine name="C — lista de tarefas ao vivo (TaskList)">
+
+The TaskList gives live visibility of the pipeline. It is ephemeral (session only) — never
+the source of truth: real state is on disk; the list only mirrors. Only the orchestrator
+touches it.
+
+- Scripts compute (S.C): the `tasklist` snapshot of `abre-rodada.sh` (and the reconciliation
+  of `confere-etapa.sh 6`) returns task → desired state, computed from disk (15 possible
+  tasks: intent 1–3, contracts 4–5, plan 6, convergence 7, execute 8, gates 9–13, UAT 14,
+  close 15 — only the ones applicable to the run are created). You only apply
+  `TaskCreate`/`TaskUpdate` to mirror. On a resume, the list is born faithful to what is done.
+- Availability first: the task tools are a runtime flag (they vanish without changelog).
+  Without `TaskCreate`/`TaskList` in the window (nor via `ToolSearch`), skip the whole
+  sub-routine: declare once ("TaskList indisponível — seguindo pelo disco") and mention it in
+  the resumo.
+- Discipline: dispatching a 🔒 step → `in_progress` on the task(s) it covers; done (artifact
+  on disk) → `completed`. A `needs_decision` return leaves `in_progress`.
+- On a pause: the current task stays `in_progress` — the next run's setup re-reads the disk
+  and corrects. At the close (6.5): anti-orphan sweep — a leftover `in_progress` task = 🔔
+  (a stage that will no longer run → complete it with a note on why).
+
+</subroutine>
+
+<subroutine name="D — parada graciosa (pause-work)">
+
+Use when implementation work that depends on the owner is left: human action
+(`human-action`), waves blocked by it, intent consultants `blocked`, persistent gaps (3.5),
+open threat (4.4), persistent UAT bug (5.5), ship `uat_reprovado`, hard gate in the silence
+window (Sub-rotina I), or the context ceiling (Sub-rotina A). Close with a clean handoff:
+
+1. End the live work — including what TaskStop does not kill. In this order:
+   1. `ListAgents` — enumerate the live subagents. The list is the source of truth: stop all
+      of them, not just the active one (a live child keeps writing artifacts after the pause).
+   2. `TaskStop` on each child the list returned.
+   3. `varre-orfaos.sh <phase_dir>` — the background processes that survive TaskStop (disk
+      waiters, codex). It identifies by link to `<phase_dir>`, groups by `pgid` and only
+      reports.
+   4. Exit 1 (orphans exist) → `varre-orfaos.sh <phase_dir> --matar`: TERM on the group, wait
+      5s, then KILL. It refuses in three foreseen cases — more than 10 candidates (`RECUSA:`),
+      `GRUPO-MISTO` and `GRUPO-PROPRIO`. On any refusal, carry the reported pids to the
+      handoff line of step 4 and continue.
+   5. `varre-worktrees.sh --projeto "$ROOT"` — the copies (worktrees) the pause leaves behind.
+      GSD's `reap-orphans` only sees a copy with a `locked` file and already merged. Report
+      only. Each `com-trabalho` or `suja` entry of the JSON becomes a line in the handoff of
+      step 4: `cópia <branch>: <commits> commits, <idade_dias> dias — arquivar com --arquivar;
+      remoção com o dono`.
+   6. `confere-etapa.sh pausa` — closes the interrupted stage in telemetry: measures the open
+      window with mede-tokens and writes the `end` with the CANONICAL checkpoint label +
+      `"interrompida":true`. Canonical label, never a variant; measurement, never an estimate
+      (aggregation depends on it).
+2. Executive summary (partial mode): Sub-rotina F with `modo: parcial` and the `motivo`.
+   Failed to generate → do not stop for it; note it in one line and continue (the technical
+   handoff is what guarantees the resume).
+3. `Skill gsd-pause-work` — durable handoff (HANDOFF.json + `.continue-here.md`) + WIP
+   commit. Write the `stop` event with the CANONICAL stage in progress (e.g.
+   `"2.5 convergencia"`) and the reason in its own field (10th positional of run-log.sh) —
+   never `pausa: <motivo>` in the stage label.
+3.5. STATE.md last. After the WIP commit, run
+   `reconcilia-docs.sh --pausa --projeto "$ROOT" --fase N` and then
+   `confere-etapa.sh pausa --pos-pausa --projeto "$ROOT" --fase N`. pause-work never touches
+   STATE.md and HANDOFF.json records hashes before the commit that carries it exists. The
+   script writes `status: paused`, the WIP hash and the plan/task from the HANDOFF, and makes
+   its own commit `docs(state): STATE.md reconciliado na pausa`. The fence fails (exit 1) if
+   `state_head` is neither HEAD nor HEAD~1: do not patch by hand — re-read the JSON
+   (`pendentes`) and re-run; exit 3 (`FORMATO-INESPERADO`) is a status in sentence form, fix
+   the token and re-run.
+4. Stop with the `🔔` handoff line: the reason, the exact action (literal command), the
+   pending plans, the pids the sweep reported and refused to kill (if any) and where
+   `NN-RESUMO-EXECUTIVO.md` is. Resumes with `/go-and-do N`.
+
+> When NOT to use: basket 3 (could-not-verify — HUMAN verification missing; hand-back route of
+> Etapa 6, next step `/gsd-verify-work`) and basket 4 (assumed — ships with transparency). A
+> leftover HANDOFF.json would derail the resume. Rule: implementation bug → D; unverifiable or
+> subjective item → Etapa 6.
+
+</subroutine>
+
+<subroutine name="E — resolver o gsd-tools (lib)">
+
+Resolution lives in `scripts/lib/gsd-shim.sh`, `source`d by every script of the skill. In the
+rare Bash blocks of YOURS that query the SDK directly (e.g. 3.4):
+
+```bash
+. "$HOME/.claude/skills/go-and-do/scripts/lib/gsd-shim.sh"
+gsd_run query phase-plan-index N
+```
+
+The lib resolves `gsd-tools.cjs` (runtime → project `.claude/` → PATH → `~/.claude/`) and
+fails with the install instruction (`npx -y @opengsd/gsd-core@latest --claude --local`) — an
+entry gate: stop and show the command (`abre-rodada.sh` already covers the opening).
+
+</subroutine>
+
+<subroutine name="F — resumo executivo (subagente Sonnet 5)">
+
+Writes `NN-RESUMO-EXECUTIVO.md`: the phase's story in prose, for the non-technical owner.
+Called at two moments: `modo: final` (6.3) and `modo: parcial` (every Sub-rotina D stop). Full
+instructions live in `prompts/resumo.md` (the subagent reads it from disk — do not read it
+before dispatching).
+
+1. Numbers with a mechanical source: BEFORE the dispatch, run
+   `scripts/numeros-da-fase.sh <phase_dir> NN` and paste the whole block into the dispatch.
+2. Dispatch an `Agent` with `model: sonnet` and `run_in_background: false`, handing: the path
+   of `prompts/resumo.md`, `NN`, absolute `phase_dir`, `modo` and — in `final` — the
+   `desfecho` + the lists extracted by 6.2 (`itens_assumidos`, `itens_nao_verificados`,
+   `itens_intencao`, `itens_nao_rodados`, `riscos_aceitos`, incidents of the run) + the 🔔
+   hint; in `parcial` — the `motivo`.
+   > Subagent because narrating requires READING the verbose artifacts — forbidden in layer
+   > 0. Sonnet because it is synthesis/writing.
+3. Check on return: `numeros-da-fase.sh <phase_dir> NN --conferir <resumo>`. Exit 1 →
+   re-dispatch once with the divergences (or amend pointwise) and re-check. Persisted →
+   continue with 🔔 `resumo com número sem fonte` in the banner (never silence it).
+4. Commit: `git add <resumo> && git commit -m "docs(fase NN): resumo executivo"` (no footer).
+   Failed → do not stop; note it in one line.
+
+Idempotence: `modo: final` with `go_and_do_resumo: final` already in the file → skip. A
+previous `parcial` is overwritten by the `final`. `parcial` always regenerates.
+
+Telemetry: the dispatch is fenced as a main command (checkpoint/end — etapa `resumo final`/
+`resumo parcial`); it is one of the most expensive subagents of the run and without the `end`
+its cost vanishes from the account.
+
+</subroutine>
+
+<subroutine name="G — telemetria da rodada (run-log)">
+
+Faithful timeline of the phase: 1 JSONL line per event in `<phase_dir>/NN-RUN-LOG.jsonl`,
+with layer/model/effort/cost per stage. The grid is born COMPLETE by mechanical writing — the
+run-log is the primary source of cost.
+
+Single-writer rule (T.2) — each event has exactly one writer; you do NOT write what already
+has an owner:
+
+| Event | Writer | When |
+|---|---|---|
+| `run` | `abre-rodada.sh` | run opening |
+| `checkpoint` | `pre-despacho.sh` | opens the stage window, with the context snapshot |
+| `end` | `confere-etapa.sh` | closes the window on pass, with `tokens_reais`/`custo_usd` from `mede-tokens.py` (transcript, never self-declaration) |
+| `despacho`/`retorno` | hook `gad-lifecycle.sh` | start/end of every `Agent()`, with origin layer and model/effort of the def |
+| `script` | each script of the skill | self-registration name+exit+summary in an active run |
+| `stop` | `pre-despacho.sh` (ceiling) or you (pause/end of run) | outcome |
+| `compact` | `run-log.sh` itself | mechanical detector (drop >100k) |
+
+What is LEFT to you (direct call, `<phase_dir>` always ABSOLUTE):
+
+```bash
+bash $HOME/.claude/skills/go-and-do/scripts/run-log.sh <phase_dir> <NN> <skip|stop> "<etapa>" [tokens] [pct] "" [limit] "" "<motivo>"
+```
+
+- `skip` — every step that WOULD have run and does not, outside the mechanical fences (the
+  fences write their own): etapa = `"<id> (<motivo>)"`.
+- `stop` of pause/end of run — with the final measurement and the reason in the 10th
+  argument. Before the end-of-run stop: `run-log.sh <dir> <NN> audit` (closes open windows;
+  dead session → `close --sessao <id>`).
+
+Canonical `etapa` vocabulary: starts with the stage ID (`0 abertura` · `1 intencao` ·
+`1.5 contratos` · `2 planejamento` · `2.5 convergencia` · `3 construcao` · `4.1 code-review`
+… `4.5 validate` · `5 uat` · `6 encerramento`) or `preparacao` · `probe` · `verificacao` ·
+`resumo` · `lateral <descrição>`. Without a stable ID, cross-phase aggregation is impossible.
+
+The script never fails the pipeline (exit 0 always; `flock`; monotonic `seq`; orphan window
+auto-closed and MEASURED by `mede-tokens.py`). Saw the auto-closed-window notice? Do not write
+a corrective `end` by hand: the number you have (your window's context) is not cost. If the
+automatic measurement came `indisponivel`, measure:
+`mede-tokens.py --sessao $CLAUDE_CODE_SESSION_ID --desde <ts do checkpoint> --ate <agora>`
+and only then an `end` with `--tokens-reais`/`--custo`. A 2nd `end` of the same stage
+declares `substitui:<seq>` (whoever sums counts only the last). Telemetry is an instrument,
+not a gate.
+
+</subroutine>
+
+<subroutine name="H — protocolo de subagentes (camada 1)">
+
+Layers: 0 (this conversation) decides, chains and talks to the user; 1 are subagents with a
+disposable window that do the verbose work of a stage; 2 are the agents that 1 dispatches or
+hosts (GSD's internal ones + this skill's `gad-*` children, defs in `~/.claude/agents/`). The
+layer-0 window is the scarcest resource.
+
+Dispatch. A stage whose block says to dispatch runs in a `general-purpose` subagent (inherited
+model, unless the block pins one), always synchronous: explicit `run_in_background: false` —
+a background dispatch breaks the flow (the notification does not resume the script). The
+dispatch prompt is minimal; the instructions live in `prompts/<etapa>.md`, which the SUBAGENT
+reads from disk. Do not read the prompt before dispatching — reference the path. The dispatch
+carries:
+
+- the instructions file path (`$HOME/.claude/skills/go-and-do/prompts/<etapa>.md`);
+- `N`/`NN`, `phase_dir`, `project_root` and input paths — always absolute (the subagent's cwd
+  is not the project root);
+- relevant flags and `args` when the block varies the command;
+- with `obs_text` (`--obs`): the literal text as the first line
+  ("Nota do usuário para esta rodada: …") — the subagent decides whether it is relevant; ignoring it as not applicable is
+  a valid answer;
+- on a resume from a pause: the user's answer, verbatim.
+
+Credentials (birth rule of every authenticated dispatch). A task that needs a logged-in
+session or touches secrets carries: (1) the sanctioned path prepared by layer 0 BEFORE
+(wrapper that injects credentials into the process, or helper that emits only the ephemeral
+code — never the secret); and (2) the literal prohibition: "PROIBIDO ler, copiar ou imprimir
+`.env*`/segredos por qualquer via — leitura indireta é evasão. Login impossível pela via
+sancionada → balde 3 ou `blocked`, nunca contorne um controle." A constraint applied
+reactively always arrives one dispatch late.
+
+Background inside the subagent: subagents do NOT receive notifications of background work —
+the `prompts/*.md` carry the protocol: background only for work >10min, with the result in an
+agreed file and a wait on ONE blocking disk waiter with explicit `timeout: 600000` (applies
+to EVERY layer, orchestrator included) — never waiting on a notification, never chopped
+polling. Return outside the contract (prose instead of the block) → do not accept nor
+re-dispatch: continue the same subagent with "decida pelo estado do disco e finalize pelo
+return_contract".
+
+Return contract. Every layer-1 subagent returns a compact block — never verbose content (the
+return is routing data; the body lives on disk):
+
+- `done` — verdict, paths, counts. Section `incidentes:` mandatory: every deviation between
+  the announced and the executed, or literally `nenhum`. Absent → return outside the contract
+  (reconcile); item ≠ `nenhum` → ONE `incidente` event in the run-log PER ITEM (`--kv origem=<etapa/agente> --kv detalhe="<o item>"`; never aggregate) + hand it to the
+  Sub-rotina F dispatch (the resumo narrates them).
+- `needs_decision` — the subagent saved progress to disk and returned the digested question
+  (options + tradeoffs + `recomendacao` + `reversivel`). Route via Sub-rotina I; the answer
+  continues the SAME subagent (do not re-dispatch: the continuation keeps the context for
+  free). Honest label: "Decisão do usuário: X" only if they actually chose X; an answer that
+  is a question is NOT a decision (answer and re-ask); delegation →
+  "decisão da camada 0 (usuário delegou): X"; triage → "decisão da camada 0 (triagem): X". Provenance block
+  (decision that IS the owner's) — always relay in this format, and instruct each layer to
+  relay it verbatim downwards (a loose label becomes an agent's assertion and a strict
+  executor rejects it):
+
+  ```
+  DECISAO-DO-DONO
+  canal: AskUserQuestion | --obs | resposta direta no chat | retomada pós-pausa
+  ts: <ISO da resposta>
+  pergunta: <1 linha>
+  resposta_verbatim: "<palavra por palavra>"
+  ```
+
+  The `ts` is MECHANICAL: `date -Iseconds` at the moment, pasted — never from memory (a round
+  minute `:00` is a placeholder red flag). The rule applies to EVERY timestamp written into
+  an artifact by any layer (frontmatters of VERIFICATION/UAT etc.) — `confere-etapa.sh` lints
+  placeholders. A consent claim requires a pointer: "aprovado pelo dono" only holds with a
+  pointer to an existing DECISAO-DO-DONO block (file + `ts`); without it, it is a report and
+  the item is UNSIGNED — for whoever writes, reviews and verifies.
+- `blocked` — precondition unavailable. Handle by the stage block's semantics; descending into
+  a subagent does not loosen any fail-closed — the block goes up and layer 0 stops.
+
+Nesting probe (S.H, mechanical cache). Nesting (layer 1 spawning layer 2) is a capability the
+runtime toggles between releases — no conclusion is timeless. `abre-rodada.sh` keeps the
+version-conditioned cache (`~/.claude/.gad-aninhamento.json`): `aninhamento.resultado:
+ok|falha` → obey; `aninhamento.probe_necessario: true` (CC version changed) → run the minimal
+probe (one `general-purpose` that answers whether it has the `Agent` tool, ~2k tokens) and
+record with `abre-rodada.sh --registra-aninhamento ok|falha`. Probe `falha` → inline route for
+the spawning stages, with two non-negotiable rules: (1) inline ⇒ read `prompts/<etapa>.md`
+before conducting (the "do not read before dispatching" rule INVERTS — you take the
+subagent's role and the disciplines live there); (2) version-conditioned record in
+`NN-DECISOES.md`/`.continue-here.md` ("na CC <versão-exata>…"), never timeless — on a resume
+or version bump, the cache re-requires the probe.
+
+Cross-session resume. Continuing a subagent only works in the SAME session. In a new session
+the state is on disk: layer 0 identifies the pending stage and re-dispatches; fine-grained
+resume belongs to the stage prompt (`intent.md` has its own arrival; those that only host a
+GSD command rely on the command's idempotence — such a `needs_decision` does not survive the
+session: the re-dispatch re-runs and the question re-emerges, accepted cost).
+
+</subroutine>
+
+<subroutine name="I — triagem de decisão (antes de todo AskUserQuestion)">
+
+Owner's decision (20/07, always on): layer 0 decides alone what they would merely stamp —
+with record and disclosure — and only what is theirs to decide reaches them.
+
+Before ANY `AskUserQuestion` — from `needs_decision`, inherited stop or own stop — classify:
+
+Hard gate — stop and wait for the user when ANY holds:
+1. External information — the answer is a fact only they have (credential, access, state of
+   the world). They provide input, not a stamp.
+2. Scope/intent — requirement, acceptance criterion, oracle, SPEC/CONTEXT/ROADMAP (includes
+   the intent review pause). Auto-approving here is the inverted stamp.
+3. Irreversible off the rail — rotating/exposing a credential, deleting data, spending money,
+   production. (The sanctioned rail — green phase up to the PR merge after a clean UAT, 6.D,
+   including the automatic merge of the route-B clean room (`ship.py --merge`; owner's
+   decision 27/08: they do not review PRs, they trust the stages) — is the default and does not
+   ask. What the route owes is the NOTICE: resumo/banner says "mergeado".)
+4. No recommendation — without real conviction, the confession of uncertainty goes up in any
+   category.
+5. Existing fail-closed — open threat, persistent basket 2, basket 3, gaps, `blocked`, context
+   gate, bloqueio_sem_revisor: triage loosens none of them.
+6. `blocking-human` inherited from GSD (1.11.0, #3210) — GSD's own `--auto` already refuses to
+   approve it; triage respects the refusal (an orchestrator stamping what the executor refused
+   to stamp voids the guard one layer up). Unmet precondition is criterion 1; package
+   verification is criterion 3.
+
+Auto-decision — decide, record and continue when NO criterion holds AND there is a
+recommendation with conviction AND the error is cheap to undo. Tie-break: the more rigorous
+option. Mechanics:
+1. Decide by the option you would recommend (the subagent's `recomendacao` is input, not
+   verdict; `reversivel: nao` goes to the hard gate).
+2. Record in `<phase_dir>/NN-DECISOES.md`: time (`date "+%F %H:%M"`), stage, question in 1
+   line, options, chosen, why and how to undo. Line to the user:
+   `🤖 decidi sozinho: <escolha> — registrado no NN-DECISOES.md` (a silent auto-decision is a
+   bug).
+3. Continue. In a `needs_decision`, continue the SAME subagent with the honest label of
+   Sub-rotina H.
+
+Timing decisions are decisions too — postponing a question, holding a notice until the
+resumo: same mechanics, entry in `NN-DECISOES.md` (chat narration is lost; the record is what
+the resumo and the audit re-read).
+
+Silence window (23h–07h): before opening a hard gate with `AskUserQuestion`, run
+`janela-silencio.sh` and follow the exit code — it is the single source of the rule (the
+`janela_silencio` field of the checkpoint JSON is informative only; do not route by it).
+1. exit 0 (`acao: pergunta`) → ask normally.
+2. exit 1 (`acao: pausa`) → graceful pause (Sub-rotina D, reason `gate duro em janela de
+   silêncio`), with the pending question (options + recommendation) in the handoff and in the
+   partial resumo; the resume re-presents it.
+
+Does not apply to auto-decision (which never stops) nor changes the fail-closed. A
+`blocking-human` of precondition in the window is not a question — it is a pending action:
+follows the 3.4 → Sub-rotina D route with the precondition verbatim in the handoff
+(`NN-ACAO-HUMANA.md` if there is a step by step to give).
+
+Transparency closes the loop: the executive summary narrates every auto-decision by reading
+`NN-DECISOES.md` — synchronous supervision becomes asynchronous review with an undo route.
+
+</subroutine>
+
+</subroutines>
+
+---
+
+<stop_points>
+
+Inherited stops — when a GSD command calls you (not a bug). This skill's OWN stops are in the
+stages. The invoked GSD commands have their own stops — decisions the command does not take
+alone. When one fires, route it via Sub-rotina I: what is the user's reaches them (never
+bypass the stop with flags); a stamp is auto-decided and recorded in `NN-DECISOES.md`. A
+command hosted in a subagent (Sub-rotina H) → the same stop arrives as a digested
+`needs_decision`; the answer continues the same subagent.
+
+- Etapa 1.5 (`gsd-ui-phase` / `gsd-ai-integration-phase`): stops are in
+  `workflow-ui.md` / `workflow-ai.md` (read with the flag).
+- `gsd-plan-phase`: decision-coverage gate (`workflow.context_coverage_gate: false` disables
+  it) · requirements-coverage gap · source-audit gaps / phase-split recommended (an
+  ill-sized phase — better a split than a bloated plan) · revision-loop stall (3 iterations
+  without converging).
+- `gsd-execute-phase` (the `--auto` of 3.3 does not silence these): regression test failure ·
+  schema drift · post-merge conflict · `human-action` checkpoint (auth/2FA/migrations only the
+  owner runs — never automated; if they defer, 3.4 detects the incomplete execution and closes
+  via Sub-rotina D instead of leaving it stuck at the prompt) · `Gate: blocking-human`
+  (`<precondition>` of a task unmet — env var, `user_setup` step, artifact of a previous
+  phase — or package verification before install). Hard gate by definition: never stampable;
+  precondition → same route as the human action (`done · incompleto` → 3.4 → Sub-rotina D);
+  package → irreversible `needs_decision` → hard gate of Sub-rotina I.
+
+Golden rule: a design/scope decision stop or a reality gate (regression/schema/auth) is
+legitimate — pause, note it in the banner, and the user decides. Sub-rotina I formalizes the
+ruler.
+
+</stop_points>

@@ -1,8 +1,8 @@
 <!-- ============================================================ -->
-<!-- prompts/ui-review.md — instruções do subagente do gate 23    -->
-<!-- (UI review). Novo na reformulação major (4.B): o 23 deixa de -->
-<!-- ser exceção inline — roda em subagente como os outros gates, -->
-<!-- com o dev server mecanizado pelo dev-server.sh.              -->
+<!-- prompts/ui-review.md — instruções do subagente do gate 4.2   -->
+<!-- (UI review). Novo na reformulação major (4.B): o 4.2 deixa   -->
+<!-- de ser exceção inline — roda em subagente como os outros    -->
+<!-- gates, com o dev server mecanizado pelo dev-server.sh.       -->
 <!-- ============================================================ -->
 
 # Etapa 4.2 — UI review (auditoria visual em 6 pilares)

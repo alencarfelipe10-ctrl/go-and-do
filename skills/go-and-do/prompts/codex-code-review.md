@@ -1,6 +1,6 @@
 <!-- ============================================================ -->
 <!-- prompts/codex-code-review.md — briefing-base da lane Codex   -->
-<!-- do gate 22 (decisão 4.D do gad-major; fecha a tarefa 26).    -->
+<!-- do gate 4.1 (decisão 4.D do gad-major; fecha a tarefa 26).   -->
 <!-- O hospedeiro do code review copia este arquivo, anexa a      -->
 <!-- lista de arquivos do escopo + o caminho do repo, e lança via -->
 <!-- roda-codex.sh. Irmão do briefing de convergência.            -->
