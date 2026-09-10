@@ -80,12 +80,14 @@ TAG_RE="^[a-z]+\($(esc "$PLAN")(-[^)]*)?\)(!)?:"
 mapfile -t COMMITS < <(git -C "$ROOT" log --format='%H%x09%s' --reverse -E --grep="$TAG_RE" 2>/dev/null || true)
 N_COMMITS=${#COMMITS[@]}
 
-# commits de tarefa: até o commit de metadados do executor (exclusive); docs nunca é tarefa
+# commits de tarefa: até o commit de metadados do executor (exclusive). `docs(` CONTA:
+# na F24.5 os planos 08/09 entregaram documentação como tarefa (3 docs( para 3 tasks)
+# e o filtro antigo reprovava por falso positivo; o break acima já exclui os metadados.
 N_TAREFA=0
 for c in ${COMMITS[@]+"${COMMITS[@]}"}; do
   s="${c#*	}"
-  if printf '%s' "$s" | grep -qE '^docs\(.*\): *complete .* plan$'; then break; fi
-  printf '%s' "$s" | grep -qE '^docs\(' && continue
+  # metadados do executor: `docs(<plano>): complete plan`, `complete <slug> plan`, com ou sem sufixo
+  if printf '%s' "$s" | grep -qE '^docs\([^)]*\): *complete( [^ ]+)* plan( |$)'; then break; fi
   N_TAREFA=$((N_TAREFA+1))
 done
 

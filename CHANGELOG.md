@@ -2,6 +2,25 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.5.3] — 2026-09-10
+
+Conserto do `confere-plano.sh`, achado pela auditoria da F24.5 (grupo-inspired): dois falsos
+positivos na contagem de «commits de tarefa» travaram a rodada no fence da Etapa 3.
+
+### Corrigido
+- `scripts/confere-plano.sh`: commits `docs(<plano>): …` passam a contar como tarefa. O filtro
+  antigo («docs nunca é tarefa», nascido da amostra da F24.4) reprovava por `COMMITS-A-MENOS`
+  planos cujo entregável é documentação — na F24.5 os planos 08 e 09 fizeram 3 commits `docs(`
+  para 3 tarefas e o fence viu 0.
+- `scripts/confere-plano.sh`: o commit de metadados do executor é reconhecido nas formas
+  `docs(<plano>): complete plan`, `complete <slug> plan` e com sufixo (`complete plan - …`).
+  O regex antigo exigia `complete <palavra> plan` no fim da mensagem, nunca disparava nos
+  commits reais e o commit de fecho entrava na conta como tarefa.
+- `tests/test-confere-plano.sh`: caso (d) invertido (`docs(7-01): nota` conta) + caso (d2)
+  novo (plano só de documentação, 3 → 3) + metadados sem slug e com sufixo.
+
+Prova: suíte verde; 9/9 planos reais da F24.5 `ok` (antes: 08 e 09 `COMMITS-A-MENOS`).
+
 ## [2.5.2] — 2026-09-07
 
 Dieta do `workflow.md`, segundo achado do mapa de estudo `gsd-optimize/mapa-gad/` (passo 3: o

@@ -81,15 +81,24 @@ eq "codigos = COMMITS-A-MENOS (1 commits para 3 tarefas)" "$(campo '.codigos[0]'
 eq "commits=5 no total, mas commits_tarefa=1"  "$(campo '"\(.commits)/\(.commits_tarefa)"')" "5/1"
 eq "fora_da_lista vazia"              "$(campo '.fora_da_lista|length')" "0"
 
-echo "== (d) sem commit de metadados: todo commit não-docs conta como tarefa"
+echo "== (d) sem commit de metadados: todo commit conta como tarefa, docs( inclusive (F24.5 planos 08/09)"
 R=$(repo d); plano "$R" 'files_modified:
   - src/a.py'
 commit "$R" 'feat(7-01): t1' src/a.py
 commit "$R" 'docs(7-01): nota' .planning/phases/7-bancada/7-01-SUMMARY.md
 commit "$R" 'feat(7-01): t2' src/a.py
-commit "$R" 'feat(7-01): t3' src/a.py
 roda "$R"
-eq "commits_tarefa=3 → ok"            "$(campo '"\(.commits_tarefa)/\(.veredito)"')" "3/ok"
+eq "commits_tarefa=3 → ok (docs(7-01): nota é tarefa)" "$(campo '"\(.commits_tarefa)/\(.veredito)"')" "3/ok"
+
+echo "== (d2) plano só de documentação: 3 docs(<plano>): Task N para 3 tarefas → ok"
+R=$(repo d2); plano "$R" 'files_modified:
+  - docs/rel.md'
+commit "$R" 'docs(7-01): Task 1' docs/rel.md
+commit "$R" 'docs(7-01): Task 2' docs/rel.md
+commit "$R" 'docs(7-01): Task 3' docs/rel.md
+commit "$R" 'docs(7-01): complete plan - varredura declarada' .planning/phases/7-bancada/7-01-SUMMARY.md
+roda "$R"
+eq "commits_tarefa=3 → ok (metadados sem slug e com sufixo não contam)" "$(campo '"\(.commits_tarefa)/\(.veredito)"')" "3/ok"
 
 echo "== (e) nenhum commit com a tag → SEM-COMMIT; docs(7) e (01) nus não contam"
 R=$(repo e); plano "$R" 'files_modified:
