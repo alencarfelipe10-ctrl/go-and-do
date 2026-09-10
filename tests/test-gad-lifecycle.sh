@@ -246,6 +246,52 @@ else
   bad "regressão: golden ausente" "$GOLDEN"
 fi
 
+# ───────────────────────── v2.5.4: SubagentStop = fim real ─────────────────────────
+echo "── SubagentStop grava retorno com fim_real:true; PostToolUse com fim_real:false ──"
+monta
+# meta + transcript do agente, como o CC grava: subagents/agent-<id>.meta.json e .jsonl
+meta a0aaaa gsd-executor tu-stop-1 2
+printf '%s\n' '{"type":"assistant","timestamp":"2026-09-09T15:15:44-03:00","message":{"model":"claude-sonnet-5"}}' > "$SUB/agent-a0aaaa-x.jsonl"
+jq -c '. + {description:"Execute plan 01 of phase INS-99", spawnedWithWorktree:true, requestShape:"background"}' \
+  "$SUB/agent-a0aaaa-x.meta.json" > "$SUB/tmp.json" && mv "$SUB/tmp.json" "$SUB/agent-a0aaaa-x.meta.json"
+# 1) despacho + retorno da chamada (PostToolUse)
+roda "$(p_agent gsd-executor "" "" tu-stop-1)"
+roda "$(p_post gsd-executor tu-stop-1)"
+ult=$(tail -n1 "$RL")
+grep -q '"evento":"retorno"' <<<"$ult" && grep -q '"fim_real":false' <<<"$ult" \
+  && ok "PostToolUse: retorno com fim_real:false" || bad "PostToolUse fim_real:false" "$ult"
+# 2) SubagentStop com transcript_path do agente
+P_STOP=$(jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$SUB/agent-a0aaaa-x.jsonl" '
+  {hook_event_name:"SubagentStop", cwd:$cwd, session_id:$s, agent_id:"a0aaaa", agent_type:"gsd-executor",
+   transcript_path:$tp}')
+roda "$P_STOP"
+ult=$(tail -n1 "$RL")
+[ "$DELTA" = 1 ] && ok "SubagentStop: 1 linha nova" || bad "SubagentStop: linhas novas" "$DELTA"
+grep -q '"evento":"retorno"' <<<"$ult" && grep -q '"fim_real":true' <<<"$ult" \
+  && ok "SubagentStop: retorno com fim_real:true" || bad "SubagentStop fim_real:true" "$ult"
+grep -q '"camada":2' <<<"$ult" && ok "…camada 2 (spawnDepth do meta)" || bad "camada do meta" "$ult"
+grep -q '"agente":"gsd-executor"' <<<"$ult" && ok "…agente do meta" || bad "agente" "$ult"
+grep -q '"agent_id":"a0aaaa"' <<<"$ult" && ok "…agent_id" || bad "agent_id" "$ult"
+grep -q '"descricao":"Execute plan 01 of phase INS-99"' <<<"$ult" && ok "…descricao do meta" || bad "descricao" "$ult"
+grep -q '"isolation":"worktree"' <<<"$ult" && ok "…isolation worktree (spawnedWithWorktree)" || bad "isolation" "$ult"
+grep -Eq '"duracao_s":[0-9]+' <<<"$ult" && ok "…duracao_s numérica" || bad "duracao_s" "$ult"
+[ -z "$OUT" ] && ok "…sem stdout (SubagentStop não aceita envelope)" || bad "stdout no SubagentStop" "$OUT"
+# 3) SubagentStop sem meta (agente desconhecido): ainda grava, agente = agent_type, sem quebrar
+P_STOP2=$(jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$SUB/agent-zzz.jsonl" '
+  {hook_event_name:"SubagentStop", cwd:$cwd, session_id:$s, agent_id:"zzz", agent_type:"Explore", transcript_path:$tp}')
+roda "$P_STOP2"
+ult=$(tail -n1 "$RL")
+[ "$DELTA" = 1 ] && grep -q '"agente":"Explore"' <<<"$ult" && grep -q '"fim_real":true' <<<"$ult" \
+  && ok "SubagentStop sem meta: grava com agent_type" || bad "SubagentStop sem meta" "$ult"
+# 4) descrição multibyte cortada por caracteres, não bytes (45g)
+D120=$(python3 -c 'print("ção"*50)')
+P_MB=$(jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$TP" --arg d "$D120" '
+  {hook_event_name:"PreToolUse", tool_name:"Agent", cwd:$cwd, session_id:$s, transcript_path:$tp,
+   tool_use_id:"tu-mb", tool_input:{subagent_type:"gsd-executor", description:$d}}')
+roda "$P_MB"
+tail -n1 "$RL" | python3 -c 'import sys,json; d=json.loads(sys.stdin.buffer.read().decode("utf-8")); assert len(d["descricao"])==120, len(d["descricao"])' \
+  && ok "descricao: 120 caracteres, UTF-8 íntegro" || bad "descricao multibyte" "$(tail -n1 "$RL" | cut -c1-200)"
+
 echo "--------------------------------------------------"
 echo "$ok ok / $falhas falhas"
 [ "$falhas" -eq 0 ]
