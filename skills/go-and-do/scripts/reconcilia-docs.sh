@@ -91,9 +91,12 @@ PRTXT=""; [ -n "$PR" ] && PRTXT=", PR ${PR%% *}"
 
 # Lê os dois campos como VALOR (e não por grep literal) para poder distinguir "o status é
 # outro token" de "o status nem é um token". Trim de espaços e de \r à direita.
-campo_state() { # <nome do campo> → valor cru, sem o prefixo e sem espaços nas bordas
+campo_state() { # <nome do campo> → valor cru, sem o prefixo, sem espaços nas bordas e sem
+  # aspas envolventes (GSD 1.13.0: `state update` regrava `current_phase: "24.4"` com aspas —
+  # sem isto o --pausa acusava «esperado '24.4', encontrado '"24.4"'» na 2ª rodada; v2.5.4)
   grep -m1 -E "^$1: " "$STATE" 2>/dev/null \
-    | sed -e "s/^$1:[[:space:]]*//" -e 's/[[:space:]]*$//' -e 's/\r$//'
+    | sed -e "s/^$1:[[:space:]]*//" -e 's/[[:space:]]*$//' -e 's/\r$//' \
+          -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
 }
 # token = uma única palavra nua (sem aspas, sem espaço): `executing`, `between_phases`, `paused`…
 eh_token() { printf '%s' "$1" | grep -qE '^[A-Za-z_][A-Za-z0-9_-]*$'; }
