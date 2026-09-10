@@ -229,6 +229,15 @@ if [ "$(jq -r '.pre.paralelismo // false' "$MANIFEST")" = "true" ]; then
   if [ "$SD" = true ] && [ "$(jq 'length' <<<"$ONDAS")" -gt 0 ]; then
     bloqueia_par "should_degrade=true em onda(s) $(jq -r 'join(",")' <<<"$ONDAS")" "O base-check do GSD rebaixaria a(s) onda(s) $(jq -r 'join(",")' <<<"$ONDAS") para sequencial. Mensagem real: $MSG — Como proceder?" "$PAR"
   fi
+  # (4) premissa obsoleta de worktree nos planos (45l, F24.5): `isolation: none` ou precondition
+  # «roda SEM worktree» num projeto com worktree-fixtures.txt / use_worktrees:true. Conserto é
+  # MECÂNICO e da camada 0 (corrigir os PLAN.md e commitar), não pergunta ao dono.
+  PRECOND=$(bash "$GAD_SCRIPTS_DIR/confere-precondicoes.sh" "$PHASE_DIR" "$ROOT" 2>/dev/null || true)
+  if [ "$(jq -r '.veredito // "ok"' <<<"$PRECOND" 2>/dev/null)" = falha ]; then
+    _pl=$(jq -r '[.planos_reprovados[].plan] | join(",")' <<<"$PRECOND")
+    extras=$(jq -cn --argjson prev "$extras" --argjson pc "$PRECOND" '$prev + {precondicoes: $pc, acao_mecanica: true}')
+    bloqueia_par "precondicao_worktree_obsoleta: $_pl" "Planos $_pl declaram 'isolation: none' ou precondition «roda SEM worktree» — premissa resolvida desde 27/07 (.planning/worktree-fixtures.txt é copiado para dentro do worktree pelo passo 0 do despacho). Conserto mecânico, sem perguntar: em cada PLAN.md listado remova a linha 'isolation: none' e reescreva a precondition dizendo que os caminhos chegam DENTRO do worktree pela cópia do passo 0; commite ('fix(fase NN): remove premissa stale de worktree dos planos') e re-rode o pre-despacho." "$PAR"
+  fi
   # (5) C1 (plano 4, 05/09): o portão de forma §13a-bis tem de ter passado NESTA fase. É ele que
   # reprova sobreposição de arquivos dentro da onda — o único estado que faz o execute-phase
   # serializar a onda inteira (`Running these plans sequentially…`). `last-plan-gate.json` é
