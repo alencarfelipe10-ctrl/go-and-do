@@ -888,13 +888,18 @@ Timing decisions are decisions too — postponing a question, holding a notice u
 resumo: same mechanics, entry in `NN-DECISOES.md` (chat narration is lost; the record is what
 the resumo and the audit re-read).
 
-Silence window (23h–07h): before opening a hard gate with `AskUserQuestion`, run
-`janela-silencio.sh` and follow the exit code — it is the single source of the rule (the
-`janela_silencio` field of the checkpoint JSON is informative only; do not route by it).
+Ceremony before ANY `AskUserQuestion` inside the round (v2.5.4, 45p): run
+`pre-gate.sh "<phase_dir>" "<NN>" "<question in 1 line>"`. It runs `janela-silencio.sh`
+(single source of the 23h–07h rule; the `janela_silencio` field of the checkpoint JSON is
+informative only), commits the phase artifacts (RUN-LOG, DECISOES, NOTIFICACOES, gate evidence)
+by explicit pathspec, and records `.planning/.gad/last-pre-gate.json`. The hook
+`gad-gate-guard.sh` DENIES the question when the marker is missing, older than 15 min, or from
+another HEAD, and when the window is closed — a denial is the route, never something to retry.
 1. exit 0 (`acao: pergunta`) → ask normally.
 2. exit 1 (`acao: pausa`) → graceful pause (Sub-rotina D, reason `gate duro em janela de
    silêncio`), with the pending question (options + recommendation) in the handoff and in the
-   partial resumo; the resume re-presents it.
+   partial resumo; the resume re-presents it. (F24.5: the 23:50 question was opened inside the
+   window with nothing committed and no handoff; the mirrors stayed 6 h stale.)
 
 Does not apply to auto-decision (which never stops) nor changes the fail-closed. A
 `blocking-human` of precondition in the window is not a question — it is a pending action:
