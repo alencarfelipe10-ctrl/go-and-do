@@ -6,10 +6,14 @@
 # único: este hook é o ÚNICO escritor de despacho/retorno. Desde a auditoria da F24
 # (10/08) o SendMessage também entra: retomada de subagente vivo gera despacho/retorno
 # com "retomada":true (o 2º retorno do gad-intent pós-gate ficava invisível).
+# v2.5.4 (45g): a tool Agent é assíncrona no CC ≥ 2.1.26x — o PostToolUse dispara no retorno
+# da CHAMADA. Por isso o hook também é registrado em `SubagentStop` (matcher vazio), que grava
+# o `retorno` de fim real (`fim_real:true`, `agent_id`, `duracao_s`); o retorno do PostToolUse
+# fica com `fim_real:false`. Registro: `hooks/registra-hooks.sh`.
 #
 # Instalação (fora do repo — passo documentado no README):
 #   ln -s <clone>/hooks/gad-lifecycle.sh ~/.claude/hooks/gad-lifecycle.sh
-#   + registro no ~/.claude/settings.json (PreToolUse e PostToolUse, matcher
+#   + registro no ~/.claude/settings.json (PreToolUse, PostToolUse e SubagentStop, matcher
 #     "Agent|Task|SendMessage")
 #
 # Vive no settings GLOBAL e dispara em qualquer sessão/projeto — por isso os guards
@@ -64,9 +68,15 @@ RUNLOG_SH="$HOME/.claude/skills/go-and-do/scripts/run-log.sh"
 [ -f "$RUNLOG_SH" ] || exit 0
 
 EV=$(jq -r '.hook_event_name // empty' <<<"$IN")
+# FIM_REAL: só o SubagentStop marca o fim de verdade do agente. Desde que a tool Agent virou
+# assíncrona (CC 2.1.26x, "Async agent launched"), o PostToolUse dispara segundos após o
+# despacho — o `retorno` dele é o retorno da CHAMADA (F24.5: 9 executores "encerrados" 2–5 s
+# após nascer, 12 incidentes falsos de onda serializada). v2.5.4, tarefa 45g.
+FIM_REAL=0
 case "$EV" in
-  PreToolUse)  TIPO=despacho ;;
-  PostToolUse) TIPO=retorno ;;
+  PreToolUse)   TIPO=despacho ;;
+  PostToolUse)  TIPO=retorno ;;
+  SubagentStop) TIPO=retorno; FIM_REAL=1 ;;
   *) exit 0 ;;
 esac
 
@@ -76,16 +86,41 @@ TP=$(jq -r '.transcript_path // ""' <<<"$IN")
 SUBDIR="${TP%.jsonl}/subagents"
 
 RETOMADA=0; ISOL=""
-if [ "$TOOL" = "SendMessage" ]; then
+# SubagentStop (docs do CC: session_id, agent_id, agent_type, transcript_path do AGENTE, cwd; sem
+# tool_use_id). O meta.json do agente é `<transcript do agente sem .jsonl>.meta.json`; fallback:
+# procurar por agent_id no diretório do transcript e em <transcript>/subagents/.
+AGID=""; META_STOP=""; ATP=""
+if [ "$EV" = SubagentStop ]; then
+  AGID=$(jq -r '.agent_id // empty' <<<"$IN")
+  ATP=$(jq -r '.agent_transcript_path // .transcript_path // ""' <<<"$IN")
+  [ -n "$ATP" ] && [ -f "${ATP%.jsonl}.meta.json" ] && META_STOP="${ATP%.jsonl}.meta.json"
+  if [ -z "$META_STOP" ] && [ -n "$AGID" ]; then
+    for _d in "$(dirname "$ATP")" "$(dirname "$ATP")/subagents" "${ATP%.jsonl}/subagents"; do
+      _m=$(ls "$_d"/agent-"${AGID#agent-}"*.meta.json 2>/dev/null | head -n1)
+      [ -n "$_m" ] && { META_STOP="$_m"; break; }
+    done
+  fi
+  TOOL="Agent"
+  AG=$(jq -r '.agent_type // empty' <<<"$IN")
+  if [ -n "$META_STOP" ]; then
+    _at=$(jq -r '.agentType // empty' "$META_STOP" 2>/dev/null); [ -n "$_at" ] && AG="$_at"
+    DESC=$(jq -r '(.description // "")[0:120]' "$META_STOP" 2>/dev/null)
+    [ "$(jq -r '.spawnedWithWorktree // false' "$META_STOP" 2>/dev/null)" = true ] && ISOL="worktree"
+    TUID=$(jq -r '.toolUseId // empty' "$META_STOP" 2>/dev/null)
+  else
+    DESC=""
+  fi
+  : "${AG:=general-purpose}"
+elif [ "$TOOL" = "SendMessage" ]; then
   # retomada de subagente vivo (SendMessage): alvo = campo `to`; mensagens para fora
   # (outras sessões/canais) não têm meta local e caem no fallback camada 0 — aceitável,
   # a origem da retomada é a camada 0 mesmo.
   RETOMADA=1
   AG=$(jq -r '.tool_input.to // "?"' <<<"$IN" | tr -cd 'A-Za-z0-9_ ().-' | head -c 60)
-  DESC=$(jq -r '.tool_input.message // ""' <<<"$IN" | head -c 120)
+  DESC=$(jq -r '(.tool_input.message // "")[0:120]' <<<"$IN")
 else
   AG=$(jq -r '.tool_input.subagent_type // "general-purpose"' <<<"$IN")
-  DESC=$(jq -r '.tool_input.description // ""' <<<"$IN" | head -c 120)
+  DESC=$(jq -r '(.tool_input.description // "")[0:120]' <<<"$IN")
   # isolamento pedido no despacho (`isolation: "worktree"`): é o que permite ao
   # confere-etapa.sh 3 distinguir executor em cópia de executor na árvore principal.
   ISOL=$(jq -r '.tool_input.isolation // ""' <<<"$IN" | tr -cd 'a-z-' | head -c 20)
@@ -237,8 +272,22 @@ modelo_do_jsonl() {
     | sed 's/.*:"\(.*\)"/\1/'
 }
 
+# SubagentStop: o meta.json já foi localizado acima (META_STOP)
+DUR=""
+if [ "$FIM_REAL" = 1 ] && [ -n "$META_STOP" ]; then
+  SD=$(jq -r '.spawnDepth // empty' "$META_STOP" 2>/dev/null)
+  case "$SD" in (''|*[!0-9]*) ;; (*) CAM=$SD ;; esac
+  MODELO=$(jq -r '.model // empty' "$META_STOP" 2>/dev/null)
+  [ -n "$MODELO" ] || MODELO=$(modelo_do_jsonl "${META_STOP%.meta.json}.jsonl")
+  # duração = agora − primeiro timestamp do transcript do agente
+  _t0=$(grep -o '"timestamp":"[^"]*"' "${META_STOP%.meta.json}.jsonl" 2>/dev/null | head -n1 | sed 's/.*:"\(.*\)"/\1/')
+  if [ -n "$_t0" ]; then
+    _s0=$(date -d "$_t0" +%s 2>/dev/null || true); _s1=$(date +%s)
+    [ -n "$_s0" ] && DUR=$((_s1 - _s0))
+  fi
+fi
 # retorno: meta.json do subagente é a fonte autoritativa (tool_use_id ↔ toolUseId)
-if [ "$TIPO" = retorno ] && [ -n "$TUID" ] && [ -d "$SUBDIR" ]; then
+if [ -z "$CAM" ] && [ "$TIPO" = retorno ] && [ -n "$TUID" ] && [ -d "$SUBDIR" ]; then
   META=$(grep -l "\"toolUseId\":\"$TUID\"" "$SUBDIR"/*.meta.json 2>/dev/null | head -n1)
   if [ -n "$META" ]; then
     SD=$(jq -r '.spawnDepth // empty' "$META" 2>/dev/null)
@@ -298,10 +347,18 @@ fi
 
 # ET (etapa da janela aberta) já foi calculada antes dos gates.
 
+# fim_real: false no retorno do PostToolUse (retorno da CHAMADA, que é imediata com Agent
+# assíncrono); true no SubagentStop. Quem mede paralelismo (confere-etapa.sh 3) só fecha
+# despacho com fim_real:true.
+FR_KV=""
+if [ "$TIPO" = retorno ]; then
+  if [ "$FIM_REAL" = 1 ]; then FR_KV="--kv fim_real=true"; else FR_KV="--kv fim_real=false"; fi
+fi
 bash "$RUNLOG_SH" "$PD" "$NN" "$TIPO" "$ET" \
   --camada "$CAM" \
   ${MODELO:+--modelo "$MODELO"} ${EFFORT:+--effort "$EFFORT"} \
-  --kv agente="$AG" --kv origem=hook \
+  --kv agente="$AG" --kv origem=hook $FR_KV \
+  ${AGID:+--kv agent_id="$AGID"} ${DUR:+--kv duracao_s="$DUR"} \
   $([ "$RETOMADA" = 1 ] && echo '--kv retomada=true') \
   $([ "$HERDADO" = 1 ] && echo '--kv modelo_herdado=true') \
   ${DESC:+--kv descricao="$DESC"} ${ISOL:+--kv isolation="$ISOL"} >/dev/null 2>&1
