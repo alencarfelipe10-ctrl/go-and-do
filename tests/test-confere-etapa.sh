@@ -290,9 +290,11 @@ monta3() { # <nome> → ecoa "<root>|<phase_dir>"
   plano3 "$pd" 01 1; plano3 "$pd" 02 1; plano3 "$pd" 03 2 '"95-01"'
   printf '%s|%s' "$root" "$pd"
 }
-ev() { # <arquivo> <seq> <ts> <evento> <descricao>
-  printf '{"ts":"%s","seq":%s,"sessao":"b","evento":"%s","etapa":"3 construcao","camada":1,"agente":"gsd-executor","origem":"hook","descricao":"%s"}\n' \
-    "$3" "$2" "$4" "$5" >> "$1"
+ev() { # <arquivo> <seq> <ts> <evento> <descricao> [fim_real: true|false — só para retorno; default true]
+  local fr=""
+  [ "$4" = retorno ] && fr=",\"fim_real\":${6:-true}"
+  printf '{"ts":"%s","seq":%s,"sessao":"b","evento":"%s","etapa":"3 construcao","camada":1,"agente":"gsd-executor","origem":"hook","descricao":"%s"%s}\n' \
+    "$3" "$2" "$4" "$5" "$fr" >> "$1"
 }
 confere3() { printf '%s' "$(bash "$C" 3 --projeto "$1" --fase 95 --dry-run 2>/dev/null | tail -1)"; }
 
@@ -317,6 +319,35 @@ bash "$C" 3 --projeto "$R" --fase 95 >/dev/null 2>&1
 casa "…C2: fora do dry-run a onda serializada vira incidente no run-log (origem=confere-etapa.sh)" "$(cat "$RL")" \
      '"evento":"incidente".*"origem":"confere-etapa.sh".*onda 1 serializada: 2 planos despachados.*janela entre despachos 1860s'
 eq "…um incidente por onda serializada (1)" "$(grep -c 'onda 1 serializada' "$RL")" "1"
+
+# v2.5.4 (45e): retorno só da chamada (fim_real:false, Agent assíncrono) NÃO fecha o despacho —
+# a onda sai nao_medido e NUNCA vira "serializada" (F24.5: 12 incidentes falsos)
+IFS='|' read -r R PD <<<"$(monta3 c3async)"
+RL="$PD/95-RUN-LOG.jsonl"
+ev "$RL" 1 2026-09-09T15:15:43-03:00 despacho "Execute plan 01 of phase INS-95"
+ev "$RL" 2 2026-09-09T15:15:46-03:00 retorno  "Execute plan 01 of phase INS-95" false
+ev "$RL" 3 2026-09-09T15:16:51-03:00 despacho "Execute plan 02 of phase INS-95"
+ev "$RL" 4 2026-09-09T15:16:53-03:00 retorno  "Execute plan 02 of phase INS-95" false
+J="$(confere3 "$R")"
+eq "async: onda 1 simultaneos_max null" "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].simultaneos_max')" "null"
+casa "…nao_medido explica (sem retorno real)" "$(printf '%s' "$J" | jq -r '.extrai.paralelismo_observado["1"].nao_medido')" 'sem retorno real'
+eq "…despachados 2" "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].despachados')" "2"
+eq "…serializacao_observada []" "$(printf '%s' "$J" | jq -c '.extrai.serializacao_observada')" '[]'
+bash "$C" 3 --projeto "$R" --fase 95 >/dev/null 2>&1
+eq "…zero incidente de onda serializada" "$(grep -c 'serializada' "$RL")" "0"
+# misto: retorno de chamada E retorno real — o real fecha, a onda mede
+IFS='|' read -r R PD <<<"$(monta3 c3misto)"
+RL="$PD/95-RUN-LOG.jsonl"
+ev "$RL" 1 2026-09-09T15:15:43-03:00 despacho "Execute plan 01 of phase INS-95"
+ev "$RL" 2 2026-09-09T15:15:46-03:00 retorno  "Execute plan 01 of phase INS-95" false
+ev "$RL" 3 2026-09-09T15:16:51-03:00 despacho "Execute plan 02 of phase INS-95"
+ev "$RL" 4 2026-09-09T15:16:53-03:00 retorno  "Execute plan 02 of phase INS-95" false
+ev "$RL" 5 2026-09-09T15:37:00-03:00 retorno  "Execute plan 01 of phase INS-95" true
+ev "$RL" 6 2026-09-09T15:44:00-03:00 retorno  "Execute plan 02 of phase INS-95" true
+J="$(confere3 "$R")"
+eq "misto: simultaneos_max 2 (os dois abertos entre 15:16:51 e 15:37)" "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].simultaneos_max')" "2"
+eq "…sem nao_medido" "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].nao_medido // "ausente"')" '"ausente"'
+eq "…duracao_onda_s 1697 (15:15:43 → 15:44:00)" "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].duracao_onda_s')" "1697"
 
 IFS='|' read -r R PD <<<"$(monta3 c3paralelo)"
 RL="$PD/95-RUN-LOG.jsonl"

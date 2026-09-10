@@ -82,12 +82,21 @@ modelo e effort) por um hook do Claude Code — sem depender do modelo lembrar d
 ln -s "$(pwd)/go-and-do/hooks/gad-lifecycle.sh" ~/.claude/hooks/gad-lifecycle.sh
 ```
 
-E registre no `~/.claude/settings.json`, dentro de `hooks`, nas duas listas
-(`PreToolUse` **e** `PostToolUse`):
+E registre no `~/.claude/settings.json`, dentro de `hooks`, em três listas: `PreToolUse` e
+`PostToolUse` com o matcher abaixo, e `SubagentStop` **sem matcher** (é ele que grava o fim real
+do subagente — a tool `Agent` é assíncrona desde o CC 2.1.26x e o `PostToolUse` dispara no retorno
+da chamada, não do agente):
 
 ```json
 {
-  "matcher": "Agent|Task",
+  "matcher": "Agent|Task|SendMessage",
+  "hooks": [
+    { "type": "command", "command": "bash \"$HOME/.claude/hooks/gad-lifecycle.sh\"", "timeout": 5 }
+  ]
+}
+```
+```json
+{
   "hooks": [
     { "type": "command", "command": "bash \"$HOME/.claude/hooks/gad-lifecycle.sh\"", "timeout": 5 }
   ]

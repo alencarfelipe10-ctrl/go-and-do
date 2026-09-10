@@ -434,6 +434,11 @@ def main() -> int:
                     ts = datetime.fromisoformat(e.get("ts", "")).timestamp()
                 except Exception:
                     ts = 0.0
+                # v2.5.4 (45e): só `retorno` com fim_real:true fecha um despacho — o retorno do
+                # PostToolUse é o da CHAMADA (Agent assíncrono) e chega 2–5 s após o despacho.
+                if e["evento"] == "retorno" and e.get("fim_real") is not True:
+                    evs.append((ts, e.get("seq", 0), "retorno_chamada", pid))
+                    continue
                 evs.append((ts, e.get("seq", 0), e["evento"], pid))
     except (FileNotFoundError, IndexError):
         pass
@@ -445,8 +450,12 @@ def main() -> int:
            for w, ids in waves.items()}
     primeiro, ultimo, ultimo_retorno, inicio_plano = {}, {}, {}, {}
     vistos = {w: set() for w in waves}
+    sem_fim = {w: 0 for w in waves}
     for ts, _seq, ev, pid in evs:
         w = wave_of[pid]
+        if ev == "retorno_chamada":
+            sem_fim[w] += 1
+            continue
         if ev == "despacho":
             aberto[pid] = aberto.get(pid, 0) + 1
             vistos[w].add(pid)
@@ -463,13 +472,21 @@ def main() -> int:
                 res[w]["plano_mais_lento_s"] = max(res[w]["plano_mais_lento_s"] or 0, dur)
     for w in waves:
         res[w]["despachados"] = len(vistos[w])
+        # despacho ainda aberto no fecho = sem retorno real (hook SubagentStop ausente, ou
+        # retorno só da chamada): a onda não é medível — não se conclui serialização dela
+        abertos = [p for p in waves[w] if aberto.get(p, 0) > 0]
+        if abertos or (vistos[w] and sem_fim[w] and not ultimo_retorno.get(w)):
+            res[w]["nao_medido"] = (f"{len(abertos) or sem_fim[w]} despacho(s) sem retorno real "
+                                    "(fim_real) — hook SubagentStop não registrado ou executor aberto")
+            res[w]["simultaneos_max"] = None
         if w in primeiro and primeiro[w] and ultimo.get(w):
             res[w]["janela_despachos_s"] = int(ultimo[w] - primeiro[w])
         # C3 (plano 4): tempo da onda (1º despacho → último retorno) × plano mais lento — próximo
         # de 1 na onda larga é o sinal de paralelismo real
         if w in primeiro and primeiro[w] and ultimo_retorno.get(w):
             res[w]["duracao_onda_s"] = int(ultimo_retorno[w] - primeiro[w])
-    ser = [w for w, r in res.items() if r["despachados"] >= 2 and r["simultaneos_max"] <= 1]
+    ser = [w for w, r in res.items()
+           if r["despachados"] >= 2 and r["simultaneos_max"] is not None and r["simultaneos_max"] <= 1]
     print(json.dumps({"paralelismo_observado": res, "serializacao_observada": ser},
                      ensure_ascii=False))
     return 0
