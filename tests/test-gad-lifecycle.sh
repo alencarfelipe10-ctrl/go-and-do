@@ -283,6 +283,12 @@ roda "$P_STOP2"
 ult=$(tail -n1 "$RL")
 [ "$DELTA" = 1 ] && grep -q '"agente":"Explore"' <<<"$ult" && grep -q '"fim_real":true' <<<"$ult" \
   && ok "SubagentStop sem meta: grava com agent_type" || bad "SubagentStop sem meta" "$ult"
+# 3b) SubagentStop sem meta E sem agent_type (subagente interno do CC, ex. classificador do
+#     auto mode — F24.5 10/09: 4 linhas órfãs em 2 min) → no-op, nenhuma linha
+P_STOP3=$(jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$SUB/agent-nada.jsonl" '
+  {hook_event_name:"SubagentStop", cwd:$cwd, session_id:$s, agent_id:"nada", agent_type:"", transcript_path:$tp, agent_transcript_path:$tp}')
+roda "$P_STOP3"
+[ "$DELTA" = 0 ] && ok "SubagentStop sem meta e sem agent_type: no-op" || bad "SubagentStop interno do CC gravou linha" "$(tail -n1 "$RL")"
 # 4) descrição multibyte cortada por caracteres, não bytes (45g)
 D120=$(python3 -c 'print("ção"*50)')
 P_MB=$(jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$TP" --arg d "$D120" '

@@ -102,6 +102,11 @@ if [ "$EV" = SubagentStop ]; then
   fi
   TOOL="Agent"
   AG=$(jq -r '.agent_type // empty' <<<"$IN")
+  # Medido na F24.5 (10/09, 1ª hora com o SubagentStop registrado): eventos a cada ~30 s com
+  # agent_type vazio e SEM transcript/meta (agent_transcript_path inexistente) — subagentes
+  # internos do CC (classificador do auto mode), não despachos da skill. Sem meta e sem tipo
+  # não há o que registrar: no-op, senão o run-log ganha um `retorno` órfão por tool call.
+  if [ -z "$META_STOP" ] && [ -z "$AG" ]; then exit 0; fi
   if [ -n "$META_STOP" ]; then
     _at=$(jq -r '.agentType // empty' "$META_STOP" 2>/dev/null); [ -n "$_at" ] && AG="$_at"
     DESC=$(jq -r '(.description // "")[0:120]' "$META_STOP" 2>/dev/null)
