@@ -109,6 +109,29 @@ milissegundos. **Sem o hook a skill funciona normalmente** — a abertura detect
 ausência e declara a degradação (o run-log fica sem os eventos `despacho`/`retorno`,
 e as conferências que dependem deles viram informativas).
 
+Atalho idempotente para o `SubagentStop` e para o `gad-gate-guard` (seção abaixo):
+`bash hooks/registra-hooks.sh --dry-run` mostra o que faria; sem `--dry-run` faz backup do
+`settings.json` e grava. Rode você mesmo, na sua sessão — a skill nunca edita o settings.
+
+### Hook de cerimônia `gad-gate-guard` (recomendado)
+
+`hooks/gad-gate-guard.sh` nega um `AskUserQuestion` dentro de uma rodada ativa quando (a) a hora
+está na janela de silêncio (23h–07h) — a rota é a parada graciosa — ou (b) o `pre-gate.sh` não
+rodou nos últimos 15 min para o HEAD atual (ele commita os artefatos da fase antes da pergunta).
+Registro em `hooks.PreToolUse` com `"matcher": "AskUserQuestion"`, apontando para o clone:
+
+```json
+{
+  "matcher": "AskUserQuestion",
+  "hooks": [
+    { "type": "command", "command": "bash \"$HOME/Projetos-Vox-AI/go-and-do/hooks/gad-gate-guard.sh\"", "timeout": 10 }
+  ]
+}
+```
+
+Registre só DEPOIS de atualizar a skill instalada para a v2.5.4 (o hook exige o `pre-gate.sh`
+na árvore instalada; sem ele, toda pergunta real seria negada).
+
 ### Hook de guarda do Bash `gad-bash-guard` (recomendado)
 
 Nega, dentro de uma rodada ativa, comando de subagente em segundo plano ou desprendido
