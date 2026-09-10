@@ -550,6 +550,125 @@ PYSUITE
   EXTRAI=$(jq -c --argjson po "$PAR_OBS" --argjson a "$uw0" --argjson b "$uw1" --argjson su "$SUITE" \
     '. + $po + {use_worktrees:{inicio:$a, fecho:$b}, suite:$su}' <<<"$EXTRAI")
 
+  # ── suíte final (45n, v2.5.4 — F24.5): a última suíte COMPLETA da etapa precisa estar verde
+  # e sem commit de código depois dela; a última onda precisa de gate próprio quando o projeto
+  # usa `roda-suite.sh --gate-onda`. Só se aplica a projeto instrumentado (há lançamento do
+  # roda-suite.sh nesta etapa ou o test_command cita roda-suite.sh). O dono pode aceitar suíte
+  # vermelha por `suite-ressalva.sh` (frontmatter do VERIFICATION) — vira incidente, não falha.
+  TESTCMD=$(jq -r '.workflow.test_command // ""' "$ROOT/.planning/config.json" 2>/dev/null || true)
+  SF=$(GAD_SUITE_DIR="${COMMON3:+$COMMON3/gad-suite}" GAD_ROOT="$ROOT" GAD_RL="$RL3" IDX_JSON="$IDX3" \
+       GAD_VER="$PHASE_DIR/$NN-VERIFICATION.md" GAD_TESTCMD="$TESTCMD" python3 - 2>/dev/null <<'PYSF' || echo '{"aplica":false}'
+import glob, json, os, re, subprocess
+from datetime import datetime
+d = os.environ.get("GAD_SUITE_DIR") or ""; root = os.environ["GAD_ROOT"]
+testcmd = os.environ.get("GAD_TESTCMD") or ""; ver = os.environ.get("GAD_VER") or ""
+idx = json.loads(os.environ.get("IDX_JSON") or "{}")
+
+def ts(s):
+    try: return datetime.fromisoformat(s.strip()).timestamp()
+    except Exception: return None
+
+# t0 = 1º despacho de executor no run-log da etapa (fallback: 1º checkpoint "3 construcao"; senão 0)
+t0 = 0.0; t0chk = None
+try:
+    for ln in open(os.environ.get("GAD_RL") or "", encoding="utf-8", errors="replace"):
+        try: e = json.loads(ln)
+        except Exception: continue
+        if e.get("evento") == "checkpoint" and str(e.get("etapa", "")).startswith("3") and t0chk is None:
+            t0chk = ts(e.get("ts", "")) or None
+        if e.get("evento") == "despacho" and e.get("agente") == "gsd-executor":
+            t0 = ts(e.get("ts", "")) or 0.0; break
+except OSError:
+    pass
+if not t0 and t0chk: t0 = t0chk
+
+tags = []
+for st in sorted(glob.glob(os.path.join(d, "*"))) if d and os.path.isdir(d) else []:
+    if not os.path.isfile(os.path.join(st, "cmd")): continue
+    try: ini = ts(open(os.path.join(st, "iniciado")).read())
+    except OSError: ini = None
+    rc = None
+    try:
+        s = open(os.path.join(st, "rc")).read().strip(); rc = int(s) if s else None
+    except (OSError, ValueError): rc = None
+    tags.append({"tag": os.path.basename(st), "iniciado": ini, "rc": rc})
+na_etapa = [t for t in tags if t["iniciado"] is not None and t["iniciado"] >= t0]
+aplica = bool(na_etapa) or ("roda-suite.sh" in testcmd)
+out = {"aplica": aplica, "t0": t0, "codigos": [], "ultima_completa": None, "commits_pos_suite": []}
+if not aplica:
+    print(json.dumps(out)); raise SystemExit
+completas = [t for t in na_etapa if not t["tag"].startswith("gate-onda-")]
+ressalva = False
+try:
+    fm = open(ver, encoding="utf-8").read().split("\n---", 2)[0]
+    ressalva = bool(re.search(r"^suite_final:\s*vermelha", fm, re.M)) and bool(re.search(r"^suite_ressalva:\s*\S", fm, re.M))
+except OSError:
+    pass
+out["ressalva"] = ressalva
+if not completas:
+    out["codigos"].append("SUITE-COMPLETA-AUSENTE")
+else:
+    u = max(completas, key=lambda t: t["iniciado"]); out["ultima_completa"] = u
+    if u["rc"] is None:
+        out["codigos"].append("SUITE-EM-CURSO")
+    elif u["rc"] != 0:
+        out["codigos"].append("SUITE-FINAL-VERMELHA-COM-RESSALVA" if ressalva else "SUITE-FINAL-VERMELHA")
+    else:
+        since = datetime.fromtimestamp(u["iniciado"]).isoformat()
+        try:
+            r = subprocess.run(["git", "-C", root, "log", f"--since={since}", "--name-only", "--format=%h %s"],
+                               capture_output=True, text=True, timeout=10)
+            # DESVIO (bug literal do plano): `--name-only` põe a linha em branco logo
+            # APÓS o cabeçalho (antes da lista de arquivos), não depois dela — tratar
+            # "" como gatilho de flush (igual a um novo cabeçalho) zera `cur` antes de
+            # qualquer arquivo ser visto e SUITE-NAO-RELANCADA nunca dispara. Linha em
+            # branco agora é no-op; o flush final roda depois do laço.
+            shas = []; cur = None; toca = False
+            for ln in r.stdout.splitlines():
+                if re.match(r"^[0-9a-f]{7,} ", ln):
+                    if cur and toca: shas.append(cur)
+                    cur = ln[:60]; toca = False
+                elif ln.strip() and not ln.startswith(".planning/"):
+                    toca = True
+            if cur and toca: shas.append(cur)
+            out["commits_pos_suite"] = shas
+            if shas: out["codigos"].append("SUITE-NAO-RELANCADA")
+        except Exception:
+            pass
+# última onda com gate próprio (só quando o test_command é o --gate-onda)
+if "--gate-onda" in testcmd:
+    waves = [int(w) for w in (idx.get("waves") or {}).keys() if str(w).isdigit()]
+    if waves:
+        W = max(waves)
+        if not any(t["tag"] == f"gate-onda-{W}" for t in na_etapa):
+            out["codigos"].append("ULTIMA-ONDA-SEM-GATE"); out["ultima_onda"] = W
+print(json.dumps(out))
+PYSF
+  )
+  jq -e . >/dev/null 2>&1 <<<"$SF" || SF='{"aplica":false}'
+  EXTRAI=$(jq -c --argjson sf "$SF" '. + {suite_final:$sf}' <<<"$EXTRAI")
+  if [ "$(jq -r '.aplica' <<<"$SF")" = true ]; then
+    while IFS= read -r cod; do
+      [ -n "$cod" ] || continue
+      det=$(jq -r --arg c "$cod" '
+        (.ultima_completa // {}) as $u |
+        if $c=="SUITE-FINAL-VERMELHA" then "última suíte completa (\($u.tag)) terminou rc=\($u.rc): conserte e RELANCE (roda-suite.sh --lancar --tag suite-final-2 --cmd …) até rc=0, ou o dono aceita por suite-ressalva.sh"
+        elif $c=="SUITE-NAO-RELANCADA" then "commit de código depois da última suíte verde (\($u.tag)): \(.commits_pos_suite|join("; ")) — relance a suíte completa"
+        elif $c=="SUITE-EM-CURSO" then "suíte \($u.tag) ainda sem rc: espere (roda-suite.sh --esperar --tag \($u.tag)) antes do fecho"
+        elif $c=="SUITE-COMPLETA-AUSENTE" then "nenhuma suíte completa lançada nesta etapa (só gates de onda): rode a suíte inteira uma vez depois da última onda"
+        elif $c=="ULTIMA-ONDA-SEM-GATE" then "a última onda (\(.ultima_onda)) não teve gate-onda-\(.ultima_onda): a suíte completa não substitui o gate da onda (F24.5)"
+        elif $c=="SUITE-FINAL-VERMELHA-COM-RESSALVA" then "última suíte completa (\($u.tag)) rc=\($u.rc), aceita pelo dono via suite-ressalva.sh"
+        else $c end' <<<"$SF")
+      if [ "$cod" = "SUITE-FINAL-VERMELHA-COM-RESSALVA" ]; then
+        RES=$(jq -c --arg d "$det" '. + [{id:"suite_final", resultado:"INFORMATIVO", detalhe:$d}]' <<<"$RES")
+        [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" incidente "$RUNLOG_ETAPA" --kv origem=confere-etapa.sh --kv detalhe="$det"
+      else
+        RES=$(jq -c --arg i "$(printf '%s' "$cod" | tr 'A-Z-' 'a-z_')" --arg d "$det" \
+          '. + [{id:$i, resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      fi
+    done < <(jq -r '.codigos[]' <<<"$SF")
+  fi
+
   # ── escopo por plano (P06, consertos F24.4): confere-plano.sh em cada plano com SUMMARY.
   # `FORA-DA-LISTA`, `LISTA-VAZIA`, `COMMITS-A-MENOS` e `SEM-COMMIT` reprovam. Arquivo fora do
   # `files_modified` é colisão que o cálculo de ondas não enxerga; commit único para três

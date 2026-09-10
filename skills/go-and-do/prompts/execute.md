@@ -136,10 +136,21 @@ reprova.
 Depois que a última onda fechar, rode a suíte completa uma vez, por `roda-suite.sh`, e trate
 o resultado como gate da etapa. Rodada extra no meio é escolha sua (fase longa, arquivo-hub
 tocado), nunca regra: com N executores em paralelo, N suítes `-n 4` disputam os mesmos quatro
-núcleos. O gate por onda que o GSD roda sozinho (`workflow.test_command`) só é barato
+núcleos. **Suíte vermelha → conserte e RELANCE** (`roda-suite.sh --lancar --tag suite-final-2
+--cmd '…'`, depois `--esperar --tag suite-final-2`; tag nova a cada relance, o estado da anterior
+fica para a auditoria) até `rc=0`. A cancela `confere-etapa.sh 3` reprova `SUITE-FINAL-VERMELHA`
+(último rc ≠ 0), `SUITE-NAO-RELANCADA` (commit fora de `.planning/` depois da última suíte verde),
+`SUITE-EM-CURSO` e `SUITE-COMPLETA-AUSENTE`. Reruns dirigidos («só os 12 que falharam») não
+substituem a suíte inteira — na F24.5 ficaram verdes só no transcript. Aceitar suíte vermelha é
+decisão do DONO: só com a resposta dele rode `suite-ressalva.sh <phase_dir> <NN> "<motivo>"`.
+**Nunca** instrua o `gsd-verifier` a não relançar a suíte.
+
+O gate por onda que o GSD roda sozinho (`workflow.test_command`) só é barato
 quando a config do projeto aponta `roda-suite.sh --gate-onda` (só os testes que a onda
 tocou); enquanto apontar a suíte inteira, um exit 124 desse gate é a suíte morrendo aos
-600 s, não um resultado — registre como incidente e não conclua nada dele.
+600 s, não um resultado — registre como incidente e não conclua nada dele. **A última onda
+também tem gate próprio** — «a suíte completa o subsome» não vale (F24.5: onda 5 sem gate, e a
+suíte completa só rodou depois dos merges); a cancela reprova `ULTIMA-ONDA-SEM-GATE`.
 
 Perda de paralelismo é incidente, não rota. Registre em `incidentes:` toda vez que o comando
 que você hospeda imprimir `Running these plans sequentially to avoid parallel worktree
