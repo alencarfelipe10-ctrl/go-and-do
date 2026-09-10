@@ -2,6 +2,21 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.5.5] — 2026-09-10
+
+Hotfix medido na primeira hora do `SubagentStop` registrado (F24.5, sessão de retomada).
+
+### Corrigido
+- `hooks/gad-lifecycle.sh`: `SubagentStop` sem `meta.json` e com `agent_type` vazio é no-op.
+  O Claude Code dispara o evento também para subagentes internos (classificador do auto mode:
+  sem transcript, `agent_transcript_path` inexistente), um a cada ~30 s — o hook gravava um
+  `retorno` órfão por tool call (4 linhas em 2 min no run-log real). Teste novo.
+
+### Provado na fase real
+- Primeiro `retorno` de fim real de um despacho verdadeiro: `descricao`, `camada 1`, `modelo
+  sonnet`, `duracao_s 187` lidos do `meta.json` (F24.5, seq 49, 11:23). O registro do hook no
+  `settings.json` entra em vigor sem reiniciar a sessão.
+
 ## [2.5.4] — 2026-09-10
 
 Consertos dos itens 2–6 da auditoria da F24.5 (grupo-inspired, 09/09): o medidor de paralelismo,
