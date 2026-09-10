@@ -292,6 +292,10 @@ runs the `base-check` and measures the waves of ≥2 incomplete plans.
   starts with `plan_gate_ausente_ou_reprovado:`, the choice «replanejar (volta à etapa 2) ou
   aceitar o despacho sabendo que a onda pode serializar». Do not diagnose on your own nor
   apply an antidote by hand: the script measures instead of presuming.
+  **Exception — `acao_mecanica: true`** (`motivo` starts with `precondicao_worktree_obsoleta:`):
+  no question. Fix the listed PLAN.md yourself exactly as `pergunta_ao_dono` says (drop
+  `isolation: none`, rewrite the precondition to the worktree-fixtures sentence), commit, re-run
+  `pre-despacho.sh 3`, and log `🤖 decidi sozinho` in `NN-DECISOES.md` (Sub-rotina I).
 - The close of 3.3 (`confere-etapa.sh 3`) extracts `paralelismo_observado` from the run-log (with
   `duracao_onda_s`/`plano_mais_lento_s`), `suite` (launches of `roda-suite.sh`) and
   `prova_avisos`/`prova_falhas` from the SUMMARYs — informative, for the `/audit-gad`

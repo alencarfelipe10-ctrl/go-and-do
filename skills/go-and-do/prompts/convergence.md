@@ -32,6 +32,13 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
      certa? · **(B) fatos do mundo externo** — payload real de API, comportamento de
      runtime, semântica de banco vivo, env de deploy. Classificação pela taxonomia de
      `prompts/categorias-achados.md`.
+   **Defeito conhecido se corrige ANTES do briefing seguinte.** Se, entre um ciclo e outro,
+   você souber de um erro nos planos — por mensagem de outra sessão, pelo advisor, por leitura
+   sua —, corrija os PLAN.md e commite ANTES de montar o briefing do ciclo seguinte; briefing
+   que carrega premissa que você já sabe falsa é `incidente` (`origem=convergence`,
+   `detalhe="briefing c<k> com premissa conhecida falsa: <qual>"`). Na F24.5 a camada 0 soube da
+   premissa «sem worktree» às 14:34, mandou o ciclo 2 com ela às 14:40 e só consertou às 15:05:
+   um ciclo de revisão externa rodou sobre plano sabidamente errado.
 2. Invoque `Skill` → `gsd-plan-review-convergence` com args
    `--codex --agy-revisor --max-cycles 3`.
    *(Dois revisores pinados — decisão do usuário 2026-07-22; flags explícitas, não a

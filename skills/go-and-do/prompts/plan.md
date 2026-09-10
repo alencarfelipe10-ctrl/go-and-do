@@ -101,6 +101,17 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    Fidelidade acima de otimismo: comando terminou sem
    erro mas `has_plans` falso → devolva `done` com `veredito: sem_plano`, nunca
    sucesso vazio.
+   **Precondições obsoletas (45l, F24.5):** no mesmo bloco, rode
+   `bash $HOME/.claude/skills/go-and-do/scripts/confere-precondicoes.sh "<phase_dir>" "<project_root>"`.
+   `veredito: falha` → **corrija você mesmo, agora, antes de devolver**: em cada PLAN.md listado em
+   `planos_reprovados`, apague a linha `isolation: none` do frontmatter e reescreva a
+   `<precondition>` que nega worktree com a frase «esses caminhos chegam DENTRO do worktree pela
+   cópia sancionada do passo 0 do despacho, declarada em `.planning/worktree-fixtures.txt`»;
+   commite (`fix(fase N): remove premissa stale de worktree dos planos`), re-rode o script até
+   `veredito: ok` e registre em `sinos:` `precondicao_worktree_obsoleta corrigida em <planos>`.
+   Não devolva `done` com o script em `falha`: o `pre-despacho.sh 3` bloqueia e o custo volta
+   para a camada 0. A premissa nasce do planner ler «arquivo gitignored» e concluir «sem
+   worktree»; na F24.5 atravessou planner, 2 checkers, plan-gate e 4 pareceres.
 5. Devolva pelo `<return_contract>`. Falha de ponta a ponta → `blocked` com motivo.
 </mission>
 
