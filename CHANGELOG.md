@@ -2,6 +2,77 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.5.4] — 2026-09-10
+
+Consertos dos itens 2–6 da auditoria da F24.5 (grupo-inspired, 09/09): o medidor de paralelismo,
+a premissa obsoleta de worktree, a espera por `sleep`, a suíte final vermelha e a parada sem
+cerimônia. Planos em `gsd-optimize/go-and-do-evolucao/planos-f24.5-consertos/`, executados por
+5 subagentes Sonnet em paralelo; suíte 28/28.
+
+### Adicionado
+- `hooks/gad-lifecycle.sh` registra também em **`SubagentStop`**: é o único evento que marca o fim
+  REAL de um subagente desde que a tool `Agent` ficou assíncrona (CC ≥ 2.1.26x). O `retorno` do
+  `PostToolUse` passa a levar `fim_real:false` (retorno da chamada); o do `SubagentStop` leva
+  `fim_real:true`, `agent_id` e `duracao_s`, com camada/modelo/descrição do `meta.json` (45g).
+- `hooks/gad-gate-guard.sh` (PreToolUse, matcher `AskUserQuestion`): nega gate duro dentro da
+  rodada sem cerimônia — janela de silêncio 23h–07h aberta, ou `pre-gate.sh` não rodado nos
+  últimos 15 min para o HEAD atual; cada negativa vira `incidente`; fail-open (45p).
+- `scripts/pre-gate.sh <phase_dir> <NN> ["<pergunta>"]`: cerimônia antes de todo
+  `AskUserQuestion` da rodada — `janela-silencio.sh` (exit 1 → `acao: pausa`, Sub-rotina D),
+  commit dos artefatos da fase por pathspec explícito, marcador `.planning/.gad/last-pre-gate.json`.
+- `scripts/confere-precondicoes.sh <phase_dir> <root>`: reprova PLAN.md com `isolation: none` ou
+  `<precondition>` «roda SEM worktree» num projeto que tem `worktree-fixtures.txt` ou
+  `use_worktrees: true` (`PRECONDICAO-WORKTREE-OBSOLETA`). Na F24.5 a premissa atravessou planner,
+  2 plan-checkers, plan-gate e 4 pareceres (45l).
+- `scripts/suite-ressalva.sh <phase_dir> <NN> "<motivo>"`: o DONO aceita uma suíte final vermelha —
+  grava `suite_final`/`suite_ressalva` no VERIFICATION; a cancela rebaixa a falha a informativo (45n).
+- `hooks/registra-hooks.sh [--dry-run]`: registro idempotente, com backup, do `SubagentStop` e do
+  `PreToolUse[AskUserQuestion]` no `~/.claude/settings.json` — quem roda é o dono; a skill nunca
+  edita o settings. README com as duas seções.
+- Testes novos: `test-confere-etapa-suite.sh` (21 casos), `test-confere-precondicoes.sh` (16),
+  `test-gad-gate-guard.sh` (18 asserções); casos novos em `test-gad-lifecycle.sh`,
+  `test-confere-etapa.sh`, `test-gad-bash-guard.sh`.
+
+### Corrigido
+- `scripts/confere-etapa.sh 3` — paralelismo: só fecha um despacho com `retorno` `fim_real:true`;
+  onda com despacho sem fim real sai `nao_medido` (`simultaneos_max: null`) e nunca vira «onda
+  serializada» (F24.5: 12 incidentes falsos; prova real: `serializacao_observada` `["1","2","5"]`
+  → `[]`) (45e).
+- `scripts/confere-etapa.sh 3` — suíte final: reprova `SUITE-FINAL-VERMELHA` (último rc ≠ 0 sem
+  ressalva do dono), `SUITE-NAO-RELANCADA` (commit fora de `.planning/` depois da última suíte
+  verde), `SUITE-EM-CURSO`, `SUITE-COMPLETA-AUSENTE` e `ULTIMA-ONDA-SEM-GATE` (quando o
+  `test_command` é o `--gate-onda`). Só em projeto instrumentado pelo `roda-suite.sh` (45n).
+- `scripts/pre-despacho.sh 3` bloqueia (exit 4, `acao_mecanica: true`) quando algum plano carrega a
+  premissa obsoleta de worktree — a camada 0 corrige os PLAN.md e re-roda, sem perguntar (45l).
+- `hooks/gad-bash-guard.sh` nega `sleep` cru de subagente (`sleep 300`, `for … sleep …`) fora do
+  waiter sancionado `until [ -s marcador ]; do sleep 15; done` — 11 turnos e ≈60 min de teto na
+  F24.5 (45i).
+- `hooks/gad-lifecycle.sh`: descrição do despacho cortada em 120 caracteres, não bytes (2 linhas
+  do run-log real da 24.5 tinham UTF-8 quebrado) (45g).
+- `scripts/reconcilia-docs.sh`: `campo_state` tira aspas envolventes — o `gsd-tools state update`
+  da GSD 1.13.0 regrava `current_phase: "24.4"` e o `--pausa` acusava «esperado '24.4',
+  encontrado '"24.4"'» na 2ª rodada (teste h da suíte estava vermelho desde 08/09).
+
+### Alterado
+- `prompts/intent.md`: protocolo de filhos diz a verdade — `Agent` é assíncrono, `run_in_background`
+  não existe mais; depois do despacho, UM waiter sancionado por chamada sobre o marcador que o
+  filho grava (`.verificador-c<C>.done`, `.releitura-c<C>.done`, `NN-SPEC.md`, `NN-CONTEXT.md`);
+  marcador apagado antes de redespachar a mesma rodada (F24.5: 5 rodadas de releitura no c0) (45i).
+- `prompts/execute.md`: suíte vermelha → conserte e RELANCE com tag nova até `rc=0`; reruns
+  dirigidos não substituem a suíte; aceitar vermelho é decisão do dono (`suite-ressalva.sh`);
+  nunca instruir o `gsd-verifier` a pular a suíte; a última onda tem gate próprio (45n).
+- `prompts/plan.md`: o host roda `confere-precondicoes.sh` antes de devolver `done` e corrige os
+  PLAN.md ele mesmo. `prompts/convergence.md`: defeito conhecido se corrige e commita ANTES do
+  briefing do ciclo seguinte; briefing com premissa sabida falsa é `incidente` (45l).
+- `workflow.md`: 3.2 — `acao_mecanica: true` não é pergunta ao dono; Sub-rotina I — «Silence window»
+  virou «Ceremony before ANY AskUserQuestion» com o `pre-gate.sh` e o `gad-gate-guard` (45p).
+
+### Pendente com o dono
+- Rodar `bash hooks/registra-hooks.sh` (depois de atualizar a skill instalada — o `gad-gate-guard`
+  exige o `pre-gate.sh` na árvore instalada). Sem o `SubagentStop`, toda onda sai `nao_medido`.
+- Fora do escopo desta versão: régua «4 turnos por ciclo» separando ciclo de fecho (é da
+  `/audit-gad`); reconciliar STATE.md/deferred-items **por onda** (laço do `gsd-execute-phase`, fork).
+
 ## [2.5.3] — 2026-09-10
 
 Conserto do `confere-plano.sh`, achado pela auditoria da F24.5 (grupo-inspired): dois falsos
