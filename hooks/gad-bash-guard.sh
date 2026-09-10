@@ -27,6 +27,7 @@
 # `at now` · `&` de fundo (não faz parte de &&, >&, <&, &>, |&; fora de aspas, heredoc e
 # comentário). Exceção sancionada pelo <environment>: o waiter de disco
 # `( <trabalho> ; touch <arquivo> ) &` — único `&` de fundo do comando, no fim.
+# · `sleep N` cru ou laço `for … sleep` sem `until`/`while` (v2.5.4, 45i — espera chutada)
 # O corpo entre aspas de `bash -c "…"`, `sh -c '…'`, `bash -lc` e `eval "…"` passa pelas
 # mesmas regras (um nível): `bash -c "uv run pytest &"` é a evasão seguinte ao `nohup`
 # e custa uma linha (P21, D1).
@@ -73,6 +74,11 @@ INTERNO = re.compile(r"(?:^|[\s;|&(){}])(?:(?:bash|sh|zsh|dash)\s+(?:-\S+\s+)*?-
 PREFIXOS = {"time", "exec", "sudo", "command", "builtin", "env", "nice", "ionice", "timeout", "stdbuf", "unbuffer"}
 BG = re.compile(r"(?<![&><|])&(?![&>])")
 WAITER = re.compile(r"\(\s*[^()]*;\s*touch\s+\S+\s*\)\s*&\s*$")
+# v2.5.4 (45i): `sleep` cru — `sleep 300`, `for i in $(seq 1 60); do sleep 5; done` — é espera
+# chutada (F24.5: 11 turnos, ≈60 min de teto). A única espera sancionada é o waiter
+# `until [ -s <arquivo> ]; do sleep 15; done`: com `until` no comando o sleep passa.
+SLEEP_CRU = re.compile(r"(^|[;&|(\s{])sleep\s+[0-9]")
+UNTIL = re.compile(r"(^|[;&|(\s{])(until|while)\s")
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1")
 
 
@@ -169,6 +175,8 @@ def motivo_texto(cmd, nivel=0):
     p = palavra_de_comando(texto)
     if p:
         return f"`{p}` como palavra de comando"
+    if SLEEP_CRU.search(texto) and not UNTIL.search(texto):
+        return "`sleep` cru (espera chutada; só o waiter `until [ -s arquivo ]; do sleep 15; done` é sancionado)"
     fundos = BG.findall(texto)
     if fundos and not (len(fundos) == 1 and WAITER.search(texto.rstrip())):
         return "`&` de fundo"

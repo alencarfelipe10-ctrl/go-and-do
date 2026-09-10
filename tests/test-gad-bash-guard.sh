@@ -68,6 +68,17 @@ for c in 'sleep 1 &' 'nohup uv run pytest &' "setsid bash -c 'x' &" $'uv run pyt
   r=$(chama "$c"); [ "$r" = deny ] && ok "deny: $(printf '%q' "$c")" || bad "deny esperado: $(printf '%q' "$c")" "$r"
 done
 r=$(chama 'uv run pytest -q' true); [ "$r" = deny ] && ok "deny: run_in_background=true" || bad "run_in_background=true" "$r"
+echo "── nega: sleep cru (45i, F24.5); permite o waiter until"
+for c in 'sleep 300' 'for i in $(seq 1 60); do sleep 5; done; echo fim' 'cd /x && sleep 30 && ls' \
+         "timeout 590 bash -c 'for i in \$(seq 1 10); do sleep 5; done'"; do
+  r=$(chama "$c"); [ "$r" = deny ] && ok "deny: $(printf '%q' "$c")" || bad "deny esperado: $(printf '%q' "$c")" "$r"
+done
+for c in "timeout 590 bash -c 'until [ -s .intent/.releitura-c1.done ]; do sleep 15; done'" \
+         'until [ -s x.done ]; do sleep 15; done' 'while ! [ -s x ]; do sleep 10; done' \
+         'echo "sleep 5" > nota.txt' 'grep -n sleep script.sh'; do
+  r=$(chama "$c"); [ "$r" = allow ] && ok "allow: $(printf '%q' "$c")" || bad "allow esperado: $(printf '%q' "$c")" "$r"
+done
+r=$(chama 'sleep 300' - -); [ "$r" = allow ] && ok "allow: sleep na sessão principal (sem agent_type)" || bad "sessão principal" "$r"
 echo "── nega: corpo de bash -c / eval (D1) e desprendimento fora do vocabulário inicial (D2)"
 for c in 'bash -c "uv run pytest &"' 'eval "uv run pytest &"' 'screen -dm uv run pytest' 'tmux new -d "uv run pytest"' \
          'systemd-run --user uv run pytest' 'at now <<< "uv run pytest"' 'coproc uv run pytest'; do

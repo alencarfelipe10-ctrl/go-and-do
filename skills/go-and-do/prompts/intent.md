@@ -41,8 +41,23 @@ Você não mexe em TaskList nem em telemetria (`run-log.sh`): ambas são da cama
 **Protocolo de filhos (camada 2).** Os passos abaixo mandam despachar agentes `gad-*`
 (definições instaladas em `~/.claude/agents/`, com modelo e effort já configurados).
 Regras do despacho, iguais para todos:
-- `Agent` com `subagent_type` = o agente indicado, **sempre síncrono**
-  (`run_in_background: false` explícito — despacho background quebra o fluxo).
+- `Agent` com `subagent_type` = o agente indicado. **A tool `Agent` é assíncrona** (Claude Code
+  ≥ 2.1.26x: a chamada devolve «Async agent launched» em segundos e o filho segue rodando;
+  `run_in_background` não existe mais nela). Depois do despacho, espere pelo **marcador em disco
+  que o filho grava**, com UM waiter sancionado por chamada:
+  `timeout 590 bash -c 'until [ -s <marcador> ]; do sleep 15; done'` (parâmetro `timeout: 600000`
+  da tool); expirou sem o arquivo → chame o mesmo waiter de novo. Marcadores:
+  `gad-verificador` (verificação) → `<phase_dir>/.intent/.verificador-c<C>.done`;
+  `gad-verificador` (releitura) → `<phase_dir>/.intent/.releitura-c<C>.done`;
+  `gad-spec` → `<phase_dir>/NN-SPEC.md`; `gad-discuss` → `<phase_dir>/NN-CONTEXT.md`;
+  `gad-explore` → peça no prompt que ele grave a conclusão em
+  `<phase_dir>/.intent/.explore-<slug>.md` e espere por esse arquivo.
+  **Redespacho da mesma rodada** (releitura `c<C>b`, `c<C>c`, verificação relançada): apague o
+  marcador ANTES do `Agent` (`rm -f <marcador>`), senão o waiter volta na hora com o resultado da
+  rodada anterior (F24.5: 5 rodadas de releitura no c0 por isso).
+  **Proibido** `sleep N` solto e laço `for … sleep …` — o `gad-bash-guard.sh` nega (F24.5: 11
+  turnos, ≈60 min de teto). A notificação de término do filho é prosa; o resultado vale pelo
+  DISCO (o `.json` ao lado do `.done`).
 - **NUNCA passe `model` nem `effort` no `Agent` de um `gad-*`** (E7): a def pina os dois e
   o `gad-lifecycle.sh` nega a chamada.
 - **Filho que devolveu `done` não é acordado** (E3): `SendMessage` a `gad-spec`/
@@ -70,10 +85,11 @@ Regras do despacho, iguais para todos:
 
 **Batching.** Cada turno seu recusta o contexto inteiro em cache read. Quando várias
 ações não dependem umas das outras, faça todas no MESMO turno. Na consultoria especializada
-o alvo é **4 turnos seus por ciclo**: (1) `roda-lanes.sh` + `gad-verificador` · (2)
-triagem + `.correcoes-c<C>` + commit · (3) releitura + eventual `c<C>b` · (4) briefing do
-ciclo seguinte. O 5º turno só é legítimo quando a releitura acusou item
-(`releitura_corrigiu`). A régua é **medida retroativamente pela `/audit-gad`** no
+o alvo é **4 turnos seus por ciclo**: (1) `roda-lanes.sh` + `gad-verificador` + o waiter do
+`.verificador-c<C>.done` · (2) triagem + `.correcoes-c<C>` + commit · (3) releitura + waiter do
+`.releitura-c<C>.done` + eventual `c<C>b` · (4) briefing do ciclo seguinte. Um waiter que expira
+e é chamado de novo conta turno; `sleep` chutado conta turno E é negado. O 5º turno só é
+legítimo quando a releitura acusou item (`releitura_corrigiu`). A régua é **medida retroativamente pela `/audit-gad`** no
 transcript — não conte turnos em sessão. A defesa é estrutural: agrupe as chamadas
 independentes e deixe a verificação com o `gad-verificador`.
 </environment>
@@ -329,7 +345,9 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    passando o `run_id`, `<phase_dir>/.intent` (dos `.status-c<C>-<lane>.json`), o run-dir
    `.intent/runs/c<C>/<run_id>`, o manifesto `.intent/.perguntas-c<C>.json`, SPEC/CONTEXT,
    o ciclo `C`, deadline de 12 min e — do ciclo 2 em diante — o `NN-INTENT-REVIEW.md`
-   parcial. Turno só para esperar lane é desperdício medido.
+   parcial. Turno só para esperar lane é desperdício medido. Espere o verificador pelo waiter
+   sancionado sobre `<phase_dir>/.intent/.verificador-c<C>.done` (protocolo de filhos), e só
+   então leia o run-dir.
 
    **A autoridade sobre a lane é o status, nunca o marcador `.done`.**
    `.intent/.status-c<C>-<lane>.json` tem dois eixos: `usable` (parecer não-vazio, fresco,
@@ -473,7 +491,9 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
       re-rode — nunca contorne com `git` na mão.
 
 5b. **Releitura da emenda (R1b) — entre o commit e o briefing do ciclo seguinte.**
-   Despache **`gad-verificador`** com `prompts/intent-releitura.md`, passando
+   `rm -f "<phase_dir>/.intent/.releitura-c<C>.done"` (o marcador da rodada anterior do MESMO
+   ciclo não vale para esta) e despache **`gad-verificador`** com `prompts/intent-releitura.md`,
+   passando
    `project_root`, `phase_dir`, `NN`, `C`, o conteúdo do `.intent/.correcoes-c<C>.aplicado`
    (ou o `.correcoes-c<C>.vazio`), `spec_do_dono: sim|nao` (o contrato da abertura deste
    bloco) e, conforme o ciclo:
@@ -487,7 +507,8 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
      c<C> …` (informativas; uma por decisão, com o id) — a releitura as trata como
      `omissoes_novas`. <!-- plano 2, P-06 (C3) — fiacao-P2-P06-releitura.md -->
    Ele grava `.intent/.releitura-c<C>.json` (objeto inteiro, `v: 2`, com o veredito) +
-   `.releitura-c<C>.done`. Devolveu item (`contradiz`, `prescreve_mecanismo`,
+   `.releitura-c<C>.done` — espere pelo `.done` com o waiter sancionado e leia o `.json`.
+   Devolveu item (`contradiz`, `prescreve_mecanismo`,
    `omissoes_novas`, `cardinalidade`, `unicidade` ou par em `consistencia`) → corrija **no
    mesmo turno** (rodada `c<C>b`: novo script, `--inicio` e `--ids` de novo — o `.aplicado`
    é sobrescrito in-place; uma `D-NN` desatualizada se emenda no CONTEXT ou ganha a tag
