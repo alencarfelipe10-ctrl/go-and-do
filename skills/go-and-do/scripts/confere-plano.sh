@@ -48,7 +48,7 @@ PHASE_DIR="${1:-}"; PLAN="${2:-}"
 [ -n "$PHASE_DIR" ] && [ -n "$PLAN" ] || { echo "uso: confere-plano.sh <phase_dir> <plan_id>" >&2; exit 2; }
 [ -d "$PHASE_DIR" ] || { echo "ERRO: phase_dir inexistente: $PHASE_DIR" >&2; exit 2; }
 PHASE_DIR="$(cd "$PHASE_DIR" && pwd -P)"
-PLAN_F="$PHASE_DIR/$PLAN-PLAN.md"
+PLAN_F="$PHASE_DIR/$PLAN-PLAN.md"; SUM_F="$PHASE_DIR/$PLAN-SUMMARY.md"
 [ -f "$PLAN_F" ] || { echo "ERRO: PLAN.md inexistente: $PLAN_F" >&2; exit 2; }
 ROOT="$(gad_project_root "$PHASE_DIR")"
 git -C "$ROOT" rev-parse --show-toplevel >/dev/null 2>&1 || { echo "ERRO: $ROOT não é repositório git" >&2; exit 2; }
@@ -101,7 +101,7 @@ tocados() {
     git -C "$ROOT" show --name-only --format= "${c%%	*}" 2>/dev/null
   done | sed '/^$/d' | sort -u
 }
-FORA=()
+FORA=(); INFORMATIVOS=()
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   case "$f" in
@@ -115,9 +115,24 @@ while IFS= read -r f; do
   [ "$dentro" = 1 ] || FORA+=("$f")
 done < <(tocados)
 
+# ── declarado e não tocado (45f) — informativo, nunca código de reprovação ────
+# Item da lista sem nenhum commit do plano por cima. Pode ser deferral legítimo (24.5-05
+# recusou recapturar um golden congelado e declarou o motivo no deferred-items.md) ou
+# lista copiada de outro plano. Quem julga é a camada 0 pelo texto; aqui só se registra.
+TOCADOS_TMP=$(mktemp); tocados > "$TOCADOS_TMP"
+NAO_TOCADOS=()
+for p in ${PERMITIDOS[@]+"${PERMITIDOS[@]}"}; do
+  case "$p" in *'*'*) continue ;; esac        # glob não é item conferível um a um
+  grep -qxF "$p" "$TOCADOS_TMP" || NAO_TOCADOS+=("$p")
+done
+rm -f "$TOCADOS_TMP"
+if [ ${#NAO_TOCADOS[@]} -gt 0 ]; then
+  INFORMATIVOS+=("DECLARADO-NAO-TOCADO ($(printf '%s ' "${NAO_TOCADOS[@]}" | sed 's/ $//'))")
+fi
+
 # ── PLAN ⊆ SUMMARY nas D-NN citadas (informativo) ─────────────────────────────
-SUM_F="$PHASE_DIR/$PLAN-SUMMARY.md"; CTX_F=$(ls "$PHASE_DIR"/*-CONTEXT.md 2>/dev/null | head -1 || true)
-D_PLAN="[]"; D_SUM="[]"; D_FALT="[]"; D_INFO="[]"; D_ESTADO="n/a"; INFORMATIVOS=()
+CTX_F=$(ls "$PHASE_DIR"/*-CONTEXT.md 2>/dev/null | head -1 || true)
+D_PLAN="[]"; D_SUM="[]"; D_FALT="[]"; D_INFO="[]"; D_ESTADO="n/a"
 dnn() { { grep -oE '\bD-[0-9]+\b' "$1" || true; } | sort -u; }
 if [ -f "$SUM_F" ] && [ -n "$CTX_F" ] && [ -f "$CTX_F" ]; then
   D_ESTADO="ok"
@@ -143,10 +158,11 @@ VER=ok; [ ${#CODIGOS[@]} -eq 0 ] || VER=falha
 
 JSON=$(jq -cn --arg plan "$PLAN" --argjson t "$N_TASKS" --argjson c "$N_COMMITS" --argjson ct "$N_TAREFA" \
   --argjson fora "$(printf '%s\n' ${FORA[@]+"${FORA[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
+  --argjson nt "$(printf '%s\n' ${NAO_TOCADOS[@]+"${NAO_TOCADOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
   --argjson cod "$(printf '%s\n' ${CODIGOS[@]+"${CODIGOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
   --argjson inf "$(printf '%s\n' ${INFORMATIVOS[@]+"${INFORMATIVOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
   --arg v "$VER" --arg de "$D_ESTADO" --argjson dp "$D_PLAN" --argjson ds "$D_SUM" --argjson df "$D_FALT" --argjson di "$D_INFO" \
-  '{plan:$plan, tasks:$t, commits:$c, commits_tarefa:$ct, fora_da_lista:$fora, veredito:$v, codigos:$cod,
+  '{plan:$plan, tasks:$t, commits:$c, commits_tarefa:$ct, fora_da_lista:$fora, declarado_nao_tocado:$nt, veredito:$v, codigos:$cod,
     informativos:$inf, decisoes:{estado:$de, plan:$dp, summary:$ds, faltantes:$df, informational:$di}}')
 (cd "$ROOT" && gad_json_out "confere-plano-$PLAN" "$JSON")
 [ "$VER" = ok ]

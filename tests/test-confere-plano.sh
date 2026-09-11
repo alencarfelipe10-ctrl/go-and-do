@@ -143,6 +143,16 @@ roda "$R"
 eq "veredito ok (lista lida inteira)" "$(campo .veredito)/$rc" "ok/0"
 eq "fora_da_lista vazio"              "$(campo '.fora_da_lista|length')" "0"
 
+echo "== (l) item declarado sem commit → DECLARADO-NAO-TOCADO informativo, veredito ok (45f)"
+R=$(repo l); plano "$R" 'files_modified:
+  - src/a.py
+  - tests/golden/baseline_243.json' '<task type="auto">a</task>'
+commit "$R" 'feat(7-01): tarefa 1' src/a.py
+roda "$R"
+eq "veredito segue ok"                    "$(campo .veredito)/$rc" "ok/0"
+eq "declarado_nao_tocado traz o golden"   "$(campo '.declarado_nao_tocado|join(",")')" "tests/golden/baseline_243.json"
+eq "informativo presente"                 "$(campo '[.informativos[]|select(startswith("DECLARADO-NAO-TOCADO"))]|length')" "1"
+
 echo "== (i) C7: PLAN cita D-NN que o SUMMARY não cita → DECISAO-SEM-SUMMARY (informativo, veredito intocado)"
 ctx() { # <root> → 7-CONTEXT.md com D-01..D-03, D-03 informational
   printf '<decisions>\n## Implementation Decisions\n\n### A\n- **D-01 [auto, R1]:** a\n- **D-02 [auto, R1]:** b\n- **D-03 [pre-spec:PS-01, informational]:** ver SPEC\n\n### Claude'"'"'s Discretion\n- nada\n\n</decisions>\n' > "$1/.planning/phases/7-bancada/7-CONTEXT.md"
