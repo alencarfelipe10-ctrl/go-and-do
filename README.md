@@ -53,6 +53,21 @@ descartáveis (`gad-spec`, `gad-discuss`, `gad-explore`, `gad-verificador`) cuja
 (o `cp` acima; symlinks também funcionam). Sem eles o despacho do filho falha e a
 intenção degrada para o fluxo inline antigo.
 
+As etapas 1, 1.5, 2 e 3 têm **hospedeiro próprio** (`gad-intent`, `gad-contratos`, `gad-plan`,
+`gad-execute`), com modelo e effort pinados na def e `experimental: cacheTtl: 1h` — o TTL longo é
+o que evita que a espera do hospedeiro reescreva o cache a cada 5 minutos (medido na F24.5: o host
+da execução, então um `general-purpose` sem def, escreveu 9,6 M de cache, 95,6 % em reescritas por
+expiração). **A def `gad-execute` precisa estar instalada antes da primeira rodada da v2.6.0** e o
+Claude Code só carrega defs novas **na abertura da sessão**:
+
+```bash
+ln -s "$(pwd)/go-and-do/agents/gad-execute.md" ~/.claude/agents/gad-execute.md
+# e reinicie a sessão do Claude Code
+```
+
+Se o despacho de `gad-execute` falhar, isso é **erro de instalação**: pare e avise — não é motivo
+para cair na rota inline.
+
 **Spawn aninhado de subagentes** (ver [Pré-requisitos](#pré-requisitos)): na CC ≥ 2.1.219 já
 vem ligado por padrão, com profundidade 3 — **não configure nada**. Se você tem
 `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` no `~/.claude/settings.json` de quando isso era
@@ -150,6 +165,31 @@ Registre no `~/.claude/settings.json`, em `hooks.PreToolUse`, apontando para o c
 ```
 
 Cada negativa vira um `incidente` no run-log da fase.
+
+### Hook `gad-rtk-worktree` (só quem usa o RTK como hook de Bash)
+
+Se o seu `~/.claude/settings.json` tem um `PreToolUse`/`Bash` com `rtk hook claude`, ele
+reescreve `git status` em `rtk git status`. Para um subagente com `isolation: worktree` a
+checagem de isolamento do Claude Code **recusa** a forma reescrita («this command runs rtk with
+a git command among its operands: what runs it, and from which directory, cannot be verified»),
+e o subagente fica sem `git` dentro da própria cópia. Na F24.5 três executores contornaram
+chamando git por `subprocess.run` dentro de Python — invisível para qualquer guarda.
+
+`hooks/gad-rtk-worktree.sh` é um envelope: dentro de um worktree de agente devolve `allow` **sem
+reescrita** (o comando chega ao harness como o modelo o escreveu); fora dele delega ao
+`rtk hook claude` e repassa a saída byte a byte. Detecta o worktree pelo caminho
+(`*/.claude/worktrees/*`) **e** pelo critério robusto de git (`--git-dir` ≠ `--git-common-dir`).
+
+Para instalar, **troque** a entrada `rtk hook claude` do seu `PreToolUse`/`Bash` por:
+
+```json
+{ "type": "command", "command": "bash \"/caminho/para/go-and-do/hooks/gad-rtk-worktree.sh\"" }
+```
+
+Custo: dentro dos worktrees você perde a compactação de saída do RTK (saída de `git log`/`diff`
+entra inteira no contexto do subagente — use sempre `--format`/`-n`). Sem o envelope, os
+executores seguem sem `git` dentro do worktree. A troca é **do dono**: a skill nunca edita o
+`settings.json`.
 
 ## Aviso no Telegram (opcional)
 

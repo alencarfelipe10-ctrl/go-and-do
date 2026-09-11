@@ -471,7 +471,7 @@ fi
         fi
         _linha_auto="{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$sess\",\"evento\":\"end\",\"etapa\":\"$prev_etapa\",\"auto_fechado\":true"
         if [ "$(printf '%s' "$_med" | sed -n 's/.*"status": *"\([a-z_]*\)".*/\1/p' | head -1)" = ok ]; then
-          _tr=$(printf '%s' "$_med" | python3 -c 'import json,sys; t=json.load(sys.stdin)["total"]; print(t["input_tokens"]+t["output_tokens"]+t["cache_creation_tokens"]); ' 2>/dev/null)
+          _tr=$(printf '%s' "$_med" | python3 -c 'import json,sys; t=json.load(sys.stdin)["total"]; print(t["input_tokens"]+t["output_tokens"]+t["cache_creation_tokens"]+t.get("cache_creation_1h_tokens",0)); ' 2>/dev/null)
           _cu=$(printf '%s' "$_med" | python3 -c 'import json,sys; print(json.load(sys.stdin)["total"].get("custo_usd",0))' 2>/dev/null)
           case "$_tr" in (''|*[!0-9]*) ;; (*) _linha_auto="$_linha_auto,\"tokens_reais\":$_tr,\"custo_usd\":${_cu:-0},\"medicao\":\"auto (mede-tokens.py, janela do checkpoint)\"" ;; esac
         else

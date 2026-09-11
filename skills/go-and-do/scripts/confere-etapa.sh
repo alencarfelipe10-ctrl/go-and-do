@@ -142,7 +142,7 @@ if [ "$ETAPA" = "pausa" ]; then
   fi
   if [ "$(jq -r '.status' <<<"$MEDICAO")" = ok ]; then
     gad_runlog "$PHASE_DIR" "$NN" end "$et" \
-      --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens' <<<"$MEDICAO")" \
+      --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens + (.total.cache_creation_1h_tokens // 0)' <<<"$MEDICAO")" \
       --custo "$(jq -r '.total.custo_usd // 0' <<<"$MEDICAO")" \
       --kv interrompida=true
   else
@@ -409,7 +409,7 @@ if [ "$ETAPA" = "3" ]; then
   # despachos abertos daquele plano, porque os despachos negados pelo sentinel ficam sem
   # retorno e contariam como abertos para sempre; `serializacao_observada` só quando >=2
   # planos da onda foram despachados e nunca dois estiveram abertos juntos.
-  PAR_OBS=$(IDX_JSON="$IDX3" python3 - "$RL3" 2>/dev/null <<'PYOBS' || echo '{"paralelismo_observado":{},"serializacao_observada":[]}'
+  PAR_OBS=$(IDX_JSON="$IDX3" python3 - "$RL3" 2>/dev/null <<'PYOBS' || echo '{"paralelismo_observado":{},"serializacao_observada":[],"largura":{"janela_executores_min":0,"minutos_em_largura_1":0,"pct_largura_1":null}}'
 import json
 import os
 import re
@@ -502,8 +502,45 @@ def main() -> int:
             res[w]["duracao_onda_s"] = int(ultimo_retorno[w] - primeiro[w])
     ser = [w for w, r in res.items()
            if r["despachados"] >= 2 and r["simultaneos_max"] is not None and r["simultaneos_max"] <= 1]
-    print(json.dumps({"paralelismo_observado": res, "serializacao_observada": ser},
-                     ensure_ascii=False))
+
+    # (47f, régua C3 da tarefa 43) minutos em largura 1 na fase INTEIRA, pelos pares
+    # despacho/retorno-real. Passe próprio, sem o filtro de ondas com 2+ planos do bloco acima:
+    # uma onda de um plano só é justamente largura 1, e é o que se quer medir.
+    # Advisory: nunca reprova — é régua, não cota.
+    jan = []
+    abertos_ts = {}
+    try:
+        with open(sys.argv[1], encoding="utf-8") as fh:
+            for ln in fh:
+                try:
+                    e = json.loads(ln)
+                except Exception:
+                    continue
+                if e.get("agente") != "gsd-executor":
+                    continue
+                d = e.get("descricao") or ""
+                try:
+                    ts = datetime.fromisoformat(e.get("ts", "")).timestamp()
+                except Exception:
+                    continue
+                if e.get("evento") == "despacho":
+                    abertos_ts.setdefault(d, ts)
+                elif e.get("evento") == "retorno" and e.get("fim_real") is True and abertos_ts.get(d):
+                    jan.append((abertos_ts.pop(d), ts))
+    except (FileNotFoundError, IndexError):
+        pass
+    marcos = sorted({t for p in jan for t in p})
+    l1 = tot = 0.0
+    for a, b in zip(marcos, marcos[1:]):
+        n = sum(1 for t0, t1 in jan if t0 <= a < t1)
+        tot += b - a
+        if n == 1:
+            l1 += b - a
+    largura = {"janela_executores_min": int(tot / 60), "minutos_em_largura_1": int(l1 / 60),
+               "pct_largura_1": int(100 * l1 / tot) if tot else None}
+
+    print(json.dumps({"paralelismo_observado": res, "serializacao_observada": ser,
+                      "largura": largura}, ensure_ascii=False))
     return 0
 
 
@@ -511,7 +548,7 @@ if __name__ == "__main__":
     sys.exit(main())
 PYOBS
   )
-  jq -e . >/dev/null 2>&1 <<<"$PAR_OBS" || PAR_OBS='{"paralelismo_observado":{},"serializacao_observada":[]}'
+  jq -e . >/dev/null 2>&1 <<<"$PAR_OBS" || PAR_OBS='{"paralelismo_observado":{},"serializacao_observada":[],"largura":{"janela_executores_min":0,"minutos_em_largura_1":0,"pct_largura_1":null}}'
   # C2 (plano 4, 05/09): onda planejada com 2+ planos que rodou em série é incidente no run-log,
   # um por onda, com a janela entre os despachos. Continua não reprovando — serializar não é
   # erro do executor, é fato a registrar; na F24.4 as ondas 1 e 6 serializaram (11 h entre os
@@ -539,29 +576,69 @@ PYOBS
   # `<git-common-dir>/gad-suite/<tag>/` (comum aos worktrees): quantos lançamentos, quantos
   # relançamentos recusados pelo lock (rc 3) e o tempo total (iniciado → mtime do rc).
   COMMON3=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
-  SUITE=$(GAD_SUITE_DIR="${COMMON3:+$COMMON3/gad-suite}" python3 - 2>/dev/null <<'PYSUITE' || echo '{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[]}'
+  SUITE=$(GAD_SUITE_DIR="${COMMON3:+$COMMON3/gad-suite}" GAD_RL="$RL3" python3 - 2>/dev/null <<'PYSUITE' || echo '{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[],"fora_da_fase":[]}'
 import glob, json, os
 from datetime import datetime
 d = os.environ.get("GAD_SUITE_DIR") or ""
-lanc = rec = tempo = 0; tags = []
+
+
+def ts(s):
+    try:
+        return datetime.fromisoformat(s.strip()).timestamp()
+    except Exception:
+        return None
+
+
+# t0 = 1º despacho de executor no run-log desta etapa (mesmo critério do bloco da suíte final,
+# 45f/F24.5: sem ele o contador somava o `gate-onda-7` simulado de 05/09, de outra fase — o
+# diretório gad-suite/ é comum aos worktrees e não é apagado entre fases).
+t0 = 0.0
+t0chk = None
+try:
+    for ln in open(os.environ.get("GAD_RL") or "", encoding="utf-8", errors="replace"):
+        try:
+            e = json.loads(ln)
+        except Exception:
+            continue
+        if e.get("evento") == "checkpoint" and str(e.get("etapa", "")).startswith("3") and t0chk is None:
+            t0chk = ts(e.get("ts", "")) or None
+        if e.get("evento") == "despacho" and e.get("agente") == "gsd-executor":
+            t0 = ts(e.get("ts", "")) or 0.0
+            break
+except OSError:
+    pass
+if not t0 and t0chk:
+    t0 = t0chk
+
+lanc = rec = tempo = 0
+tags = []
+fora_da_fase = []
 for st in sorted(glob.glob(os.path.join(d, "*"))) if d and os.path.isdir(d) else []:
     if not os.path.isfile(os.path.join(st, "cmd")):
         continue
-    lanc += 1; tags.append(os.path.basename(st))
+    try:
+        ini = ts(open(os.path.join(st, "iniciado")).read())
+    except OSError:
+        ini = None
+    if t0 and (ini is None or ini < t0):
+        fora_da_fase.append(os.path.basename(st))
+        continue
+    lanc += 1
+    tags.append(os.path.basename(st))
     try:
         rec += sum(1 for l in open(os.path.join(st, "recusados")) if l.strip())
     except OSError:
         pass
     try:
-        ini = datetime.fromisoformat(open(os.path.join(st, "iniciado")).read().strip()).timestamp()
         fim = os.path.getmtime(os.path.join(st, "rc"))
-        tempo += max(0, int(fim - ini))
+        tempo += max(0, int(fim - (ini or 0)))
     except (OSError, ValueError):
         pass
-print(json.dumps({"lancamentos": lanc, "recusados": rec, "tempo_total_s": tempo, "tags": tags}))
+print(json.dumps({"lancamentos": lanc, "recusados": rec, "tempo_total_s": tempo,
+                  "tags": tags, "fora_da_fase": fora_da_fase}))
 PYSUITE
   )
-  jq -e . >/dev/null 2>&1 <<<"$SUITE" || SUITE='{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[]}'
+  jq -e . >/dev/null 2>&1 <<<"$SUITE" || SUITE='{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[],"fora_da_fase":[]}'
   EXTRAI=$(jq -c --argjson po "$PAR_OBS" --argjson a "$uw0" --argjson b "$uw1" --argjson su "$SUITE" \
     '. + $po + {use_worktrees:{inicio:$a, fecho:$b}, suite:$su}' <<<"$EXTRAI")
 
@@ -691,7 +768,7 @@ PYSF
   # reprovado pelo script vira um `incidente` no run-log; um plano que falha não impede a
   # conferência dos outros, e plano sem SUMMARY é pulado.
   CPL="$GAD_SCRIPTS_DIR/confere-plano.sh"
-  PC_OK=0; PC_FALHA="[]"; PC_CODIGOS="{}"; PC_REPROVA=""; PC_INFO="{}"
+  PC_OK=0; PC_FALHA="[]"; PC_CODIGOS="{}"; PC_REPROVA=""; PC_INFO="{}"; PC_NDECL="{}"
   if [ -f "$CPL" ]; then
     for sf in "$PHASE_DIR"/*-SUMMARY.md; do
       [ -f "$sf" ] || continue
@@ -703,6 +780,9 @@ PYSF
       # C7 (plano 2): informativos (DECISAO-SEM-SUMMARY) colhidos antes do `continue` — um plano
       # `ok` pode ter faltantes.
       PC_INFO=$(jq -c --arg p "$pid" --argjson i "$(jq -c '.informativos // []' <<<"$pcout")" 'if ($i|length)>0 then . + {($p): $i} else . end' <<<"$PC_INFO")
+      # 46t: desvios de escopo que o executor DECLAROU no SUMMARY, por plano.
+      PC_NDECL=$(jq -c --arg p "$pid" --argjson n "$(jq -c '.arquivo_nao_declarado // []' <<<"$pcout")" \
+        'if ($n|length)>0 then . + {($p): $n} else . end' <<<"$PC_NDECL")
       if [ "$(jq -r '.veredito' <<<"$pcout")" = ok ]; then
         PC_OK=$((PC_OK+1)); continue
       fi
@@ -719,9 +799,57 @@ PYSF
       RES=$(jq -c --arg d "plano fora do escopo declarado: $PC_REPROVA — arquivo fora do files_modified é colisão invisível para as ondas; menos commits que tarefas esconde qual tarefa quebrou" \
         '. + [{id:"escopo_planos", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
+    # recolisão entre ondas com as listas REAIS (46t): dois planos de ONDAS diferentes que
+    # tocaram o mesmo arquivo não são colisão (as ondas são sequenciais); dois planos da MESMA
+    # onda, sim — e é exatamente o que o cálculo de ondas não viu, porque rodou com a lista
+    # declarada antes da execução. Assert novo: vale da v2.6.0 em diante.
+    COLISAO=$(IDX_JSON="$IDX3" ROOT="$ROOT" python3 - <<'PYCOL' || echo '[]'
+import json, os, re, subprocess
+idx = json.loads(os.environ.get("IDX_JSON") or "{}")
+waves = {w: list(ids) for w, ids in (idx.get("waves") or {}).items()}
+if not waves:  # fallback: plans[].wave (mesma informação; medido 11/09 na 24.5)
+    for p in (idx.get("plans") or []):
+        if p.get("wave") is not None and p.get("id"):
+            waves.setdefault(str(p["wave"]), []).append(p["id"])
+root = os.environ["ROOT"]
+tocados = {}
+for w, ids in waves.items():
+    for pid in ids:
+        tag = re.escape(pid)
+        r = subprocess.run(["git", "-C", root, "log", "--format=%H", "-E",
+                            "--grep=^[a-z]+\\(" + tag + "(-[^)]*)?\\)(!)?:"],
+                           capture_output=True, text=True, timeout=20)
+        arqs = set()
+        for sha in r.stdout.split():
+            s = subprocess.run(["git", "-C", root, "show", "--name-only", "--format=", sha],
+                               capture_output=True, text=True, timeout=20)
+            for f in s.stdout.splitlines():
+                f = f.strip()
+                if f and not f.startswith(".planning/") and not f.endswith("-SUMMARY.md"):
+                    arqs.add(f)
+        tocados[pid] = arqs
+out = []
+for w, ids in waves.items():
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            comuns = sorted(tocados.get(ids[i], set()) & tocados.get(ids[j], set()))
+            if comuns:
+                out.append({"onda": w, "planos": [ids[i], ids[j]], "arquivos": comuns[:10]})
+print(json.dumps(out, ensure_ascii=False))
+PYCOL
+    )
+    jq -e . >/dev/null 2>&1 <<<"$COLISAO" || COLISAO='[]'
+    if [ "$(jq 'length' <<<"$COLISAO")" -gt 0 ]; then
+      RES=$(jq -c --arg d "COLISAO-REAL-NA-ONDA: $(jq -r '[.[]|"onda \(.onda): \(.planos|join(" × ")) em \(.arquivos|join(", "))"]|join(" · ")' <<<"$COLISAO" | cut -c1-400) — dois planos da MESMA onda commitaram o mesmo arquivo; o cálculo de ondas rodou com a lista declarada antes da execução" \
+        '. + [{id:"colisao_real_onda", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" incidente "$RUNLOG_ETAPA" --kv origem=confere-etapa.sh \
+        --kv detalhe="COLISAO-REAL-NA-ONDA: $(jq -r '[.[]|"onda \(.onda) \(.planos|join("×"))"]|join("; ")' <<<"$COLISAO")"
+    fi
   fi
   EXTRAI=$(jq -c --argjson ok "$PC_OK" --argjson f "$PC_FALHA" --argjson c "$PC_CODIGOS" --argjson i "$PC_INFO" \
-    '. + {planos_conferidos:{ok:$ok, falha:$f, codigos:$c, informativos:$i}}' <<<"$EXTRAI")
+    --argjson col "${COLISAO:-[]}" --argjson nd "$PC_NDECL" \
+    '. + {planos_conferidos:{ok:$ok, falha:$f, codigos:$c, informativos:$i},
+          colisao_real_onda:$col, arquivo_nao_declarado:$nd}' <<<"$EXTRAI")
 
   # ── prova por reexecução (A4, plano 4 / 05/09/2026): "17 de 18 verdes" sem comando e saída
   # colados na mesma seção não é verificação. Na F24.4 o 24.4-05-SUMMARY.md:71 e :223
@@ -1094,7 +1222,7 @@ if [ "$DRY" = 0 ]; then
       :
     elif [ "$(jq -r '.status' <<<"$MEDICAO")" = ok ]; then
       gad_runlog "$PHASE_DIR" "$NN" end "$RUNLOG_ETAPA" \
-        --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens' <<<"$MEDICAO")" \
+        --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens + (.total.cache_creation_1h_tokens // 0)' <<<"$MEDICAO")" \
         --custo "$(jq -r '.total.custo_usd // 0' <<<"$MEDICAO")" \
         --kv veredito=pass ${POSFLAG[@]+"${POSFLAG[@]}"}
     else

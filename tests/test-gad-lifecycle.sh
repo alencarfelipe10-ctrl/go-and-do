@@ -168,6 +168,24 @@ monta
 roda "$(p_agent gad-intent claude-opus-5 medium tu-e7e)"
 esp_passou "E7: model/effort IGUAIS à def passam" gad-intent
 
+# ── 47a: a def nova `gad-execute` (host da etapa 3) entra nos mesmos trilhos ──
+monta
+roda "$(p_agent gad-execute '' '' tu-ex1)"
+esp_passou "47a: Agent(gad-execute) sem model/effort passa" gad-execute
+[ "$(jq -r '.camada // ""' <<<"$ULT")" = 1 ] \
+  && ok "47a: gad-execute classificado camada 1 (tools: tem Agent)" \
+  || bad "47a: gad-execute classificado camada 1" "camada=$(jq -r .camada <<<"$ULT")"
+[ "$(jq -r '.modelo // ""' <<<"$ULT")" = claude-opus-5 ] \
+  && ok "47a: modelo lido da def (claude-opus-5)" \
+  || bad "47a: modelo lido da def" "modelo=$(jq -r .modelo <<<"$ULT")"
+[ "$(jq -r '.effort // ""' <<<"$ULT")" = medium ] \
+  && ok "47a: effort lido da def (medium)" \
+  || bad "47a: effort lido da def" "effort=$(jq -r .effort <<<"$ULT")"
+
+monta
+roda "$(p_agent gad-execute sonnet '' tu-ex2)"
+esp_negado "47a: Agent(gad-execute, model=sonnet) negado pelo E7(b) — o host fica em Opus"
+
 # ═════════════════════ 2. E3a — SendMessage a filho encerrado ═════════════════════
 monta
 roda "$(p_send gad-discuss)"
