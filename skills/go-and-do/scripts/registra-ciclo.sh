@@ -105,7 +105,12 @@ SEM_CITACAO=()
   echo "## Ciclo $K — registro mecânico (gad, $(date -Is))"
   echo
   for lane in codex agy; do
-    J="$PAR/.roda-$lane-c$K.json"
+    # 45(j): o espelho da convergência ganhou nome próprio (.roda-planrev-<lane>-c<K>.json)
+    # porque o default compartilhado apagava o da intenção (F24.5: .roda-codex-c1.json
+    # apontava para o parecer da convergência). Sem este prefixo o modo `convergencia` lê o
+    # espelho errado, ou nenhum. Sem o 4.º argumento, PREFIXO vazio = comportamento de hoje.
+    PREFIXO=""; [ "$ETAPA_SEL" = convergencia ] && PREFIXO="planrev-"
+    J="$PAR/.roda-${PREFIXO}$lane-c$K.json"
     [ -s "$J" ] || continue   # -s, não -f: JSON de 0 bytes quebraria o jq sob set -e
     if [ "$lane" = codex ]; then
       echo "- **codex**: modelo_efetivo=\`$(jq -r '.modelo_efetivo' "$J")\` · fresco=$(jq -r '.fresco' "$J") · vazio=$(jq -r '.vazio' "$J")"
