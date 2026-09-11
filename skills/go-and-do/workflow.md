@@ -176,6 +176,13 @@ resuming a `gad-spec`/`gad-discuss` that already returned `done`, and a second d
 when the artifact (`NN-SPEC.md`/`NN-CONTEXT.md`) is already on disk (E3). The denial carries
 the reason in `permissionDecisionReason` — read it and fix the route, do not retry.
 
+**1.2a — Hand the subagent its transcript directory.** The dispatch of `gad-intent` also carries
+`subagents_dir: $HOME/.claude/projects/<slug do projeto>/<CLAUDE_CODE_SESSION_ID>/subagents` — it is
+from there that the coordinator reads its own turns with `turnos-por-ciclo.py` at the close of the
+stage. Without the parameter, the coordinator returns `turnos: nao_medido — transcript fora do
+alcance`, which is a legitimate route (owner's decision of 11/09: layer 0 passes the path,
+`nao_medido` as the fallback).
+
 **1.3 — Routing the return.**
 - `done` → route gate: `confere-rotas.sh <phase_dir>/.intent` (exit 1 → back to the SAME
   subagent, step 7b of intent.md, fail-closed) → `confere-etapa.sh 1` (includes
@@ -202,6 +209,20 @@ the reason in `permissionDecisionReason` — read it and fix the route, do not r
   Sub-rotina D. `intent_review: blocked` is already on disk (the next invocation retries).
   Handoff: "🔔 revisão de intenção bloqueada — autentique um dos revisores e re-rode
   `/go-and-do N`."
+
+**1.3a — The fiscal now leaves a receipt.** `confere-etapa.sh <etapa>` writes, on a pass,
+`<phase_dir>/.fence-<etapa>.ok` with the HEAD it checked, and deletes it on a fail (the pair of the
+`.gate-fail-<etapa>.json` lock). `gad-intent` only returns `done` after running the fiscal itself
+and seeing a valid fence. A return that says `done` **without** a valid fence on disk is an
+incident of the subagent, not of the fiscal: log it and send it back to the same subagent, as the
+gate already prescribes. `--dry-run` neither writes nor deletes a fence.
+
+**1.3b — What the `transparencia:` of the return may carry.** The field may bring a line
+`turnos: <literal output of turnos-por-ciclo.py>` or `turnos: nao_medido — <motivo>`; no new field
+is mandatory and no parser changes. `ciclo0: dispensado (sem sino)` is the record that the phase
+entered with SPEC and CONTEXT already done (written by the owner or already on disk) and that there
+was therefore no bell to triage — it is not a gap, it raises no incident and it asks the user
+nothing.
 
 </stage>
 
@@ -241,6 +262,21 @@ base args `N --tdd`): it judges research (2.D) · mapper (2.E) · granularity (2
 
 **2.4 — Arrival fence.** `confere-etapa.sh 2` — asserts + extraction of `nao_autonomos` +
 mapper bell. Exit 1 → send the list of what is missing back to the SAME subagent, whatever it claimed.
+
+**2.4a — The `mapper_pulado` bell has an action, not just a landing.** When the fence returns a
+non-empty `mapper_pulado`, cross it against the plans before moving on:
+
+```bash
+bash "$HOME/.claude/skills/go-and-do/scripts/confere-arquivos-novos.sh" "<phase_dir>" "<project_root>"
+```
+
+`veredito: mapper_obrigatorio` → hand the phase **back to the same `gad-plan` subagent** with the
+list from `novos_producao` and the instruction to run the pattern-mapper before returning; log one
+`incidente` (`origem=workflow 2.4a`, `detalhe="mapper pulado com arquivo novo de produção: <lista>"`).
+`veredito: mapper_opcional` → note the bell for transparency and continue.
+Empty `mapper_pulado` → nothing to do. Never decide this by reading the judge's prose: on F24.5 the
+judge's reason ("phase only modifies files") is the very one this workflow's own prompt names as a
+trap, and two new scripts were on the plans.
 
 **2.4b — Close: `autonomous: false` resolved HERE (2.H).** For each plan in `nao_autonomos`,
 classify the checkpoint:
@@ -314,11 +350,53 @@ runs the `base-check` and measures the waves of ≥2 incomplete plans.
   if the owner defers an action, 3.4 closes via Sub-rotina D on the way back. Test-suite
   discipline (suite as gate, at most 1× per wave) lives in `prompts/execute.md`.
 
+**Fiscal receipt before `done`.** A `done` return is only acceptable when
+`<phase_dir>/.fence-3.ok` exists and its `head` equals the current HEAD. The host writes it by
+running `confere-etapa.sh 3 --fase <N> --projeto <root> --sem-telemetria` itself; that flag
+evaluates and writes the fence (and clears the lock) **without** measuring tokens and **without**
+logging an event, so it does not leave a second `end` for the stage. Receipt absent, or `head`
+stale because a commit landed after it: return the list of what is missing to the same subagent,
+whatever it claimed. F24.5: the execution host returned «pronto · completo · 9/9» while the fiscal
+was failing — the second time in the same round that a host declared done without the gate.
+
+**You still run the fence yourself.** Your `confere-etapa.sh 3` (no `--sem-telemetria`) remains
+the authoritative arrival gate and is what writes the stage's `end`. The host's run is a receipt,
+not a substitute: measured on F24.5, the stage-3 fiscal takes about 7 seconds (it reads the suite
+state, it never relaunches a suite), and the design rule since decision 2.C is that layer 0 does
+not take the subagent's word. If a future phase measures that fiscal above 60 s, bring the number
+back as a question.
+
+**The plan's contract is not rewritten after the fact.** Editing a PLAN.md's `files_modified`
+after that plan has executed is forbidden — the wave computation already ran on the old list, so a
+collision between plans of the same wave becomes invisible. The answer to `FORA-DA-LISTA` is a
+declaration: the line `ARQUIVO-NAO-DECLARADO: <path>` in the plan's SUMMARY, with the reason
+next to it, committed. `confere-etapa.sh 3` accepts the declaration and reports it under
+`informativos`, and re-checks intra-wave collision against the real commit lists
+(`colisao_real_onda`). F24.5: four PLAN.md were edited at 23:42 and 23:44, after execution, so
+the gate would pass.
+
+**One `incidente` per item, at the time of the fact.** The execution host now writes each
+incident to the run-log when it happens. When its return arrives, log only the items that are
+**not** already in the run-log (match by `detalhe`), so the count is not inflated. F24.5: the
+eleven incidents of the stage all landed in the same second, at close, and the audit lost the
+order of events.
+
 **3.4 — Crossroads.** Completeness first: `gsd_run query phase-plan-index N` (lib of
 Sub-rotina E) — a plan without `SUMMARY.md` → execution incomplete, blocked → Sub-rotina D with
 the exact action (never treat it as `human_needed`). Otherwise, the VERIFICATION.md status:
-- absent (verification never ran) → re-execute by the 3.3 rule (idempotence skips the done
-  ones). Persisted → D.
+- absent, or present but stale (the phase took commits after it): **do not re-invoke
+  `gsd-execute-phase`** — with `VERIFY_STATUS=stale` and `PHASE_MARKED=false` its route is
+  `update_roadmap`, which marks the phase complete **without** verifying (F24.5: the agent
+  disobeyed the instruction and saved the phase). Dispatch `Agent(subagent_type="gsd-verifier")`
+  directly, synchronous, handing: `phase_dir`, `NN`, the plan ids, and **the test scope** — the
+  modules touched since the previous VERIFICATION
+  (`git diff --name-only <sha-da-verificação>..HEAD -- src tests`), never the full suite. The
+  dispatch carries, verbatim: «Rode apenas os testes dos módulos listados. A suíte completa é
+  gate de fase e já rodou — não a relance.» The project's own testing rule comes first when it
+  exists (`CLAUDE.md`; the inspired's says, in writing, to run only the touched module).
+  F24.5: an unscoped dispatch ran the fast suite whole for 30+ min with 4 GB of swap, and the
+  full suite took 56 min 50 s against a measured band of 17–35 min. Still absent after the
+  re-verification → Sub-rotina D.
 - `passed` → Etapa 4 · `human_needed` → note it (becomes PENDING of the UAT) and continue ·
   `gaps_found` → 3.5.
 
@@ -327,6 +405,28 @@ re-convergence: add to the `NN-CONVERGENCE.md` frontmatter the line
 `gap_replan: "<data> — N planos gap_closure; commits <shas>"` and commit → re-execute (3.3
 rule) → re-verify. `passed`/`human_needed` → Etapa 4; still `gaps_found` → Sub-rotina D
 (`gaps persistentes`). One attempt only.
+
+**Instrument under judgement.** When a `confere-*.sh`, a hook or a fork script is failing the
+round **because of a defect of its own**, it is evidence, never a target. Write
+`<phase_dir>/.gate-fail-<etapa>-evidencia.txt` with the command, the literal output and the line
+you believe is wrong; commit it; route the decision to the user through the hard gate
+(Sub-rotina I). Never `sed`, never `Edit`, never a "temporary" patch to the instrument while the
+round it judges is open — not even when your diagnosis is right. F24.5, 23:47–23:49: the
+diagnosis **was** right and the gesture was still wrong; only the permission classifier stopped
+it, twice.
+
+**Instrument versus disk.** When an instrument's reading contradicts the disk by an order of
+magnitude (78 minutes read as «5 s»; nine agents read as one), the hypothesis is that the
+**instrument** is wrong, not the fact. Before any report to the user, run the primary
+measurement and carry **that**:
+
+```bash
+bash "$HOME/.claude/skills/go-and-do/scripts/numeros-da-fase.sh" <phase_dir> <NN> --executores
+```
+
+The report to the user carries the primary number and the disagreement («the meter says X, the
+clocks say Y, and here is why the meter is wrong»), never the open doubt. F24.5: layer 0 told
+the user «the parallelism may not have happened» with the clocks of all nine executors on disk.
 
 </stage>
 
@@ -384,9 +484,20 @@ login without vault, 2FA, captcha → `[pending]`/`blocked`, blocks the ship (ha
 
 **5.3 — Generate `NN-UAT.md` (via SUBAGENT).** `pre-despacho.sh 5`. Dispatch an `Agent`
 (`model: sonnet`, synchronous) to reuse the verify-work derivation:
-- (a0) mechanical classifier first (5.D): `gsd_run query uat.classify-coverage --summary` — a
-  deliverable covered by a passing automated test enters as `pass, source: automated` without
-  becoming a browser scenario (fail-safe: never drop a deliverable);
+- (a0) mechanical classifier first (5.D) — **one SUMMARY per call**, in a loop. The command is
+  `gsd_run uat classify-coverage --summary <file>`. It accepts neither `--phase-dir`
+  (`Error: unknown flag "--phase-dir"; accepted: --summary <value>, --file <value>`) nor a bare
+  invocation (`Error: SUMMARY file required`), and a second `--summary` in the same call is
+  silently ignored — only the first file is classified. Measured on GSD 1.13.0, 11/09/2026:
+  ```bash
+  for s in "<phase_dir>"/*-SUMMARY.md; do
+    [ -e "$s" ] || continue
+    gsd_run uat classify-coverage --summary "$s" || echo "classify-coverage falhou em $s"
+  done
+  ```
+  A deliverable covered by a passing automated test enters as `pass, source: automated` without
+  becoming a browser scenario (fail-safe: never drop a deliverable). A SUMMARY the classifier
+  could not read is a deliverable that goes to the UAT as `[pending]`, never one that is dropped;
 - (a) find_summaries → (b) extract_tests — user-observable behaviors; visual scenarios from
   the UI-SPEC (or SUMMARY without `--ui`); cold-start smoke only when a SUMMARY touched
   server/app/db/migrations/seed/docker, limited to boot + health ("clear ephemeral state" is
@@ -780,6 +891,13 @@ carries:
   a valid answer;
 - on a resume from a pause: the user's answer, verbatim.
 
+A number you copy is a number you check. Before carrying into a dispatch (or into a question
+to the user) a figure another artifact declares — «8 lines», «12 red», «25 ACs» — count the list
+that figure summarises, in the same file. If they disagree, carry the **list**, not the number,
+and log an `incidente` with both values. `numeros-da-fase.sh --conferir <file>` does this
+mechanically and prints `CONTAGEM-x-ENUMERACAO` on a mismatch. F24.5: `NN-RELATORIOS-EVIDENCIA.md`
+said «8 linhas» and enumerated 7; the sentence reached the UAT prompt intact.
+
 Credentials (birth rule of every authenticated dispatch). A task that needs a logged-in
 session or touches secrets carries: (1) the sanctioned path prepared by layer 0 BEFORE
 (wrapper that injects credentials into the process, or helper that emits only the ephemeral
@@ -801,7 +919,9 @@ return is routing data; the body lives on disk):
 
 - `done` — verdict, paths, counts. Section `incidentes:` mandatory: every deviation between
   the announced and the executed, or literally `nenhum`. Absent → return outside the contract
-  (reconcile); item ≠ `nenhum` → ONE `incidente` event in the run-log PER ITEM (`--kv origem=<etapa/agente> --kv detalhe="<o item>"`; never aggregate) + hand it to the
+  (reconcile); item ≠ `nenhum` → ONE `incidente` event in the run-log PER ITEM (`--kv origem=<etapa/agente> --kv detalhe="<o item>"`; never aggregate) — in Etapa 3, only the
+  items the execution host has not already logged itself (see 3.3, *One `incidente` per item*) —
+  + hand it to the
   Sub-rotina F dispatch (the resumo narrates them).
 - `needs_decision` — the subagent saved progress to disk and returned the digested question
   (options + tradeoffs + `recomendacao` + `reversivel`). Route via Sub-rotina I; the answer
@@ -891,6 +1011,11 @@ option. Mechanics:
 Timing decisions are decisions too — postponing a question, holding a notice until the
 resumo: same mechanics, entry in `NN-DECISOES.md` (chat narration is lost; the record is what
 the resumo and the audit re-read).
+
+An instrument that is failing the round because of a defect of its own, and a reading that
+contradicts the disk, are both hard gates routed from here — the rule and the evidence file
+live in the Etapa 3 block (*Instrument under judgement* / *Instrument versus disk*); never
+patch the instrument yourself while the round it judges is open.
 
 Ceremony before ANY `AskUserQuestion` inside the round (v2.5.4, 45p): run
 `pre-gate.sh "<phase_dir>" "<NN>" "<question in 1 line>"`. It runs `janela-silencio.sh`
