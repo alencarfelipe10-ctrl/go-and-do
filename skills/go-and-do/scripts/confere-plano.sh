@@ -147,10 +147,30 @@ if [ -f "$SUM_F" ] && [ -n "$CTX_F" ] && [ -f "$CTX_F" ]; then
   fi
 fi
 
+# ── ARQUIVO-NAO-DECLARADO reconhecido (46t) ──────────────────────────────────
+# O fiscal aceita o desvio quando ele foi DECLARADO pelo executor: linha
+# `ARQUIVO-NAO-DECLARADO: <caminho>` no SUMMARY do plano (uma por arquivo), ou o
+# caminho citado no `deferred-items.md` da fase na mesma linha do literal. Declarar é o
+# comportamento certo; editar o files_modified depois da execução é o errado (workflow 3.3).
+RECONHECIDOS=()
+for f in ${FORA[@]+"${FORA[@]}"}; do
+  decl=0
+  [ -f "$SUM_F" ] && grep -qF "ARQUIVO-NAO-DECLARADO: $f" "$SUM_F" && decl=1
+  [ "$decl" = 0 ] && [ -f "$PHASE_DIR/deferred-items.md" ] \
+    && grep -F "ARQUIVO-NAO-DECLARADO" "$PHASE_DIR/deferred-items.md" | grep -qF "$f" && decl=1
+  [ "$decl" = 1 ] && RECONHECIDOS+=("$f")
+done
+FORA_NAO_DECL=()
+for f in ${FORA[@]+"${FORA[@]}"}; do
+  d=0; for r in ${RECONHECIDOS[@]+"${RECONHECIDOS[@]}"}; do [ "$f" = "$r" ] && d=1 && break; done
+  [ "$d" = 1 ] || FORA_NAO_DECL+=("$f")
+done
+
 # ── veredito ──────────────────────────────────────────────────────────────────
 CODIGOS=()
 [ ${#PERMITIDOS[@]} -gt 0 ] || CODIGOS+=("LISTA-VAZIA")
-[ ${#FORA[@]} -eq 0 ] || CODIGOS+=("FORA-DA-LISTA")
+[ ${#FORA_NAO_DECL[@]} -eq 0 ] || CODIGOS+=("FORA-DA-LISTA")
+[ ${#RECONHECIDOS[@]} -eq 0 ] || INFORMATIVOS+=("ARQUIVO-NAO-DECLARADO ($(printf '%s ' "${RECONHECIDOS[@]}" | sed 's/ $//'))")
 if [ "$N_COMMITS" -eq 0 ]; then CODIGOS+=("SEM-COMMIT")
 elif [ "$N_TAREFA" -lt "$N_TASKS" ]; then CODIGOS+=("COMMITS-A-MENOS ($N_TAREFA commits para $N_TASKS tarefas)")
 fi
@@ -159,10 +179,11 @@ VER=ok; [ ${#CODIGOS[@]} -eq 0 ] || VER=falha
 JSON=$(jq -cn --arg plan "$PLAN" --argjson t "$N_TASKS" --argjson c "$N_COMMITS" --argjson ct "$N_TAREFA" \
   --argjson fora "$(printf '%s\n' ${FORA[@]+"${FORA[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
   --argjson nt "$(printf '%s\n' ${NAO_TOCADOS[@]+"${NAO_TOCADOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
+  --argjson rec "$(printf '%s\n' ${RECONHECIDOS[@]+"${RECONHECIDOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
   --argjson cod "$(printf '%s\n' ${CODIGOS[@]+"${CODIGOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
   --argjson inf "$(printf '%s\n' ${INFORMATIVOS[@]+"${INFORMATIVOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
   --arg v "$VER" --arg de "$D_ESTADO" --argjson dp "$D_PLAN" --argjson ds "$D_SUM" --argjson df "$D_FALT" --argjson di "$D_INFO" \
-  '{plan:$plan, tasks:$t, commits:$c, commits_tarefa:$ct, fora_da_lista:$fora, declarado_nao_tocado:$nt, veredito:$v, codigos:$cod,
+  '{plan:$plan, tasks:$t, commits:$c, commits_tarefa:$ct, fora_da_lista:$fora, declarado_nao_tocado:$nt, arquivo_nao_declarado:$rec, veredito:$v, codigos:$cod,
     informativos:$inf, decisoes:{estado:$de, plan:$dp, summary:$ds, faltantes:$df, informational:$di}}')
 (cd "$ROOT" && gad_json_out "confere-plano-$PLAN" "$JSON")
 [ "$VER" = ok ]

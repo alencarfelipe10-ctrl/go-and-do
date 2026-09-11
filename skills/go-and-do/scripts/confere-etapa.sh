@@ -676,7 +676,7 @@ PYSF
   # reprovado pelo script vira um `incidente` no run-log; um plano que falha não impede a
   # conferência dos outros, e plano sem SUMMARY é pulado.
   CPL="$GAD_SCRIPTS_DIR/confere-plano.sh"
-  PC_OK=0; PC_FALHA="[]"; PC_CODIGOS="{}"; PC_REPROVA=""; PC_INFO="{}"
+  PC_OK=0; PC_FALHA="[]"; PC_CODIGOS="{}"; PC_REPROVA=""; PC_INFO="{}"; PC_NDECL="{}"
   if [ -f "$CPL" ]; then
     for sf in "$PHASE_DIR"/*-SUMMARY.md; do
       [ -f "$sf" ] || continue
@@ -688,6 +688,9 @@ PYSF
       # C7 (plano 2): informativos (DECISAO-SEM-SUMMARY) colhidos antes do `continue` — um plano
       # `ok` pode ter faltantes.
       PC_INFO=$(jq -c --arg p "$pid" --argjson i "$(jq -c '.informativos // []' <<<"$pcout")" 'if ($i|length)>0 then . + {($p): $i} else . end' <<<"$PC_INFO")
+      # 46t: desvios de escopo que o executor DECLAROU no SUMMARY, por plano.
+      PC_NDECL=$(jq -c --arg p "$pid" --argjson n "$(jq -c '.arquivo_nao_declarado // []' <<<"$pcout")" \
+        'if ($n|length)>0 then . + {($p): $n} else . end' <<<"$PC_NDECL")
       if [ "$(jq -r '.veredito' <<<"$pcout")" = ok ]; then
         PC_OK=$((PC_OK+1)); continue
       fi
@@ -704,9 +707,57 @@ PYSF
       RES=$(jq -c --arg d "plano fora do escopo declarado: $PC_REPROVA — arquivo fora do files_modified é colisão invisível para as ondas; menos commits que tarefas esconde qual tarefa quebrou" \
         '. + [{id:"escopo_planos", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
+    # recolisão entre ondas com as listas REAIS (46t): dois planos de ONDAS diferentes que
+    # tocaram o mesmo arquivo não são colisão (as ondas são sequenciais); dois planos da MESMA
+    # onda, sim — e é exatamente o que o cálculo de ondas não viu, porque rodou com a lista
+    # declarada antes da execução. Assert novo: vale da v2.6.0 em diante.
+    COLISAO=$(IDX_JSON="$IDX3" ROOT="$ROOT" python3 - <<'PYCOL' || echo '[]'
+import json, os, re, subprocess
+idx = json.loads(os.environ.get("IDX_JSON") or "{}")
+waves = {w: list(ids) for w, ids in (idx.get("waves") or {}).items()}
+if not waves:  # fallback: plans[].wave (mesma informação; medido 11/09 na 24.5)
+    for p in (idx.get("plans") or []):
+        if p.get("wave") is not None and p.get("id"):
+            waves.setdefault(str(p["wave"]), []).append(p["id"])
+root = os.environ["ROOT"]
+tocados = {}
+for w, ids in waves.items():
+    for pid in ids:
+        tag = re.escape(pid)
+        r = subprocess.run(["git", "-C", root, "log", "--format=%H", "-E",
+                            "--grep=^[a-z]+\\(" + tag + "(-[^)]*)?\\)(!)?:"],
+                           capture_output=True, text=True, timeout=20)
+        arqs = set()
+        for sha in r.stdout.split():
+            s = subprocess.run(["git", "-C", root, "show", "--name-only", "--format=", sha],
+                               capture_output=True, text=True, timeout=20)
+            for f in s.stdout.splitlines():
+                f = f.strip()
+                if f and not f.startswith(".planning/") and not f.endswith("-SUMMARY.md"):
+                    arqs.add(f)
+        tocados[pid] = arqs
+out = []
+for w, ids in waves.items():
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            comuns = sorted(tocados.get(ids[i], set()) & tocados.get(ids[j], set()))
+            if comuns:
+                out.append({"onda": w, "planos": [ids[i], ids[j]], "arquivos": comuns[:10]})
+print(json.dumps(out, ensure_ascii=False))
+PYCOL
+    )
+    jq -e . >/dev/null 2>&1 <<<"$COLISAO" || COLISAO='[]'
+    if [ "$(jq 'length' <<<"$COLISAO")" -gt 0 ]; then
+      RES=$(jq -c --arg d "COLISAO-REAL-NA-ONDA: $(jq -r '[.[]|"onda \(.onda): \(.planos|join(" × ")) em \(.arquivos|join(", "))"]|join(" · ")' <<<"$COLISAO" | cut -c1-400) — dois planos da MESMA onda commitaram o mesmo arquivo; o cálculo de ondas rodou com a lista declarada antes da execução" \
+        '. + [{id:"colisao_real_onda", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" incidente "$RUNLOG_ETAPA" --kv origem=confere-etapa.sh \
+        --kv detalhe="COLISAO-REAL-NA-ONDA: $(jq -r '[.[]|"onda \(.onda) \(.planos|join("×"))"]|join("; ")' <<<"$COLISAO")"
+    fi
   fi
   EXTRAI=$(jq -c --argjson ok "$PC_OK" --argjson f "$PC_FALHA" --argjson c "$PC_CODIGOS" --argjson i "$PC_INFO" \
-    '. + {planos_conferidos:{ok:$ok, falha:$f, codigos:$c, informativos:$i}}' <<<"$EXTRAI")
+    --argjson col "${COLISAO:-[]}" --argjson nd "$PC_NDECL" \
+    '. + {planos_conferidos:{ok:$ok, falha:$f, codigos:$c, informativos:$i},
+          colisao_real_onda:$col, arquivo_nao_declarado:$nd}' <<<"$EXTRAI")
 
   # ── prova por reexecução (A4, plano 4 / 05/09/2026): "17 de 18 verdes" sem comando e saída
   # colados na mesma seção não é verificação. Na F24.4 o 24.4-05-SUMMARY.md:71 e :223

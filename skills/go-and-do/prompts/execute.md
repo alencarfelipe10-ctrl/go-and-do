@@ -133,6 +133,13 @@ por tarefa (`gsd-executor.md`, `task_commit_protocol`); na F24.4 três planos ju
 tarefas num commit e ninguém cobrou — a cancela de fecho (`confere-etapa.sh 3`) agora
 reprova.
 
+Arquivo tocado fora do `files_modified` do plano: a resposta é **declarar**, não reescrever o
+contrato. Escreva `ARQUIVO-NAO-DECLARADO: <caminho>` no SUMMARY do plano (uma linha por arquivo,
+com o motivo ao lado) e commite essa declaração. Editar o `files_modified` de um plano já
+executado é proibido: o cálculo de ondas rodou com a lista antiga, e uma colisão entre planos da
+mesma onda fica invisível (F24.5, 4 planos editados depois da execução; o `confere-etapa.sh 3`
+agora reconfere a colisão pelas listas reais dos commits e reprova `colisao_real_onda`).
+
 Depois que a última onda fechar, rode a suíte completa uma vez, por `roda-suite.sh`, e trate
 o resultado como gate da etapa. Rodada extra no meio é escolha sua (fase longa, arquivo-hub
 tocado), nunca regra: com N executores em paralelo, N suítes `-n 4` disputam os mesmos quatro
