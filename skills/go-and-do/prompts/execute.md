@@ -200,13 +200,25 @@ if [ -f "$MAIN/.planning/worktree-fixtures.txt" ]; then
         if [ -d "./$d/$(basename "$d")" ]; then
           echo "🔔 ANINHAMENTO em ./$d/$(basename "$d") — NÃO prossiga: remova só o nível aninhado e registre em incidentes:"
         fi
+        # conferência por contagem (45n, F24.5: o rsync deixou 6 .xlsx para trás EM SILÊNCIO)
+        n_orig=$(find "$MAIN/$d" -type f 2>/dev/null | wc -l)
+        n_dest=$(find "./$d" -type f 2>/dev/null | wc -l)
+        if [ "$n_orig" != "$n_dest" ]; then
+          echo "🔔 COPIA-INCOMPLETA em $d: origem $n_orig arquivo(s), cópia $n_dest — complete com 'cp -an \"$MAIN/$d/.\" \"./$d/\"' e registre em incidentes:"
+          cp -an "$MAIN/$d/." "./$d/" 2>/dev/null || true
+          n_dest2=$(find "./$d" -type f 2>/dev/null | wc -l)
+          [ "$n_orig" = "$n_dest2" ] || echo "🔔 COPIA-INCOMPLETA PERSISTE em $d ($n_orig × $n_dest2) — PARE e devolva needs_decision"
+        fi
       done
 fi
 ```
 
 (rsync faz merge idempotente — re-rodar a cópia numa retomada não reaninha; `cp -n`/`cp -an`
 preservam o que já existir, mas re-execução sobre destino existente foi exatamente o vetor
-do aninhamento da F22 — por isso a guarda é obrigatória mesmo no fallback.) A cópia é o canal **sancionado** — e não muda a
+do aninhamento da F22 — por isso a guarda é obrigatória mesmo no fallback. A contagem origem ×
+destino é obrigatória por fixture: `rsync` e `cp -n` podem pular arquivo por permissão, nome com
+caractere especial ou espaço em disco, e nenhum dos dois acusa — na F24.5 foram 6 planilhas do
+entregável do cliente.) A cópia é o canal **sancionado** — e não muda a
 regra de sempre: replicar ≠ inspecionar. Nenhum agente imprime/dumpa o conteúdo de `.env*` no
 transcript; quem precisa de um valor consome a env pelo processo (dotenv/`process.env`),
 nunca por `cat`. As fixtures copiadas vivem e morrem com o worktree (a remoção dele as
@@ -227,6 +239,19 @@ paralelismo primeiro — para fixture gitignored, o conserto sancionado é decla
 acima. Serializou de fato, por qualquer caminho? Isso é desvio: entra OBRIGATORIAMENTE
 em `incidentes:` no retorno, nunca só num log de camada 2.
 
+**Incidente se grava na hora, não no fecho.** Todo desvio que você vai listar em `incidentes:`
+também é gravado no run-log **no momento em que acontece**, com o `ts` do fato:
+
+```bash
+bash "$HOME/.claude/skills/go-and-do/scripts/run-log.sh" "<phase_dir>" "<NN>" incidente "3 construcao" \
+  --kv origem=execute-host --kv detalhe="<o quê · por quê · quem decidiu>"
+```
+
+O bloco `incidentes:` do retorno continua obrigatório e é o mesmo conteúdo — ele é o resumo ao
+orquestrador, não o registro. O porquê: na F24.5 os 11 incidentes da etapa chegaram ao run-log
+no mesmo segundo, no fecho, e a auditoria perdeu a ordem dos fatos (qual desvio veio antes de
+qual conserto).
+
 **Guarda anti-reversão (inclua este bloco, verbatim, em TODO briefing de executor —
 worktree ou árvore compartilhada):**
 
@@ -241,6 +266,18 @@ O porquê (caso real, F20): um executor rodou `git stash -u` + `git checkout <ha
 e reverteu arquivos rastreados da árvore compartilhada — detectou e desfez sozinho em 25s,
 mas nada impedia a perda. Mesma família do guard de proveniência: a proteção não pode
 depender do reflexo de quem errou.
+
+**Negativa de guarda não se contorna.** Se um comando seu for recusado por estar «isolado no
+worktree» (ou por qualquer guarda), a resposta é **devolver o bloqueio ao coordenador** com o
+comando negado e a mensagem literal — e seguir com o que não depende dele. É proibido chamar a
+mesma operação por outra via para escapar do guarda: `subprocess.run(["git", …])` dentro de
+`python -c`, `os.system`, script intermediário, alias. O porquê (F24.5): três executores
+commitaram por dentro do Python, o hook não viu nada, e um deles, sem conseguir usar o
+`roda-suite.sh`, rodou um teste de 190 s em primeiro plano. Chegaram à mesa; a empresa ficou
+com uma catraca que não funciona e uma janela que todo mundo sabe abrir.
+Forma do comando de git dentro de um worktree: `git <sub> …` **nu**, na raiz do worktree — sem
+`cd X && git …`, sem `for … git`, sem `bash script.sh` que chame git por dentro. Essas formas
+a checagem de isolamento recusa por não conseguir verificá-las, e a recusa é correta.
 
 **Guarda de segredo PRÉ-commit (inclua no briefing de todo executor cujo plano toca API
 externa viva ou dados de terceiros):**
@@ -265,6 +302,12 @@ git diff) · commitado: Y em <sha>`) — nunca o estado efêmero do disco como s
 fato. Caso real (F21): o retorno da execução alegou `use_worktrees: false` "não-commitado
 no disco" e a auditoria só achou `true` commitado — alegação sem trilha vira número morto
 em relatório permanente.
+
+**Toda hora que você escreve em artefato é `date -Is` do momento**, nunca um horário estimado.
+Vale para o frontmatter do `VERIFICATION.md`, para o `SUMMARY.md` e para qualquer registro: na
+F24.5 o VERIFICATION nasceu com `21:30:00` redondo, e a hora virou número morto num documento
+permanente. Se você não pode rodar `date`, escreva `hora: nao_medida` — nunca um palpite com
+cara de medição.
 
 Economia de testes (princípio agnóstico de stack; o racional: na F16, 58% do tempo de
 execução foi suíte de teste, com ~1h45 de re-verificação duplicada e ~35min de runs
