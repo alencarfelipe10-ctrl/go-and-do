@@ -249,5 +249,23 @@ tail -n5 "$RL" | grep -q '"motivo":"git_por_subprocess"' \
 r=$(chama 'python3 -c "import subprocess; subprocess.run([\"git\",\"log\"])"' - -)
 [ "$r" = allow ] && ok "fora de rodada (sem agent_type) → allow, sem rastro" || bad "fora de rodada" "$r"
 
+echo "── 47e: exceção de run_in_background só para a espera do roda-suite.sh (P-13)"
+RS='bash $HOME/.claude/gsd-core/bin/nosso/roda-suite.sh'
+for c in "$RS --esperar --tag f24 --teto 590" \
+         "$RS --gate-onda --fase 24 --onda 2"; do
+  r=$(chama "$c" true); [ "$r" = allow ] && ok "allow com bg: $(printf '%.55s' "$c")" || bad "allow esperado (47e): $c" "$r"
+done
+for c in "$RS --lancar --cmd 'uv run pytest -q' --tag f24" \
+         "uv run pytest -q"; do
+  r=$(chama "$c" true); [ "$r" = deny ] && ok "deny com bg: $(printf '%.55s' "$c")" || bad "deny esperado (47e): $c" "$r"
+done
+# `--lancar && --esperar` no MESMO comando: a vida da chamada é a do trabalho (o --esperar
+# segura até o fim), então a acordada é real e a exceção vale. É o uso recomendado sob bg.
+r=$(chama "$RS --lancar --cmd x --tag t && $RS --esperar --tag t" true)
+[ "$r" = allow ] && ok "allow com bg: --lancar && --esperar (a chamada vive o trabalho)" || bad "--lancar && --esperar" "$r"
+r=$(chama "$RS --lancar --cmd 'uv run pytest -q' --tag f24"); [ "$r" = allow ] && ok "--lancar SEM o flag segue allow (inalterado)" || bad "--lancar sem flag" "$r"
+r=$(chama "$RS --esperar --tag f24"); [ "$r" = allow ] && ok "--esperar sem o flag segue allow" || bad "--esperar sem flag" "$r"
+r=$(chama "$RS --esperar --tag f24; sleep 300" true); [ "$r" = allow ] && ok "a exceção do bg precede o texto (documentado)" || bad "precedência do bg" "$r"
+
 echo; echo "resultado: $ok ok, $falhas falha(s)"
 [ "$falhas" -eq 0 ]

@@ -36,6 +36,14 @@
 #   `sem_aspas` apaga o caminho junto com as aspas) e NUNCA resolve symlink — o
 #   `~/.claude/skills/go-and-do` aponta para o repositório de desenvolvimento, e canonizar
 #   faria a regra morder a bancada de conserto, que não é uma rodada.
+# Exceção de `run_in_background` (v2.6.0, 47e — bancada B de 11/09/2026, CC 2.1.269):
+#   filho Bash com `run_in_background: true` ACORDA o pai quando o processo DA PRÓPRIA
+#   chamada termina; o `( … ) &` desprendido do `roda-suite.sh --lancar` NÃO acorda
+#   ninguém. Logo a exceção só rende para a chamada cuja vida é a do trabalho:
+#   `roda-suite.sh --esperar` e `--gate-onda`. `--lancar` continua negado sob o flag —
+#   ele voltaria em ~1 s e a notificação chegaria antes da suíte, que é o não-resultado
+#   medido na rodada 2 da bancada. Sem flag, `--lancar` já passava e continua passando.
+#   As negações de `sleep` cru, `&` fora do waiter e `nohup`/`setsid`/`disown` FICAM.
 # Rastro sem negativa (v2.6.0, 45n): `git` chamado por dentro de Python
 # (`subprocess.run(["git"…])`, `os.system("… git …")`, `sh -c "… git …"`) grava `incidente`
 # no run-log e SEGUE. Na F24.5 três executores commitaram por esse caminho sem deixar
@@ -101,6 +109,8 @@ PROTEGIDO = re.compile(
     r"|(?:\$HOME|~|/home/[^/\s\"']+)/\.claude/agents/gad-[^\s\"';|&)]*\.md"
     r"|(?:[^\s\"';|&)]*/)?gen5-patches/"
     r")")
+# 47e: a única forma de `run_in_background` sancionada — espera que vive o tempo do trabalho.
+SUITE_ESPERA = re.compile(r"roda-suite\.sh\b(?=[^\n]*?(?:--esperar|--gate-onda))(?![^\n]*?--lancar)")
 SED_I = re.compile(r"(^|[;&|(\s])sed\s+(?:-\S+\s+)*-[A-Za-z]*i")
 PATCH_CMD = re.compile(r"(^|[;&|(\s])patch\b")
 PY_ESCRITA = re.compile(r"open\s*\(\s*[^,)]+,\s*['\"][rwax+bt]*[wax][rwax+bt]*['\"]")
@@ -265,6 +275,8 @@ def motivo_texto(cmd, nivel=0):
 def decide(cmd, run_in_background):
     """Devolve None (allow) ou o motivo da negativa."""
     if run_in_background is True:
+        if SUITE_ESPERA.search(sem_heredoc(cmd)):
+            return None          # 47e: espera do roda-suite.sh — o pai é acordado de verdade
         return RUN_IN_BG_MOTIVO
     alvo = motivo_instrumento(cmd)
     if alvo:
