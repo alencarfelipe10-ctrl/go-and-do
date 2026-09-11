@@ -6,7 +6,8 @@
 #       `r6_phase_without_req_id`  que haja sino ESTRUTURADO (`req_ausente: <id>` /
 #                                  `fase_sem_req`); menção em prosa não conta
 #
-# Sempre em `--dry-run` (nada é gravado no run-log) e em projeto de bancada (mktemp):
+# Em `--dry-run` (nada é gravado no run-log) na maior parte dos casos, e em projeto de bancada
+# (mktemp) sempre — os casos do J5/fence rodam também sem a flag, para exercitar lock e fence:
 # nenhum projeto real é tocado. Os asserts do manifest (SPEC/CONTEXT/…) reprovam nesta
 # bancada de propósito — cada caso afirma SÓ o assert que está sendo medido.
 #   bash tests/test-confere-etapa.sh      · exit 0 = verde

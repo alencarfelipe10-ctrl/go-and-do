@@ -239,7 +239,25 @@ n=$(jq '[.alvos[] | select(.ausente_no_inicio == true)] | length' "$PD/.intent/.
 b=$(jq -r '.alvos[] | select(.ausente_no_inicio == true) | .blob_pre' "$PD/.intent/.correcoes-c0.base.json")
 [ -z "$b" ] && ok "blob_pre vazio (delta inteiro é do ciclo)" || erro "blob_pre deveria ser vazio: [$b]"
 
+echo "== M4 — ponta a ponta: o INTENT-REVIEW nasce DENTRO do ciclo e entra no commit"
+monta_repo
+rm -f "$PD/24.3-INTENT-REVIEW.md"
+RUN "$PD" 0 --inicio --artefatos "$PD/24.3-SPEC.md" "$PD/24.3-CONTEXT.md" \
+    "$PD/24.3-INTENT-REVIEW.md" >/dev/null 2>&1 || erro "--inicio falhou no ponta a ponta"
+printf 'review criado no ciclo\n' > "$PD/24.3-INTENT-REVIEW.md"
+echo "correcao do ciclo" >> "$PD/24.3-SPEC.md"
+saida=$(RUN "$PD" 0 --ids "c0-01" --artefatos "$PD/24.3-SPEC.md" "$PD/24.3-CONTEXT.md" \
+        "$PD/24.3-INTENT-REVIEW.md" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "--ids fecha o ciclo com o alvo que nasceu dentro dele (exit 0)" \
+  || erro "esperado 0, veio $rc" "$saida"
+jq -e '[.caminhos[] | select(endswith("24.3-INTENT-REVIEW.md"))] | length == 1' \
+  "$PD/.intent/.correcoes-c0.aplicado" >/dev/null 2>&1 \
+  && ok "o arquivo novo entrou nos caminhos comitados" \
+  || erro "INTENT-REVIEW ficou de fora do commit" "$(jq -c '.caminhos' "$PD/.intent/.correcoes-c0.aplicado" 2>&1)"
+
 echo "== M4 — nos modos --ids/--vazio a ausência segue sendo erro"
+monta_repo
+rm -f "$PD/24.3-INTENT-REVIEW.md"
 saida=$(RUN "$PD" 0 --ids "c0-01" --artefatos "$PD/24.3-SPEC.md" \
         "$PD/24.3-INTENT-REVIEW.md" 2>&1); rc=$?
 [ "$rc" = 3 ] && printf '%s' "$saida" | grep -q 'alvo inexistente' \
