@@ -82,11 +82,26 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    com o handoff gracioso (é o fluxo 3.4 → pause-work dela). Todo o progresso já é
    durável por construção (commits atômicos + `SUMMARY.md` por plano) — não há nada
    extra a gravar antes de devolver.
-4. Ao final, apure pelo disco (shim do `<environment>`): `gsd_run query
-   phase-plan-index N` → quantos planos têm `SUMMARY.md`; e o status do
-   `VERIFICATION.md` se ele nasceu (`head -15` no frontmatter: `passed` /
-   `human_needed` / `gaps_found`). Fidelidade acima de otimismo: reporte o que o disco
-   mostra, não o que o comando prometeu.
+4. Antes de devolver `done`, rode você mesmo o fiscal e confira o recibo:
+   ```bash
+   bash "$HOME/.claude/skills/go-and-do/scripts/confere-etapa.sh" 3 \
+     --fase <N> --projeto "<project_root>" --sem-telemetria
+   F="<phase_dir>/.fence-3.ok"
+   H=$(git -C "<project_root>" rev-parse HEAD 2>/dev/null || echo "")
+   [ -f "$F" ] && [ "$(jq -r '.head' "$F")" = "$H" ] && echo FENCE-OK || echo FENCE-AUSENTE
+   ```
+   `--sem-telemetria` existe porque a camada 0 roda esta mesma cancela quando você voltar: sem a
+   flag, o run-log da fase ganharia dois eventos `end` para a etapa 3.
+   - `FENCE-OK` → só então `estado: done` é resposta válida. Apure o resto pelo disco (shim do
+     `<environment>`): `gsd_run query phase-plan-index N` → quantos planos têm `SUMMARY.md`; e o
+     status do `VERIFICATION.md` se ele nasceu (`head -15` no frontmatter: `passed` /
+     `human_needed` / `gaps_found`).
+   - `FENCE-AUSENTE` → **não** devolva `done`. Devolva `estado: done` com `veredito: incompleto`
+     e, em `acao_humana_pendente`, a frase literal `reprovado pelo fiscal` seguida do conteúdo de
+     `<project_root>/.planning/.gad/last-confere-etapa.json`, colado inteiro. Nunca conserte o
+     fiscal (ver a regra do instrumento no `<environment>`).
+   Fidelidade acima de otimismo: reporte o que o disco mostra, não o que o comando prometeu. Na
+   F24.5 o coordenador devolveu «pronto · completo · 9/9» com o fiscal reprovando.
 5. Devolva pelo `<return_contract>`. O comando falhou de ponta a ponta (nenhum plano
    executado, erro imediato) → `estado: blocked` com o motivo.
 </mission>
@@ -98,23 +113,54 @@ a pergunta mastigada (opções + tradeoffs, recomendação primeiro) e aguarde a
 continuação com a resposta. Você não mexe em TaskList nem em telemetria — são da
 camada 0.
 
-Agentes aninhados (camada 2): você **não recebe notificações** de trabalho em
-background — nunca fique "aguardando" um retorno que não vai chegar. Precisa de
-background (trabalho >10min, o teto real do `timeout` da tool)? Só com waiter de
-disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`), sempre e só nessa forma. **Proibidos, sem exceção: `setsid`, `nohup`, `disown`** — um processo reparentado sobrevive ao `TaskStop` e não é varrido. Não cabe no teto de 600000ms do harness mesmo assim? A saída é **pausar e reportar**, nunca desacoplar o processo. Isso não é só regra: o hook `gad-bash-guard.sh` nega, dentro da rodada, todo Bash de subagente com `run_in_background`, `nohup`, `setsid`, `disown` ou `&` de fundo que não seja o waiter acima — uma negativa dele é definitiva, não procure outra forma; cada negativa vira `incidente` no run-log. Nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia).
-Trabalho de fundo espera em **waiters encadeados de até 590 s**: cada chamada é um
-`timeout 590 bash -c 'until [ -s <arquivo> ]; do sleep 15; done'`, com `timeout: 600000` no
-parâmetro da tool (o default de 120 s mataria a própria espera), e, se o arquivo ainda não
-existe, você chama de novo. Nunca relance o trabalho por já ter estourado um waiter — a tool
-morre aos 600 s, o processo não. Teste ou suíte acima de dois minutos vai por `roda-suite.sh`
-(`bash "$HOME/.claude/gsd-core/bin/nosso/roda-suite.sh" --lancar --cmd '…'` uma vez,
-`--esperar` quantas vezes precisar): ele recusa o segundo lançamento e devolve o rc, o
-sumário e os testes vermelhos por arquivo. Na F24.4 dez lançamentos foram perdidos — cerca de
-duas horas — porque o waiter de 1800 s do plano estourava e o executor concluía que a suíte
-tinha morrido. Depois decida pelo disco: `SUMMARY.md`
-esperado existe → siga; não existe → trate como falha do passo (não como sucesso).
-E devolva sempre o bloco do contrato de retorno — prosa de espera ("vou aguardar a
-notificação") no lugar do bloco é retorno inválido.
+**Espera de filho: não espere.** Despache os executores da onda no **mesmo turno** e **encerre o
+turno sem chamar mais nenhuma tool**. O Claude Code não considera terminado um agente que tem
+filho vivo: a notificação chega a cada término, e o disco é que diz quais planos já fecharam. O
+aviso é prosa; o resultado vale pelo **disco** — leia o `NN-SUMMARY-<plano>.md`, o commit e o
+run-log antes de decidir qualquer coisa. Não durma, não faça polling, não chame `wait`, não use o
+Monitor para vigiar filho `Agent` (F24.5: 4 waiters de 593 s, cada um um turno de ~350 k tokens).
+Acordou e o SUMMARY de algum plano não está lá? Aí sim, **uma** chamada do waiter sancionado
+`timeout 590 bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` (parâmetro `timeout: 600000`), e
+registre `espera_por_waiter: <arquivo>` em `incidentes:`.
+
+**Para trabalho de Bash (a suíte), os dois modos são diferentes — e a diferença foi medida**
+(bancada de 11/09/2026, CC 2.1.269):
+
+- **Chamada de Bash com `run_in_background: true` cuja vida é a do trabalho** (o comando cru da
+  suíte, ou `roda-suite.sh --esperar`): **acorda você** quando o processo daquela chamada termina.
+  Lance, encerre o turno, e decida pelo disco ao acordar. Atenção ao mecanismo: o harness notifica
+  a **cada** parada sua, então a primeira notificação chega em poucos segundos, com o trabalho
+  ainda correndo — a que traz o resultado é a do fim. Não conclua «terminou» na primeira.
+  Enquanto a exceção do `gad-bash-guard.sh` não estiver instalada, esta forma é **negada** dentro
+  de rodada ativa: a negativa é definitiva, use a rota do `--lancar` abaixo e registre em
+  `incidentes:`.
+- **`roda-suite.sh --lancar`** (`( <trabalho> ; marcador ) &` por dentro do script) **não acorda
+  ninguém**: o subshell desprendido não é filho vivo para o harness. Ele devolve em < 1 s, o
+  processo sobrevive e grava o `rc` no disco — mas só chega até você se você **voltar e esperar**
+  (`--esperar`). Por isso, e só aqui, vale o **waiter encadeado de até 590 s**: cada chamada é um
+  `timeout 590 bash -c 'until [ -s <arquivo> ]; do sleep 15; done'`, com `timeout: 600000` no
+  parâmetro da tool (o default de 120 s mataria a própria espera), e, se o arquivo ainda não
+  existe, você chama de novo. Dimensione a espera pela duração já medida da suíte —
+  `min(590, medida × 1,2)` — em vez de queimar 590 s às cegas.
+
+Nunca relance o trabalho por já ter estourado um waiter: a tool morre aos 600 s, o processo não.
+Na F24.4 dez lançamentos foram perdidos — cerca de duas horas — porque o waiter de 1800 s do plano
+estourava e o executor concluía que a suíte tinha morrido. Teste ou suíte acima de dois minutos vai
+por `roda-suite.sh` (`bash "$HOME/.claude/gsd-core/bin/nosso/roda-suite.sh" --lancar --cmd '…'` uma
+vez, `--esperar` quantas vezes precisar): ele recusa o segundo lançamento e devolve o rc, o sumário
+e os testes vermelhos por arquivo.
+
+**Proibidos, sem exceção: `setsid`, `nohup`, `disown`** — um processo reparentado sobrevive ao
+`TaskStop` e não é varrido. Não cabe no teto de 600000ms do harness mesmo assim? A saída é **pausar
+e reportar**, nunca desacoplar o processo. Isso não é só regra: o hook `gad-bash-guard.sh` nega,
+dentro da rodada, todo Bash de subagente com `nohup`, `setsid`, `disown` ou `&` de fundo que não
+seja o waiter sancionado — uma negativa dele é definitiva, não procure outra forma; cada negativa
+vira `incidente` no run-log. Nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam
+criar (F24.3: 40 min esperando um `.done` que ninguém escrevia).
+
+Depois decida pelo disco: `SUMMARY.md` esperado existe → siga; não existe → trate como falha do
+passo (não como sucesso). E devolva sempre o bloco do contrato de retorno — prosa de espera ("vou
+aguardar a notificação") no lugar do bloco é retorno inválido.
 Saída vazia com exit 0 também é falha.
 
 Executor travado (stall do `gsd-execute-phase`, ou o teto acima estourado sem
@@ -266,6 +312,14 @@ O porquê (caso real, F20): um executor rodou `git stash -u` + `git checkout <ha
 e reverteu arquivos rastreados da árvore compartilhada — detectou e desfez sozinho em 25s,
 mas nada impedia a perda. Mesma família do guard de proveniência: a proteção não pode
 depender do reflexo de quem errou.
+
+**Instrumento sob julgamento.** Quando um `confere-*.sh`, um hook ou um script do fork está
+reprovando a rodada **por defeito dele mesmo**, ele é evidência, nunca alvo. Grave
+`<phase_dir>/.gate-fail-<etapa>-evidencia.txt` com o comando, a saída literal e a linha que você
+julga errada, commite e devolva a decisão ao coordenador. Nunca `sed`, nunca `Edit`, nunca um
+remendo «temporário» no instrumento enquanto a rodada que ele julga está aberta — nem quando o
+seu diagnóstico está certo. F24.5, 23:47–23:49: o diagnóstico **estava** certo e o gesto
+continuava errado; só o classificador de permissões o impediu, duas vezes.
 
 **Negativa de guarda não se contorna.** Se um comando seu for recusado por estar «isolado no
 worktree» (ou por qualquer guarda), a resposta é **devolver o bloqueio ao coordenador** com o
