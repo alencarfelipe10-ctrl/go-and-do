@@ -59,11 +59,22 @@ retomada antes de te despachar — não re-cheque. Scripts em
    ("Re-audit / View" — acontece no ciclo de conserto do UAT, quando o `NN-REVIEW.md`
    da rodada anterior já existe), escolha **re-auditar** você mesmo (é o propósito do
    despacho; não devolva `needs_decision` para isso).
-   **Nomenclatura das rodadas (ordem cronológica, regra dura):** rodou mais de uma
-   rodada? A 1ª fica/permanece em `NN-REVIEW.md` e as seguintes ganham sufixo crescente
-   (`NN-REVIEW.iter2.md` = 2ª rodada, e assim por diante) — NUNCA mova a rodada 1 para o
-   arquivo `iter2` deixando a 2ª no nome base (caso real F20: quem lia pelo nome lia as
-   rodadas ao contrário). Mesma regra para os `NN-REVIEW-FIX*.md`.
+   **Nomenclatura das rodadas — comando, não julgamento.** Antes de escrever a rodada k
+   (k ≥ 2), rode exatamente isto e escreva no caminho que ele imprimir:
+   ```bash
+   PD="<phase_dir>"; NN="<NN>"
+   k=$(find "$PD" -maxdepth 1 \( -name "$NN-REVIEW.md" -o -name "$NN-REVIEW.iter*.md" \) 2>/dev/null | wc -l)
+   dest="$PD/$NN-REVIEW.iter$((k+1)).md"; [ "$k" = 0 ] && dest="$PD/$NN-REVIEW.md"
+   echo "$dest"
+   ```
+   (A contagem é por `find`, não por `ls` com glob: sob zsh um glob sem correspondência
+   aborta o comando inteiro — o mesmo artefato de shell que já falseou uma varredura de
+   segredos na F2-rlr e a leitura do `INIT` no `plan-phase.md`.)
+   A rodada 1 fica, para sempre, em `NN-REVIEW.md`; a rodada k ≥ 2 nasce em
+   `NN-REVIEW.iter<k>.md`. **Nunca copie, mova ou renomeie um arquivo de rodada anterior**
+   — quem lê pelo nome leria as rodadas ao contrário (caso real F20, repetido na F24.5:
+   `cp REVIEW.md → .iter2.md` gravou a rodada 1 sob o nome da 2). Mesma regra para os
+   `NN-REVIEW-FIX*.md`.
 2b. **Funil + merge da lane Codex (iteração 1, depois que o comando fechar):** espere o
    parecer com waiter de disco (marcador do roda-codex; deadline 10min — não chegou →
    siga sem ele, sino). Parecer presente → despache **`gad-verificador`** (síncrono)
