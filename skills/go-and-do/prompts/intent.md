@@ -20,7 +20,9 @@ relatório.
 <inputs>
 O despacho te entrega: o número da fase (`N`), o prefixo (`NN`), o `phase_dir` e o
 `project_root` — ambos **absolutos**. Numa continuação, entrega também a resposta do
-usuário às perguntas que você devolveu.
+usuário às perguntas que você devolveu. Pode entregar também `subagents_dir` (o diretório
+dos transcripts de subagente da sessão): é dele que você lê os próprios turnos no passo 9.
+Parâmetro ausente → `turnos: nao_medido — transcript fora do alcance`, que é caminho legítimo.
 
 Seu diretório de trabalho inicial não é a raiz do projeto: comece todo bloco Bash com
 `cd "<project_root>"` e use caminhos absolutos em tudo que escrever ou passar adiante.
@@ -650,7 +652,37 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    ciclo; `VIOLACAO` → despache um `gad-verificador` retroativo sobre os pareceres daquele
    ciclo e incorpore o resultado; `VIOLACAO-INVERSA` → verifique inline o que faltar e
    corrija a `.rota-verificacao-c<C>.json`. Em todos: `incidentes` + re-rode o gate.
-8. Devolva `done` pelo `<return_contract>`.
+8. **Recibo do fiscal, antes de devolver `done`.** Rode o fiscal você mesmo e leia o recibo:
+   ```bash
+   cd "<project_root>"
+   $HOME/.claude/skills/go-and-do/scripts/confere-etapa.sh 1 --fase <N> --projeto "<project_root>" \
+     --sem-telemetria; rc=$?
+   F="<phase_dir>/.fence-1.ok"
+   H=$(git rev-parse HEAD 2>/dev/null || echo "")
+   [ -f "$F" ] && [ "$(jq -r '.head' "$F")" = "$H" ] && echo "FENCE-OK" || echo "FENCE-AUSENTE"
+   ```
+   **`--sem-telemetria` é obrigatório:** a telemetria da etapa é da camada 0, que re-roda esta mesma
+   cancela quando você voltar. Sem a flag, o run-log ganharia dois `end` para a etapa 1 e o ledger da
+   fase sairia errado.
+   `FENCE-OK` → devolva `done` pelo `<return_contract>`.
+   `FENCE-AUSENTE` (ou `rc != 0`) → **você não devolve `done`**. Leia a lista de `FALHA` do JSON do
+   fiscal, conserte cada uma, e rode o fiscal de novo. Se commitar depois do pass, o fence deixa de
+   valer (o `head` muda) e o fiscal roda outra vez — é de propósito: o recibo vale para o HEAD que
+   ele conferiu. Não invente o veredito e não descreva o que «deve» ter passado: na F24.5 a etapa
+   foi declarada pronta às 12:10:20 e o fiscal reprovou 1 min depois, por três correções sem
+   veredito; custou 4 turnos de engenharia reversa do script.
+9. **Relato de turnos: a saída do medidor, verbatim.** Antes do retorno, rode
+   ```bash
+   python3 $HOME/.claude/skills/audit-gad/scripts/turnos-por-ciclo.py \
+     "<subagents_dir>" --json 2>/dev/null | head -40
+   ```
+   `<subagents_dir>` é o parâmetro que o despacho te entregou (o diretório dos subagentes da
+   sessão). Cole a linha de resumo em `transparencia:` como `turnos: <saída literal>`. Sem o
+   parâmetro no despacho, ou medidor indisponível (skill `/audit-gad` não instalada, transcript fora
+   do alcance) → escreva literalmente `turnos: nao_medido — <motivo>`. **Nunca** uma frase de
+   avaliação: «próximo do alvo» é uma afirmação sobre um número que você não contou, e na F24.5 ela
+   saiu com 19 e 8 turnos contra um alvo de 4.
+10. Devolva `done` pelo `<return_contract>`.
 </adversarial_review>
 
 <business_pause>

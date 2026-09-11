@@ -17,6 +17,20 @@
 #   o caminho de pausa não media e fragmentava o rótulo da etapa em 3 variantes).
 #   --dry-run: avalia e imprime, não grava evento nenhum (PC-12 — validação contra
 #   fases arquivadas sem sujar run-log real).
+#   --sem-telemetria: avalia e grava o `.fence-<etapa>.ok` no pass (removendo-o no fail), e NÃO
+#   grava evento nenhum no run-log, NÃO mede tokens e NÃO TOCA NO LOCK `.gate-fail-<etapa>.json`
+#   (nem o cria no fail, nem o remove no pass). É o modo do subagente de camada 1, que confere o
+#   próprio trabalho antes de devolver `done` (46 j / 46 r). Duas razões, as duas medidas:
+#   (1) telemetria é da camada 0, que re-roda esta cancela na chegada — dois `end` para a mesma
+#   etapa falseiam o ledger (a limpeza do 45(b) teve de apagar linhas do run-log da 24.5 por
+#   contaminação parecida); (2) o lock é o insumo do `POS_FAIL` logo abaixo: se esta rodada o
+#   removesse, a rodada com telemetria veria `POS_FAIL=0` e o evento `pass pós-fail (lock
+#   removido)` da v2.1.9 nunca seria gravado — a fase ficaria com o `fail` no run-log e sem o
+#   `pass` que o destravou (F24.3 4.4).
+#   Resumo:            fence | lock | run-log | mede
+#     normal            sim  | sim  |  sim    | sim
+#     --sem-telemetria  sim  | NÃO  |  não    | não
+#     --dry-run         não  | não  |  não    | não
 #   <etapa> = "pausa" --pos-pausa (P17, v2.4.0): cancela DEPOIS do `reconcilia-docs.sh
 #   --pausa` — não mede nada, só confere que o STATE.md diz `status: paused` e que o
 #   `state_head` é HEAD ou HEAD~1 (o WIP logo antes do commit próprio do reconciliador).
@@ -51,12 +65,13 @@ shopt -s nullglob
 
 ETAPA="${1:-}"; shift || true
 [ -n "$ETAPA" ] || { echo "uso: confere-etapa.sh <etapa> [--fase N] [--projeto DIR] [--dry-run]" >&2; exit 2; }
-FASE=""; PROJ=""; DRY=0; FIXCYCLE=0; POSPAUSA=0
+FASE=""; PROJ=""; DRY=0; SEMTEL=0; FIXCYCLE=0; POSPAUSA=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --fase)    FASE="${2:-}"; shift 2 ;;
     --projeto) PROJ="${2:-}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
+    --sem-telemetria) SEMTEL=1; shift ;;
     --fix-cycle) FIXCYCLE=1; shift ;;
     --pos-pausa) POSPAUSA=1; shift ;;
     *) echo "flag desconhecida: $1" >&2; exit 2 ;;
@@ -1030,19 +1045,30 @@ if [ "$FALHAS" = 0 ]; then VEREDITO=pass; else VEREDITO=fail; fi
 # reporta verde"): o fail deixa um lock que o run-log.sh HONRA — nenhum `end` desta
 # etapa é gravável enquanto o lock existir. Só ESTE script, ao dar pass, remove o lock.
 LOCK="$PHASE_DIR/.gate-fail-${RUNLOG_ETAPA%% *}.json"
+# 46(j)/46(r): recibo do fiscal. O lock acima é o dente do fail; este é o do pass. O
+# coordenador da etapa só pode devolver `done` com este arquivo válido — «válido» = existe E
+# `head` é o HEAD atual. Na F24.5 a etapa 1 e a etapa 3 devolveram «pronto» sem o fiscal ter
+# rodado. Formato definido no PLANO-1; a etapa 3 usa o mesmo (fiacao-P1-fence.md).
+FENCE="$PHASE_DIR/.fence-${RUNLOG_ETAPA%% *}.ok"
 MEDICAO=null
 if [ "$DRY" = 0 ]; then
   if [ "$VEREDITO" = pass ]; then
     POS_FAIL=0
-    if [ -f "$LOCK" ]; then
+    if [ "$SEMTEL" = 0 ] && [ -f "$LOCK" ]; then
       POS_FAIL=1; rm -f "$LOCK"
       # v2.1.9: o pass que destrava um fail também fica no run-log como evento `script`
       # (F24.3 4.4: só a reprovação aparecia; a re-cancela verde só existia no transcript)
       gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
         --kv script=confere-etapa.sh --kv exit=0 --kv resumo="pass pós-fail (lock removido)"
     fi
+    HEAD_NOW=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "")
+    jq -cn --arg e "${RUNLOG_ETAPA%% *}" --arg f "$NN" --arg h "$HEAD_NOW" \
+      --arg t "$(date -Is)" --arg s "${CLAUDE_CODE_SESSION_ID:0:8}" \
+      --argjson n "$(jq 'length' <<<"$RES")" \
+      '{v:1, etapa:$e, fase:$f, head:$h, ts:$t, sessao:$s, asserts:$n}' > "$FENCE"
     # janela da etapa: do checkpoint aberto pelo pre-despacho até agora
     sid="${CLAUDE_CODE_SESSION_ID:-}"
+    if [ "$SEMTEL" = 1 ]; then sid=""; fi
     RL="$PHASE_DIR/$NN-RUN-LOG.jsonl"
     desde=""
     if [ -n "$sid" ] && [ -f "$RL" ]; then
@@ -1055,14 +1081,18 @@ if [ "$DRY" = 0 ]; then
         desde=$(grep '"evento":"run"' "$RL" | tail -n1 | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p' || true)
       fi
     fi
-    if [ -n "$sid" ] && [ -n "$desde" ]; then
+    if [ "$SEMTEL" = 1 ]; then
+      MEDICAO='{"status":"sem_medicao","reason":"--sem-telemetria"}'
+    elif [ -n "$sid" ] && [ -n "$desde" ]; then
       MEDICAO=$(python3 "$GAD_SCRIPTS_DIR/mede-tokens.py" --sessao "$sid" \
         --desde "$desde" --ate "$(date -Is)" --sem-espelho 2>/dev/null || echo '{"status":"sem_medicao","reason":"mede-tokens falhou"}')
     else
       MEDICAO='{"status":"sem_medicao","reason":"sem sessão ou sem checkpoint da etapa no run-log"}'
     fi
     POSFLAG=(); [ "$POS_FAIL" = 1 ] && POSFLAG=(--kv pos_gate_fail=true)
-    if [ "$(jq -r '.status' <<<"$MEDICAO")" = ok ]; then
+    if [ "$SEMTEL" = 1 ]; then
+      :
+    elif [ "$(jq -r '.status' <<<"$MEDICAO")" = ok ]; then
       gad_runlog "$PHASE_DIR" "$NN" end "$RUNLOG_ETAPA" \
         --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens' <<<"$MEDICAO")" \
         --custo "$(jq -r '.total.custo_usd // 0' <<<"$MEDICAO")" \
@@ -1073,11 +1103,14 @@ if [ "$DRY" = 0 ]; then
         ${POSFLAG[@]+"${POSFLAG[@]}"}
     fi
   else
+    rm -f "$FENCE"
     resumo=$(jq -r '[.[] | select(.resultado=="FALHA") | .id] | join(",")' <<<"$RES")
-    printf '{"etapa":"%s","ts":"%s","resumo":"falhas: %s"}\n' \
-      "${RUNLOG_ETAPA%% *}" "$(date -Is)" "$resumo" > "$LOCK"
-    gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
-      --kv script=confere-etapa.sh --kv exit=1 --kv resumo="falhas: $resumo"
+    if [ "$SEMTEL" = 0 ]; then
+      printf '{"etapa":"%s","ts":"%s","resumo":"falhas: %s"}\n' \
+        "${RUNLOG_ETAPA%% *}" "$(date -Is)" "$resumo" > "$LOCK"
+      gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
+        --kv script=confere-etapa.sh --kv exit=1 --kv resumo="falhas: $resumo"
+    fi
   fi
 fi
 
