@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # roda-lanes.sh — lançador assíncrono das lanes adversariais da intenção (item E4).
 #
-# Uso: roda-lanes.sh <phase_dir> <NN> <C> <briefing> --prova <arquivo> [--lanes "a b"]
+# Uso: roda-lanes.sh <phase_dir> <NN> <C> <briefing> --prova <arquivo> [--lanes "codex agy"]
+#                    [--familia intencao|convergencia]
 #      roda-lanes.sh <phase_dir> <NN> <C> <briefing> --prova <arquivo> --reformata <lane>
 #                    ^ devolução (P15): relança SÓ a lane cujo parecer o confere-ciclo.sh
 #                    marcou `parecer_informe … devolver`, com o briefing original mais o
@@ -59,6 +60,14 @@
 # script) · GAD_LANES_LANES = lista de lanes (default "codex agy") · GAD_LANE_TIMEOUT =
 # teto em segundos do filho (default 660; os `roda-*.sh` já têm o seu de 600).
 #
+# Família (v2.6.0, 45 m/45 j): a MESMA mecânica serve as duas rodadas de revisão da fase.
+#   intencao     (default) — base `<phase_dir>/.intent`, aliases `NN-parecer-<lane>-c<C>.md`
+#                            e `.roda-<lane>-c<C>.json`. Comportamento histórico, byte a byte.
+#   convergencia            — base `<phase_dir>/.convergencia`, aliases
+#                            `NN-planrev-parecer-<lane>-c<C>.md` e `.roda-planrev-<lane>-c<C>.json`.
+# Sem isso a 2.5 sobrescrevia o espelho da 1 no mesmo ciclo: na F24.5 os pareceres saíram com
+# nomes distintos e os espelhos NÃO (um só `.roda-codex-c1.json` para as duas etapas).
+#
 # Exit do lançador: 0 = lanes lançadas · 2 = uso.
 
 set -uo pipefail
@@ -96,6 +105,13 @@ lane_lock() { # <lockdir> [tentativas]
 lane_unlock() { rm -rf "${1:-}" 2>/dev/null || true; }
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Família de artefatos (45 m/45 j) — escritor único dos caminhos, para que supervisor
+# e lançador nunca discordem sobre onde mora o run e como se chama o alias.
+# ═══════════════════════════════════════════════════════════════════════════════
+fam_base()   { case "$1" in convergencia) printf '%s/.convergencia' "$2" ;; *) printf '%s/.intent' "$2" ;; esac; }
+fam_prefixo(){ case "$1" in convergencia) printf 'planrev-' ;; *) printf '' ;; esac; }
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Modo SUPERVISOR (interno)
 # ═══════════════════════════════════════════════════════════════════════════════
 if [ "${1:-}" = "--supervisiona" ]; then
@@ -105,7 +121,9 @@ if [ "${1:-}" = "--supervisiona" ]; then
     || { echo "uso interno inválido" >&2; exit 2; }
 
   RUN_ID="$(basename -- "$RUN_DIR")"
-  INTENT="$PD/.intent"
+  FAMILIA="${9:-intencao}"
+  INTENT="$(fam_base "$FAMILIA" "$PD")"
+  PREFIXO="$(fam_prefixo "$FAMILIA")"
   LOCK="$INTENT/.lock-c$C"
   PONTEIRO="$INTENT/.run-atual-c$C"
 
@@ -227,8 +245,8 @@ if [ "${1:-}" = "--supervisiona" ]; then
   grava_status "$RC" "$RR" "$USABLE" "$INDEPENDENT" "$NONCE_OK" "$MODELO_OK" "$MIRROR_VALID"
 
   # ── (4) promoção dos aliases canônicos — só o dono do ponteiro, sob o lock ───
-  ALIAS_PARECER="$PD/pareceres/$NN-parecer-$LANE-c$C.md"
-  ALIAS_ESPELHO="$PD/pareceres/.roda-$LANE-c$C.json"
+  ALIAS_PARECER="$PD/pareceres/$NN-${PREFIXO}parecer-$LANE-c$C.md"
+  ALIAS_ESPELHO="$PD/pareceres/.roda-${PREFIXO}$LANE-c$C.json"
   ALIAS_STATUS="$INTENT/.status-c$C-$LANE.json"
   ALIAS_DONE="$INTENT/.done-c$C-$LANE"
 
@@ -253,16 +271,21 @@ fi
 # Modo LANÇADOR
 # ═══════════════════════════════════════════════════════════════════════════════
 PD="${1:-}"; NN="${2:-}"; C="${3:-}"; BRIEF="${4:-}"
-PROVA=""; LANES_ARG=""; REFORMATA=""
+PROVA=""; LANES_ARG=""; REFORMATA=""; FAMILIA="intencao"
 [ -n "$PD" ] && [ -n "$NN" ] && [ -n "$C" ] && [ -f "${BRIEF:-/nao-existe}" ] \
-  || { echo "uso: roda-lanes.sh <phase_dir> <NN> <C> <briefing> --prova <arquivo> [--lanes \"codex agy\"] [--reformata <lane>]" >&2; exit 2; }
+  || { echo "uso: roda-lanes.sh <phase_dir> <NN> <C> <briefing> --prova <arquivo> [--lanes \"codex agy\"] [--reformata <lane>] [--familia intencao|convergencia]" >&2; exit 2; }
 shift 4
 while [ $# -gt 0 ]; do case "$1" in
   --prova) PROVA="${2:-}"; shift 2 ;;
   --lanes) LANES_ARG="${2:-}"; shift 2 ;;
   --reformata) REFORMATA="${2:-}"; shift 2 ;;
+  --familia) FAMILIA="${2:-}"; shift 2 ;;
   *) shift ;;
 esac; done
+case "$FAMILIA" in
+  intencao|convergencia) : ;;
+  *) echo "uso: --familia deve ser intencao|convergencia (recebido: '$FAMILIA')" >&2; exit 2 ;;
+esac
 
 # `--prova` é OBRIGATÓRIO: sem o token do briefing nenhuma lane consegue provar leitura,
 # e as duas cairiam no fallback do roda-agy.sh — que faz append CONCORRENTE no mesmo
@@ -271,7 +294,7 @@ esac; done
   || { echo "uso: roda-lanes.sh … --prova <arquivo> (obrigatório; arquivo do briefing-build.sh)" >&2; exit 2; }
 
 LANES="${LANES_ARG:-${GAD_LANES_LANES:-codex agy}}"
-INTENT="$PD/.intent"
+INTENT="$(fam_base "$FAMILIA" "$PD")"
 LOCK="$INTENT/.lock-c$C"
 PONTEIRO="$INTENT/.run-atual-c$C"
 mkdir -p "$INTENT/runs/c$C" "$PD/pareceres"
@@ -281,7 +304,7 @@ RUN_DIR="$INTENT/runs/c$C/$RUN_ID"
 
 # ── devolução de uma lane (P15) ─────────────────────────────────────────────────
 if [ -n "$REFORMATA" ]; then
-  MARC="$PD/pareceres/.reformat-$REFORMATA-c$C"
+  MARC="$PD/pareceres/.reformat-$(fam_prefixo "$FAMILIA")$REFORMATA-c$C"
   if [ -e "$MARC" ]; then
     echo "RECUSADO: lane $REFORMATA já foi devolvida uma vez no ciclo $C ($MARC). A 2ª ocorrência de parecer_informe reprova a lane (confere-ciclo.sh --tabela); não há 3ª tentativa." >&2
     exit 4
@@ -322,7 +345,7 @@ fi
 PIDS=(); STATUS_PATHS=()
 for LANE in $LANES; do
   nohup bash "$GAD_LANES_SELF" --supervisiona "$LANE" "$RUN_DIR" "$PD" "$NN" "$C" \
-    "$BRIEF" "$PROVA" \
+    "$BRIEF" "$PROVA" "$FAMILIA" \
     </dev/null >>"$RUN_DIR/supervisor-$LANE.out" 2>&1 &
   PID=$!
   PIDS+=("$PID")

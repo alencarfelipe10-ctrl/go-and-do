@@ -191,6 +191,96 @@ if [ "${1:-}" = "--origem-vereditos" ]; then
   exit 0
 fi
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Modo --frescor (46 o, 45 m) — dente da regra «defeito conhecido se corrige ANTES do
+# briefing seguinte» e de «replan não dispensa o juiz estrutural».
+#
+# Uso: confere-ciclo.sh --frescor <phase_dir> <NN> <ciclo>
+# Saída: JSON de 1 linha
+#   {"fase_dir":…, "ciclo":k, "briefing":…, "plan_mais_novo":…, "checker_mais_novo":…,
+#    "veredito":"ok|falha|nao_se_aplica", "codigos":["BRIEFING-STALE","CHECKER-STALE",
+#    "PREMISSA-CONHECIDA-SEM-CONSERTO"]}
+# Exit: 0 ok/nao_se_aplica · 1 falha · 2 uso.
+#
+# Relógio = git, não mtime: um checkout/retomada reescreve mtime e falsearia o veredito
+# (a fase 24.5 foi retomada em 10/09 e todos os mtimes mudaram). Só cai para mtime quando
+# o arquivo não está no git — caso do briefing, que é untracked por desenho.
+# nao_se_aplica: o ciclo 1 não tem ciclo anterior para ficar stale, e projeto com
+# `plan_checker_enabled:false` não tem trilha .plan-checker/ — nos dois casos não se
+# reprova por ausência.
+# ═══════════════════════════════════════════════════════════════════════════════
+if [ "${1:-}" = "--frescor" ]; then
+  shift
+  FPD="${1:-}"; FNN="${2:-}"; FK="${3:-}"
+  [ -n "$FPD" ] && [ -d "$FPD" ] && [ -n "$FNN" ] && [ -n "$FK" ] \
+    || { echo "uso: confere-ciclo.sh --frescor <phase_dir> <NN> <ciclo>" >&2; exit 2; }
+  command -v jq >/dev/null || { echo "jq ausente" >&2; exit 2; }
+  FROOT="$(cd "$FPD" && git rev-parse --show-toplevel 2>/dev/null || echo "")"
+
+  # epoch de um caminho: data do último commit que o tocou; sem git, mtime.
+  _fr_epoch() {
+    local p="$1" e=""
+    [ -e "$p" ] || { echo 0; return; }
+    if [ -n "$FROOT" ]; then
+      e="$(git -C "$FROOT" log -1 --format=%ct -- "$p" 2>/dev/null || true)"
+    fi
+    [ -n "$e" ] || e="$(stat -c %Y "$p" 2>/dev/null || echo 0)"
+    echo "$e"
+  }
+  _fr_max() { # <glob...> → maior epoch e o caminho
+    local melhor=0 quem="" f e
+    for f in "$@"; do
+      [ -e "$f" ] || continue
+      e="$(_fr_epoch "$f")"
+      if [ "$e" -gt "$melhor" ]; then melhor="$e"; quem="$f"; fi
+    done
+    printf '%s\t%s\n' "$melhor" "$quem"
+  }
+
+  # o briefing do ciclo k da convergência (untracked por desenho → mtime)
+  FBRIEF="$FPD/pareceres/briefing-planrev-c$FK.md"
+  [ -e "$FBRIEF" ] || FBRIEF="$FPD/.convergencia/briefing-c$FK.md"
+
+  IFS=$'\t' read -r PLAN_E PLAN_Q < <(_fr_max "$FPD"/*-PLAN.md)
+  IFS=$'\t' read -r CHK_E  CHK_Q  < <(_fr_max "$FPD"/.plan-checker/iter-*.yaml)
+  BRF_E=0; [ -e "$FBRIEF" ] && BRF_E="$(stat -c %Y "$FBRIEF" 2>/dev/null || echo 0)"
+
+  FCOD='[]'; FVER=ok
+  if [ "$PLAN_E" = 0 ]; then
+    FVER=nao_se_aplica
+  else
+    # (ii) trilha do checker mais velha que o PLAN.md mais novo — só quando a trilha existe
+    if [ "$CHK_E" != 0 ] && [ "$CHK_E" -lt "$PLAN_E" ]; then
+      FCOD=$(jq -c '. + ["CHECKER-STALE"]' <<<"$FCOD"); FVER=falha
+    fi
+    # (i) briefing do ciclo k mais velho que o PLAN.md mais novo — só quando o briefing existe
+    if [ "$BRF_E" != 0 ] && [ "$BRF_E" -lt "$PLAN_E" ]; then
+      FCOD=$(jq -c '. + ["BRIEFING-STALE"]' <<<"$FCOD"); FVER=falha
+    fi
+    # (iii) incidente «premissa conhecida» sem commit de conserto anterior ao briefing
+    FRL="$FPD/$FNN-RUN-LOG.jsonl"
+    if [ -s "$FRL" ] && [ "$BRF_E" != 0 ] \
+       && grep -q 'premissa conhecida' "$FRL" 2>/dev/null; then
+      FCONS=0
+      if [ -n "$FROOT" ]; then
+        FCONS="$(git -C "$FROOT" log --format=%ct --since="@$((BRF_E-86400))" --until="@$BRF_E" \
+                   --grep='^fix(' -- "$FPD" 2>/dev/null | head -1 || echo 0)"
+      fi
+      [ -n "$FCONS" ] || FCONS=0
+      if [ "$FCONS" = 0 ]; then
+        FCOD=$(jq -c '. + ["PREMISSA-CONHECIDA-SEM-CONSERTO"]' <<<"$FCOD"); FVER=falha
+      fi
+    fi
+  fi
+
+  jq -cn --arg pd "$FPD" --argjson k "$FK" --arg b "$FBRIEF" --arg p "$PLAN_Q" \
+         --arg c "$CHK_Q" --arg v "$FVER" --argjson cod "$FCOD" \
+    '{fase_dir:$pd, ciclo:$k, briefing:$b, plan_mais_novo:$p, checker_mais_novo:$c,
+      veredito:$v, codigos:$cod}'
+  [ "$FVER" = falha ] && exit 1
+  exit 0
+fi
+
 if [ "${1:-}" = "--tabela" ]; then
   shift
   PERG=""; VERED=""; STATUSDIR=""; PARECERES=()

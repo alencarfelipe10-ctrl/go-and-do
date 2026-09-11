@@ -52,7 +52,10 @@ case "$MODO" in
   runlog)
     git add "$PD/$NN-RUN-LOG.jsonl" 2>/dev/null || true
     [ -f "$PD/$NN-DECISOES.md" ] && git add "$PD/$NN-DECISOES.md" 2>/dev/null || true
-    MSG="docs(fase $NN): run-log e decisões da rodada" ;;
+    # 46(p): o state.json do GSD muda durante a rodada e ficava modificado fora do commit
+    # (árvore suja no preflight do ship, F24.5). Caminho explícito, nunca `git add .planning`.
+    [ -f "$ROOT/.planning/state.json" ] && git add "$ROOT/.planning/state.json" 2>/dev/null || true
+    MSG="docs(fase $NN): run-log, decisões e state da rodada" ;;
   intencao)
     # M6 (F24.5): `git commit --only` recusa arquivo NOVO (pareceres do 1º ciclo). `git add`
     # com pathspec explícito aceita novo e rastreado, e continua sem tocar no resto do

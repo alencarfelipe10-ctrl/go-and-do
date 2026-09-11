@@ -39,10 +39,17 @@ retomada antes de te despachar — não re-cheque. Scripts em
    `<phase_dir>/pareceres/.briefing-review.md` e anexe a lista de arquivos do escopo
    (dos SUMMARY.md) + o caminho do repo. Lance em background:
    ```bash
+   rm -f "<phase_dir>/pareceres/.codex-review.done"
    ( $HOME/.claude/skills/go-and-do/scripts/roda-codex.sh "<phase_dir>" "<NN>" review \
        "<phase_dir>/pareceres/.briefing-review.md" \
-       --out "<phase_dir>/pareceres/<NN>-parecer-codex-review.md" ) &
+       --out "<phase_dir>/pareceres/<NN>-parecer-codex-review.md" ;
+     touch "<phase_dir>/pareceres/.codex-review.done" ) &
    ```
+   O `; touch <marcador>` **não é enfeite**: é a única forma de `&` de fundo que o
+   `gad-bash-guard` aceita (`hooks/gad-bash-guard.sh`, regex `WAITER`). Sem ele o comando
+   é negado — aconteceu na retomada de 10/09, 3 negações em 5 s (`setsid`, depois `&`), e
+   a lane acabou rodando em primeiro plano, fora do contrato. Não troque por `setsid`,
+   `nohup` nem `run_in_background`.
    e siga IMEDIATAMENTE para o passo 2 (o custo do Codex é só de parede). Exit 5
    (`revisor_ausente`) → siga sem a lane, sino declarado — o reviewer interno canônico
    é o piso do gate 22 (não bloqueia, PC-6 vale só para a revisão adversarial).
@@ -65,8 +72,10 @@ retomada antes de te despachar — não re-cheque. Scripts em
    arquivo `iter2` deixando a 2ª no nome base (caso real F20: quem lia pelo nome lia as
    rodadas ao contrário). Mesma regra para os `NN-REVIEW-FIX*.md`.
 2b. **Funil + merge da lane Codex (iteração 1, depois que o comando fechar):** espere o
-   parecer com waiter de disco (marcador do roda-codex; deadline 10min — não chegou →
-   siga sem ele, sino). Parecer presente → despache **`gad-verificador`** (síncrono)
+   parecer com o waiter de disco pelo marcador que o passo 1 criou —
+   `timeout 570 bash -c 'until [ -e "<phase_dir>/pareceres/.codex-review.done" ]; do sleep 15; done'`,
+   chamado de novo enquanto o arquivo não existir, até o deadline de 10 min; não chegou →
+   siga sem ele, sino. Nunca com `run_in_background`. Parecer presente → despache **`gad-verificador`** (síncrono)
    com `prompts/intent-verifica.md` adaptado no despacho: "verifique cada achado do
    parecer `<caminho>` contra o código real; vereditos confirmado/nao_sustentado; sem
    classificação de ciclo". Então faça o merge no formato canônico:

@@ -145,5 +145,133 @@ python3 -c "import sys; sys.exit(0 if float('$ms')<0.05 else 1)" && ok "sessão 
 ms=$( { /usr/bin/time -f '%e' bash "$HOOK" <<<'{"cwd":"/tmp","agent_type":"gsd-executor","tool_name":"Bash","tool_input":{"command":"nohup x &"}}' >/dev/null; } 2>&1 )
 python3 -c "import sys; sys.exit(0 if float('$ms')<0.05 else 1)" && ok "subagente fora de rodada: ${ms}s" || bad "lento" "${ms}s"
 
+# ── P-01/P-02: a receita que o prompt PRESCREVE tem de passar no guard ────────────────
+# Extraído do arquivo do prompt, nunca copiado à mão: prompt e teste não podem divergir
+# em silêncio (lição da v2.3.0 — nunca parafrasear literal que um gate grepa).
+echo "── receitas prescritas pelos prompts (P-01/P-02)"
+PROMPTS="$REPO/skills/go-and-do/prompts"
+bloco_bash() { # <arquivo> <n-do-bloco a partir de 1> → conteúdo do n-ésimo ```bash … ```
+  awk -v want="$2" '
+    /^[[:space:]]*```bash[[:space:]]*$/ { n++; if (n==want) { dentro=1; next } }
+    /^[[:space:]]*```[[:space:]]*$/     { if (dentro) { exit } }
+    dentro { print }' "$1"
+}
+
+CONV_LANCA=$(bloco_bash "$PROMPTS/convergence.md" 1)
+CONV_ESPERA=$(bloco_bash "$PROMPTS/convergence.md" 2)
+CR_LANE=$(bloco_bash "$PROMPTS/code-review.md" 1)
+[ -n "$CONV_LANCA" ] && [ -n "$CONV_ESPERA" ] && [ -n "$CR_LANE" ] \
+  || bad "extração dos blocos bash dos prompts" "algum bloco saiu vazio"
+
+[ "$(chama "$CONV_LANCA")"  = allow ] && ok "convergence.md §2 — lançador passa no guard" \
+  || bad "convergence.md §2 — lançador" "$(chama "$CONV_LANCA")"
+[ "$(chama "$CONV_ESPERA")" = allow ] && ok "convergence.md §2 — waiter passa no guard" \
+  || bad "convergence.md §2 — waiter" "$(chama "$CONV_ESPERA")"
+[ "$(chama "$CR_LANE")"     = allow ] && ok "code-review.md passo 1 — lane Codex passa no guard" \
+  || bad "code-review.md passo 1" "$(chama "$CR_LANE")"
+
+# regressão: as receitas ANTIGAS continuam negadas (o guard não foi afrouxado)
+ANTIGO_2LANES='( $HOME/.claude/skills/go-and-do/scripts/roda-codex.sh "/pd" "24" 1 /b ) &
+( $HOME/.claude/skills/go-and-do/scripts/roda-agy.sh   "/pd" "24" 1 /b ) &
+wait'
+ANTIGO_SEM_TOUCH='( $HOME/.claude/skills/go-and-do/scripts/roda-codex.sh "/pd" "24" review /b --out /o ) &'
+[ "$(chama "$ANTIGO_2LANES")"    = deny ] && ok "receita antiga de 2 lanes em & segue negada" \
+  || bad "receita antiga de 2 lanes" "$(chama "$ANTIGO_2LANES")"
+[ "$(chama "$ANTIGO_SEM_TOUCH")" = deny ] && ok "subshell & sem touch segue negado" \
+  || bad "subshell & sem touch" "$(chama "$ANTIGO_SEM_TOUCH")"
+[ "$(chama "$CONV_ESPERA" true)" = deny ] && ok "waiter com run_in_background=true é negado" \
+  || bad "waiter com run_in_background" "$(chama "$CONV_ESPERA" true)"
+
+echo "── 45o: escrita no instrumento sob julgamento (P-11)"
+H="$HOME/.claude/skills/go-and-do"; A="$HOME/.claude/skills/audit-gad"
+for c in "sed -i \"88d\" $H/scripts/confere-plano.sh" \
+         "tee $H/prompts/plan.md < /tmp/x" \
+         "echo x > $H/scripts/confere-ciclo.sh" \
+         "echo x >> $A/workflow.md" \
+         "cp /tmp/x.sh $H/scripts/confere-ciclo.sh" \
+         "mv /tmp/x.md \$HOME/.claude/agents/gad-plan.md" \
+         "patch -p1 $H/hooks/x.sh < /tmp/p.diff" \
+         "python3 -c \"open('/home/u/.claude/skills/go-and-do/x','w')\"" \
+         "sed -i s/a/b/ /home/u/Projetos/gsd-optimize/gen5-patches/manifesto.json"; do
+  r=$(chama "$c")
+  if [ "$r" = deny ]; then ok "deny instrumento: $(printf '%.60s' "$c")"; else bad "deny esperado (instrumento): $c" "$r"; fi
+done
+# a razão nomeia o motivo e a saída de evidência
+resp=$(printf '{"session_id":"%s","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Bash","agent_type":"gsd-executor","agent_id":"a0","tool_input":{"command":"sed -i 88d %s/scripts/confere-plano.sh"}}' "$SESS" "$PROJ" "$H" | bash "$HOOK" 2>/dev/null)
+printf '%s' "$resp" | grep -q 'instrumento_sob_julgamento: escrita em' \
+  && printf '%s' "$resp" | grep -q 'gate-fail-<etapa>-evidencia.txt' \
+  && ok "razão do instrumento nomeia o motivo e o arquivo de evidência" \
+  || bad "razão do instrumento" "$resp"
+
+echo "── 45o: leitura, execução e destino de fora seguem liberados (o coração do item)"
+for c in "bash $H/scripts/confere-etapa.sh 2" \
+         "grep -n x $H/prompts/plan.md" \
+         "cat /home/u/Projetos/gsd-optimize/gen5-patches/manifesto.json" \
+         "cp $H/scripts/confere-ciclo.sh /tmp/x.sh" \
+         "grep -n x $H/prompts/plan.md > /tmp/saida.txt"; do
+  r=$(chama "$c"); [ "$r" = allow ] && ok "allow: $(printf '%.60s' "$c")" || bad "allow esperado: $c" "$r"
+done
+# fora de escopo: sessão do dono (sem agent_type) e projeto sem ponteiro
+r=$(chama "sed -i s/a/b/ $H/scripts/confere-plano.sh" - -); [ "$r" = allow ] && ok "sem agent_type (dono) → allow" || bad "sem agent_type" "$r"
+r=$(chama "sed -i s/a/b/ $H/scripts/confere-plano.sh" - gsd-executor "$PAI"); [ "$r" = allow ] && ok "sem ponteiro de rodada → allow" || bad "sem ponteiro" "$r"
+
+echo "── 45n: rastro de git por subprocess (P-12) — allow + incidente"
+verifica_rastro() { # <descrição> <cmd> <esperado allow|deny> <eventos esperados>
+  local desc="$1" c="$2" esp="$3" nev="$4" a b r
+  a=$(n_inc); r=$(chama "$c"); b=$(n_inc)
+  if [ "$r" = "$esp" ] && [ "$b" = $((a+nev)) ]; then ok "$desc"
+  else bad "$desc" "decisão=$r (esperado $esp); eventos=$((b-a)) (esperado $nev)"; fi
+}
+verifica_rastro "subprocess.run(['git'…]) → allow + 1 incidente" \
+  "uv run python -c \"import subprocess; subprocess.run(['git','add','-A'])\"" allow 1
+# LACUNA DECLARADA (45n): a regex do contrato casa a aspa NUA (["'] ). Quando o comando chega
+# com a aspa ESCAPADA (`[\"git\"`, forma que aparece quando o .py vem dentro de outra string
+# com aspas duplas), o rastro NÃO dispara. Não é negativa nenhuma — só rastro que falta.
+# Registrado como pendência do P-12; alargar a regex é decisão do dono.
+verifica_rastro "aspa escapada (\\\"git\\\") → allow, SEM rastro (lacuna declarada)" \
+  'uv run python -c "import subprocess; subprocess.run([\"git\",\"add\"])"' allow 0
+verifica_rastro "os.system(… git …) → allow + 1 incidente" \
+  'python3 -c "import os; os.system(\"git commit -m x\")"' allow 1
+verifica_rastro "sh -c \"… git …\" → allow + 1 incidente" \
+  'sh -c "git status --short"' allow 1
+verifica_rastro "git direto (sem Python) → allow, sem evento" 'git status --short' allow 0
+verifica_rastro "subprocess.run([\"ls\"]) → allow, sem evento" \
+  'python3 -c "import subprocess; subprocess.run([\"ls\"])"' allow 0
+verifica_rastro "sh -c com github na URL → allow, sem evento (\\bgit\\b não casa github)" \
+  'sh -c "curl https://github.com/x"' allow 0
+verifica_rastro "heredoc com subprocess.run([\"git\"…]) → allow + 1 incidente" \
+  "$(printf 'python3 - <<%s\nimport subprocess\nsubprocess.run(["git","log"])\nPY' "'PY'")" allow 1
+verifica_rastro "negado pelo P-11 E com rastro → deny + 2 eventos" \
+  "sh -c \"git log > \$HOME/.claude/skills/go-and-do/scripts/x.sh\"" deny 2
+# o incidente traz o motivo canônico
+tail -n5 "$RL" | grep -q '"motivo":"git_por_subprocess"' \
+  && ok "incidente do rastro com motivo=git_por_subprocess" || bad "motivo do rastro" "$(tail -n1 "$RL")"
+r=$(chama 'python3 -c "import subprocess; subprocess.run([\"git\",\"log\"])"' - -)
+[ "$r" = allow ] && ok "fora de rodada (sem agent_type) → allow, sem rastro" || bad "fora de rodada" "$r"
+
+echo "── 47e: exceção de run_in_background só para a espera do roda-suite.sh (P-13)"
+RS='bash $HOME/.claude/gsd-core/bin/nosso/roda-suite.sh'
+for c in "$RS --esperar --tag f24 --teto 590" \
+         "$RS --gate-onda --fase 24 --onda 2"; do
+  r=$(chama "$c" true); [ "$r" = allow ] && ok "allow com bg: $(printf '%.55s' "$c")" || bad "allow esperado (47e): $c" "$r"
+done
+for c in "$RS --lancar --cmd 'uv run pytest -q' --tag f24" \
+         "uv run pytest -q"; do
+  r=$(chama "$c" true); [ "$r" = deny ] && ok "deny com bg: $(printf '%.55s' "$c")" || bad "deny esperado (47e): $c" "$r"
+done
+# `--lancar && --esperar` no MESMO comando: a vida da chamada é a do trabalho (o --esperar
+# segura até o fim), então a acordada é real e a exceção vale. É o uso recomendado sob bg.
+r=$(chama "$RS --lancar --cmd x --tag t && $RS --esperar --tag t" true)
+[ "$r" = allow ] && ok "allow com bg: --lancar && --esperar (a chamada vive o trabalho)" || bad "--lancar && --esperar" "$r"
+r=$(chama "$RS --lancar --cmd 'uv run pytest -q' --tag f24"); [ "$r" = allow ] && ok "--lancar SEM o flag segue allow (inalterado)" || bad "--lancar sem flag" "$r"
+r=$(chama "$RS --esperar --tag f24"); [ "$r" = allow ] && ok "--esperar sem o flag segue allow" || bad "--esperar sem flag" "$r"
+# a exceção tira o FLAG da lista de motivos; NÃO dispensa a leitura do comando.
+r=$(chama "$RS --esperar --tag f24; sleep 300" true)
+[ "$r" = deny ] && ok "bg + sleep cru → o texto continua valendo (a exceção não é passe livre)" || bad "sleep cru sob a exceção" "$r"
+r=$(chama "$RS --esperar --tag f24; nohup x &" true)
+[ "$r" = deny ] && ok "bg + nohup/& → segue negado sob a exceção" || bad "nohup sob a exceção" "$r"
+r=$(chama "$RS --esperar --tag f24; sed -i s/a/b/ \$HOME/.claude/skills/go-and-do/scripts/confere-plano.sh" true)
+[ "$r" = deny ] && ok "bg + escrita no instrumento → o P-11 sobrevive à exceção do 47e" || bad "instrumento sob a exceção" "$r"
+
 echo; echo "resultado: $ok ok, $falhas falha(s)"
 [ "$falhas" -eq 0 ]

@@ -39,6 +39,31 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    `detalhe="briefing c<k> com premissa conhecida falsa: <qual>"`). Na F24.5 a camada 0 soube da
    premissa «sem worktree» às 14:34, mandou o ciclo 2 com ela às 14:40 e só consertou às 15:05:
    um ciclo de revisão externa rodou sobre plano sabidamente errado.
+   Antes de montar o briefing do ciclo k, rode
+   `bash $HOME/.claude/skills/go-and-do/scripts/confere-ciclo.sh --frescor "<phase_dir>" "<NN>" <k>`;
+   exit 1 → conserte o que o código aponta (`BRIEFING-STALE` = remonte o briefing depois
+   do conserto; `CHECKER-STALE` = re-rode o checker; `PREMISSA-CONHECIDA-SEM-CONSERTO` =
+   commite o conserto ANTES do briefing) e re-rode até exit 0. Não monte briefing com o
+   script em `falha`.
+
+   **Replan não dispensa o juiz estrutural.** Depois de qualquer replan — o inline do
+   comando ou um fix cirúrgico seu —, o `.plan-checker/` tem de ter iteração mais nova que
+   o PLAN.md mais recentemente editado ANTES de você montar o briefing do ciclo seguinte.
+   Confira com
+   `bash $HOME/.claude/skills/go-and-do/scripts/confere-ciclo.sh --frescor "<phase_dir>" "<NN>" <k+1>`;
+   `veredito: falha` com código `CHECKER-STALE` → rode o checker (`Skill` →
+   `gsd-plan-phase <N> --reviews` deixa o comando fazê-lo) e só então monte o briefing.
+   Na F24.5 o plano 06 foi ao ciclo 2 com `.plan-checker/iter-2.yaml` anterior ao replan:
+   o único juiz estrutural tinha aprovado outra versão.
+
+   **A ata é do escrivão.** O `NN-REVIEWS.md` é gravado pelo agente de revisão que o
+   comando despacha (`plan-review-convergence.md`: «agent with write access to REVIEWS.md
+   must leave it alone»). Você **lê e confere**; não escreve nem reordena. Se o comando
+   devolver sem o arquivo, isso é falha do passo — devolva `blocked` com o motivo, nunca
+   escreva a ata você mesmo (F24.5: o host redigiu o REVIEWS.md e, no mesmo arquivo,
+   rebaixou um achado externo por uma alegação que não conferiu — cartão 7). Exceção
+   única: o apêndice de evidências e a tabela anti-omissão, que **o `registra-ciclo.sh`**
+   apenda — script, não você.
 2. Invoque `Skill` → `gsd-plan-review-convergence` com args
    `--codex --agy-revisor --max-cycles 3`.
    *(Dois revisores pinados — decisão do usuário 2026-07-22; flags explícitas, não a
@@ -49,19 +74,45 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    comando: o prompt já converte estouro em `escalou` gracioso, então margem extra só
    gastava um ciclo.)*
    **As lanes externas rodam pelos scripts** — quando o workflow hospedado mandar
-   digitar os comandos dos revisores, rode em vez disso, em background num único bloco
-   (`run_in_background: true`, única exceção ao síncrono):
+   digitar os comandos dos revisores, rode em vez disso o lançador, em PRIMEIRO PLANO
+   (ele devolve em menos de 1 s e deixa as duas lanes correndo por dentro).
+   Antes de qualquer glob de `.roda-*.json` num bloco seu, rode `setopt nullglob` (zsh) —
+   sem ele, «no matches found» aborta o bloco **antes** do comando seguinte, e na F24.5
+   isso apagou os 4 espelhos sem backup (o `cp` morreu, o `rm -f` rodou).
    ```bash
-   ( $HOME/.claude/skills/go-and-do/scripts/roda-codex.sh "<phase_dir>" "<NN>" <k> <briefing> ) &
-   ( $HOME/.claude/skills/go-and-do/scripts/roda-agy.sh   "<phase_dir>" "<NN>" <k> <briefing> ) &
-   wait
+   cd "<project_root>"
+   rm -f "<phase_dir>/.convergencia/.done-c<k>-"*
+   bash $HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh \
+     "<phase_dir>" "<NN>" <k> "<briefing>" --prova "<briefing>" --familia convergencia
    ```
-   e obedeça os exit codes: `0` = parecer válido · `5` = revisor NÃO INSTALADO → siga
-   com o outro e registre `revisor_ausente` em `sinos` (disclosure; ambos ausentes não
-   chegam até você — o pre-despacho bloqueou) · `6` = revisor FALHOU neste ciclo
-   (vazio/degradado/reciclado — o JSON diz qual) → conta como lane caída, nunca como
-   "sem achados". Os JSONs dos scripts (`pareceres/.roda-*-c<k>.json`) carregam
-   banner/evidência/canário — você não coleta evidência à mão.
+   Depois espere pelo disco, com o waiter sancionado, repetido enquanto faltar arquivo
+   (o teto de uma chamada Bash é 600 s e uma lane pode levar 660 s):
+   ```bash
+   B="<phase_dir>/.convergencia"
+   timeout 570 bash -c 'until [ -e "'"$B"'/.done-c<k>-codex" ] && [ -e "'"$B"'/.done-c<k>-agy" ]; do sleep 15; done'
+   ```
+   **`-e`, não `-s`**: o `.done` nasce vazio (`roda-lanes.sh`, `: > "$ALIAS_DONE"`) e
+   `[ -s ]` esperaria até o timeout. O guard não olha o teste; olha o `until`.
+   **Nunca `run_in_background: true`, nunca `&`, nunca `setsid`** — nem no lançador, nem
+   no waiter: o `gad-bash-guard` nega os três, e nega o `run_in_background` antes de
+   olhar o texto do comando (na F24.5 ele negou 4 vezes em 35 s e a convergência rodou
+   em série, ~7,4 min perdidos por ciclo; na retomada de 10/09 negou um waiter correto
+   só porque veio com o flag). O paralelismo não mora no seu comando: mora dentro do
+   `roda-lanes.sh`. O protocolo de «despache e encerre o turno» vale para filho `Agent`,
+   **não** para estes — lane é processo, não subagente, e não emite `task-notification`.
+   Leia então os `status-<lane>.json` do `run_dir` (o lançador imprimiu o caminho) e
+   obedeça a fórmula, não o exit code: `usable:false` com `rc_reason: revisor_ausente`
+   = revisor NÃO INSTALADO → siga com o outro e registre `revisor_ausente` em `sinos`
+   (disclosure; ambos ausentes não chegam até você — o pre-despacho bloqueou) ·
+   `usable:false` com qualquer outro `rc_reason` = revisor FALHOU neste ciclo
+   (vazio/obsoleto/ilegível) → conta como lane caída, nunca como "sem achados" ·
+   `usable:true, independent:false` = parecer vale como corroboração, não sustenta
+   ciclo novo sozinho. Os espelhos promovidos (`pareceres/.roda-planrev-<lane>-c<k>.json`)
+   carregam banner/evidência/canário — você não coleta evidência à mão.
+   **Não commite nada. O host commita ao fim do passo.** — acrescente essa linha literal
+   ao prompt de todo agente que o comando hospedado despachar (planner do replan
+   inclusive). Na F24.5 os despachados commitaram por conta própria e o host perdeu o
+   controle do que estava staged.
 3. **Fecho de CADA ciclo:** rode
    `$HOME/.claude/skills/go-and-do/scripts/registra-ciclo.sh "<phase_dir>" "<NN>" <k> convergencia`
    (o 4º argumento escolhe a família de pareceres — sem ele o c1 da convergência misturava
@@ -73,12 +124,12 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    script é piso, não teto (um HIGH real já sumiu de resumo de ciclo). Omissão
    recuperada entra em `incidentes:`.
    Se a `pareceres/.tabela-c<k>.txt` trouxer `parecer_informe: <lane> devolver`: relance só
-   essa lane com o briefing do ciclo mais o bloco `## Reformatação obrigatória` (copie o
-   bloco de `roda-lanes.sh`), grave `touch "<phase_dir>/pareceres/.reformat-planrev-<lane>-c<k>"`
-   antes do relance e re-rode o `registra-ciclo.sh`. Na 2ª ocorrência a lane está reprovada
-   (marcador `.reprovada` + incidente); siga com a outra lane e sino. O relance é manual
-   porque o `roda-lanes.sh --reformata` só promove o alias da intenção (`NN-parecer-…`),
-   não o da convergência (`NN-planrev-parecer-…`).
+   essa lane com
+   `bash $HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh "<phase_dir>" "<NN>" <k> "<briefing>" --prova "<briefing>" --familia convergencia --reformata <lane>`
+   (o script monta o briefing com o bloco `## Reformatação obrigatória`, grava o marcador
+   `pareceres/.reformat-planrev-<lane>-c<k>` e recusa com exit 4 uma 2.ª devolução da mesma lane
+   no mesmo ciclo), espere pelo `.done` como no §2 e re-rode o `registra-ciclo.sh`. Exit 4 = a
+   lane está reprovada (incidente); siga com a outra lane e sino.
    **Aterramento e modelo (GSD 1.11.0 — #3194/#2295):** o JSON do `registra-ciclo.sh`
    devolve `sem_citacao_fonte: [lanes]` — parecer sem UMA citação `arquivo:linha` (ou
    carimbado `[reviewed-without-source-citations]` pelo runner) revisou o texto colado,
@@ -89,6 +140,20 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    roda-*.sh (fora do runner), ele vem `unknown`/ausente e a evidência de modelo que
    conta é a dos JSONs (`banner`/`evidencia`) — não devolva `unknown` como "modelo
    desconhecido" quando o espelho tem a prova.
+3b. **Citação própria (a mesma régua que o `gad-verificador` já tem na intenção).**
+   Qualquer coisa que você afirme CONTRA um parecer e que dependa de existir (arquivo,
+   diretório, símbolo, linha, função, teste) é conferida por comando antes de virar
+   veredito — `ls -1 <caminho>` para arquivo, `grep -n '<símbolo>' <arquivo>` para
+   símbolo/linha —, e o **comando e a saída de 1 linha vão colados ao lado da alegação**
+   no `NN-REVIEWS.md`, no formato:
+   `alegação (conferido: \`ls -1 src/x.py\` → OK | NÃO ENCONTRADO)`.
+   Sem o par comando+saída, a alegação não rebaixa achado nenhum: ela vira, no máximo,
+   «não consegui confirmar». Registre as conferências no retorno, no campo
+   `conferencias:` — uma linha por comando, no formato ASCII
+   `<comando> => ok|nao_encontrado`.
+   Na F24.5 o host concluiu, só pela leitura do parecer, que o Antigravity citava 3
+   caminhos inexistentes; os três existiam, e o briefing do ciclo 2 já tinha saído com a
+   frase errada. Um `ls` bastava.
 4. **Critério de materialidade (julgamento seu — não recicle por tooling):** achado que
    não toca requisito, critério de aceite, segurança ou código de produção (tooling de
    smoke, encanamento de teste) não sustenta ciclo novo de replan+re-review. Rota: fix
@@ -130,9 +195,20 @@ Proceed anyway / Manual review") é caso com política pré-decidida: NUNCA a de
 como `needs_decision` e NUNCA escolha "Proceed anyway" — devolva `veredito: escalou`
 com o impasse; a camada 0 para graciosamente.
 
-Agentes aninhados (camada 2): você **não recebe notificações** de background — espera
-só com waiter de disco (`timeout <Ns> bash -c 'until [ -s <arq> ]; do sleep 15; done'`)
-e decisão pelo estado do disco; o `<arq>` esperado é criado pelo PRÓPRIO comando de fundo (`( … ; touch <arq> ) &`), nunca um marcador que "o harness" deveria escrever (F24.3: 40 min de espera vazia). **Revisor estagnado sem parecer novo:** os achados do
+**Espera de filho: não espere.** Filho despachado com `Agent` (camada 2) **acorda você**:
+despache e encerre o turno sem chamar mais nenhuma tool. O Claude Code não considera
+terminado um agente que tem filho vivo; a notificação chega a cada término e o disco é que
+diz o que já está pronto — leia o artefato e o marcador antes de agir. Acordou e o que você
+precisa não está lá? Aí sim, **uma** chamada do waiter sancionado
+`timeout 590 bash -c 'until [ -s <arq> ]; do sleep 15; done'`, com `espera_por_waiter` em
+`incidentes:`.
+**As lanes externas são a exceção, e ela é literal.** `roda-lanes.sh` (e os `roda-codex.sh`/
+`roda-agy.sh` que ele chama) são **processo Bash**, não subagente: não emitem
+`task-notification`. Para elas vale o waiter de disco `until` do §2, sobre o arquivo que o
+**próprio** comando de fundo cria (`( … ; touch <arq> ) &`), nunca um marcador que "o
+harness" deveria escrever (F24.3: 40 min de espera vazia).
+
+**Revisor estagnado sem parecer novo:** os achados do
 ciclo anterior já incorporados no replan E verificados (plan-checker `VERIFICATION
 PASSED`), sem achado novo sustentável → isso É convergência (`convergiu` + sino do
 ciclo estagnado); senão → `escalou`.
@@ -148,6 +224,7 @@ veredito: convergiu | escalou
 ciclos: <n>
 correcoes: [<1 linha por correção relevante aplicada ao plano; ausente se nenhuma>]
 revisores_efetivos: [codex, agy]   ← só os que revisaram de fato
+conferencias: [<1 linha por alegação conferida: `<comando> => ok|nao_encontrado`; ausente se você não alegou nada contra parecer>]
 impasse: <só no escalou: o travamento em ≤5 linhas — posições e o ponto de discórdia>
 incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido; sem desvio, escreva literalmente: nenhum>]
 sinos: [<ex.: "roda-agy exit 6 no c2 (stdout vazio) — ciclo Codex-only"; ausente se vazio>]
