@@ -127,7 +127,7 @@ if [ "$ETAPA" = "pausa" ]; then
   fi
   if [ "$(jq -r '.status' <<<"$MEDICAO")" = ok ]; then
     gad_runlog "$PHASE_DIR" "$NN" end "$et" \
-      --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens' <<<"$MEDICAO")" \
+      --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens + (.total.cache_creation_1h_tokens // 0)' <<<"$MEDICAO")" \
       --custo "$(jq -r '.total.custo_usd // 0' <<<"$MEDICAO")" \
       --kv interrompida=true
   else
@@ -1167,7 +1167,7 @@ if [ "$DRY" = 0 ]; then
     POSFLAG=(); [ "$POS_FAIL" = 1 ] && POSFLAG=(--kv pos_gate_fail=true)
     if [ "$(jq -r '.status' <<<"$MEDICAO")" = ok ]; then
       gad_runlog "$PHASE_DIR" "$NN" end "$RUNLOG_ETAPA" \
-        --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens' <<<"$MEDICAO")" \
+        --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens + (.total.cache_creation_1h_tokens // 0)' <<<"$MEDICAO")" \
         --custo "$(jq -r '.total.custo_usd // 0' <<<"$MEDICAO")" \
         --kv veredito=pass ${POSFLAG[@]+"${POSFLAG[@]}"}
     else

@@ -53,6 +53,21 @@ descartáveis (`gad-spec`, `gad-discuss`, `gad-explore`, `gad-verificador`) cuja
 (o `cp` acima; symlinks também funcionam). Sem eles o despacho do filho falha e a
 intenção degrada para o fluxo inline antigo.
 
+As etapas 1, 1.5, 2 e 3 têm **hospedeiro próprio** (`gad-intent`, `gad-contratos`, `gad-plan`,
+`gad-execute`), com modelo e effort pinados na def e `experimental: cacheTtl: 1h` — o TTL longo é
+o que evita que a espera do hospedeiro reescreva o cache a cada 5 minutos (medido na F24.5: o host
+da execução, então um `general-purpose` sem def, escreveu 9,6 M de cache, 95,6 % em reescritas por
+expiração). **A def `gad-execute` precisa estar instalada antes da primeira rodada da v2.6.0** e o
+Claude Code só carrega defs novas **na abertura da sessão**:
+
+```bash
+ln -s "$(pwd)/go-and-do/agents/gad-execute.md" ~/.claude/agents/gad-execute.md
+# e reinicie a sessão do Claude Code
+```
+
+Se o despacho de `gad-execute` falhar, isso é **erro de instalação**: pare e avise — não é motivo
+para cair na rota inline.
+
 **Spawn aninhado de subagentes** (ver [Pré-requisitos](#pré-requisitos)): na CC ≥ 2.1.219 já
 vem ligado por padrão, com profundidade 3 — **não configure nada**. Se você tem
 `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` no `~/.claude/settings.json` de quando isso era
