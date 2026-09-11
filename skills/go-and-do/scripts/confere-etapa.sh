@@ -394,7 +394,7 @@ if [ "$ETAPA" = "3" ]; then
   # despachos abertos daquele plano, porque os despachos negados pelo sentinel ficam sem
   # retorno e contariam como abertos para sempre; `serializacao_observada` só quando >=2
   # planos da onda foram despachados e nunca dois estiveram abertos juntos.
-  PAR_OBS=$(IDX_JSON="$IDX3" python3 - "$RL3" 2>/dev/null <<'PYOBS' || echo '{"paralelismo_observado":{},"serializacao_observada":[]}'
+  PAR_OBS=$(IDX_JSON="$IDX3" python3 - "$RL3" 2>/dev/null <<'PYOBS' || echo '{"paralelismo_observado":{},"serializacao_observada":[],"largura":{"janela_executores_min":0,"minutos_em_largura_1":0,"pct_largura_1":null}}'
 import json
 import os
 import re
@@ -487,8 +487,45 @@ def main() -> int:
             res[w]["duracao_onda_s"] = int(ultimo_retorno[w] - primeiro[w])
     ser = [w for w, r in res.items()
            if r["despachados"] >= 2 and r["simultaneos_max"] is not None and r["simultaneos_max"] <= 1]
-    print(json.dumps({"paralelismo_observado": res, "serializacao_observada": ser},
-                     ensure_ascii=False))
+
+    # (47f, régua C3 da tarefa 43) minutos em largura 1 na fase INTEIRA, pelos pares
+    # despacho/retorno-real. Passe próprio, sem o filtro de ondas com 2+ planos do bloco acima:
+    # uma onda de um plano só é justamente largura 1, e é o que se quer medir.
+    # Advisory: nunca reprova — é régua, não cota.
+    jan = []
+    abertos_ts = {}
+    try:
+        with open(sys.argv[1], encoding="utf-8") as fh:
+            for ln in fh:
+                try:
+                    e = json.loads(ln)
+                except Exception:
+                    continue
+                if e.get("agente") != "gsd-executor":
+                    continue
+                d = e.get("descricao") or ""
+                try:
+                    ts = datetime.fromisoformat(e.get("ts", "")).timestamp()
+                except Exception:
+                    continue
+                if e.get("evento") == "despacho":
+                    abertos_ts.setdefault(d, ts)
+                elif e.get("evento") == "retorno" and e.get("fim_real") is True and abertos_ts.get(d):
+                    jan.append((abertos_ts.pop(d), ts))
+    except (FileNotFoundError, IndexError):
+        pass
+    marcos = sorted({t for p in jan for t in p})
+    l1 = tot = 0.0
+    for a, b in zip(marcos, marcos[1:]):
+        n = sum(1 for t0, t1 in jan if t0 <= a < t1)
+        tot += b - a
+        if n == 1:
+            l1 += b - a
+    largura = {"janela_executores_min": int(tot / 60), "minutos_em_largura_1": int(l1 / 60),
+               "pct_largura_1": int(100 * l1 / tot) if tot else None}
+
+    print(json.dumps({"paralelismo_observado": res, "serializacao_observada": ser,
+                      "largura": largura}, ensure_ascii=False))
     return 0
 
 
@@ -496,7 +533,7 @@ if __name__ == "__main__":
     sys.exit(main())
 PYOBS
   )
-  jq -e . >/dev/null 2>&1 <<<"$PAR_OBS" || PAR_OBS='{"paralelismo_observado":{},"serializacao_observada":[]}'
+  jq -e . >/dev/null 2>&1 <<<"$PAR_OBS" || PAR_OBS='{"paralelismo_observado":{},"serializacao_observada":[],"largura":{"janela_executores_min":0,"minutos_em_largura_1":0,"pct_largura_1":null}}'
   # C2 (plano 4, 05/09): onda planejada com 2+ planos que rodou em série é incidente no run-log,
   # um por onda, com a janela entre os despachos. Continua não reprovando — serializar não é
   # erro do executor, é fato a registrar; na F24.4 as ondas 1 e 6 serializaram (11 h entre os

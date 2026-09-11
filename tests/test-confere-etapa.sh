@@ -348,6 +348,13 @@ J="$(confere3 "$R")"
 eq "misto: simultaneos_max 2 (os dois abertos entre 15:16:51 e 15:37)" "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].simultaneos_max')" "2"
 eq "…sem nao_medido" "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].nao_medido // "ausente"')" '"ausente"'
 eq "…duracao_onda_s 1697 (15:15:43 → 15:44:00)" "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].duracao_onda_s')" "1697"
+# (47f) largura: janela 15:15:43 → 15:44:00 = 1697 s = 28 min; os dois ficam abertos de
+# 15:16:51 a 15:37:00 (1209 s), então largura 1 = 1697-1209 = 488 s = 8 min (28 %).
+eq "…largura.janela_executores_min 28"  "$(printf '%s' "$J" | jq -c '.extrai.largura.janela_executores_min')" "28"
+eq "…largura.minutos_em_largura_1 8"    "$(printf '%s' "$J" | jq -c '.extrai.largura.minutos_em_largura_1')" "8"
+eq "…largura.pct_largura_1 28"          "$(printf '%s' "$J" | jq -c '.extrai.largura.pct_largura_1')" "28"
+# onda sem retorno real → pct null, nunca 0 (régua advisory, não cota)
+eq "async: largura.pct_largura_1 null"  "$(printf '%s' "$(confere3 "$(cd "$BASE/c3async" && pwd)")" | jq -c '.extrai.largura.pct_largura_1')" "null"
 
 IFS='|' read -r R PD <<<"$(monta3 c3paralelo)"
 RL="$PD/95-RUN-LOG.jsonl"
@@ -361,7 +368,7 @@ eq "…janela_despachos_s 5"             "$(printf '%s' "$J" | jq -c '.extrai.pa
 eq "…serializacao_observada vazia"     "$(printf '%s' "$J" | jq -c '.extrai.serializacao_observada')" '[]'
 eq "…C3: duracao_onda_s 1860 × plano_mais_lento_s 1855 (razão ≈ 1: paralelismo real)" \
    "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"]|[.duracao_onda_s,.plano_mais_lento_s]')" '[1860,1855]'
-eq "…C3: extrai.suite sem lançamentos = zeros" "$(printf '%s' "$J" | jq -c '.extrai.suite')" '{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[]}'
+eq "…C3: extrai.suite sem lançamentos = zeros" "$(printf '%s' "$J" | jq -c '.extrai.suite')" '{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[],"fora_da_fase":[]}'
 mkdir -p "$R/.git/gad-suite/suite" "$R/.git/gad-suite/gate-onda-1"
 printf 'uv run pytest -n 4 -q -rf\n' > "$R/.git/gad-suite/suite/cmd"; date -Is -d '-100 seconds' > "$R/.git/gad-suite/suite/iniciado"; echo 1 > "$R/.git/gad-suite/suite/rc"; printf 'x\ny\n' > "$R/.git/gad-suite/suite/recusados"
 printf 'uv run pytest tests/unit/test_a.py -rf\n' > "$R/.git/gad-suite/gate-onda-1/cmd"; date -Is -d '-30 seconds' > "$R/.git/gad-suite/gate-onda-1/iniciado"; echo 0 > "$R/.git/gad-suite/gate-onda-1/rc"

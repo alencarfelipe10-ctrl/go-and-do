@@ -42,6 +42,91 @@ waves_linha=$(printf '%s' "$waves" | tr '\n' ' ')
 # SUMMARYs por dia (mtime) — separa "da fase" de "desta rodada"
 por_dia=$(for s in $sums; do date -r "$s" +%F 2>/dev/null; done | sort | uniq -c | awk '{print $2": "$1}' | tr '\n' ';' | sed 's/;$//;s/;/ · /g')
 
+if [ "${3:-}" = "--executores" ]; then
+  # Medição PRIMÁRIA do paralelismo (46q): relógio dos transcripts dos executores, não o run-log.
+  # O run-log depende do hook SubagentStop; o transcript existe sempre. Fonte de verdade quando os
+  # dois discordam (F24.5: o medidor leu 78 min como «5 s»).
+  # Uma fase RETOMADA tem mais de uma sessão, e os executores podem estar em qualquer uma delas
+  # (F24.5: a sessão do run-log é a da retomada, `acd3c396`, e os 9 executores estão na original,
+  # `1036b8fe`). Por isso varrem-se TODAS as pastas `*/subagents` do projeto e filtra-se pelo NN na
+  # `description` do executor. `--sessao <id>` restringe a uma sessão quando se quiser.
+  sess="${4:-}"; [ "$sess" = "--sessao" ] && sess="${5:-}"
+  proj="$HOME/.claude/projects/$(printf '%s' "$(cd "$(dirname "$dir")" && git rev-parse --show-toplevel 2>/dev/null || echo "$dir")" | sed 's#/#-#g')"
+  [ -d "$proj" ] || { echo "executores: projeto não localizado em $proj — medição primária indisponível"; exit 0; }
+  SUB=$(ls -d "$proj"/*"$sess"*/subagents 2>/dev/null | tr '\n' ':')
+  [ -n "$SUB" ] || { echo "executores: subagents/ não localizado (sessão ${sess:-todas}, projeto $proj) — medição primária indisponível"; exit 0; }
+  python3 - "$SUB" "$nn" <<'PYEX'
+import glob, json, os, sys
+from datetime import datetime
+subs = [x for x in sys.argv[1].split(":") if x]
+nn = sys.argv[2]
+linhas = []
+for meta in sorted(m for s in subs for m in glob.glob(os.path.join(s, "*.meta.json"))):
+    try:
+        m = json.load(open(meta))
+    except Exception:
+        continue
+    if m.get("agentType") != "gsd-executor":
+        continue
+    # só executores de PLANO DESTA FASE: os consertos pós-merge nascem com outra `description`
+    # e não entram na conta de largura; executores de outra fase na mesma sessão, tampouco.
+    desc = str(m.get("description", ""))
+    if not desc.startswith("Execute plan ") or nn not in desc:
+        continue
+    j = meta[:-10] + ".jsonl"
+    ts = []
+    try:
+        for ln in open(j, errors="replace"):
+            i = ln.find('"timestamp":"')
+            if i >= 0:
+                ts.append(ln[i + 13:ln.find('"', i + 13)])
+    except OSError:
+        continue
+    if not ts:
+        continue
+    t0, t1 = min(ts), max(ts)
+    linhas.append((t0, t1, m.get("description", "?")))
+linhas.sort()
+print("== executores (medição primária: min/max de timestamp dos agent-*.jsonl) ==")
+for t0, t1, d in linhas:
+    dur = (datetime.fromisoformat(t1.replace("Z", "+00:00"))
+           - datetime.fromisoformat(t0.replace("Z", "+00:00"))).total_seconds()
+    print(f"{d}: {t0} -> {t1} ({int(dur/60)} min)")
+# simultâneos reais: maior nº de janelas sobrepostas
+evs = []
+for t0, t1, _ in linhas:
+    evs.append((t0, 1)); evs.append((t1, -1))
+evs.sort()
+cur = mx = 0
+for _, d in evs:
+    cur += d; mx = max(mx, cur)
+print(f"simultaneos_max_primario: {mx} (de {len(linhas)} executores)")
+
+# (47f) minutos em largura 1: soma dos intervalos com exatamente um executor aberto.
+marcos = sorted({t for t0, t1, _ in linhas for t in (t0, t1)})
+
+
+def n_abertos(t):
+    return sum(1 for t0, t1, _ in linhas if t0 <= t < t1)
+
+
+larg1 = larg0 = total = 0.0
+for a, b in zip(marcos, marcos[1:]):
+    dt = (datetime.fromisoformat(b.replace("Z", "+00:00"))
+          - datetime.fromisoformat(a.replace("Z", "+00:00"))).total_seconds()
+    total += dt
+    n = n_abertos(a)
+    if n == 1:
+        larg1 += dt
+    elif n == 0:
+        larg0 += dt
+print(f"janela_executores_min: {int(total/60)}")
+print(f"minutos_em_largura_1: {int(larg1/60)} ({int(100*larg1/total) if total else 0}% da janela)")
+print(f"minutos_sem_executor: {int(larg0/60)} (host esperando gate, merge, suíte)")
+PYEX
+  exit 0
+fi
+
 if [ "$3" != "--conferir" ]; then
   echo "== numeros-da-fase (fonte estrutural — copie DAQUI, nunca de memória) =="
   echo "planos_total (PLAN.md no disco): $n_plans"
@@ -58,6 +143,41 @@ fi
 alvo="$4"
 [ -f "$alvo" ] || { echo "conferir: arquivo inexistente ($alvo)"; exit 0; }
 falhas=0
+# (46b) contagem × enumeração: "8 linhas:" seguido de 7 bullets. Na F24.5 o
+# NN-RELATORIOS-EVIDENCIA.md dizia «8 linhas» e enumerava 7, e a frase foi ao prompt do UAT intacta.
+#
+# Escopo estreitado depois de medir (11/09): a forma «número em QUALQUER linha × itens da seção ##
+# inteira» dava 96 acusações em 19 dos 39 artefatos da 24.5 — ruído, não achado. A regra que fica é
+# a que reproduz o caso real e só ele: a frase tem de TERMINAR em `:` (é uma introdução de lista) e
+# a lista tem de começar nas duas linhas seguintes; conta-se o bloco CONTÍGUO de itens, não a seção.
+python3 - "$alvo" <<'PYCONT' || falhas=$((falhas+1))
+import re, sys
+linhas = open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines()
+RE_N = re.compile(r"\b([0-9]{1,3}) (linhas?|itens?|achados?|testes?|arquivos?|cen[áa]rios?|alunos?)\b", re.I)
+RE_IT = re.compile(r"^\s*(?:[-*]|[0-9]+\.)\s+\S")
+ruim = 0
+for i, l in enumerate(linhas):
+    if not l.rstrip().endswith(":"):
+        continue
+    m = RE_N.search(l)
+    if not m:
+        continue
+    j = i + 1
+    while j < len(linhas) and j <= i + 2 and not linhas[j].strip():
+        j += 1
+    if j >= len(linhas) or not RE_IT.match(linhas[j]):
+        continue
+    itens = 0
+    while j < len(linhas) and (RE_IT.match(linhas[j]) or linhas[j].startswith(("  ", "\t"))):
+        if RE_IT.match(linhas[j]):
+            itens += 1
+        j += 1
+    if itens and int(m.group(1)) != itens:
+        print(f"CONTAGEM-x-ENUMERACAO {sys.argv[1]}:{i + 1} «{m.group(0)}» × {itens} item(ns) na lista que ela introduz")
+        ruim += 1
+sys.exit(1 if ruim else 0)
+PYCONT
+
 # conjuntos válidos: contagens estruturais + parciais por dia
 validos_planos="$n_plans $n_sums $n_gap $((n_plans - n_gap))"
 for d in $(for s in $sums; do date -r "$s" +%F 2>/dev/null; done | sort | uniq -c | awk '{print $1}'); do
