@@ -68,7 +68,9 @@
 # **blob sha do arquivo alvo depois da correção**, o mesmo `blob_commit` que a releitura
 # (intent-releitura.md) e o gate do briefing-build.sh conferem. Ordem de preenchimento:
 #   1. caminho declarado na forma `id:<caminho>` e presente entre os comitados → o blob dele;
-#   2. senão, se o ciclo comitou EXATAMENTE UM caminho → o blob desse caminho;
+#   2. senão, se o ciclo comitou EXATAMENTE UM caminho de correção → o blob desse caminho.
+#      O `.planning/DECISIONS-INDEX.md` NÃO conta aqui: é índice regenerado por script (M5,
+#      F24.5 — contá-lo como 2º caminho apagou o hash de 8 das 15 correções do ciclo 0);
 #   3. senão (0 ou >1 caminhos, sem declaração) → `hash: ""` E o id entra em
 #      `hash_ausente[]`, para que a ausência seja auditável em vez de silenciosa.
 # `hash_ausente` é gravado SEMPRE (mesmo vazio): a presença da chave é o que distingue
@@ -133,9 +135,15 @@ ALVOS=(${ART[@]+"${ART[@]}"} ${DOCS[@]+"${DOCS[@]}"})
 [ ${#ALVOS[@]} -gt 0 ] || { echo "ERRO: nenhum alvo (--artefatos/--docs)" >&2; exit 2; }
 
 # caminhos relativos à raiz, únicos, existentes
-REL=()
+REL=(); AUSENTES_INICIO=()
 for a in "${ALVOS[@]}"; do
-  [ -f "$a" ] || { echo "ERRO: alvo inexistente: $a" >&2; exit 3; }
+  if [ ! -f "$a" ]; then
+    # M4 (F24.5): no `--inicio` o INTENT-REVIEW do ciclo ainda não existe — ele nasce DENTRO
+    # do ciclo. Alvo ausente aqui é «arquivo novo», não erro: `blob_pre` fica vazio e o fecho
+    # o trata como delta inteiro do ciclo. Nos modos `--ids`/`--vazio` a ausência segue erro.
+    if [ "$MODO" = inicio ]; then AUSENTES_INICIO+=("$a"); continue; fi
+    echo "ERRO: alvo inexistente: $a" >&2; exit 3
+  fi
   r=$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$a" "$ROOT")
   case "$r" in ../*) echo "ERRO: alvo fora da raiz do repo: $a" >&2; exit 3 ;; esac
   case " ${REL[*]:-} " in *" $r "*) continue ;; esac
@@ -184,8 +192,15 @@ if [ "$MODO" = inicio ]; then
       '{path:$p, blob_pre:$b, blob_head:$h, sujo_antes:$s, patch:$pt}')")
     i=$((i+1))
   done
+  for a in ${AUSENTES_INICIO[@]+"${AUSENTES_INICIO[@]}"}; do
+    r=$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$a" "$ROOT")
+    case " ${REL[*]:-} " in *" $r "*) continue ;; esac
+    ENTRADAS+=("$(jq -cn --arg p "$r" \
+      '{path:$p, blob_pre:"", blob_head:"", sujo_antes:false, patch:"", ausente_no_inicio:true}')")
+    REL+=("$r")
+  done
   DOCS_JSON=$(printf '%s\n' ${DOCS_REL[@]+"${DOCS_REL[@]}"} | jq -R . | jq -cs 'map(select(length>0))')
-  ALVOS_JSON=$(printf '%s\n' "${ENTRADAS[@]}" | jq -cs .)
+  ALVOS_JSON=$(printf '%s\n' ${ENTRADAS[@]+"${ENTRADAS[@]}"} | jq -cs 'map(select(. != null))')
   jq -cn --arg c "$C" --arg h "$HEADP" --argjson a "$ALVOS_JSON" --argjson d "$DOCS_JSON" \
     '{v:1, ciclo:$c, head_pre:$h, alvos:$a, docs:$d}' > "$BASE.tmp" && mv -f "$BASE.tmp" "$BASE"
   gad_json_out correcoes-commit "$(jq -cn --arg c "$C" --arg b "$BASE" --arg h "$HEADP" \
@@ -314,8 +329,16 @@ done
 # pré-sujo os dois diferem por desenho, e a releitura ancora no blob_commit.
 declare -A BLOB_DE=()
 for i in "${!COMITADOS[@]}"; do BLOB_DE["${COMITADOS[$i]}"]="${BLOBS_CAND[$i]}"; done
+# M5 (F24.5): o índice de decisões é regenerado por script, nunca é alvo de correção — contá-lo
+# como «2º caminho» apagou o hash de 8 das 15 correções do ciclo 0 da 24.5. A regra 2 (caminho
+# único) passa a contar só os caminhos que NÃO são derivados.
+COMITADOS_COR=()
+for r in ${COMITADOS[@]+"${COMITADOS[@]}"}; do
+  [ "$r" = "$IDX_REL" ] && continue
+  COMITADOS_COR+=("$r")
+done
 UNICO=""
-[ ${#COMITADOS[@]} -eq 1 ] && UNICO="${COMITADOS[0]}"
+[ ${#COMITADOS_COR[@]} -eq 1 ] && UNICO="${COMITADOS_COR[0]}"
 
 COR_ENTRADAS=(); AUSENTES=()
 IFS=',' read -r -a TOKENS_ID <<< "$IDS"
@@ -345,7 +368,7 @@ done
 COR_JSON=$(printf '%s\n' ${COR_ENTRADAS[@]+"${COR_ENTRADAS[@]}"} | jq -cs .)
 AUS_JSON=$(printf '%s\n' ${AUSENTES[@]+"${AUSENTES[@]}"} | jq -R . | jq -cs 'map(select(length>0))')
 if [ ${#AUSENTES[@]} -gt 0 ]; then
-  echo "aviso: ${#AUSENTES[@]} correção(ões) sem hash (ciclo comitou ${#COMITADOS[@]} caminhos e o id não declarou qual): ${AUSENTES[*]} — declaradas em hash_ausente[]" >&2
+  echo "aviso: ${#AUSENTES[@]} correção(ões) sem hash (ciclo comitou ${#COMITADOS_COR[@]} caminhos de correção e o id não declarou qual): ${AUSENTES[*]} — declaradas em hash_ausente[]" >&2
 fi
 IDS_JSON=$(printf '%s' "$IDS" | tr ',' '\n' | jq -R 'select(length>0) | split(":")[0]' | jq -cs .)
 CAM_JSON=$(printf '%s\n' "${COMITADOS[@]}" | jq -R . | jq -cs .)

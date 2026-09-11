@@ -380,6 +380,16 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    (`pareceres/NN-parecer-<lane>-c<C>.md`) são aliases promovidos pelo run vencedor — são
    eles que o passo 7 commita.
 
+   **Antes do despacho, grave a rota.** A rota é decidida pelo ciclo e pelo volume pré-rota do
+   passo 5 (a): ciclos 1–2, ou 3+ com 3+ brutos → `child`; ciclos 3+ com ≤ 2 brutos → `inline`.
+   ```bash
+   printf '{"run_id":"<run_id>","mode":"child","brutos_pre_rota":<n>}\n' \
+     > "<phase_dir>/.intent/.rota-verificacao-c<C>.json"
+   ```
+   Gravar depois do despacho é escrever a regra sabendo o resultado: na F24.5 as duas rotas foram
+   gravadas 3 min DEPOIS de o verificador fechar. O passo 5 (b) segue valendo como a régua;
+   aqui é só a ordem.
+
    **No MESMO turno**, despache **`gad-verificador`** com `prompts/intent-verifica.md`,
    passando o `run_id`, `<phase_dir>/.intent` (dos `.status-c<C>-<lane>.json`), o run-dir
    `.intent/runs/c<C>/<run_id>`, o manifesto `.intent/.perguntas-c<C>.json`, SPEC/CONTEXT,
@@ -444,9 +454,9 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    (o marcador `.verificador-c<C>.done` não distingue as rotas: a inline também o grava).
    O `mode` do arquivo é a rota que você VAI usar; escrever `child` "por segurança" num c3
    com 2 brutos é violação, igual a verificar 10 inline.
-   - **Ciclos 1–2, ou 3+ com 3+ brutos → `child`.** Grave
-     `printf '{"run_id":"<run_id>","mode":"child","brutos_pre_rota":<n>}\n' >
-     "<phase_dir>/.intent/.rota-verificacao-c<C>.json"` e siga com o filho já despachado.
+   - **Ciclos 1–2, ou 3+ com 3+ brutos → `child`.** A rota já está gravada (passo 4); confira
+     que o `mode` dela é o que a régua manda e corrija se divergir, registrando `incidentes`.
+     Siga com o filho já despachado.
    - **Ciclos 3+ com ≤2 brutos → `inline` OBRIGATÓRIO.** Grave o mesmo arquivo com
      `"mode":"inline"` e verifique você mesmo, pelo protocolo do `intent-verifica.md`
      (categoria revalidada pela regra de desempate, `.vereditos-c<C>.txt`, `vereditos-dirigidos.json`
@@ -515,6 +525,13 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    de_artefato_pos_ciclo}`. O achado cita **código** (`base.py:1979`); a `proposicao` diz
    onde mora a frase errada — é dela que a `/audit-gad` mede original × derivado. Sem ela o
    achado sai `não_medido`; não chute nem invente âncora.
+
+   **Um id, um papel.** Dentro de um ciclo, um `c<C>-NN` nomeia um achado **ou** uma correção,
+   nunca os dois. Correção que nasce de leitura sua (não de achado) continua a série do ciclo, a
+   partir do último id usado — não recomeça do `-01`. Motivo: o `confere-reconciliacao.sh` cruza id
+   de veredito com id aplicado, e o mesmo id nos dois papéis casa a linha errada (F24.5: `c2-01`
+   era um achado descartado e uma correção aplicada, e a tabela do INTENT-REVIEW teve de
+   desambiguar com `(achado)` à mão).
 
    **As correções do ciclo: um script, um turno.**
    1. ANTES de editar qualquer artefato:
@@ -626,12 +643,12 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    citadas) nos artefatos que VOCÊ escreveu; ponteiro quebrado → conserte antes de commitar.
    ```bash
    cd "<project_root>"
-   git commit --only -m "docs(fase NN): consultoria especializada de intenção (M ciclos, K achados)" -- \
-     <só os caminhos que existem: NN-PRE-SPEC.md NN-SPEC.md NN-CONTEXT.md NN-INTENT-REVIEW.md pareceres/NN-parecer-*.md>
+   $HOME/.claude/skills/go-and-do/scripts/commita-artefatos.sh "<phase_dir>" "<NN>" intencao
    ```
-   **`--only` com pathspec, nunca `git add` nem commit sem pathspec:** o worktree do
-   usuário pode estar sujo e um commit amplo absorveria o trabalho dele. Commit falhou
-   (sem git, nada a commitar) → não pare; anote no retorno e siga.
+   O script é o escritor único de git da skill: ele adiciona só os caminhos da etapa (PRE-SPEC,
+   SPEC, CONTEXT, INTENT-REVIEW e `pareceres/NN-parecer-*.md`), aceita arquivo novo — o
+   `git commit --only` o recusava (F24.5) — e nunca absorve o worktree sujo do usuário. Commit
+   falhou (sem git, nada a commitar) → não pare; anote no retorno e siga.
 7b. **Gate de rota (fail-closed) — antes de devolver `done`:**
    ```bash
    $HOME/.claude/skills/go-and-do/scripts/confere-rotas.sh "<phase_dir>/.intent"
@@ -641,13 +658,17 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    pre_spec_sem_bloco'`): a partir do `rm` eles só existem lá, e é lá que o
    `confere-etapa.sh 1` da camada 0 vai procurá-los. Só então a limpeza (política 1.5):
    ```bash
+   setopt nullglob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
    rm -f "<phase_dir>/.intent/".sinos-*.txt "<phase_dir>/.intent/"briefing-c*.md \
          "<phase_dir>/.intent/".varredura.md "<phase_dir>/.intent/".mudancas-c*.md
    ```
    **Não alargue esses globs.** SOBREVIVEM, por serem insumo da `/audit-gad` e dos gates:
    `runs/`, `.status-c*`, `.tabela-c*`, `.vereditos-c*`, `.prova-leitura-c*`,
    `.rota-verificacao-c*`, `.correcoes-c*.aplicado|.vazio`, `.releitura-c*`,
-   `.ciclo0.json`, `.gerado-*`, `.base-*` (blobs-base do T3) e `pre-spec-route.json`.
+   `.ciclo0.json`, `.vereditos-c*.origem.json` (o recibo do J5), `.gerado-*`,
+   `.base-*` (blobs-base do T3) e `pre-spec-route.json`. Fora de `.intent/`, o
+   `<phase_dir>/.fence-*.ok` (recibo do fiscal) também não se apaga — a lista está aqui
+   justamente para ninguém alargar o glob até `<phase_dir>`.
    Siga ao passo 8. Exit 1 → **você não devolve `done`**: `SEM-TABELA` → gere a tabela do
    ciclo; `VIOLACAO` → despache um `gad-verificador` retroativo sobre os pareceres daquele
    ciclo e incorpore o resultado; `VIOLACAO-INVERSA` → verifique inline o que faltar e
