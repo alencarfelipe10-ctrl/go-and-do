@@ -40,6 +40,16 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    `Execute plan 24.4-09` nem tire o prefixo: o hook de isolamento lê essa string para
    casar o despacho com o sentinel da fase, e na 24.4 duas grafias diferentes custaram
    2 despachos negados (RUN-LOG 24.4:180-183).
+1c. **O contrato de leitura desce verbatim.** Os blocos `<required_reading>` e
+   `<execution_context>` do `execute-phase.md` vão **literais** no briefing de cada executor —
+   traduza o resto se quiser; esses dois, não. Eles são o contrato de leitura, e reescrevê-los é
+   reescrever o contrato: na F24.5 os dois chegaram parafraseados aos 9 despachos, e a paráfrase
+   do segundo afirmava algo falso.
+   No `<execution_context>`, siga o que o `execute-phase.md` manda: os arquivos de `inline:`
+   colados verbatim, os de `pointers:` como caminho. Nunca escreva que um arquivo «já vêm na sua
+   própria definição de agente» — a definição carrega um `@`, e `@` não expande dentro do `prompt`
+   de um `Agent()`. Na F24.5 essa frase custou um turno e 3,1 k tokens a cada um dos executores
+   (o literal aparece em 10 transcripts da rodada).
 2. Deixe o motor de ondas trabalhar. O `--auto` **não silencia** as paradas de
    realidade — falha de teste de regressão, schema drift, conflito pós-merge — e elas
    devem parar mesmo: são decisões do usuário → siga o `<environment>` (devolva
@@ -197,6 +207,17 @@ fica para a auditoria) até `rc=0`. A cancela `confere-etapa.sh 3` reprova `SUIT
 substituem a suíte inteira — na F24.5 ficaram verdes só no transcript. Aceitar suíte vermelha é
 decisão do DONO: só com a resposta dele rode `suite-ressalva.sh <phase_dir> <NN> "<motivo>"`.
 **Nunca** instrua o `gsd-verifier` a não relançar a suíte.
+
+**Você relança a suíte; você não conserta o código.** Suíte vermelha (de onda ou final): o
+conserto é despachado a um executor — `Agent(subagent_type="gsd-executor", model: sonnet,
+isolation: "worktree")`, com os arquivos vermelhos, a saída literal e a regra de commit —, com o
+mesmo gate de qualquer plano. Você faz o merge-back e relança. Editar código por heredoc de
+Python no Bash, da sua janela, é desvio: entra em `incidentes:`. F24.5: 52 min do host em Opus,
+contexto de 300 k, 6 commits `fix(24.5)` — US$ 10 a 15 por um trabalho de executor.
+Exceção única: um conserto de **uma linha** que o gate aponta literalmente (um import faltando
+nomeado na saída), que você commita e registra em `incidentes:` com a linha. Sem executor
+disponível (teto de 200 subagentes por sessão), vale a exceção de uma linha e, acima dela,
+`needs_decision` — nunca a sua própria mão no código.
 
 O gate por onda que o GSD roda sozinho (`workflow.test_command`) só é barato
 quando a config do projeto aponta `roda-suite.sh --gate-onda` (só os testes que a onda

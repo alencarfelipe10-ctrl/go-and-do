@@ -7,6 +7,8 @@
 #   46t  — declarar `ARQUIVO-NAO-DECLARADO`, nunca reescrever o `files_modified` pós-execução
 #   45n  — negativa de guarda não se contorna (`subprocess.run`)
 #   45o  — instrumento sob julgamento é evidência, não alvo
+#   47b  — o contrato de leitura (<required_reading>/<execution_context>) desce verbatim
+#   47d  — o host não conserta código: conserto pós-merge vai a executor
 #   47e  — a espera de filho `Agent` não é por waiter (a frase «não recebe notificações» caiu)
 #   bash tests/test-contrato-execute.sh      · exit 0 = verde
 set -u
@@ -27,6 +29,9 @@ tem "45n: conferência por contagem no passo 0"                   'COPIA-INCOMPL
 tem "45o: instrumento sob julgamento é evidência"                'Instrumento sob julgamento'
 tem "46u: incidente se grava na hora"                            'Incidente se grava na hora'
 tem "46u: hora de artefato vem do date -Is"                      'date -Is'
+tem "47b: o contrato de leitura desce verbatim"          'vão **literais** no briefing'
+tem "47b: a frase falsa do template é proibida"         'já vêm na sua'
+tem "47d: o host não conserta código"                   'Você relança a suíte; você não conserta o código'
 tem "47e: filho Agent acorda o pai"                              'encerre o turno'
 nao "47e: a frase falsa de que não chegam notificações saiu"     'você **não recebe notificações**'
 
