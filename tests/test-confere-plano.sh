@@ -131,6 +131,18 @@ roda "$R"
 eq "tasks=2 (checkpoint fora)"        "$(campo .tasks)" "2"
 eq "veredito ok"                      "$(campo .veredito)" "ok"
 
+echo "== (k) comentário e linha em branco no meio da lista não truncam (45f, F24.5)"
+R=$(repo k); plano "$R" 'files_modified:
+  - src/a.py
+  # redação final delegada ao plano dono (caso real 24.5-02)
+  - src/b.py
+
+  - src/c.py' '<task type="auto">a</task>'
+commit "$R" 'feat(7-01): tarefa 1' src/a.py src/b.py src/c.py
+roda "$R"
+eq "veredito ok (lista lida inteira)" "$(campo .veredito)/$rc" "ok/0"
+eq "fora_da_lista vazio"              "$(campo '.fora_da_lista|length')" "0"
+
 echo "== (i) C7: PLAN cita D-NN que o SUMMARY não cita → DECISAO-SEM-SUMMARY (informativo, veredito intocado)"
 ctx() { # <root> → 7-CONTEXT.md com D-01..D-03, D-03 informational
   printf '<decisions>\n## Implementation Decisions\n\n### A\n- **D-01 [auto, R1]:** a\n- **D-02 [auto, R1]:** b\n- **D-03 [pre-spec:PS-01, informational]:** ver SPEC\n\n### Claude'"'"'s Discretion\n- nada\n\n</decisions>\n' > "$1/.planning/phases/7-bancada/7-CONTEXT.md"

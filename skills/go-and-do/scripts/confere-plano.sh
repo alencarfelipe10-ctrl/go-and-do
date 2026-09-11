@@ -66,7 +66,10 @@ lista_fm() { # <arquivo> <chave> → um caminho por linha
       dentro=1; next
     }
     dentro && /^[ \t]+-[ \t]*/ { s=$0; sub(/^[ \t]+-[ \t]*/, "", s); gsub(/^["'\'']|["'\'']$/, "", s); sub(/[ \t]+#.*$/, "", s); if (s!="") print s; next }
-    dentro { exit }
+    dentro && /^[ \t]*#/ { next }                                  # comentário indentado: não encerra
+    dentro && /^[ \t]*$/ { next }                                  # linha em branco: não encerra
+    dentro && /^[^ \t]/ { exit }                                   # só uma chave nova (coluna 0) encerra
+    dentro { next }                                                # qualquer outra linha de dentro: ignora
   ' "$1"
 }
 mapfile -t PERMITIDOS < <({ lista_fm "$PLAN_F" files_modified; lista_fm "$PLAN_F" files_deleted; } | sed 's#^\./##')
