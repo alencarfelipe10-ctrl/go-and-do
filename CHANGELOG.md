@@ -2,6 +2,190 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Unreleased]
+
+Pacote da auditoria da F24.5 (grupo-inspired, 11/09) — tarefas 45/46/47. Planos em
+`gsd-optimize/go-and-do-evolucao/planos-acao-f24.5-consertos/`, executados por 4 subagentes
+(P1, P2, P3S, P3F) em worktrees próprios, mais 1 bancada de medição. Suíte 33/33.
+Número da release ainda não aprovado pelo dono.
+
+### Etapa de intenção
+- Ciclo 0 só roda com sino em disco: sem sino, `.ciclo0.json` com `dispensado: true` e briefing do
+  ciclo 1 direto — a guarda anti-cegueira do `briefing-build.sh` continua reprovando dispensa com
+  sino real (46 h; F24.5: 15 correções inventadas, 5 commits, 38 min).
+- Protocolo de espera: o coordenador despacha o filho e encerra o turno; a notificação do Claude
+  Code o acorda e o resultado vale pelo disco. O waiter `until [ -s marcador ]` fica como caminho de
+  incidente (46 i; supera a parte correspondente da v2.5.4).
+- Marcador de releitura por rodada (`.releitura-c0b.done`), com o `.json` mantido no nome fixo do
+  ciclo; o gate do c1 aceita qualquer marcador da família (45 h).
+- Alegação de código do coordenador vira item ao `gad-verificador`; correção sem veredito vira dívida
+  declarada; o `gad-verificador` sela o `.vereditos-c<C>.txt` com `.vereditos-c<C>.origem.json`
+  (sha256) e o `confere-ciclo.sh --origem-vereditos` reprova `VEREDITO-SEM-ORIGEM`,
+  `VEREDITO-ALTERADO` e `ROTA-DIVERGENTE`, cobrados pelo `confere-etapa.sh 1` — aviso, não falha, em
+  `--dry-run`, para não reprovar fase arquivada (45 k).
+- `confere-etapa.sh` grava `<phase_dir>/.fence-<etapa>.ok` no pass (com o HEAD conferido) e o apaga
+  no fail; a flag nova `--sem-telemetria` grava o fence sem medir, sem escrever no run-log e sem
+  tocar no lock `.gate-fail-<etapa>.json`. O `intent.md` só devolve `done` com o recibo válido, e o
+  relato de turnos passa a ser a saída literal do `turnos-por-ciclo.py` (46 j).
+- Miudezas: `correcoes-commit.sh --inicio` tolera o INTENT-REVIEW ainda inexistente; o índice de
+  decisões deixa de contar como 2.º caminho e as correções voltam a ter hash; o commit do passo 7
+  passa pelo `commita-artefatos.sh intencao` (aceita arquivo novo); `nullglob` antes da limpeza;
+  um id nunca nomeia achado e correção no mesmo ciclo; a rota de verificação é gravada antes do
+  despacho (46 j, M4–M7/M11).
+- `registra-ciclo.sh` lê o espelho da lane pela família (`planrev-` na convergência): sem isso a
+  evidência de modelo da convergência sairia vazia depois da separação de nomes (45 j).
+
+### Planejamento e convergência
+- Convergência: as duas lanes externas voltam a rodar em paralelo. O `convergence.md` §2
+  prescrevia `run_in_background`/`( … ) &`/`setsid`, que o `gad-bash-guard` nega — 4 negações
+  em 35 s na F24.5 e a etapa inteira em série (~7,4 min por ciclo, 18 % da 2.5). A rota
+  sancionada é o `roda-lanes.sh` (lança por dentro, primeiro plano, < 1 s) mais o waiter de
+  disco `until`. (45 m)
+- `roda-lanes.sh --familia intencao|convergencia`: o lançador deixa de ser cravado na etapa de
+  intenção. Sem a família, o espelho de modelo da convergência sobrescrevia o da intenção do
+  mesmo ciclo (comprovado na F24.5: pareceres distintos, um só `.roda-codex-c1.json`). (45 m, 45 j)
+- `code-review.md`: a lane Codex da iteração 1 passa a ser lançada na única forma de `&` que o
+  guard sanciona (`( … ; touch <marcador> ) &`), e o passo 2b espera por esse marcador.
+  A receita antiga foi negada 3 vezes na retomada de 10/09. (46 d)
+- `intel api-surface` com índice vazio passa a falhar visível em vez de injetar no planner um
+  ponteiro para um arquivo sem símbolos. A régua é a forma do renderizador (seção `## <símbolo>`),
+  medida contra os `API-SURFACE.md` reais. (46 p)
+- `commita-artefatos.sh runlog` inclui o `.planning/state.json`, que ficava modificado fora do
+  commit e sujava a árvore no preflight do ship. (46 p)
+- `confere-ciclo.sh --frescor <phase_dir> <NN> <ciclo>`: dente da regra «defeito conhecido se
+  corrige antes do briefing seguinte» e de «replan não dispensa o juiz estrutural». Reprova
+  `BRIEFING-STALE`, `CHECKER-STALE` e `PREMISSA-CONHECIDA-SEM-CONSERTO`. Relógio por git, não
+  por mtime, para sobreviver a retomada. (46 o, 45 m)
+- `confere-arquivos-novos.sh` (novo): lista mecânica dos arquivos que os planos declaram e que ainda
+  não existem no repositório, em três baldes (produção, teste, planning). Insumo do julgamento
+  2.E e da cancela `mapper_pulado`. Na F24.5 acusa os 2 scripts que o host disse não existirem. (46 n)
+- `convergence.md`: regra de citação própria — alegação do host contra um parecer que dependa de
+  existência de arquivo, símbolo ou linha é conferida por comando, e o comando fica colado no
+  `NN-REVIEWS.md`. Campo novo `conferencias:` no contrato de retorno. (46 k)
+- `plan.md`, critério 2.D: terceira condição por escrito — se a validação Nyquist vai rodar, a
+  pesquisa não é opcional; chave ausente = trate como `true`. Fim do vaivém «pulo/não pulo»
+  (F24.3 e F24.5). (46 m)
+- `plan.md` e `convergence.md`, `<environment>`: filho `Agent` acorda o pai pela
+  `task-notification` — despache e encerre o turno. O waiter de disco `until` fica só para as
+  lanes externas, que são processo, não subagente. (46 i)
+- `plan.md` e `convergence.md`: despachos do researcher e do planner (inclusive no replan) levam
+  «não commite, o host commita». (46 p)
+
+### Execução — fiscal e gates
+- `confere-plano.sh`: parser de `files_modified` tolerante a comentário e linha em branco (45f);
+  código informativo `DECLARADO-NAO-TOCADO` para item da lista sem commit (45f); incidente
+  `ARQUIVO-NAO-DECLARADO` declarado no SUMMARY passa a ser resposta aceita, em vez de reprovação
+  (46t); informativo `COMMITS-SUBDECLARADOS` cruzando `actuals.commits` com o `git log` (46u).
+- `confere-etapa.sh 3`: contador de lançamentos de suíte filtrado pelo 1.º despacho da etapa, com
+  `fora_da_fase` nomeando o que ficou de fora (45f); assert novo `colisao_real_onda`, que reconfere
+  a colisão entre planos da mesma onda com as listas reais dos commits (46t); campo
+  `extrai.largura` com «minutos em largura 1» (47f).
+- `numeros-da-fase.sh`: modo `--executores` com a medição primária do paralelismo (min/max de
+  `timestamp` dos `agent-*.jsonl`, varrendo todas as sessões da fase) e os minutos em largura 1
+  (46q, 47f); `--conferir` passa a acusar `CONTAGEM-x-ENUMERACAO` (46b).
+- `prompts/execute.md`: `done` só com o marcador do fiscal, e retorno «reprovado pelo fiscal» com
+  o JSON colado (46r); declarar arquivo fora da lista em vez de editar o plano (46t); incidente
+  gravado na hora do fato (46u); hora por `date -Is` (46u); conferência do passo 0 por contagem
+  (45n); negativa de guarda não se contorna (45n); instrumento sob julgamento é evidência (45o).
+- `prompts/code-review.md`: nomenclatura das rodadas por comando, não por julgamento (46e).
+- `hooks/gad-rtk-worktree.sh` (novo): desliga a reescrita do RTK dentro de worktree de agente, que
+  era o que fazia a checagem de isolamento negar `git` aos executores (45n). Registro pelo dono.
+- `gad-bash-guard.sh`: dente de «instrumento sob julgamento» — dentro de rodada ativa, escrita por
+  Bash (`sed -i`, `tee`, `>`/`>>`, `cp`/`mv`, `patch`, `python -c` em modo escrita) com destino em
+  `~/.claude/skills/go-and-do/**`, `~/.claude/skills/audit-gad/**`, `~/.claude/agents/gad-*.md` ou
+  `**/gen5-patches/**` é negada, e a negativa diz o que fazer no lugar (gravar
+  `.gate-fail-<etapa>-evidencia.txt` e devolver ao dono pelo gate). Leitura e execução nesses
+  caminhos seguem liberadas. Casa no texto literal e não resolve symlink, para não morder a
+  bancada de desenvolvimento. A metade `Edit`/`Write` exige matcher novo no `settings.json` e
+  fica pendente com o dono. (45 o)
+- `gad-bash-guard.sh`: `git` chamado por dentro de Python (`subprocess.run(["git"…])`,
+  `os.system`, `sh -c`) passa a gravar `incidente` no run-log e **seguir** — na F24.5 três
+  executores commitaram por esse caminho sem deixar rastro no hook. Não é negativa: script de
+  medição honesto também chama git assim. (45 n)
+- `gad-bash-guard.sh`: `run_in_background: true` deixa de ser negado quando o comando é a ESPERA
+  do `roda-suite.sh` (`--esperar`, `--gate-onda`, ou `--lancar && --esperar` no mesmo comando).
+  `sleep` cru, `&` fora do waiter, `nohup`/`setsid` e a escrita no instrumento continuam negados
+  sob ele. (47 e)
+- `workflow.md` (camada 0): cancela do `mapper_pulado` com ação (2.4a); recibo do fiscal antes do
+  `done` da Etapa 3 e do `done` da Etapa 1; `files_modified` não se reescreve depois da execução;
+  um `incidente` por item, na hora do fato; re-verificação por `gsd-verifier` direto e com escopo
+  de teste (3.4); `uat classify-coverage` um SUMMARY por chamada (5.3); «número que você copia,
+  número que você confere» na Sub-rotina H; instrumento sob julgamento e instrumento × disco na
+  Etapa 3; `subagents_dir` no despacho da Etapa 1 e `ciclo0: dispensado (sem sino)` como estado
+  normal.
+- Bancadas novas: `tests/test-confere-arquivos-novos.sh`, `tests/test-contrato-execute.sh`,
+  `tests/test-gad-rtk-worktree.sh`, `tests/test-mede-tokens.sh`, `tests/test-numeros-da-fase.sh`.
+  Suíte 28 → 33.
+
+### Execução — tempo e tokens
+- `agents/gad-execute.md` (novo): Opus 5, effort medium, `experimental: cacheTtl: 1h`. A Etapa 3
+  deixa de rodar em `general-purpose`. Medido na F24.5: o host escreveu 100 % do cache em TTL de
+  5 min enquanto `gad-intent` e `gad-plan`, da mesma fase, rodaram 100 % em 1 h — 30 reescritas
+  por expiração, US$ 57 de US$ 94 (47a). **A def ainda não é despachada**: o trecho do
+  `workflow.md` que troca a rota da Etapa 3 fica adiado até o dono instalar o symlink, reiniciar
+  a sessão e a bancada A provar o `cacheTtl: 1h` num tipo de agente novo.
+- `precos.json` + `mede-tokens.py`: escrita de cache de 1 h (2× o input) modelada e medida à parte,
+  por `usage.cache_creation.ephemeral_1h_input_tokens`, com o caso de turno multi-iteração (47a).
+- `prompts/execute.md`: protocolo de espera reescrito com os dois modos medidos em bancada
+  (11/09, CC 2.1.269) — `run_in_background` cuja vida é a do trabalho acorda o pai;
+  `roda-suite.sh --lancar` não acorda e mantém o waiter, agora com teto adaptativo (47e). A frase
+  «você não recebe notificações de trabalho em background» saiu: é falsa para o primeiro modo.
+- `prompts/execute.md`: o contrato de leitura (`<required_reading>`/`<execution_context>`) desce
+  verbatim ao briefing do executor (47b); conserto pós-merge vai a um executor, nunca à mão do
+  host (47d).
+
+### Fork do GSD (fork, repo gsd-optimize — `gen5-patches/`)
+- `execute-phase.md`, `execute-plan.md` e `gsd-executor.md` absorvidos (manifesto 55 → 59,
+  contando o `digest-onda.sh` novo) e teste novo `tests/test-execute-fork.sh` (47b).
+- `execute-phase.md`: leitura obrigatória do executor por faixa citada pelo plano, SUMMARYs
+  de ondas anteriores por digest (47b); o `<execution_context>` deixa de afirmar que o template do
+  SUMMARY «já vem na definição do agente» — não vem, e os 9 executores da F24.5 o leram à parte —,
+  passando a separar `inline:` de `pointers:` (47b); reconciliação de STATE/`deferred-items` por
+  onda (45p); conserto pós-merge despachado a um executor, nunca feito pelo host (47d).
+- `gsd-executor.md`: bloco `<orcamento_de_comando>` — comando medido acima de 60 s roda uma
+  vez por tarefa, depois das edições; iteração por recorte; acima de 5 min vai a segundo plano
+  (47c); config lida do checkout principal, não do worktree (46u).
+- `bin/nosso/digest-onda.sh` (novo): digest das ondas anteriores em ≤ 15 linhas por plano —
+  4.285 B onde a F24.5 fez os executores lerem 489.648 B de SUMMARY (47b).
+- `bin/nosso/roda-suite.sh`: o gate da onda soma os testes que importam os módulos tocados e
+  os goldens do pacote, e anuncia à parte o vermelho previsto declarado no PLAN.md em
+  `vermelho_esperado:` (46s). ⛔ **Pendência com o dono antes do `instalar.sh`**: medido na onda 3
+  real, a lista do gate vai de 4 para 81 arquivos e estoura o teto de 600 s do `post-merge-gate.md`.
+- `planner-prompt.md`: `<verify>` com recorte embutido e comando cheio declarado (47c);
+  `vermelho_esperado:` no frontmatter do PLAN.md (46s).
+- `plan-phase.md`: o bloco de inicialização deixa de depender de `echo "$INIT"`. Sob zsh
+  o `echo` embutido expande `\n` e corrompe qualquer campo do `init.plan-phase` com quebra de
+  linha (o `prior_verify_commands` tem um, índice 10, fase INS-24.4). Era isso — e não o
+  `gsd-tools` — o «JSON inválido» que na F24.5 custou um arquivo de contorno de 24,9 KB passado
+  ao planner por caminho, contra a regra de insumos inline do próprio workflow. (46 l)
+- `templates/summary.md`: o campo `actuals.commits` vem do `git log` pela tag (46u).
+
+### /audit-gad (fora do repositório — diff em `relatorio-P1-auditgad.diff`)
+- `etiqueta-achados.py` aceita a classe colada na célula de veredito (`confirmado (B-viabilidade)`):
+  a F24.5 volta a medir 3 confirmados onde saía 0, e a régua de proveniência deixa de sair
+  `não_medida` pela 3.ª fase seguida (45 j).
+- `turnos-por-ciclo.py` fecha a janela do ciclo no `decide-ciclo.sh` e reporta o fecho da etapa em
+  chave própria: o ciclo 2 da F24.5 passa de 23 para 8 turnos, com `fecho: 19`, e o ciclo 1 segue
+  em 19 (45 i).
+- `workflow.md` da skill: a régua do `confere-rotas.sh` lê o exit real do run-log, com o transcript
+  como fallback declarado; bloco novo sobre as duas famílias de pareceres e sobre o ciclo 0
+  dispensado (45 q2, 45 j, 46 h); sub-seções de medição entregues pelos planos 2 e 3 (frescor do
+  briefing; tempo/tokens da Etapa 3), todas descritivas — nenhuma é gate, nenhuma tem meta.
+
+### Bancadas
+- **Bancada B** (11/09, CC 2.1.269): um `Bash` com `run_in_background: true` **acorda o pai**, e a
+  acordada vem do fim do processo da própria chamada — `roda-suite.sh --lancar`, que desprende e
+  sai em < 1 s, **não** acorda. Habilitou a exceção do `gad-bash-guard` (47 e) e falsificou a frase
+  do `prompts/execute.md` sobre notificações de background.
+- **Bancada A** (`gad-execute` em fase real) **não rodou**: o Claude Code não carrega def nova de
+  `~/.claude/agents/` no meio da sessão. Provado só no nível de unidade (a def existe; o
+  `gad-lifecycle.sh` a classifica camada 1, lê `claude-opus-5`/`medium` e nega o override — 5 casos
+  novos em `tests/test-gad-lifecycle.sh`).
+
+### Conferido, sem mudança
+- 45 q1: o teto do `discuss-phase.md` no fork já é 21.504 desde 08/09 e o arquivo mede 20.647 B;
+  suíte do fork verde.
+
 ## [2.5.5] — 2026-09-10
 
 Hotfix medido na primeira hora do `SubagentStop` registrado (F24.5, sessão de retomada).
