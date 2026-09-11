@@ -182,5 +182,38 @@ ANTIGO_SEM_TOUCH='( $HOME/.claude/skills/go-and-do/scripts/roda-codex.sh "/pd" "
 [ "$(chama "$CONV_ESPERA" true)" = deny ] && ok "waiter com run_in_background=true é negado" \
   || bad "waiter com run_in_background" "$(chama "$CONV_ESPERA" true)"
 
+echo "── 45o: escrita no instrumento sob julgamento (P-11)"
+H="$HOME/.claude/skills/go-and-do"; A="$HOME/.claude/skills/audit-gad"
+for c in "sed -i \"88d\" $H/scripts/confere-plano.sh" \
+         "tee $H/prompts/plan.md < /tmp/x" \
+         "echo x > $H/scripts/confere-ciclo.sh" \
+         "echo x >> $A/workflow.md" \
+         "cp /tmp/x.sh $H/scripts/confere-ciclo.sh" \
+         "mv /tmp/x.md \$HOME/.claude/agents/gad-plan.md" \
+         "patch -p1 $H/hooks/x.sh < /tmp/p.diff" \
+         "python3 -c \"open('/home/u/.claude/skills/go-and-do/x','w')\"" \
+         "sed -i s/a/b/ /home/u/Projetos/gsd-optimize/gen5-patches/manifesto.json"; do
+  r=$(chama "$c")
+  if [ "$r" = deny ]; then ok "deny instrumento: $(printf '%.60s' "$c")"; else bad "deny esperado (instrumento): $c" "$r"; fi
+done
+# a razão nomeia o motivo e a saída de evidência
+resp=$(printf '{"session_id":"%s","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Bash","agent_type":"gsd-executor","agent_id":"a0","tool_input":{"command":"sed -i 88d %s/scripts/confere-plano.sh"}}' "$SESS" "$PROJ" "$H" | bash "$HOOK" 2>/dev/null)
+printf '%s' "$resp" | grep -q 'instrumento_sob_julgamento: escrita em' \
+  && printf '%s' "$resp" | grep -q 'gate-fail-<etapa>-evidencia.txt' \
+  && ok "razão do instrumento nomeia o motivo e o arquivo de evidência" \
+  || bad "razão do instrumento" "$resp"
+
+echo "── 45o: leitura, execução e destino de fora seguem liberados (o coração do item)"
+for c in "bash $H/scripts/confere-etapa.sh 2" \
+         "grep -n x $H/prompts/plan.md" \
+         "cat /home/u/Projetos/gsd-optimize/gen5-patches/manifesto.json" \
+         "cp $H/scripts/confere-ciclo.sh /tmp/x.sh" \
+         "grep -n x $H/prompts/plan.md > /tmp/saida.txt"; do
+  r=$(chama "$c"); [ "$r" = allow ] && ok "allow: $(printf '%.60s' "$c")" || bad "allow esperado: $c" "$r"
+done
+# fora de escopo: sessão do dono (sem agent_type) e projeto sem ponteiro
+r=$(chama "sed -i s/a/b/ $H/scripts/confere-plano.sh" - -); [ "$r" = allow ] && ok "sem agent_type (dono) → allow" || bad "sem agent_type" "$r"
+r=$(chama "sed -i s/a/b/ $H/scripts/confere-plano.sh" - gsd-executor "$PAI"); [ "$r" = allow ] && ok "sem ponteiro de rodada → allow" || bad "sem ponteiro" "$r"
+
 echo; echo "resultado: $ok ok, $falhas falha(s)"
 [ "$falhas" -eq 0 ]

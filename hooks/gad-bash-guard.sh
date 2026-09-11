@@ -28,6 +28,14 @@
 # comentário). Exceção sancionada pelo <environment>: o waiter de disco
 # `( <trabalho> ; touch <arquivo> ) &` — único `&` de fundo do comando, no fim.
 # · `sleep N` cru ou laço `for … sleep` sem `until`/`while` (v2.5.4, 45i — espera chutada)
+# · escrita (`sed -i`, `tee`, `>`/`>>`, `cp`/`mv`/`rsync`/`install`/`ln`, `patch`, `open(…,'w')`
+#   em `python -c`) cujo DESTINO cai em `~/.claude/skills/go-and-do/**`,
+#   `~/.claude/skills/audit-gad/**`, `~/.claude/agents/gad-*.md` ou `**/gen5-patches/**`
+#   (v2.6.0, 45o): instrumento que está julgando a rodada é evidência, não rascunho.
+#   Sem exceção: a fase fecha, o ponteiro some, o dono edita. Casa no texto CRU (o
+#   `sem_aspas` apaga o caminho junto com as aspas) e NUNCA resolve symlink — o
+#   `~/.claude/skills/go-and-do` aponta para o repositório de desenvolvimento, e canonizar
+#   faria a regra morder a bancada de conserto, que não é uma rodada.
 # O corpo entre aspas de `bash -c "…"`, `sh -c '…'`, `bash -lc` e `eval "…"` passa pelas
 # mesmas regras (um nível): `bash -c "uv run pytest &"` é a evasão seguinte ao `nohup`
 # e custa uma linha (P21, D1).
@@ -81,6 +89,20 @@ SLEEP_CRU = re.compile(r"(^|[;&|(\s{])sleep\s+[0-9]")
 UNTIL = re.compile(r"(^|[;&|(\s{])(until|while)\s")
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1")
 
+# ── 45o: escrita no instrumento sob julgamento ────────────────────────────────────────
+PROTEGIDO = re.compile(
+    r"^(?:"
+    r"(?:\$HOME|~|/home/[^/\s\"']+)/\.claude/skills/(?:go-and-do|audit-gad)/"
+    r"|(?:\$HOME|~|/home/[^/\s\"']+)/\.claude/agents/gad-[^\s\"';|&)]*\.md"
+    r"|(?:[^\s\"';|&)]*/)?gen5-patches/"
+    r")")
+SED_I = re.compile(r"(^|[;&|(\s])sed\s+(?:-\S+\s+)*-[A-Za-z]*i")
+PATCH_CMD = re.compile(r"(^|[;&|(\s])patch\b")
+PY_ESCRITA = re.compile(r"open\s*\(\s*[^,)]+,\s*['\"][rwax+bt]*[wax][rwax+bt]*['\"]")
+REDIR = re.compile(r"(?<![0-9<>&])>>?\s*(?!&)([^\s;|&)<>]+)")
+TEE = re.compile(r"(^|[;&|(\s])tee\b([^;|&)\n]*)")
+COPIA = re.compile(r"(^|[;&|(\s])(cp|mv|rsync|install|ln)\b([^;|&)\n]*)")
+
 
 def sem_heredoc(cmd):
     """Remove o corpo (e a linha delimitadora) de cada heredoc; o operador fica."""
@@ -103,6 +125,38 @@ def sem_heredoc(cmd):
             return cmd[:nl]
         cmd = cmd[:nl + 1] + "\n".join(linhas[fim + 1:])
         pos = nl + 1
+
+
+def _segmento(texto, i):
+    """Do ponto i até o fim da linha (ou do texto) — onde procurar o caminho do verbo."""
+    j = texto.find("\n", i)
+    return texto[i:(len(texto) if j < 0 else j)]
+
+
+def destinos_de_escrita(texto):
+    """Caminhos que o comando pretende ESCREVER. Texto CRU (só sem heredoc), com aspas."""
+    d = []
+    d += REDIR.findall(texto)
+    for m in TEE.finditer(texto):
+        d += [t for t in m.group(2).split() if not t.startswith("-")]
+    for m in COPIA.finditer(texto):
+        args = [t for t in m.group(3).split() if not t.startswith("-")]
+        if args:
+            d.append(args[-1])          # destino é o último argumento não-flag
+    for rx in (SED_I, PATCH_CMD, PY_ESCRITA):
+        for m in rx.finditer(texto):
+            d += re.findall(r"[^\s'\"();|&<>]*/[^\s'\"();|&<>]+", _segmento(texto, m.start()))
+    return d
+
+
+def motivo_instrumento(cmd):
+    """Devolve o caminho protegido que o comando escreveria, ou None."""
+    texto = sem_heredoc(cmd)
+    for alvo in destinos_de_escrita(texto):
+        alvo = alvo.strip("'\"")
+        if PROTEGIDO.match(alvo):
+            return alvo
+    return None
 
 
 def sem_aspas(cmd):
@@ -192,6 +246,9 @@ def decide(cmd, run_in_background):
     """Devolve None (allow) ou o motivo da negativa."""
     if run_in_background is True:
         return RUN_IN_BG_MOTIVO
+    alvo = motivo_instrumento(cmd)
+    if alvo:
+        return f"instrumento_sob_julgamento: escrita em `{alvo}`"
     return motivo_texto(cmd)
 
 
@@ -276,14 +333,22 @@ def main():
     motivo = decide(cmd, ti.get("run_in_background"))
     if not motivo:
         return
-    razao = (f"[gad-bash-guard] comando negado ({motivo}): dentro de uma rodada da go-and-do "
-             "um subagente não recebe aviso de trabalho em segundo plano, e processo desprendido "
-             "sobrevive ao TaskStop. Rode em primeiro plano com timeout <= 600000; para mais de "
-             "10 min use o waiter de disco `( trabalho ; touch marcador ) &` e espere pelo arquivo "
-             "com `timeout 590 bash -c 'until [ -s marcador ]; do sleep 15; done'`, chamado de novo "
-             "enquanto o arquivo não existir. Teste ou suíte longa vai por `bash roda-suite.sh "
-             "--lancar --cmd '…'` e `--esperar` (gsd-core/bin/nosso/): um lançamento só, espera em "
-             "pedaços e o vermelho por arquivo.")
+    if motivo.startswith("instrumento_sob_julgamento"):
+        razao = (f"[gad-bash-guard] comando negado ({motivo}): o instrumento que julga esta "
+                 "rodada nao se edita durante a rodada. Se ele esta reprovando, ele e "
+                 "evidencia: grave <phase_dir>/.gate-fail-<etapa>-evidencia.txt com o comando, "
+                 "a saida literal e a linha suspeita, commite e devolva ao dono pelo gate. "
+                 "O dono edita com a rodada fechada. Nao ha excecao e nao ha caminho "
+                 "alternativo: a fase fecha, o ponteiro some, a edicao acontece.")
+    else:
+        razao = (f"[gad-bash-guard] comando negado ({motivo}): dentro de uma rodada da go-and-do "
+                 "um subagente não recebe aviso de trabalho em segundo plano, e processo desprendido "
+                 "sobrevive ao TaskStop. Rode em primeiro plano com timeout <= 600000; para mais de "
+                 "10 min use o waiter de disco `( trabalho ; touch marcador ) &` e espere pelo arquivo "
+                 "com `timeout 590 bash -c 'until [ -s marcador ]; do sleep 15; done'`, chamado de novo "
+                 "enquanto o arquivo não existir. Teste ou suíte longa vai por `bash roda-suite.sh "
+                 "--lancar --cmd '…'` e `--esperar` (gsd-core/bin/nosso/): um lançamento só, espera em "
+                 "pedaços e o vermelho por arquivo.")
     registra(pont, agente, cmd, motivo)
     sys.stderr.write(f"gad-bash-guard: negado ({motivo}) agente={agente}\n")
     sys.stdout.write(json.dumps({"hookSpecificOutput": {
