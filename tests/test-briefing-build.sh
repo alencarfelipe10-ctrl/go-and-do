@@ -366,6 +366,45 @@ printf '%s' "$saida" | jq -e '.licoes_respostas == 2' >/dev/null \
   && ok "o JSON declara quantas respostas de lição foram colhidas" || erro "JSON sem licoes_respostas"
 limpa
 
+echo "== 46(h)/45(h) — ciclo 0 dispensado e marcador de releitura por rodada"
+monta_repo
+DISP='{"v":1,"dispensado":true,"motivo":"sem sino em disco","sinos":[],"correcoes":[],"releitura":{}}'
+printf '%s\n' "$DISP" > "$PD/.intent/.ciclo0.json"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "c1: ciclo 0 dispensado passa (sem .releitura-c0.done)" \
+  || erro "c1: dispensa deveria passar, veio rc=$rc" "$saida"
+printf '%s' "$saida" | jq -e '.gate.ciclo0_dispensado == true' >/dev/null \
+  && ok "c1: JSON declara ciclo0_dispensado" || erro "JSON sem ciclo0_dispensado" "$saida"
+printf '%s' "$saida" | jq -e '[.avisos[]|select(test("ciclo 0 dispensado: sem sino em disco"))]|length==1' >/dev/null \
+  && ok "c1: aviso da dispensa com o motivo" || erro "aviso da dispensa ausente" "$saida"
+
+printf 'req_ausente: REQ-9\n' > "$PD/.intent/.sinos-spec.txt"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 4 ] && printf '%s' "$saida" | grep -q 'sino sumindo (R3)' \
+  && ok "c1: dispensa com sino real reprova (exit 4, sino sumindo)" \
+  || erro "c1: dispensa com sino real deveria reprovar" "rc=$rc $saida"
+rm -f "$PD/.intent/.sinos-spec.txt"
+
+printf '%s\n' '{"v":1,"dispensado":true,"motivo":"x","sinos":[],"correcoes":[{"id":"c0-01","hash":"a"}],"releitura":{}}' \
+  > "$PD/.intent/.ciclo0.json"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 4 ] && printf '%s' "$saida" | grep -q 'dispensa é ausência, não atalho' \
+  && ok "c1: dispensado:true com correções reprova" || erro "dispensa com correções deveria reprovar" "rc=$rc $saida"
+limpa
+
+echo "== 45(h) — o gate do c1 aceita qualquer .releitura-c0*.done"
+monta_repo
+jq -n '{v:1,sinos:[],correcoes:[],releitura:{commit:"",artefatos:[]}}' > "$PD/.intent/.ciclo0.json"
+: > "$PD/.intent/.releitura-c0b.done"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "c1: .releitura-c0b.done sozinho satisfaz o gate" \
+  || erro "c0b deveria satisfazer o gate, veio rc=$rc" "$saida"
+rm -f "$PD/.intent/".releitura-c0*.done
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 4 ] && printf '%s' "$saida" | grep -q 'releitura-c0\*.done` ausente' \
+  && ok "c1: nenhum .releitura-c0*.done reprova" || erro "sem marcador deveria reprovar" "rc=$rc $saida"
+limpa
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-briefing-build: TUDO OK" || echo "test-briefing-build: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

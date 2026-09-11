@@ -274,6 +274,32 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    `NN-SPEC.md`. Número load-bearing entra re-derivado da fonte primária, nunca copiado de
    outro documento.
 2b. **Ciclo 0 — triagem dos sinos dos filhos (R3), antes do primeiro briefing.**
+   **Porta de entrada, antes de qualquer leitura.** O ciclo 0 existe para triar sino que um
+   filho deixou; ele não é uma revisão própria dos artefatos. Conte os sinos reais em disco:
+   ```bash
+   cd "<project_root>"
+   IN="<phase_dir>/.intent"
+   n=$(cat "$IN/.sinos-spec.txt" "$IN/.sinos-discuss.txt" 2>/dev/null \
+       | grep -vE '^\s*$|^\s*(licao [0-9]+:|leitura_propria:)' | wc -l)
+   echo "sinos_reais=$n"
+   ```
+   `sinos_reais=0` → **ciclo 0 dispensado**. Grave o registro de dispensa e vá ao passo 3
+   (briefing do ciclo 1). Não leia os artefatos procurando o que corrigir, não abra script de
+   correção, não despache releitura: sem sino não há o que triar, e revisar por conta própria
+   texto que o dono escreveu é decidir no lugar dele (F24.5: 15 «sinos» inventados, 4 scripts,
+   5 releituras, 5 commits, 38 min — 37 % da etapa — e 8 das 15 eram reescrita de estilo).
+   ```bash
+   printf '%s\n' '{"v":1,"dispensado":true,"motivo":"sem sino em disco","sinos":[],"correcoes":[],"releitura":{}}' \
+     > "<phase_dir>/.intent/.ciclo0.json"
+   ```
+   Declare `ciclo0: dispensado (sem sino)` em `transparencia:` no retorno **e** escreva, no corpo do
+   `NN-INTENT-REVIEW.md` do passo 7, a linha `ciclo 0: dispensado (sem sino em disco)` no lugar onde
+   iriam as linhas `c0-NN` — o retorno é efêmero, o artefato é o que a auditoria lê depois.
+   `sinos_reais>0` → siga a triagem abaixo.
+   Erro factual que VOCÊ perceber nos artefatos, com ou sem sino, não morre: ele entra como
+   item despachado ao `gad-verificador` pela regra do passo 5 (ver «Alegação própria do
+   coordenador»), nunca como emenda direta.
+
    Leia `.intent/.sinos-spec.txt` e `.intent/.sinos-discuss.txt` e corrija **só o
    mecanicamente provável**, com fonte-de-verdade explícita: **fato de código citado >
    SPEC > CONTEXT**; requisito ou critério de aceite, manda o **SPEC**; o *como*, manda o
