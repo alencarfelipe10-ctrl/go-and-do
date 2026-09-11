@@ -265,7 +265,13 @@ r=$(chama "$RS --lancar --cmd x --tag t && $RS --esperar --tag t" true)
 [ "$r" = allow ] && ok "allow com bg: --lancar && --esperar (a chamada vive o trabalho)" || bad "--lancar && --esperar" "$r"
 r=$(chama "$RS --lancar --cmd 'uv run pytest -q' --tag f24"); [ "$r" = allow ] && ok "--lancar SEM o flag segue allow (inalterado)" || bad "--lancar sem flag" "$r"
 r=$(chama "$RS --esperar --tag f24"); [ "$r" = allow ] && ok "--esperar sem o flag segue allow" || bad "--esperar sem flag" "$r"
-r=$(chama "$RS --esperar --tag f24; sleep 300" true); [ "$r" = allow ] && ok "a exceção do bg precede o texto (documentado)" || bad "precedência do bg" "$r"
+# a exceção tira o FLAG da lista de motivos; NÃO dispensa a leitura do comando.
+r=$(chama "$RS --esperar --tag f24; sleep 300" true)
+[ "$r" = deny ] && ok "bg + sleep cru → o texto continua valendo (a exceção não é passe livre)" || bad "sleep cru sob a exceção" "$r"
+r=$(chama "$RS --esperar --tag f24; nohup x &" true)
+[ "$r" = deny ] && ok "bg + nohup/& → segue negado sob a exceção" || bad "nohup sob a exceção" "$r"
+r=$(chama "$RS --esperar --tag f24; sed -i s/a/b/ \$HOME/.claude/skills/go-and-do/scripts/confere-plano.sh" true)
+[ "$r" = deny ] && ok "bg + escrita no instrumento → o P-11 sobrevive à exceção do 47e" || bad "instrumento sob a exceção" "$r"
 
 echo; echo "resultado: $ok ok, $falhas falha(s)"
 [ "$falhas" -eq 0 ]

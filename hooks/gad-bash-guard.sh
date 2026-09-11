@@ -274,9 +274,11 @@ def motivo_texto(cmd, nivel=0):
 
 def decide(cmd, run_in_background):
     """Devolve None (allow) ou o motivo da negativa."""
-    if run_in_background is True:
-        if SUITE_ESPERA.search(sem_heredoc(cmd)):
-            return None          # 47e: espera do roda-suite.sh — o pai é acordado de verdade
+    # 47e: a exceção tira o FLAG da lista de motivos — nunca dispensa a leitura do comando.
+    # As regras de texto (`sleep` cru, `&` fora do waiter, nohup/setsid) e a do instrumento
+    # continuam valendo sob o flag: senão `roda-suite.sh --esperar; sed -i … <instrumento>`
+    # passaria inteiro só por citar a suíte.
+    if run_in_background is True and not SUITE_ESPERA.search(sem_heredoc(cmd)):
         return RUN_IN_BG_MOTIVO
     alvo = motivo_instrumento(cmd)
     if alvo:
