@@ -5,6 +5,20 @@
 #      confere-ciclo.sh --tabela [--perguntas MANIFESTO] [--vereditos ARQ]
 #                       [--status-dir DIR] <parecer1.md> [parecer2.md ...]
 #
+#      confere-ciclo.sh --origem-vereditos <phase_dir> <C>
+#
+# 45(k)/J5 (F24.5) — PROVENIÊNCIA DO VEREDITO. O `.intent/.vereditos-c<C>.txt` é a única
+# coisa que o fiscal da etapa 1 (confere-reconciliacao.sh) aceita como «este achado teve
+# veredito». Na F24.5 o coordenador acrescentou três linhas a ele às 12:12, 57 min depois de o
+# verificador do ciclo 1 ter fechado às 11:15 — honestamente declaradas no campo `classe`, mas
+# escritas por quem julgava. Este modo fecha o arquivo: o verificador grava
+# `.vereditos-c<C>.origem.json` {v, ciclo, run_id, agente, mode, ts, n_linhas, sha256} como
+# último ato, e aqui o sha256 é recalculado. Divergiu = alguém escreveu depois.
+#   Exit 0  — recibo presente e sha256 idêntico (ou ciclo sem vereditos: n/a).
+#   Exit 1  — VEREDITO-SEM-ORIGEM (recibo ausente) ou VEREDITO-ALTERADO (sha divergente)
+#             ou ROTA-DIVERGENTE (`mode` do recibo != `mode` da .rota-verificacao-c<C>.json).
+#   Exit 2  — uso inválido.
+#
 # R8 (v2.2.0) — respostas dirigidas entram na MESMA contagem de brutos:
 #   --perguntas   `.intent/.perguntas-c<C>.json` escrito pelo briefing-build.sh. Para
 #                 cada Q do manifesto, por lane usável: `sim`/`incerto` = bruto;
@@ -146,6 +160,36 @@ cancela_parecer_informe() {
       --kv origem=confere-ciclo.sh --kv detalhe="lane ${lane} c${c}: parecer sem achados 2×" >/dev/null 2>&1 || true
   fi
 }
+
+if [ "${1:-}" = "--origem-vereditos" ]; then
+  PD="${2:-}"; C="${3:-}"
+  [ -n "$PD" ] && [ -n "$C" ] || { echo "uso: confere-ciclo.sh --origem-vereditos <phase_dir> <C>" >&2; exit 2; }
+  IN="$PD/.intent"; V="$IN/.vereditos-c$C.txt"; O="$IN/.vereditos-c$C.origem.json"
+  R="$IN/.rota-verificacao-c$C.json"
+  if [ ! -f "$V" ]; then
+    echo "origem_vereditos: n/a (sem .vereditos-c$C.txt)"; exit 0
+  fi
+  if [ ! -f "$O" ]; then
+    echo "VEREDITO-SEM-ORIGEM c$C — .vereditos-c$C.txt existe sem .vereditos-c$C.origem.json (quem julgou não deixou recibo)"
+    exit 1
+  fi
+  sha_disco=$(sha256sum "$V" | cut -d' ' -f1)
+  sha_rec=$(jq -r '.sha256 // ""' "$O" 2>/dev/null || echo "")
+  if [ "$sha_disco" != "$sha_rec" ]; then
+    echo "VEREDITO-ALTERADO c$C — sha256 do arquivo ($sha_disco) != do recibo ($sha_rec): linha escrita depois de o verificador sair"
+    exit 1
+  fi
+  modo_rec=$(jq -r '.mode // ""' "$O" 2>/dev/null || echo "")
+  if [ -f "$R" ]; then
+    modo_rota=$(jq -r '.mode // ""' "$R" 2>/dev/null || echo "")
+    if [ -n "$modo_rota" ] && [ -n "$modo_rec" ] && [ "$modo_rec" != "$modo_rota" ]; then
+      echo "ROTA-DIVERGENTE c$C — recibo diz mode=$modo_rec e .rota-verificacao-c$C.json diz mode=$modo_rota"
+      exit 1
+    fi
+  fi
+  echo "origem_vereditos: ok c$C (mode=$modo_rec, sha256 confere)"
+  exit 0
+fi
 
 if [ "${1:-}" = "--tabela" ]; then
   shift

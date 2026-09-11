@@ -234,6 +234,45 @@ echo "== manifesto ilegível não zera a contagem (fail-closed)"
 "$SCRIPT" --tabela --perguntas "$TMP/nao-existe.json" "$CODEX" > "$TMP/t7.txt" 2>/dev/null
 [ "$(campo "$TMP/t7.txt" brutas)" -ge 1 ] && ok "manifesto ausente vira bruto, não zero" || erro "guarda cega"
 
+echo "== 45(k)/J5 — proveniência do veredito (--origem-vereditos)"
+PD5="$TMP/j5"; mkdir -p "$PD5/.intent"
+"$SCRIPT" --origem-vereditos "$PD5" 1 > "$TMP/j5-na.txt" 2>&1; rc=$?
+[ "$rc" = 0 ] && grep -q 'origem_vereditos: n/a' "$TMP/j5-na.txt" \
+  && ok "ciclo sem .vereditos → n/a, exit 0" || erro "n/a esperado, rc=$rc" "$(cat "$TMP/j5-na.txt")"
+
+printf 'c1-01 | novo | confirmado | A-produto\n' > "$PD5/.intent/.vereditos-c1.txt"
+"$SCRIPT" --origem-vereditos "$PD5" 1 > "$TMP/j5-sem.txt" 2>&1; rc=$?
+[ "$rc" = 1 ] && grep -q '^VEREDITO-SEM-ORIGEM c1 ' "$TMP/j5-sem.txt" \
+  && ok "vereditos sem recibo → VEREDITO-SEM-ORIGEM, exit 1" || erro "esperado 1, veio $rc" "$(cat "$TMP/j5-sem.txt")"
+
+sela() { # regrava o recibo com o sha atual e o mode dado
+  local m="$1"
+  printf '{"v":1,"ciclo":"1","run_id":"r","agente":"gad-verificador","mode":"%s","ts":"t","n_linhas":1,"sha256":"%s"}\n' \
+    "$m" "$(sha256sum "$PD5/.intent/.vereditos-c1.txt" | cut -d' ' -f1)" > "$PD5/.intent/.vereditos-c1.origem.json"
+}
+sela child
+"$SCRIPT" --origem-vereditos "$PD5" 1 > "$TMP/j5-ok.txt" 2>&1; rc=$?
+[ "$rc" = 0 ] && grep -q 'origem_vereditos: ok c1 (mode=child' "$TMP/j5-ok.txt" \
+  && ok "recibo com sha correto → ok, exit 0" || erro "esperado 0, veio $rc" "$(cat "$TMP/j5-ok.txt")"
+
+printf 'c1-02 | correcao | confirmado | D-documental\n' >> "$PD5/.intent/.vereditos-c1.txt"
+"$SCRIPT" --origem-vereditos "$PD5" 1 > "$TMP/j5-alt.txt" 2>&1; rc=$?
+[ "$rc" = 1 ] && grep -q '^VEREDITO-ALTERADO c1 ' "$TMP/j5-alt.txt" \
+  && ok "linha acrescentada depois do recibo → VEREDITO-ALTERADO" || erro "esperado 1, veio $rc" "$(cat "$TMP/j5-alt.txt")"
+
+sela inline
+printf '{"run_id":"r","mode":"child","brutos_pre_rota":9}\n' > "$PD5/.intent/.rota-verificacao-c1.json"
+"$SCRIPT" --origem-vereditos "$PD5" 1 > "$TMP/j5-rota.txt" 2>&1; rc=$?
+[ "$rc" = 1 ] && grep -q '^ROTA-DIVERGENTE c1 ' "$TMP/j5-rota.txt" \
+  && ok "mode do recibo != mode da rota → ROTA-DIVERGENTE" || erro "esperado 1, veio $rc" "$(cat "$TMP/j5-rota.txt")"
+
+"$SCRIPT" --origem-vereditos "$PD5" > "$TMP/j5-uso.txt" 2>&1; rc=$?
+[ "$rc" = 2 ] && ok "uso inválido → exit 2" || erro "esperado 2, veio $rc"
+
+"$SCRIPT" --tabela "$CODEX" > "$TMP/j5-tab.txt" 2>/dev/null; rc=$?
+[ "$rc" = 0 ] && grep -q 'achados_estruturais_total:' "$TMP/j5-tab.txt" \
+  && ok "modo --tabela inalterado pelo modo novo" || erro "--tabela regrediu" "$(head -3 "$TMP/j5-tab.txt")"
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-confere-ciclo: TUDO OK" || echo "test-confere-ciclo: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

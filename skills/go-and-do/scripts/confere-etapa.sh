@@ -859,6 +859,31 @@ if [ "$ETAPA" = "1" ]; then
     fi
   fi
 
+  # ── J5 (45k, F24.5): proveniência do veredito. O R5 acima já pega correção promovida SEM
+  # linha de veredito; o que ele não vê é a linha de veredito escrita pelo próprio coordenador
+  # depois que o verificador saiu (24.5: 3 linhas às 12:12, verificador fechado às 11:15).
+  # Em `--dry-run` (o modo com que se valida fase arquivada, PC-12) o recibo ausente sai como
+  # aviso: as fases 24.3-24.5 em disco não o têm, e o gate morde a rodada corrente, não a
+  # auditoria retroativa.
+  CCICLO="$GAD_SCRIPTS_DIR/confere-ciclo.sh"
+  if [ -f "$CCICLO" ]; then
+    J5_NIVEL=FALHA; [ "$DRY" = 1 ] && J5_NIVEL=aviso
+    for vf in "$PHASE_DIR/.intent/".vereditos-c*.txt; do
+      [ -f "$vf" ] || continue
+      c=$(basename "$vf" | sed -n 's/^\.vereditos-c\([0-9][0-9]*\)\.txt$/\1/p')
+      [ -n "$c" ] || continue
+      jrc=0; jout=$(bash "$CCICLO" --origem-vereditos "$PHASE_DIR" "$c" 2>&1) || jrc=$?
+      if [ "$jrc" = 0 ]; then
+        RES=$(jq -c --arg id "j5_origem_c$c" --arg d "$(printf '%s' "$jout" | cut -c1-200)" \
+          '. + [{id:$id, resultado:"ok", detalhe:$d}]' <<<"$RES")
+      else
+        RES=$(jq -c --arg id "j5_origem_c$c" --arg n "$J5_NIVEL" --arg d "$(printf '%s' "$jout" | tr '\n' ' ' | cut -c1-300)" \
+          '. + [{id:$id, resultado:$n, detalhe:$d}]' <<<"$RES")
+        if [ "$J5_NIVEL" = FALHA ]; then FALHAS=$((FALHAS+1)); fi
+      fi
+    done
+  fi
+
   # ── C3 (plano 2, 05/09/2026): D-NN que citam critério mudado desde a base selada e não foram
   # emendadas nem marcadas superada-c<N>. Informativo até a métrica M9 medir uma fase real.
   if [ -f "$CREC" ]; then

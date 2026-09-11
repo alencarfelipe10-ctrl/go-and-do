@@ -171,6 +171,27 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
      o coordenador abre a rodada nova sobre premissa falsa (F24.5: 5 rodadas de releitura no ciclo 0,
      `c0c` lançado 51 s antes de o `c0b` acabar).
    - Despacho sem `<RODADA>` declarado → use o próprio ciclo (`c<C>`), que é o comportamento antigo.
+   - **Veredito dos itens que você devolveu (J5b).** Todo item que você devolve (`contradiz`,
+     `prescreve_mecanismo`, `omissoes_novas`, `cardinalidade`, `unicidade`, par em `consistencia`)
+     vira uma correção que quem te despachou vai promover no mesmo turno — e o fiscal da etapa exige
+     linha de veredito por id promovido. **Quem julga escreve.** Acrescente, para cada item, uma
+     linha em `<phase_dir>/.intent/.vereditos-c<C>.txt`, no formato de quatro campos de sempre:
+     `<id> | releitura | confirmado | <categoria>`, com o `id` continuando a série do ciclo a partir
+     do último já usado (nunca reaproveitando um id de achado). `classe: releitura` é o que distingue
+     estas linhas das do consultor na tabela do INTENT-REVIEW.
+   - **Re-sele o recibo.** Depois de acrescentar as linhas, regrave
+     `<phase_dir>/.intent/.vereditos-c<C>.origem.json` com o sha256 novo e acrescente-se ao histórico:
+     ```bash
+     IN="<phase_dir>/.intent"; V="$IN/.vereditos-c<C>.txt"; O="$IN/.vereditos-c<C>.origem.json"
+     jq --arg s "$(sha256sum "$V" | cut -d' ' -f1)" --arg t "$(date -Is)" --argjson n "$(grep -cvE '^\s*(#|$)' "$V")" \
+        '.sha256=$s | .n_linhas=$n | .escritores += [{"agente":"gad-verificador","modo":"releitura","ts":$t}]' \
+        "$O" > "$O.tmp" && mv -f "$O.tmp" "$O"
+     ```
+     Recibo ausente (ciclo sem verificação, ou fase antiga) → crie-o com o mesmo schema do
+     `intent-verifica.md`, com `escritores` contendo só a sua entrada.
+   - Você **não** decide destino nem promove nada: continua valendo o item 5 do
+     `intent-verifica.md`. O que muda é que o veredito do que você achou não passa mais pela mão de
+     quem você está auditando.
    - **Ciclo 0:** você grava **só** `.releitura-c0.json` + `.releitura-c0.done`. O
      `.ciclo0.json` (sinos, correções, releitura) é escrito pelo **coordenador**, não por
      você — e o campo `.ciclo0.json`.`releitura` dele é o objeto **inteiro** do

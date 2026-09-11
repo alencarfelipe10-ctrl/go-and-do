@@ -462,6 +462,23 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    tira uma pergunta dirigida da conta. **Você NÃO relê os pareceres** quando o filho roda:
    a triagem trabalha sobre a tabela e os vereditos devolvidos.
 
+   **Alegação própria do coordenador (J1).** Fato de código que VOCÊ derivou lendo o repositório
+   — não veio de parecer nem de verificador — não vira emenda. Ele vira um item a mais no despacho
+   do `gad-verificador` deste ciclo (ou do próximo, se o filho já fechou), com a sua alegação e o
+   comando que a sustenta, e só entra no artefato com o veredito dele. Motivo medido: na F24.5 o
+   coordenador «deduziu» 6 categorias onde havia 8, emendou o CONTEXT do dono e gastou 2 commits,
+   2 releituras e 5 turnos para desfazer (`c1-04` → `c1-06`).
+   **Correção órfã (J5).** Correção que você promoveu e que não tem linha de veredito de um
+   verificador tem dois destinos, e só dois: (1) volta ao `gad-verificador` e ganha veredito; ou
+   (2) vira **dívida declarada** na seção `## Dívidas registradas` do INTENT-REVIEW, com
+   `origem: coordenador` e o destino (`plan-phase`, `code-review`, `deferred`, `dono`), e **não é
+   promovida neste ciclo**. **Exceção que não é exceção:** item devolvido pela releitura do 5b já vem
+   com veredito escrito por ela (J5b) — você promove sem julgar, no mesmo turno de sempre.
+   Escrever a linha de veredito você mesmo no `.vereditos-c<C>.txt` deixa rastro: o arquivo é selado
+   por `.vereditos-c<C>.origem.json` (sha256 + lista de `escritores`), e o `confere-etapa.sh 1`
+   reprova `VEREDITO-ALTERADO` quando o conteúdo não bate com o último selo. Não é impossível —
+   é auditável, e o lugar de registrar uma correção sua é a dívida, não a coluna de veredito.
+
    **Triagem (sua alçada, achado a achado sobre os `confirmado`) — num turno só.**
    - **Correção factual** → entra no script de correções (abaixo).
    - **Mexe em requisito, critério de aceite ou oráculo** (`toca_requisito_ou_criterio:
@@ -553,6 +570,8 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    maior que o da primeira. Só com a releitura limpa (`ok: true` em disco) você monta o
    briefing seguinte; `ok: false` ou arquivo incompleto dá exit 4 no `briefing-build.sh`, e
    no último ciclo o `confere-reconciliacao.sh --ordem` cobra o mesmo (`RELEITURA-ABERTA`).
+   As linhas de veredito desses itens são escritas pela própria releitura (J5b) — você promove,
+   não julga.
 6. **Convergência — rode o script e obedeça:**
    ```bash
    $HOME/.claude/skills/go-and-do/scripts/decide-ciclo.sh "<phase_dir>" <C>
