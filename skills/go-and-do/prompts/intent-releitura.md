@@ -147,7 +147,7 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
     "observacao": "..."}
    JSON
    mv -f "$IN/.releitura-c<C>.json.tmp" "$IN/.releitura-c<C>.json"
-   touch "$IN/.releitura-c<C>.done"
+   touch "$IN/.releitura-<RODADA>.done"
    ```
 
    - `commit` = o `commit` do `.aplicado`, verbatim.
@@ -163,6 +163,14 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
      o `.done`. O arquivo é obrigatório mesmo assim.
    - **Ordem obrigatória:** o `.json` completo primeiro, o `.done` por último — marcador na
      frente de JSON meio-escrito é fabricação de evidência.
+   - **`<RODADA>` é o rótulo que o despacho te passou**, não o número do ciclo: `c0` na primeira
+     rodada do ciclo 0, `c0b` na correção pós-releitura, `c0c` na seguinte, e assim por diante
+     (`c1`, `c1b`, …). O **`.json` continua com o nome fixo do ciclo** (`.releitura-c<C>.json`,
+     sobrescrito in-place) — é por ele que o gate do `briefing-build.sh` compara. O `.done` é que
+     ganha o nome da rodada: sem isso, o marcador da rodada anterior satisfaz a espera da seguinte e
+     o coordenador abre a rodada nova sobre premissa falsa (F24.5: 5 rodadas de releitura no ciclo 0,
+     `c0c` lançado 51 s antes de o `c0b` acabar).
+   - Despacho sem `<RODADA>` declarado → use o próprio ciclo (`c<C>`), que é o comportamento antigo.
    - **Ciclo 0:** você grava **só** `.releitura-c0.json` + `.releitura-c0.done`. O
      `.ciclo0.json` (sinos, correções, releitura) é escrito pelo **coordenador**, não por
      você — e o campo `.ciclo0.json`.`releitura` dele é o objeto **inteiro** do
