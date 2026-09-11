@@ -524,29 +524,69 @@ PYOBS
   # `<git-common-dir>/gad-suite/<tag>/` (comum aos worktrees): quantos lançamentos, quantos
   # relançamentos recusados pelo lock (rc 3) e o tempo total (iniciado → mtime do rc).
   COMMON3=$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)
-  SUITE=$(GAD_SUITE_DIR="${COMMON3:+$COMMON3/gad-suite}" python3 - 2>/dev/null <<'PYSUITE' || echo '{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[]}'
+  SUITE=$(GAD_SUITE_DIR="${COMMON3:+$COMMON3/gad-suite}" GAD_RL="$RL3" python3 - 2>/dev/null <<'PYSUITE' || echo '{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[],"fora_da_fase":[]}'
 import glob, json, os
 from datetime import datetime
 d = os.environ.get("GAD_SUITE_DIR") or ""
-lanc = rec = tempo = 0; tags = []
+
+
+def ts(s):
+    try:
+        return datetime.fromisoformat(s.strip()).timestamp()
+    except Exception:
+        return None
+
+
+# t0 = 1º despacho de executor no run-log desta etapa (mesmo critério do bloco da suíte final,
+# 45f/F24.5: sem ele o contador somava o `gate-onda-7` simulado de 05/09, de outra fase — o
+# diretório gad-suite/ é comum aos worktrees e não é apagado entre fases).
+t0 = 0.0
+t0chk = None
+try:
+    for ln in open(os.environ.get("GAD_RL") or "", encoding="utf-8", errors="replace"):
+        try:
+            e = json.loads(ln)
+        except Exception:
+            continue
+        if e.get("evento") == "checkpoint" and str(e.get("etapa", "")).startswith("3") and t0chk is None:
+            t0chk = ts(e.get("ts", "")) or None
+        if e.get("evento") == "despacho" and e.get("agente") == "gsd-executor":
+            t0 = ts(e.get("ts", "")) or 0.0
+            break
+except OSError:
+    pass
+if not t0 and t0chk:
+    t0 = t0chk
+
+lanc = rec = tempo = 0
+tags = []
+fora_da_fase = []
 for st in sorted(glob.glob(os.path.join(d, "*"))) if d and os.path.isdir(d) else []:
     if not os.path.isfile(os.path.join(st, "cmd")):
         continue
-    lanc += 1; tags.append(os.path.basename(st))
+    try:
+        ini = ts(open(os.path.join(st, "iniciado")).read())
+    except OSError:
+        ini = None
+    if t0 and (ini is None or ini < t0):
+        fora_da_fase.append(os.path.basename(st))
+        continue
+    lanc += 1
+    tags.append(os.path.basename(st))
     try:
         rec += sum(1 for l in open(os.path.join(st, "recusados")) if l.strip())
     except OSError:
         pass
     try:
-        ini = datetime.fromisoformat(open(os.path.join(st, "iniciado")).read().strip()).timestamp()
         fim = os.path.getmtime(os.path.join(st, "rc"))
-        tempo += max(0, int(fim - ini))
+        tempo += max(0, int(fim - (ini or 0)))
     except (OSError, ValueError):
         pass
-print(json.dumps({"lancamentos": lanc, "recusados": rec, "tempo_total_s": tempo, "tags": tags}))
+print(json.dumps({"lancamentos": lanc, "recusados": rec, "tempo_total_s": tempo,
+                  "tags": tags, "fora_da_fase": fora_da_fase}))
 PYSUITE
   )
-  jq -e . >/dev/null 2>&1 <<<"$SUITE" || SUITE='{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[]}'
+  jq -e . >/dev/null 2>&1 <<<"$SUITE" || SUITE='{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[],"fora_da_fase":[]}'
   EXTRAI=$(jq -c --argjson po "$PAR_OBS" --argjson a "$uw0" --argjson b "$uw1" --argjson su "$SUITE" \
     '. + $po + {use_worktrees:{inicio:$a, fecho:$b}, suite:$su}' <<<"$EXTRAI")
 
