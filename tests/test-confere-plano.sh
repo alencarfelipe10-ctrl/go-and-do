@@ -169,6 +169,21 @@ rm -f "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"; roda "$R"
 eq "veredito falha, exit 1"                 "$(campo .veredito)/$rc" "falha/1"
 eq "codigos = FORA-DA-LISTA"                "$(campo '.codigos|join(",")')" "FORA-DA-LISTA"
 
+echo "== (o) actuals.commits divergente do git log → COMMITS-SUBDECLARADOS informativo (46u)"
+R=$(repo o); plano "$R" 'files_modified:
+  - src/a.py' '<task type="auto">a</task>'
+commit "$R" 'feat(7-01): t1' src/a.py
+commit "$R" 'feat(7-01): t2' src/a.py
+commit "$R" 'feat(7-01): t3' src/a.py
+printf -- '---\nphase: 7\nplan: 01\nactuals:\n  tokens: 1\n  tasks: 1\n  commits: 2\n---\n# Summary\n' > "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"
+roda "$R"
+eq "veredito segue ok"                "$(campo .veredito)/$rc" "ok/0"
+eq "informativo com declarado × medido" "$(campo '[.informativos[]|select(startswith("COMMITS-SUBDECLARADOS"))][0]')" "COMMITS-SUBDECLARADOS (2 declarado × 3 medido)"
+# declarado igual ao medido → silêncio
+printf -- '---\nphase: 7\nplan: 01\nactuals:\n  commits: 3\n---\n# Summary\n' > "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"
+roda "$R"
+eq "declarado = medido → sem informativo" "$(campo '[.informativos[]|select(startswith("COMMITS-SUBDECLARADOS"))]|length')" "0"
+
 echo "== (i) C7: PLAN cita D-NN que o SUMMARY não cita → DECISAO-SEM-SUMMARY (informativo, veredito intocado)"
 ctx() { # <root> → 7-CONTEXT.md com D-01..D-03, D-03 informational
   printf '<decisions>\n## Implementation Decisions\n\n### A\n- **D-01 [auto, R1]:** a\n- **D-02 [auto, R1]:** b\n- **D-03 [pre-spec:PS-01, informational]:** ver SPEC\n\n### Claude'"'"'s Discretion\n- nada\n\n</decisions>\n' > "$1/.planning/phases/7-bancada/7-CONTEXT.md"

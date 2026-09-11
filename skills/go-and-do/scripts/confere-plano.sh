@@ -130,6 +130,14 @@ if [ ${#NAO_TOCADOS[@]} -gt 0 ]; then
   INFORMATIVOS+=("DECLARADO-NAO-TOCADO ($(printf '%s ' "${NAO_TOCADOS[@]}" | sed 's/ $//'))")
 fi
 
+# ── commits subdeclarados (46u) — informativo ────────────────────────────────
+# O `actuals.commits` do SUMMARY vem do template do fork, que manda medir pelo `git log`.
+# Na F24.5 oito dos nove SUMMARYs subdeclararam. Aqui só se cruza declarado × medido.
+DECL_C=$({ sed -n '/^actuals:/,/^[^ ]/p' "$SUM_F" 2>/dev/null || true; } | sed -n 's/^[ \t]*commits:[ \t]*\([0-9]\+\).*/\1/p' | head -1)
+if [ -n "${DECL_C:-}" ] && [ "$DECL_C" != "$N_COMMITS" ]; then
+  INFORMATIVOS+=("COMMITS-SUBDECLARADOS ($DECL_C declarado × $N_COMMITS medido)")
+fi
+
 # ── PLAN ⊆ SUMMARY nas D-NN citadas (informativo) ─────────────────────────────
 CTX_F=$(ls "$PHASE_DIR"/*-CONTEXT.md 2>/dev/null | head -1 || true)
 D_PLAN="[]"; D_SUM="[]"; D_FALT="[]"; D_INFO="[]"; D_ESTADO="n/a"
