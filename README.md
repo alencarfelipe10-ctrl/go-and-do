@@ -166,7 +166,7 @@ Registre no `~/.claude/settings.json`, em `hooks.PreToolUse`, apontando para o c
 
 Cada negativa vira um `incidente` no run-log da fase.
 
-### Hook `gad-rtk-worktree` (só quem usa o [RTK](https://github.com/) como hook de Bash)
+### Hook `gad-rtk-worktree` (só quem usa o RTK como hook de Bash)
 
 Se o seu `~/.claude/settings.json` tem um `PreToolUse`/`Bash` com `rtk hook claude`, ele
 reescreve `git status` em `rtk git status`. Para um subagente com `isolation: worktree` a
