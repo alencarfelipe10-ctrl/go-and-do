@@ -36,6 +36,11 @@
 #   `sem_aspas` apaga o caminho junto com as aspas) e NUNCA resolve symlink — o
 #   `~/.claude/skills/go-and-do` aponta para o repositório de desenvolvimento, e canonizar
 #   faria a regra morder a bancada de conserto, que não é uma rodada.
+# Rastro sem negativa (v2.6.0, 45n): `git` chamado por dentro de Python
+# (`subprocess.run(["git"…])`, `os.system("… git …")`, `sh -c "… git …"`) grava `incidente`
+# no run-log e SEGUE. Na F24.5 três executores commitaram por esse caminho sem deixar
+# rastro no hook. Negar quebraria script de medição honesto — o que se quer é que o
+# contorno deixe de ser silencioso.
 # O corpo entre aspas de `bash -c "…"`, `sh -c '…'`, `bash -lc` e `eval "…"` passa pelas
 # mesmas regras (um nível): `bash -c "uv run pytest &"` é a evasão seguinte ao `nohup`
 # e custa uma linha (P21, D1).
@@ -147,6 +152,21 @@ def destinos_de_escrita(texto):
         for m in rx.finditer(texto):
             d += re.findall(r"[^\s'\"();|&<>]*/[^\s'\"();|&<>]+", _segmento(texto, m.start()))
     return d
+
+
+# ── 45n: rastro (não negativa) de `git` chamado por dentro de Python ──────────────────
+GIT_INDIRETO = (
+    re.compile(r"subprocess\.(?:run|Popen|check_output|check_call|call)\s*\(\s*\[?\s*[\"']git\b"),
+    re.compile(r"os\.system\s*\([^)]*\bgit\b"),
+    re.compile(r"sh\s+-c\s+[\"'][^\"']*\bgit\b"),
+)
+
+
+def git_por_subprocess(cmd):
+    """True quando o comando embute uma chamada de git por dentro de Python/sh -c."""
+    texto = sem_heredoc(cmd)
+    alvos = [texto, cmd]          # heredoc conta: o script .py costuma vir por heredoc
+    return any(rx.search(t) for rx in GIT_INDIRETO for t in alvos)
 
 
 def motivo_instrumento(cmd):
@@ -331,6 +351,10 @@ def main():
     ti = d.get("tool_input") or {}
     cmd = ti.get("command") or ""
     motivo = decide(cmd, ti.get("run_in_background"))
+    if git_por_subprocess(cmd):
+        det = re.sub(r"\s+", " ", cmd).strip()[:120]
+        registra(pont, agente, f"git por subprocess — contorno de guarda (45n): {det}",
+                 "git_por_subprocess")
     if not motivo:
         return
     if motivo.startswith("instrumento_sob_julgamento"):

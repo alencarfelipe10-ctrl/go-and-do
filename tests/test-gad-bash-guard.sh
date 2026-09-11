@@ -215,5 +215,39 @@ done
 r=$(chama "sed -i s/a/b/ $H/scripts/confere-plano.sh" - -); [ "$r" = allow ] && ok "sem agent_type (dono) → allow" || bad "sem agent_type" "$r"
 r=$(chama "sed -i s/a/b/ $H/scripts/confere-plano.sh" - gsd-executor "$PAI"); [ "$r" = allow ] && ok "sem ponteiro de rodada → allow" || bad "sem ponteiro" "$r"
 
+echo "── 45n: rastro de git por subprocess (P-12) — allow + incidente"
+verifica_rastro() { # <descrição> <cmd> <esperado allow|deny> <eventos esperados>
+  local desc="$1" c="$2" esp="$3" nev="$4" a b r
+  a=$(n_inc); r=$(chama "$c"); b=$(n_inc)
+  if [ "$r" = "$esp" ] && [ "$b" = $((a+nev)) ]; then ok "$desc"
+  else bad "$desc" "decisão=$r (esperado $esp); eventos=$((b-a)) (esperado $nev)"; fi
+}
+verifica_rastro "subprocess.run(['git'…]) → allow + 1 incidente" \
+  "uv run python -c \"import subprocess; subprocess.run(['git','add','-A'])\"" allow 1
+# LACUNA DECLARADA (45n): a regex do contrato casa a aspa NUA (["'] ). Quando o comando chega
+# com a aspa ESCAPADA (`[\"git\"`, forma que aparece quando o .py vem dentro de outra string
+# com aspas duplas), o rastro NÃO dispara. Não é negativa nenhuma — só rastro que falta.
+# Registrado como pendência do P-12; alargar a regex é decisão do dono.
+verifica_rastro "aspa escapada (\\\"git\\\") → allow, SEM rastro (lacuna declarada)" \
+  'uv run python -c "import subprocess; subprocess.run([\"git\",\"add\"])"' allow 0
+verifica_rastro "os.system(… git …) → allow + 1 incidente" \
+  'python3 -c "import os; os.system(\"git commit -m x\")"' allow 1
+verifica_rastro "sh -c \"… git …\" → allow + 1 incidente" \
+  'sh -c "git status --short"' allow 1
+verifica_rastro "git direto (sem Python) → allow, sem evento" 'git status --short' allow 0
+verifica_rastro "subprocess.run([\"ls\"]) → allow, sem evento" \
+  'python3 -c "import subprocess; subprocess.run([\"ls\"])"' allow 0
+verifica_rastro "sh -c com github na URL → allow, sem evento (\\bgit\\b não casa github)" \
+  'sh -c "curl https://github.com/x"' allow 0
+verifica_rastro "heredoc com subprocess.run([\"git\"…]) → allow + 1 incidente" \
+  "$(printf 'python3 - <<%s\nimport subprocess\nsubprocess.run(["git","log"])\nPY' "'PY'")" allow 1
+verifica_rastro "negado pelo P-11 E com rastro → deny + 2 eventos" \
+  "sh -c \"git log > \$HOME/.claude/skills/go-and-do/scripts/x.sh\"" deny 2
+# o incidente traz o motivo canônico
+tail -n5 "$RL" | grep -q '"motivo":"git_por_subprocess"' \
+  && ok "incidente do rastro com motivo=git_por_subprocess" || bad "motivo do rastro" "$(tail -n1 "$RL")"
+r=$(chama 'python3 -c "import subprocess; subprocess.run([\"git\",\"log\"])"' - -)
+[ "$r" = allow ] && ok "fora de rodada (sem agent_type) → allow, sem rastro" || bad "fora de rodada" "$r"
+
 echo; echo "resultado: $ok ok, $falhas falha(s)"
 [ "$falhas" -eq 0 ]
