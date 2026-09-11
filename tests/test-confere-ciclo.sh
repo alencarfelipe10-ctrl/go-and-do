@@ -234,6 +234,69 @@ echo "== manifesto ilegível não zera a contagem (fail-closed)"
 "$SCRIPT" --tabela --perguntas "$TMP/nao-existe.json" "$CODEX" > "$TMP/t7.txt" 2>/dev/null
 [ "$(campo "$TMP/t7.txt" brutas)" -ge 1 ] && ok "manifesto ausente vira bruto, não zero" || erro "guarda cega"
 
+echo "── 46o/45m: modo --frescor (briefing e checker stale) ─────────────────────────"
+FR="$TMP/frescor"; mkdir -p "$FR"
+GG() { git -C "$1" -c user.email=t@t -c user.name=t "${@:2}"; }
+GGC() { GIT_COMMITTER_DATE="$2" git -C "$1" -c user.email=t@t -c user.name=t \
+          -c commit.gpgsign=false commit -qm "$3" --date "$2" >/dev/null 2>&1; }
+monta_fr() { # <nome> → ecoa o phase_dir (repo git com 1 PLAN.md commitado)
+  local r="$FR/$1"; local pd="$r/.planning/phases/24-t"
+  mkdir -p "$pd"; GG "$r" init -q
+  printf -- '---\ntitulo: p1\n---\ncorpo\n' > "$pd/24-01-PLAN.md"
+  GG "$r" add -A >/dev/null 2>&1
+  GGC "$r" "2026-09-01T10:00:00" "plan"
+  printf '%s\n' "$pd"
+}
+
+# (1) trilha do checker commitada DEPOIS do PLAN.md → ok
+PDF="$(monta_fr ok1)"; R1="$(dirname "$(dirname "$(dirname "$PDF")")")"
+mkdir -p "$PDF/.plan-checker"; printf 'status: PASSED\n' > "$PDF/.plan-checker/iter-9.yaml"
+GG "$R1" add -A >/dev/null 2>&1
+GGC "$R1" "2026-09-02T10:00:00" "checker"
+J="$("$SCRIPT" --frescor "$PDF" 24 1)"; RC=$?
+[ "$(printf '%s' "$J" | jq -r .veredito)" = ok ] && [ "$RC" = 0 ] \
+  && ok "--frescor: checker mais novo que o PLAN.md → ok, exit 0" || erro "--frescor caso verde: $J rc=$RC"
+
+# (2) sem .plan-checker/ → não reprova por ausência
+PDF="$(monta_fr semchecker)"
+J="$("$SCRIPT" --frescor "$PDF" 24 1)"; RC=$?
+[ "$(printf '%s' "$J" | jq -r .veredito)" = ok ] && [ "$RC" = 0 ] \
+  && ok "--frescor: sem trilha do checker → ok (não se reprova por ausência)" || erro "--frescor sem checker: $J rc=$RC"
+
+# (3) sem PLAN.md → nao_se_aplica
+PDF="$(monta_fr semplan)"; rm -f "$PDF"/*-PLAN.md
+J="$("$SCRIPT" --frescor "$PDF" 24 1)"; RC=$?
+[ "$(printf '%s' "$J" | jq -r .veredito)" = nao_se_aplica ] && [ "$RC" = 0 ] \
+  && ok "--frescor: sem PLAN.md → nao_se_aplica, exit 0" || erro "--frescor sem plano: $J rc=$RC"
+
+# (4) checker ANTERIOR ao replan → CHECKER-STALE (o caso do cartão 6, isolado)
+PDF="$(monta_fr stale)"; R4="$(dirname "$(dirname "$(dirname "$PDF")")")"
+mkdir -p "$PDF/.plan-checker"; printf 'status: PASSED\n' > "$PDF/.plan-checker/iter-1.yaml"
+GG "$R4" add -A >/dev/null 2>&1
+GGC "$R4" "2026-08-30T10:00:00" "checker antigo"
+printf -- '---\ntitulo: p1 replanejado\n---\ncorpo novo\n' > "$PDF/24-01-PLAN.md"
+GG "$R4" add -A >/dev/null 2>&1
+GGC "$R4" "2026-09-05T10:00:00" "replan"
+J="$("$SCRIPT" --frescor "$PDF" 24 2)"; RC=$?
+printf '%s' "$J" | jq -e '.codigos|index("CHECKER-STALE")' >/dev/null && [ "$RC" = 1 ] \
+  && ok "--frescor: replan sem re-rodar o checker → CHECKER-STALE, exit 1" || erro "--frescor CHECKER-STALE: $J rc=$RC"
+
+# (4b) briefing do ciclo montado ANTES do replan → BRIEFING-STALE
+mkdir -p "$PDF/pareceres"; touch -d "2026-09-03 10:00:00" "$PDF/pareceres/briefing-planrev-c2.md"
+J="$("$SCRIPT" --frescor "$PDF" 24 2)"
+printf '%s' "$J" | jq -e '.codigos|index("BRIEFING-STALE")' >/dev/null \
+  && ok "--frescor: briefing mais velho que o PLAN.md → BRIEFING-STALE" || erro "--frescor BRIEFING-STALE: $J"
+
+# (5) fora de repositório git → cai para mtime, não quebra
+PDF="$(monta_fr semgit)"; rm -rf "$(dirname "$(dirname "$(dirname "$PDF")")")/.git"
+J="$("$SCRIPT" --frescor "$PDF" 24 1)"; RC=$?
+[ -n "$(printf '%s' "$J" | jq -r .plan_mais_novo)" ] && [ "$RC" -le 1 ] \
+  && ok "--frescor: fora de git não quebra (cai para mtime)" || erro "--frescor sem git: $J rc=$RC"
+
+# (6) uso inválido
+"$SCRIPT" --frescor /nao/existe >/dev/null 2>&1
+[ "$?" = 2 ] && ok "--frescor: uso inválido → exit 2" || erro "--frescor uso"
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-confere-ciclo: TUDO OK" || echo "test-confere-ciclo: $falhas falha(s)"
 [ "$falhas" -eq 0 ]
