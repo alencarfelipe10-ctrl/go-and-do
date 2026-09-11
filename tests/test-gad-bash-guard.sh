@@ -145,5 +145,42 @@ python3 -c "import sys; sys.exit(0 if float('$ms')<0.05 else 1)" && ok "sessão 
 ms=$( { /usr/bin/time -f '%e' bash "$HOOK" <<<'{"cwd":"/tmp","agent_type":"gsd-executor","tool_name":"Bash","tool_input":{"command":"nohup x &"}}' >/dev/null; } 2>&1 )
 python3 -c "import sys; sys.exit(0 if float('$ms')<0.05 else 1)" && ok "subagente fora de rodada: ${ms}s" || bad "lento" "${ms}s"
 
+# ── P-01/P-02: a receita que o prompt PRESCREVE tem de passar no guard ────────────────
+# Extraído do arquivo do prompt, nunca copiado à mão: prompt e teste não podem divergir
+# em silêncio (lição da v2.3.0 — nunca parafrasear literal que um gate grepa).
+echo "── receitas prescritas pelos prompts (P-01/P-02)"
+PROMPTS="$REPO/skills/go-and-do/prompts"
+bloco_bash() { # <arquivo> <n-do-bloco a partir de 1> → conteúdo do n-ésimo ```bash … ```
+  awk -v want="$2" '
+    /^[[:space:]]*```bash[[:space:]]*$/ { n++; if (n==want) { dentro=1; next } }
+    /^[[:space:]]*```[[:space:]]*$/     { if (dentro) { exit } }
+    dentro { print }' "$1"
+}
+
+CONV_LANCA=$(bloco_bash "$PROMPTS/convergence.md" 1)
+CONV_ESPERA=$(bloco_bash "$PROMPTS/convergence.md" 2)
+CR_LANE=$(bloco_bash "$PROMPTS/code-review.md" 1)
+[ -n "$CONV_LANCA" ] && [ -n "$CONV_ESPERA" ] && [ -n "$CR_LANE" ] \
+  || bad "extração dos blocos bash dos prompts" "algum bloco saiu vazio"
+
+[ "$(chama "$CONV_LANCA")"  = allow ] && ok "convergence.md §2 — lançador passa no guard" \
+  || bad "convergence.md §2 — lançador" "$(chama "$CONV_LANCA")"
+[ "$(chama "$CONV_ESPERA")" = allow ] && ok "convergence.md §2 — waiter passa no guard" \
+  || bad "convergence.md §2 — waiter" "$(chama "$CONV_ESPERA")"
+[ "$(chama "$CR_LANE")"     = allow ] && ok "code-review.md passo 1 — lane Codex passa no guard" \
+  || bad "code-review.md passo 1" "$(chama "$CR_LANE")"
+
+# regressão: as receitas ANTIGAS continuam negadas (o guard não foi afrouxado)
+ANTIGO_2LANES='( $HOME/.claude/skills/go-and-do/scripts/roda-codex.sh "/pd" "24" 1 /b ) &
+( $HOME/.claude/skills/go-and-do/scripts/roda-agy.sh   "/pd" "24" 1 /b ) &
+wait'
+ANTIGO_SEM_TOUCH='( $HOME/.claude/skills/go-and-do/scripts/roda-codex.sh "/pd" "24" review /b --out /o ) &'
+[ "$(chama "$ANTIGO_2LANES")"    = deny ] && ok "receita antiga de 2 lanes em & segue negada" \
+  || bad "receita antiga de 2 lanes" "$(chama "$ANTIGO_2LANES")"
+[ "$(chama "$ANTIGO_SEM_TOUCH")" = deny ] && ok "subshell & sem touch segue negado" \
+  || bad "subshell & sem touch" "$(chama "$ANTIGO_SEM_TOUCH")"
+[ "$(chama "$CONV_ESPERA" true)" = deny ] && ok "waiter com run_in_background=true é negado" \
+  || bad "waiter com run_in_background" "$(chama "$CONV_ESPERA" true)"
+
 echo; echo "resultado: $ok ok, $falhas falha(s)"
 [ "$falhas" -eq 0 ]
