@@ -238,6 +238,23 @@ def valida_releitura(rel, aplicado, vazio, rotulo, ciclo):  # noqa: C901
                 "o commit do ciclo levou só o delta do ciclo)" % p)
     return paths
 
+def guarda_sinos_reais(diretorio):
+    """`sinos: []` (ou dispensa) com sino real no disco esconderia R3 — reprova."""
+    for nome in (".sinos-spec.txt", ".sinos-discuss.txt"):
+        p = os.path.join(diretorio, nome)
+        if not os.path.exists(p):
+            continue
+        # as respostas do checklist de lições (R8(3)) e as linhas `leitura_propria:` do
+        # discuss (evidência de auditoria, plano 2/C5) moram no mesmo arquivo e NÃO são
+        # sinos — um arquivo só com elas não contradiz `sinos: []`.
+        with open(p, encoding="utf-8", errors="replace") as fh:
+            reais = [l for l in fh
+                     if l.strip()
+                     and not re.match(r"^\s*(licao \d+:|leitura_propria:)", l)]
+        if reais:
+            die("`.ciclo0.json`.sinos=[] mas %s tem sino real — sino sumindo (R3)" % nome)
+
+
 info = {"ok": True, "gate": "c%s" % C, "avisos": [], "sinos": []}
 
 if str(C) == "1":
@@ -245,87 +262,93 @@ if str(C) == "1":
     exige_chaves(z, ["v", "sinos", "correcoes", "releitura"], "`.ciclo0.json`")
     if z["v"] != 1:
         die("`.ciclo0.json`: schema v=%s desconhecido (esperado v=1)" % z["v"])
-    sinos, cors = z["sinos"], z["correcoes"]
-    if not isinstance(sinos, list) or not isinstance(cors, list):
-        die("`.ciclo0.json`: sinos e correcoes têm de ser listas")
+    # 46(h), F24.5: o ciclo 0 nasceu para triar sino de filho. Quando o dono escreve SPEC e
+    # CONTEXT à parte não há filho, não há sino — e na 24.5 o coordenador abriu o ciclo assim
+    # mesmo e inventou 15. `dispensado: true` é o registro dessa ausência: sinos e correções
+    # vazios, sem releitura e sem commit. A guarda anti-cegueira continua valendo — é
+    # ela que impede a dispensa de virar escapatória com sino real no disco.
+    if z.get("dispensado") is True:
+        if z["sinos"] or z["correcoes"]:
+            die("`.ciclo0.json`: `dispensado: true` com sinos/correções — dispensa é ausência, não atalho")
+        guarda_sinos_reais(IN)
+        info["ciclo0_vazio"] = True
+        info["ciclo0_dispensado"] = True
+        info["sinos"] = []
+        info["avisos"].append(
+            "ciclo 0 dispensado: %s" % str(z.get("motivo") or "sem motivo declarado"))
+    else:
+        sinos, cors = z["sinos"], z["correcoes"]
+        if not isinstance(sinos, list) or not isinstance(cors, list):
+            die("`.ciclo0.json`: sinos e correcoes têm de ser listas")
 
-    ids_cor = {}
-    sem_hash = []          # ids com `hash` presente mas VAZIO (C1)
-    for c in cors:
-        if not isinstance(c, dict) or "id" not in c or "hash" not in c:
-            die("`.ciclo0.json`.correcoes: item sem id/hash")
-        if c["id"] in ids_cor:
-            die("`.ciclo0.json`.correcoes: id duplicado %s" % c["id"])
-        ids_cor[c["id"]] = c["hash"]
-        if not str(c["hash"]).strip():
-            sem_hash.append(c["id"])
+        ids_cor = {}
+        sem_hash = []          # ids com `hash` presente mas VAZIO (C1)
+        for c in cors:
+            if not isinstance(c, dict) or "id" not in c or "hash" not in c:
+                die("`.ciclo0.json`.correcoes: item sem id/hash")
+            if c["id"] in ids_cor:
+                die("`.ciclo0.json`.correcoes: id duplicado %s" % c["id"])
+            ids_cor[c["id"]] = c["hash"]
+            if not str(c["hash"]).strip():
+                sem_hash.append(c["id"])
 
-    referenciados = set()
-    for s in sinos:
-        if not isinstance(s, dict):
-            die("`.ciclo0.json`.sinos: item não é objeto")
-        for k in ("id", "origem", "disposicao"):
-            if k not in s:
-                die("`.ciclo0.json`.sinos: item sem `%s`" % k)
-        if s["origem"] not in ("spec", "discuss"):
-            die("sino %s: origem `%s` inválida (spec|discuss)" % (s["id"], s["origem"]))
-        if s["disposicao"] not in ("corrigido", "descartado", "aberto"):
-            die("sino %s: disposicao `%s` inválida" % (s["id"], s["disposicao"]))
-        if s["disposicao"] == "corrigido":
-            cid = s.get("correcao_id")
-            if not cid:
-                die("sino %s: `corrigido` exige exatamente um `correcao_id`" % s["id"])
-            if cid not in ids_cor:
-                die("sino %s: correcao_id `%s` não existe em correcoes[]" % (s["id"], cid))
-            referenciados.add(cid)
-        elif "correcao_id" in s:
-            die("sino %s: `%s` proíbe o campo `correcao_id`" % (s["id"], s["disposicao"]))
-    orfas = sorted(set(ids_cor) - referenciados)
-    if orfas:
-        die("`.ciclo0.json`.correcoes sem sino que as referencie: %s" % ", ".join(orfas))
+        referenciados = set()
+        for s in sinos:
+            if not isinstance(s, dict):
+                die("`.ciclo0.json`.sinos: item não é objeto")
+            for k in ("id", "origem", "disposicao"):
+                if k not in s:
+                    die("`.ciclo0.json`.sinos: item sem `%s`" % k)
+            if s["origem"] not in ("spec", "discuss"):
+                die("sino %s: origem `%s` inválida (spec|discuss)" % (s["id"], s["origem"]))
+            if s["disposicao"] not in ("corrigido", "descartado", "aberto"):
+                die("sino %s: disposicao `%s` inválida" % (s["id"], s["disposicao"]))
+            if s["disposicao"] == "corrigido":
+                cid = s.get("correcao_id")
+                if not cid:
+                    die("sino %s: `corrigido` exige exatamente um `correcao_id`" % s["id"])
+                if cid not in ids_cor:
+                    die("sino %s: correcao_id `%s` não existe em correcoes[]" % (s["id"], cid))
+                referenciados.add(cid)
+            elif "correcao_id" in s:
+                die("sino %s: `%s` proíbe o campo `correcao_id`" % (s["id"], s["disposicao"]))
+        orfas = sorted(set(ids_cor) - referenciados)
+        if orfas:
+            die("`.ciclo0.json`.correcoes sem sino que as referencie: %s" % ", ".join(orfas))
 
-    # Guarda anti-cegueira: `sinos: []` com sinos reais no disco esconderia R3.
-    if not sinos:
-        for nome in (".sinos-spec.txt", ".sinos-discuss.txt"):
-            p = os.path.join(IN, nome)
-            if not os.path.exists(p):
-                continue
-            # as respostas do checklist de lições (R8(3)) e as linhas `leitura_propria:`
-            # do discuss (evidência de auditoria, plano 2/C5) moram no mesmo arquivo e
-            # NÃO são sinos — um arquivo só com elas não contradiz `sinos: []`.
-            with open(p, encoding="utf-8", errors="replace") as fh:
-                reais = [l for l in fh
-                         if l.strip()
-                         and not re.match(r"^\s*(licao \d+:|leitura_propria:)", l)]
-            if reais:
-                die("`.ciclo0.json`.sinos=[] mas %s tem sino real — sino sumindo (R3)" % nome)
+        if not sinos:
+            guarda_sinos_reais(IN)
 
-    aplicado = None
-    if cors:
-        aplicado = carrega(os.path.join(IN, ".correcoes-c0.aplicado"),
-                           "`.intent/.correcoes-c0.aplicado` (E2c)")
-        exige_chaves(aplicado, ["commit", "caminhos", "correcoes"], "`.correcoes-c0.aplicado`")
-        par_z = sorted((c["id"], c["hash"]) for c in cors)
-        par_a = sorted((c.get("id"), c.get("hash")) for c in aplicado["correcoes"])
-        if par_z != par_a:
-            die("`.ciclo0.json`.correcoes %s != `.aplicado`.correcoes %s" % (par_z, par_a))
-    # C1: o veredito da válvula vem AQUI — logo depois de carregar o `.aplicado` e
-    # ANTES da releitura. Assim "hash vazio" nunca se disfarça de erro de releitura.
-    valida_hashes(aplicado, sem_hash, "`.ciclo0.json`.correcoes", info["avisos"])
-    valida_releitura(z["releitura"], aplicado, False, "`.ciclo0.json`.releitura", "c0")
+        aplicado = None
+        if cors:
+            aplicado = carrega(os.path.join(IN, ".correcoes-c0.aplicado"),
+                               "`.intent/.correcoes-c0.aplicado` (E2c)")
+            exige_chaves(aplicado, ["commit", "caminhos", "correcoes"], "`.correcoes-c0.aplicado`")
+            par_z = sorted((c["id"], c["hash"]) for c in cors)
+            par_a = sorted((c.get("id"), c.get("hash")) for c in aplicado["correcoes"])
+            if par_z != par_a:
+                die("`.ciclo0.json`.correcoes %s != `.aplicado`.correcoes %s" % (par_z, par_a))
+        # C1: o veredito da válvula vem AQUI — logo depois de carregar o `.aplicado` e
+        # ANTES da releitura. Assim "hash vazio" nunca se disfarça de erro de releitura.
+        valida_hashes(aplicado, sem_hash, "`.ciclo0.json`.correcoes", info["avisos"])
+        valida_releitura(z["releitura"], aplicado, False, "`.ciclo0.json`.releitura", "c0")
 
-    if not os.path.exists(os.path.join(IN, ".releitura-c0.done")):
-        die("`.intent/.releitura-c0.done` ausente (R1: a releitura do ciclo 0 não fechou)")
+        # 45(h): o `.done` passou a carregar o rótulo da rodada (`c0`, `c0b`, `c0c`…). O gate
+        # exige que EXISTA um marcador da família do ciclo 0; qual rodada fechou por último é
+        # decidido pelo `.releitura-c0.json`, que continua com nome fixo.
+        import glob as _glob
+        if not _glob.glob(os.path.join(IN, ".releitura-c0*.done")):
+            die("`.intent/.releitura-c0*.done` ausente (R1: a releitura do ciclo 0 não fechou)")
 
-    info["ciclo0_vazio"] = not cors
-    info["sinos"] = [
-        {"id": s["id"], "origem": s["origem"], "disposicao": s["disposicao"],
-         "correcao_id": s.get("correcao_id", "")}
-        for s in sinos
-    ]
-    info["correcoes"] = [{"id": k, "hash": v} for k, v in ids_cor.items()]
-    if not cors:
-        info["avisos"].append("ciclo 0 declarou 0 correções (arrays vazios explícitos)")
+        info["ciclo0_vazio"] = not cors
+        info["sinos"] = [
+            {"id": s["id"], "origem": s["origem"], "disposicao": s["disposicao"],
+             "correcao_id": s.get("correcao_id", "")}
+            for s in sinos
+        ]
+        info["correcoes"] = [{"id": k, "hash": v} for k, v in ids_cor.items()]
+        if not cors:
+            info["avisos"].append("ciclo 0 declarou 0 correções (arrays vazios explícitos)")
 
 else:
     try:

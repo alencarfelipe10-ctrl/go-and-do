@@ -226,6 +226,71 @@ else
   ok "gerador do fork não encontrado ao lado — casos C6 pulados"
 fi
 
+echo "== M4 (46 j) — --inicio tolera alvo ainda inexistente (o INTENT-REVIEW nasce no ciclo)"
+monta_repo
+rm -f "$PD/24.3-INTENT-REVIEW.md"
+saida=$(RUN "$PD" 0 --inicio --artefatos "$PD/24.3-SPEC.md" "$PD/24.3-CONTEXT.md" \
+        "$PD/24.3-INTENT-REVIEW.md" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "--inicio com alvo ausente: exit 0 (era exit 3)" \
+  || erro "esperado 0, veio $rc" "$saida"
+n=$(jq '[.alvos[] | select(.ausente_no_inicio == true)] | length' "$PD/.intent/.correcoes-c0.base.json" 2>/dev/null)
+[ "$n" = 1 ] && ok "o alvo ausente entra no .base.json com ausente_no_inicio:true" \
+  || erro "esperado 1 alvo ausente, veio [$n]"
+b=$(jq -r '.alvos[] | select(.ausente_no_inicio == true) | .blob_pre' "$PD/.intent/.correcoes-c0.base.json")
+[ -z "$b" ] && ok "blob_pre vazio (delta inteiro é do ciclo)" || erro "blob_pre deveria ser vazio: [$b]"
+
+echo "== M4 — ponta a ponta: o INTENT-REVIEW nasce DENTRO do ciclo e entra no commit"
+monta_repo
+rm -f "$PD/24.3-INTENT-REVIEW.md"
+RUN "$PD" 0 --inicio --artefatos "$PD/24.3-SPEC.md" "$PD/24.3-CONTEXT.md" \
+    "$PD/24.3-INTENT-REVIEW.md" >/dev/null 2>&1 || erro "--inicio falhou no ponta a ponta"
+printf 'review criado no ciclo\n' > "$PD/24.3-INTENT-REVIEW.md"
+echo "correcao do ciclo" >> "$PD/24.3-SPEC.md"
+saida=$(RUN "$PD" 0 --ids "c0-01" --artefatos "$PD/24.3-SPEC.md" "$PD/24.3-CONTEXT.md" \
+        "$PD/24.3-INTENT-REVIEW.md" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "--ids fecha o ciclo com o alvo que nasceu dentro dele (exit 0)" \
+  || erro "esperado 0, veio $rc" "$saida"
+jq -e '[.caminhos[] | select(endswith("24.3-INTENT-REVIEW.md"))] | length == 1' \
+  "$PD/.intent/.correcoes-c0.aplicado" >/dev/null 2>&1 \
+  && ok "o arquivo novo entrou nos caminhos comitados" \
+  || erro "INTENT-REVIEW ficou de fora do commit" "$(jq -c '.caminhos' "$PD/.intent/.correcoes-c0.aplicado" 2>&1)"
+
+echo "== M4 — nos modos --ids/--vazio a ausência segue sendo erro"
+monta_repo
+rm -f "$PD/24.3-INTENT-REVIEW.md"
+saida=$(RUN "$PD" 0 --ids "c0-01" --artefatos "$PD/24.3-SPEC.md" \
+        "$PD/24.3-INTENT-REVIEW.md" 2>&1); rc=$?
+[ "$rc" = 3 ] && printf '%s' "$saida" | grep -q 'alvo inexistente' \
+  && ok "--ids com alvo ausente: exit 3, como antes" || erro "esperado 3, veio $rc" "$saida"
+
+echo "== M5 (46 j) — o índice de decisões não conta como 2.º caminho na regra do hash"
+monta_repo
+mkdir -p "$REPO/.planning"
+printf '# indice\n' > "$REPO/.planning/DECISIONS-INDEX.md"
+cat > "$REPO/gerador.py" <<'PYGEN'
+import sys, pathlib
+planning = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else ".planning")
+(planning / "DECISIONS-INDEX.md").write_text("# indice regenerado\n")
+PYGEN
+G add -A >/dev/null; G commit -qm indice >/dev/null
+saida=$(GAD_DECISIONS_INDEX="$REPO/gerador.py" RUN "$PD" 1 --inicio \
+        --artefatos "$PD/24.3-CONTEXT.md" 2>&1); rc=$?
+[ "$rc" = 0 ] || erro "--inicio com índice falhou (rc=$rc)" "$saida"
+echo "correcao do ciclo" >> "$PD/24.3-CONTEXT.md"
+saida=$(GAD_DECISIONS_INDEX="$REPO/gerador.py" RUN "$PD" 1 --ids "c1-01,c1-02" \
+        --artefatos "$PD/24.3-CONTEXT.md" 2>&1); rc=$?
+if [ "$rc" = 0 ]; then
+  apl="$PD/.intent/.correcoes-c1.aplicado"
+  ncam=$(jq '.caminhos | length' "$apl")
+  nsem=$(jq '.hash_ausente | length' "$apl")
+  [ "$ncam" -ge 2 ] && ok "o ciclo comitou $ncam caminhos (CONTEXT + índice derivado)" \
+    || erro "esperava 2+ caminhos, veio $ncam"
+  [ "$nsem" = 0 ] && ok "0 correções sem hash (era 8 na F24.5)" \
+    || erro "ainda há $nsem correção(ões) em hash_ausente[]" "$(jq -c '{caminhos,hash_ausente}' "$apl")"
+else
+  erro "commit do ciclo com índice falhou (rc=$rc)" "$saida"
+fi
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-correcoes-commit: TUDO OK" || echo "test-correcoes-commit: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

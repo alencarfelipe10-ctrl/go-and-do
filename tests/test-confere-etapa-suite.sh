@@ -192,6 +192,40 @@ eq "…idempotente: continua UMA linha suite_ressalva" "$(grep -c '^suite_ressal
 bash "$SR" "$PD" 96 "motivo" >/tmp/sf8-semver.txt 2>&1; RC=$?
 eq "sem VERIFICATION (NN errado): exit 2" "$RC" "2"
 
+echo "── contador de lançamentos filtrado pela fase (45f) ──"
+
+# 11. lançamento anterior ao 1º despacho da etapa não conta
+IFS='|' read -r R PD <<<"$(monta3 s11foradafase)"
+prep "$R" "$PD" 'roda-suite.sh --gate-onda'
+despacho_retorno "$PD/95-RUN-LOG.jsonl"          # 1º despacho: 2026-09-01T10:00:00-03:00
+suite_tag "$R" gate-onda-7 2026-09-05T10:00:00-03:00 0   # bancada de OUTRA fase, DEPOIS
+suite_tag "$R" velha       2026-08-20T09:00:00-03:00 0   # lançamento de fase anterior
+suite_tag "$R" gate-onda-1 2026-09-01T10:40:00-03:00 0
+J="$(confere3 "$R")"
+eq "lancamentos conta só o desta etapa"  "$(printf '%s' "$J" | jq -r '.extrai.suite.lancamentos')" "2"
+eq "fora_da_fase nomeia a tag velha"     "$(printf '%s' "$J" | jq -r '.extrai.suite.fora_da_fase|join(",")')" "velha"
+
+echo "── colisão real entre planos da mesma onda (46t) ──"
+
+# 9. dois planos da MESMA onda commitam o mesmo arquivo → colisao_real_onda
+IFS='|' read -r R PD <<<"$(monta3 c9colisao)"
+prep "$R" "$PD" '-'
+commit_codigo "$R" src/hub.py 'feat(95-01): t1' 2026-09-01T10:05:00-03:00
+commit_codigo "$R" src/hub.py 'feat(95-02): t1' 2026-09-01T10:06:00-03:00
+J="$(confere3 "$R")"
+eq "colisao_real_onda reprova"     "$(printf '%s' "$J" | jq -c '[.asserts[]?|select(.id=="colisao_real_onda")|.resultado]')" '["FALHA"]'
+eq "…nomeia a onda e os dois planos" \
+   "$(printf '%s' "$J" | jq -r '.extrai.colisao_real_onda[0]|"\(.onda)/\(.planos|join(","))/\(.arquivos|join(","))"')" \
+   "1/95-01,95-02/src/hub.py"
+
+# 10. planos de ONDAS diferentes no mesmo arquivo → não é colisão (as ondas são sequenciais)
+IFS='|' read -r R PD <<<"$(monta3 c10ondas)"
+prep "$R" "$PD" '-'
+commit_codigo "$R" src/hub.py 'feat(95-01): t1' 2026-09-01T10:05:00-03:00
+commit_codigo "$R" src/hub.py 'feat(95-03): t1' 2026-09-01T10:06:00-03:00
+J="$(confere3 "$R")"
+eq "ondas diferentes não colidem" "$(printf '%s' "$J" | jq -c '.extrai.colisao_real_onda')" '[]'
+
 echo
 echo "── resumo: $OK ok / $FALHAS falhas ──"
 [ "$FALHAS" -eq 0 ]

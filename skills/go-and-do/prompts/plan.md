@@ -46,19 +46,30 @@ retorno:
 
 **1. Pesquisa (2.D).** `NN-RESEARCH.md` JÁ existe → **nenhuma flag de research** (o
 comando auto-usa o existente; `--research` fixo era force-refresh e regenerava ~50KB
-por retomada). Senão, a pergunta: *a correção desta fase depende de fatos que não
-estão escritos em nenhum artefato da árvore (banco vivo, daemon/imagem, payload real,
-planilha, lib nova)? As decisões do CONTEXT/SPEC já resolvem o desenho?* **Viés
-assimétrico: o default é pesquisar** (`--research`); pule (`--skip-research`) só com
-as duas condições fechadas com convicção — custo de pesquisar à toa = ~50KB em janela
-descartável; custo de pular errado = fixture mentirosa (caso RLR-02).
+por retomada). Senão, as **três** perguntas — pular exige as três fechadas com convicção:
+*(a) a correção desta fase depende de fatos que não estão escritos em nenhum artefato da
+árvore (banco vivo, daemon/imagem, payload real, planilha, lib nova)?* · *(b) as decisões
+do CONTEXT/SPEC já resolvem o desenho?* · *(c) **a validação Nyquist vai rodar nesta
+fase?*** — confira em `nyquist_validation_enabled` do `init.plan-phase`: se for `true`,
+**a pesquisa não é opcional**, porque a validação consome o RESEARCH; **chave ausente =
+trate como `true`** (o viés é pesquisar). **Viés
+assimétrico: o default é pesquisar** (`--research`); pule (`--skip-research`) só com as
+três fechadas — custo de pesquisar à toa = ~50KB em janela descartável; custo de pular
+errado = fixture mentirosa (caso RLR-02) ou o vaivém da F24.5 (skip anunciado às 12:14,
+desfeito às 12:18, 2 decisões registradas para 1 resultado; reincidente da F24.3).
 
 **2. Pattern-mapper (2.E).** Critério ex-ante: *a fase cria ≥1 arquivo novo de
 produção?* — **leia dos artefatos que LISTAM arquivos** (SPEC `files:`/AC de "criar",
 RESEARCH "Files to create", e — se já houver — os PLAN.md `files_modified`/`creates`),
 não de uma impressão do CONTEXT: na F24.3 o mapper foi suprimido "porque nenhum plano
 cria arquivo novo" e o plano 02 criava `src/comparison/roteamento_responsavel.py`; o
-checker rodou sem PATTERNS. Na dúvida, o mapper roda. Cria → o mapper roda (não faça nada).
+checker rodou sem PATTERNS. **Antes de decidir, o critério deixa de ser opinião.** Se já houver PLAN.md no
+`phase_dir` (replan, `--reviews`, retomada), rode
+`bash $HOME/.claude/skills/go-and-do/scripts/confere-arquivos-novos.sh "<phase_dir>" "<project_root>"`:
+`veredito: mapper_obrigatorio` → **o mapper roda, sem discussão**, e você registra em
+`sinos:` `mapper_obrigatorio: <os caminhos>`. Não havendo plano ainda (1.ª passada), a
+lista de arquivos dos artefatos (SPEC/RESEARCH) é o insumo, e vale a mesma régua: **na
+dúvida, o mapper roda**. Cria → o mapper roda (não faça nada).
 Só modifica existentes → **suprima o passo do pattern-mapper do workflow hospedado**
 (ele roda na SUA janela — ao chegar no passo que despacha `gsd-pattern-mapper`,
 pule-o e siga; PATTERNS de fase só-modifica é tautológico e custa 13–53KB de include
@@ -80,7 +91,12 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    - `--tdd` é sinal de intenção; quem liga de fato é `workflow.tdd_mode` na config.
    - Sem `--auto`: no plan-phase ele encadeia direto pro execute, e quem encadeia é a
      /go-and-do (a convergência da Etapa 2.5 roda entre plano e execução).
-2. Deixe o comando trabalhar. Paradas herdadas são legítimas — decision-coverage gate,
+2. Deixe o comando trabalhar. **Escritor único de commits (46 p).** Quando o comando
+   hospedado despachar o `gsd-phase-researcher` ou o `gsd-planner` (inclusive no replan
+   por `--reviews`), acrescente ao prompt do despacho a linha literal: «Não commite nada.
+   O host commita ao fim do passo.» Na F24.5 os dois commitaram por conta própria, fora
+   do fluxo, e o host perdeu o controle do que estava staged.
+   Paradas herdadas são legítimas — decision-coverage gate,
    plan shape gate (§13a-bis: sobreposição de arquivos na onda, `files_modified` vazio,
    cadeia quase-serial), requirements-coverage gap, source-audit, phase-split
    recomendado, revision-loop stall: decisões de escopo/dimensionamento do usuário → `<environment>` (devolva
@@ -121,11 +137,23 @@ dele mandam levar ao usuário, não a contorne com flags: devolva `needs_decisio
 pergunta mastigada (opções + tradeoffs, recomendação primeiro) e aguarde a continuação.
 Você não mexe em TaskList nem em telemetria — são da camada 0.
 
-Agentes aninhados (camada 2): você **não recebe notificações** de trabalho em
-background — nunca fique "aguardando" um retorno que não vai chegar. Precisa de
-background (trabalho >10min)? Só com waiter de disco:
-`timeout <Ns> bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` — nunca polling; o marcador é criado pelo PRÓPRIO comando de fundo (`( … ; touch <arq> ) &`), nunca um arquivo que "o harness" deveria criar (F24.3: 40 min de espera vazia); estourou o teto → decida pelo disco
-picado. Depois decida pelo disco: artefato existe → siga; não existe → falha do passo.
+**Espera de filho: não espere.** Despache o `Agent` e **encerre o turno sem chamar mais
+nenhuma tool**. O Claude Code não considera terminado um agente que tem filho vivo: quando
+o filho acaba, você é acordado por uma notificação com o id dele. O aviso é prosa; o
+resultado vale pelo **disco** — leia o artefato que o filho grava (`NN-PLAN.md`,
+`PATTERNS.md`, `RESEARCH.md`, o `.roda-*.json` da lane) antes de decidir qualquer coisa.
+Não durma, não faça polling, não chame `wait`. Os filhos do planejamento (researcher,
+pattern-mapper, planner, checker) são despachados pelo `gsd-plan-phase` hospedado inline:
+quando o passo hospedado mandar esperar, encerre o turno em vez de esperar. Acordou e o
+artefato não está lá? Aí sim, **uma** chamada do waiter sancionado
+`timeout 590 bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` (parâmetro
+`timeout: 600000`), e registre `espera_por_waiter: <arquivo>` em `incidentes:`. `sleep`
+cru segue negado pelo `gad-bash-guard.sh`.
+As **lanes externas** (`roda-codex.sh`/`roda-agy.sh` pelo `roda-lanes.sh`) **não** são
+filhos `Agent` e não emitem `task-notification`: para elas vale o waiter de disco `until`,
+sobre o marcador criado pelo PRÓPRIO comando de fundo (`( … ; touch <arq> ) &`), nunca um
+arquivo que "o harness" deveria criar (F24.3: 40 min de espera vazia).
+Depois decida pelo disco: artefato existe → siga; não existe → falha do passo.
 Saída vazia com exit 0 também é falha. E devolva sempre o bloco do contrato — prosa de
 espera no lugar do bloco é retorno inválido.
 </environment>

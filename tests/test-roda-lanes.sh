@@ -304,6 +304,38 @@ for lane in agy codex; do
   eq "roda-$lane.sh com argumentos faltando → exit 2 (uso)" "$RC" 2
 done
 
+echo "── 45m/45j: família de artefatos (intencao | convergencia) ──"
+
+# convergência: base .convergencia/ e aliases com prefixo `planrev-`
+PD="$(monta_fase)"; CFG="$PD/cfg"; cfg "$CFG" codex "STARTED=$PD/.started-f"
+STUB_CFG="$CFG" bash "$LANES" "$PD" 01 1 "$PD/.intent/briefing-c1.md" \
+  --prova "$PD/.intent/.prova-leitura-c1.txt" --lanes codex --familia convergencia >/dev/null
+espera "$PD/.convergencia/.done-c1-codex" 30
+eq "familia convergencia → alias do parecer com prefixo planrev-" \
+   "$([ -f "$PD/pareceres/01-planrev-parecer-codex-c1.md" ] && echo sim || echo nao)" sim
+eq "familia convergencia → espelho com prefixo planrev- (o conserto do 45j)" \
+   "$([ -f "$PD/pareceres/.roda-planrev-codex-c1.json" ] && echo sim || echo nao)" sim
+eq "familia convergencia → status e done sob .convergencia/" \
+   "$([ -f "$PD/.convergencia/.status-c1-codex.json" ] && [ -f "$PD/.convergencia/.done-c1-codex" ] && echo sim || echo nao)" sim
+eq "familia convergencia → NADA escrito nos caminhos da intenção" \
+   "$([ -e "$PD/pareceres/.roda-codex-c1.json" ] || [ -e "$PD/.intent/.done-c1-codex" ] && echo vazou || echo limpo)" limpo
+
+# default (sem --familia): byte a byte o comportamento histórico
+PD="$(monta_fase)"; CFG="$PD/cfg"; cfg "$CFG" codex "STARTED=$PD/.started-d"
+STUB_CFG="$CFG" bash "$LANES" "$PD" 01 1 "$PD/.intent/briefing-c1.md" \
+  --prova "$PD/.intent/.prova-leitura-c1.txt" --lanes codex >/dev/null
+espera "$PD/.intent/.done-c1-codex" 30
+eq "sem --familia → aliases da intenção, sem prefixo" \
+   "$([ -f "$PD/pareceres/01-parecer-codex-c1.md" ] && [ -f "$PD/pareceres/.roda-codex-c1.json" ] && echo sim || echo nao)" sim
+eq "sem --familia → nada sob .convergencia/" \
+   "$([ -d "$PD/.convergencia" ] && echo vazou || echo limpo)" limpo
+
+# família inválida → uso (exit 2)
+PD="$(monta_fase)"
+RC=0; bash "$LANES" "$PD" 01 1 "$PD/.intent/briefing-c1.md" \
+  --prova "$PD/.intent/.prova-leitura-c1.txt" --familia lixo >/dev/null 2>&1 || RC=$?
+eq "--familia inválida → exit 2 (uso)" "$RC" 2
+
 echo
 TOTAL=$((OK + FALHAS))
 printf '%s testes, %s verdes, %s vermelhos\n' "$TOTAL" "$OK" "$FALHAS"

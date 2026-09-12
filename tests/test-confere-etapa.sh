@@ -6,7 +6,8 @@
 #       `r6_phase_without_req_id`  que haja sino ESTRUTURADO (`req_ausente: <id>` /
 #                                  `fase_sem_req`); menção em prosa não conta
 #
-# Sempre em `--dry-run` (nada é gravado no run-log) e em projeto de bancada (mktemp):
+# Em `--dry-run` (nada é gravado no run-log) na maior parte dos casos, e em projeto de bancada
+# (mktemp) sempre — os casos do J5/fence rodam também sem a flag, para exercitar lock e fence:
 # nenhum projeto real é tocado. Os asserts do manifest (SPEC/CONTEXT/…) reprovam nesta
 # bancada de propósito — cada caso afirma SÓ o assert que está sendo medido.
 #   bash tests/test-confere-etapa.sh      · exit 0 = verde
@@ -348,6 +349,13 @@ J="$(confere3 "$R")"
 eq "misto: simultaneos_max 2 (os dois abertos entre 15:16:51 e 15:37)" "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].simultaneos_max')" "2"
 eq "…sem nao_medido" "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].nao_medido // "ausente"')" '"ausente"'
 eq "…duracao_onda_s 1697 (15:15:43 → 15:44:00)" "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"].duracao_onda_s')" "1697"
+# (47f) largura: janela 15:15:43 → 15:44:00 = 1697 s = 28 min; os dois ficam abertos de
+# 15:16:51 a 15:37:00 (1209 s), então largura 1 = 1697-1209 = 488 s = 8 min (28 %).
+eq "…largura.janela_executores_min 28"  "$(printf '%s' "$J" | jq -c '.extrai.largura.janela_executores_min')" "28"
+eq "…largura.minutos_em_largura_1 8"    "$(printf '%s' "$J" | jq -c '.extrai.largura.minutos_em_largura_1')" "8"
+eq "…largura.pct_largura_1 28"          "$(printf '%s' "$J" | jq -c '.extrai.largura.pct_largura_1')" "28"
+# onda sem retorno real → pct null, nunca 0 (régua advisory, não cota)
+eq "async: largura.pct_largura_1 null"  "$(printf '%s' "$(confere3 "$(cd "$BASE/c3async" && pwd)")" | jq -c '.extrai.largura.pct_largura_1')" "null"
 
 IFS='|' read -r R PD <<<"$(monta3 c3paralelo)"
 RL="$PD/95-RUN-LOG.jsonl"
@@ -361,7 +369,7 @@ eq "…janela_despachos_s 5"             "$(printf '%s' "$J" | jq -c '.extrai.pa
 eq "…serializacao_observada vazia"     "$(printf '%s' "$J" | jq -c '.extrai.serializacao_observada')" '[]'
 eq "…C3: duracao_onda_s 1860 × plano_mais_lento_s 1855 (razão ≈ 1: paralelismo real)" \
    "$(printf '%s' "$J" | jq -c '.extrai.paralelismo_observado["1"]|[.duracao_onda_s,.plano_mais_lento_s]')" '[1860,1855]'
-eq "…C3: extrai.suite sem lançamentos = zeros" "$(printf '%s' "$J" | jq -c '.extrai.suite')" '{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[]}'
+eq "…C3: extrai.suite sem lançamentos = zeros" "$(printf '%s' "$J" | jq -c '.extrai.suite')" '{"lancamentos":0,"recusados":0,"tempo_total_s":0,"tags":[],"fora_da_fase":[]}'
 mkdir -p "$R/.git/gad-suite/suite" "$R/.git/gad-suite/gate-onda-1"
 printf 'uv run pytest -n 4 -q -rf\n' > "$R/.git/gad-suite/suite/cmd"; date -Is -d '-100 seconds' > "$R/.git/gad-suite/suite/iniciado"; echo 1 > "$R/.git/gad-suite/suite/rc"; printf 'x\ny\n' > "$R/.git/gad-suite/suite/recusados"
 printf 'uv run pytest tests/unit/test_a.py -rf\n' > "$R/.git/gad-suite/gate-onda-1/cmd"; date -Is -d '-30 seconds' > "$R/.git/gad-suite/gate-onda-1/iniciado"; echo 0 > "$R/.git/gad-suite/gate-onda-1/rc"
@@ -487,6 +495,67 @@ rm -f "$PD/95-07-SUMMARY.md"
 J="$(confere3 "$R")"
 eq "afirmação com linha \$ comando e saída na mesma seção → sem assert (passa)" "$(assert_de "$J" prova_por_reexecucao)" "<ausente>"
 eq "…prova_falhas vazio" "$(printf '%s' "$J" | jq -c '.extrai.prova_falhas')" '[]'
+
+# ═══════════════════════════════════════════════════ J5 (45k) + fence (46j)
+echo "── J5: proveniência do veredito na cancela da etapa 1 ──"
+IFS='|' read -r R PD <<<"$(monta j5 99)"
+printf 'c1-01 | novo | confirmado | A-produto\n' > "$PD/.intent/.vereditos-c1.txt"
+J=$(confere "$R" 99)
+eq "fase sem recibo em --dry-run → aviso, não FALHA (válvula da resposta 1 do dono)" \
+   "$(assert_de "$J" j5_origem_c1)" "aviso"
+J=$(bash "$C" 1 --projeto "$R" --fase 99 --sem-telemetria 2>/dev/null | tail -1)
+eq "fase sem recibo fora do --dry-run → FALHA" "$(assert_de "$J" j5_origem_c1)" "FALHA"
+printf '{"v":1,"ciclo":"1","run_id":"r","agente":"gad-verificador","mode":"child","ts":"t","n_linhas":1,"sha256":"%s"}\n' \
+  "$(sha256sum "$PD/.intent/.vereditos-c1.txt" | cut -d' ' -f1)" > "$PD/.intent/.vereditos-c1.origem.json"
+J=$(bash "$C" 1 --projeto "$R" --fase 99 --sem-telemetria 2>/dev/null | tail -1)
+eq "recibo correto → ok" "$(assert_de "$J" j5_origem_c1)" "ok"
+printf 'c1-02 | correcao | confirmado | D-documental\n' >> "$PD/.intent/.vereditos-c1.txt"
+J=$(bash "$C" 1 --projeto "$R" --fase 99 --sem-telemetria 2>/dev/null | tail -1)
+eq "linha acrescentada depois do recibo → VEREDITO-ALTERADO reprova a etapa 1" \
+   "$(assert_de "$J" j5_origem_c1)" "FALHA"
+casa "…com a mensagem literal" "$J" 'VEREDITO-ALTERADO c1'
+
+echo "── 46(j)/46(r): o fiscal deixa recibo (.fence-N.ok) ──"
+# a bancada reprova de propósito (SPEC/CONTEXT ausentes) → serve para o ramo fail
+IFS='|' read -r R PD <<<"$(monta fence 99)"
+: > "$PD/.fence-1.ok"
+bash "$C" 1 --projeto "$R" --fase 99 --dry-run >/dev/null 2>&1
+[ -f "$PD/.fence-1.ok" ] && ok "--dry-run não apaga o fence" || falha "--dry-run apagou o fence"
+bash "$C" 1 --projeto "$R" --fase 99 >/dev/null 2>&1
+[ -f "$PD/.fence-1.ok" ] && falha "fail não apagou o fence" || ok "fail apaga o .fence-1.ok"
+[ -f "$PD/.gate-fail-1.json" ] && ok "fail grava o lock" || falha "fail não gravou o lock"
+rm -f "$PD/.gate-fail-1.json"
+bash "$C" 1 --projeto "$R" --fase 99 --sem-telemetria >/dev/null 2>&1
+[ -f "$PD/.gate-fail-1.json" ] && falha "--sem-telemetria criou o lock no fail" \
+  || ok "--sem-telemetria no fail NÃO cria o lock"
+
+# ramo pass: a etapa 0 tem manifest mínimo (ponteiro da rodada + evento `run`) e é onde
+# o ramo pass do write site genérico do fence pode ser exercitado numa bancada.
+IFS='|' read -r R PD <<<"$(monta fencepass 99)"
+git -C "$R" -c user.name=t -c user.email=t@t -c commit.gpgsign=false add -A >/dev/null 2>&1
+git -C "$R" -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -qm base >/dev/null 2>&1
+printf '{"fase":"99"}\n' > "$R/.planning/.gad-rodada-ativa.json"
+RLP="$PD/99-RUN-LOG.jsonl"
+printf '{"evento":"run","etapa":"0 abertura"}\n' > "$RLP"
+if bash "$C" 0 --projeto "$R" --fase 99 --sem-telemetria >/dev/null 2>&1; then
+  [ -f "$PD/.fence-0.ok" ] && ok "pass grava o .fence-<etapa>.ok" || falha "pass não gravou o fence"
+  eq "head do fence == HEAD" "$(jq -r .head "$PD/.fence-0.ok" 2>/dev/null)" \
+     "$(git -C "$R" rev-parse HEAD)"
+  printf '{"etapa":"0","ts":"x","resumo":"falhas: teste"}\n' > "$PD/.gate-fail-0.json"
+  n=$(wc -l < "$RLP")
+  bash "$C" 0 --projeto "$R" --fase 99 --sem-telemetria >/dev/null 2>&1
+  [ -f "$PD/.gate-fail-0.json" ] && ok "--sem-telemetria no pass PRESERVA o lock" \
+    || falha "--sem-telemetria removeu o lock no pass"
+  eq "--sem-telemetria no pass não escreve no run-log" "$(wc -l < "$RLP")" "$n"
+  bash "$C" 0 --projeto "$R" --fase 99 >/dev/null 2>&1
+  [ -f "$PD/.gate-fail-0.json" ] && falha "a rodada normal não removeu o lock" \
+    || ok "a rodada normal depois do --sem-telemetria remove o lock"
+  eq "…e grava 'pass pós-fail (lock removido)' exatamente uma vez" \
+     "$(grep -c 'pass pós-fail (lock removido)' "$RLP" || true)" "1"
+else
+  falha "bancada do ramo pass não passou na cancela da etapa 0" \
+    "$(bash "$C" 0 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1 | jq -r '[.asserts[]|select(.resultado=="FALHA")|.id]|join(",")')"
+fi
 
 echo "--------------------------------------------------"
 echo "test-confere-etapa.sh: $OK ok / $FALHAS falha(s)"

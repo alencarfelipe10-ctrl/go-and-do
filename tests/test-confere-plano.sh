@@ -131,6 +131,59 @@ roda "$R"
 eq "tasks=2 (checkpoint fora)"        "$(campo .tasks)" "2"
 eq "veredito ok"                      "$(campo .veredito)" "ok"
 
+echo "== (k) comentário e linha em branco no meio da lista não truncam (45f, F24.5)"
+R=$(repo k); plano "$R" 'files_modified:
+  - src/a.py
+  # redação final delegada ao plano dono (caso real 24.5-02)
+  - src/b.py
+
+  - src/c.py' '<task type="auto">a</task>'
+commit "$R" 'feat(7-01): tarefa 1' src/a.py src/b.py src/c.py
+roda "$R"
+eq "veredito ok (lista lida inteira)" "$(campo .veredito)/$rc" "ok/0"
+eq "fora_da_lista vazio"              "$(campo '.fora_da_lista|length')" "0"
+
+echo "== (l) item declarado sem commit → DECLARADO-NAO-TOCADO informativo, veredito ok (45f)"
+R=$(repo l); plano "$R" 'files_modified:
+  - src/a.py
+  - tests/golden/baseline_243.json' '<task type="auto">a</task>'
+commit "$R" 'feat(7-01): tarefa 1' src/a.py
+roda "$R"
+eq "veredito segue ok"                    "$(campo .veredito)/$rc" "ok/0"
+eq "declarado_nao_tocado traz o golden"   "$(campo '.declarado_nao_tocado|join(",")')" "tests/golden/baseline_243.json"
+eq "informativo presente"                 "$(campo '[.informativos[]|select(startswith("DECLARADO-NAO-TOCADO"))]|length')" "1"
+
+echo "== (m) arquivo fora da lista DECLARADO no SUMMARY → informativo, veredito ok (46t)"
+R=$(repo m); plano "$R" 'files_modified:
+  - src/a.py' '<task type="auto">a</task>'
+commit "$R" 'feat(7-01): t1 mexe fora' src/a.py src/x.py
+printf -- '---\nphase: 7\nplan: 01\n---\n# Summary\nARQUIVO-NAO-DECLARADO: src/x.py — redação final delegada pelo plano 02\n' > "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"
+roda "$R"
+eq "veredito ok (declaração aceita)"        "$(campo .veredito)/$rc" "ok/0"
+eq "codigos sem FORA-DA-LISTA"              "$(campo '.codigos|length')" "0"
+eq "arquivo_nao_declarado nomeia o desvio"  "$(campo '.arquivo_nao_declarado|join(",")')" "src/x.py"
+eq "informativo ARQUIVO-NAO-DECLARADO"      "$(campo '[.informativos[]|select(startswith("ARQUIVO-NAO-DECLARADO"))]|length')" "1"
+
+echo "== (n) o mesmo desvio SEM declaração → FORA-DA-LISTA, como hoje (46t)"
+rm -f "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"; roda "$R"
+eq "veredito falha, exit 1"                 "$(campo .veredito)/$rc" "falha/1"
+eq "codigos = FORA-DA-LISTA"                "$(campo '.codigos|join(",")')" "FORA-DA-LISTA"
+
+echo "== (o) actuals.commits divergente do git log → COMMITS-SUBDECLARADOS informativo (46u)"
+R=$(repo o); plano "$R" 'files_modified:
+  - src/a.py' '<task type="auto">a</task>'
+commit "$R" 'feat(7-01): t1' src/a.py
+commit "$R" 'feat(7-01): t2' src/a.py
+commit "$R" 'feat(7-01): t3' src/a.py
+printf -- '---\nphase: 7\nplan: 01\nactuals:\n  tokens: 1\n  tasks: 1\n  commits: 2\n---\n# Summary\n' > "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"
+roda "$R"
+eq "veredito segue ok"                "$(campo .veredito)/$rc" "ok/0"
+eq "informativo com declarado × medido" "$(campo '[.informativos[]|select(startswith("COMMITS-SUBDECLARADOS"))][0]')" "COMMITS-SUBDECLARADOS (2 declarado × 3 medido)"
+# declarado igual ao medido → silêncio
+printf -- '---\nphase: 7\nplan: 01\nactuals:\n  commits: 3\n---\n# Summary\n' > "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"
+roda "$R"
+eq "declarado = medido → sem informativo" "$(campo '[.informativos[]|select(startswith("COMMITS-SUBDECLARADOS"))]|length')" "0"
+
 echo "== (i) C7: PLAN cita D-NN que o SUMMARY não cita → DECISAO-SEM-SUMMARY (informativo, veredito intocado)"
 ctx() { # <root> → 7-CONTEXT.md com D-01..D-03, D-03 informational
   printf '<decisions>\n## Implementation Decisions\n\n### A\n- **D-01 [auto, R1]:** a\n- **D-02 [auto, R1]:** b\n- **D-03 [pre-spec:PS-01, informational]:** ver SPEC\n\n### Claude'"'"'s Discretion\n- nada\n\n</decisions>\n' > "$1/.planning/phases/7-bancada/7-CONTEXT.md"

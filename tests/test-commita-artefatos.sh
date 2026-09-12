@@ -90,6 +90,43 @@ esperado=$(printf 'fase/24-UAT.md\nfase/uat-evidencia/cenario-1.pdf')
 [ "$commitado" = "$esperado" ] && ok "só o .pdf visível entrou; oculto/.jsonl/.tmp ficaram de fora" \
   || erro "seleção incorreta" "commitado=[$commitado] esperado=[$esperado]"
 
+echo "== M6 (46 j) — modo `intencao`: aceita parecer NOVO e não absorve worktree sujo"
+D="$TMP/m6"; repo_de_mentira "$D"
+mkdir -p "$D/fase/pareceres"
+echo spec    > "$D/fase/99-SPEC.md"
+echo context > "$D/fase/99-CONTEXT.md"
+echo review  > "$D/fase/99-INTENT-REVIEW.md"
+echo parecer > "$D/fase/pareceres/99-parecer-codex-c1.md"
+echo planrev > "$D/fase/pareceres/99-planrev-parecer-codex-c1.md"
+echo "sujeira do usuario" > "$D/outro.txt"   # nunca deve entrar
+saida=$(cd "$D" && bash "$SCRIPT" "$D/fase" 99 intencao 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "modo intencao: exit 0" || erro "esperado 0, veio $rc" "$saida"
+commitado=$(git -C "$D" show --name-only --format= HEAD | grep . | sort)
+esperado=$(printf 'fase/99-CONTEXT.md\nfase/99-INTENT-REVIEW.md\nfase/99-SPEC.md\nfase/pareceres/99-parecer-codex-c1.md' | sort)
+[ "$commitado" = "$esperado" ] \
+  && ok "commit leva os artefatos + o parecer NOVO da intenção, e só" \
+  || erro "seleção divergente" "commitado=[$commitado] esperado=[$esperado]"
+git -C "$D" ls-files | grep -q '^outro.txt$' && erro "absorveu o worktree sujo do usuário" \
+  || ok "worktree sujo do usuário não entrou"
+git -C "$D" ls-files | grep -q 'planrev' && erro "parecer da convergência entrou no commit da intenção" \
+  || ok 'parecer planrev- (convergência) fica de fora'
+printf '%s' "$saida" | grep -q '"modo":"intencao"' && ok "JSON de saída declara o modo" \
+  || erro "JSON sem o modo" "$saida"
+
+echo "== M6 — modo intencao sem pareceres/ (consultoria pulada)"
+D="$TMP/m6b"; repo_de_mentira "$D"
+mkdir -p "$D/fase"
+echo spec > "$D/fase/99-SPEC.md"
+saida=$(cd "$D" && bash "$SCRIPT" "$D/fase" 99 intencao 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "sem pareceres/: exit 0" || erro "esperado 0, veio $rc" "$saida"
+git -C "$D" show --stat --format= HEAD | grep -q '99-SPEC.md' \
+  && ok "commit leva só os artefatos existentes" || erro "SPEC não entrou" "$saida"
+
+echo "== modo desconhecido segue reprovando"
+saida=$(cd "$D" && bash "$SCRIPT" "$D/fase" 99 xpto 2>&1); rc=$?
+[ "$rc" = 2 ] && printf '%s' "$saida" | grep -q 'uat|runlog|intencao' \
+  && ok "modo desconhecido → exit 2 com a lista atualizada" || erro "esperado exit 2" "rc=$rc $saida"
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-commita-artefatos: TUDO OK" || echo "test-commita-artefatos: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

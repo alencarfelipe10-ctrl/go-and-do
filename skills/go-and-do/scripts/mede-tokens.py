@@ -43,16 +43,43 @@ import os
 import sys
 from datetime import datetime
 
-CAMPOS = ("input_tokens", "cache_creation_input_tokens",
+CAMPOS = ("input_tokens", "cache_creation_input_tokens", "cache_creation_1h_input_tokens",
           "cache_read_input_tokens", "output_tokens")
 SAIDA = {"input_tokens": "input_tokens",
          "cache_creation_input_tokens": "cache_creation_tokens",
+         "cache_creation_1h_input_tokens": "cache_creation_1h_tokens",
          "cache_read_input_tokens": "cache_read_tokens",
          "output_tokens": "output_tokens"}
 PRECO_CAMPO = {"input_tokens": "input",
                "cache_creation_input_tokens": "cache_write",
+               "cache_creation_1h_input_tokens": "cache_write_1h",
                "cache_read_input_tokens": "cache_read",
                "output_tokens": "output"}
+
+
+def normaliza_usage(u):
+    """Separa a escrita de cache por TTL (47a).
+
+    A API expõe o total em `cache_creation_input_tokens` e a divisão em
+    `cache_creation.{ephemeral_1h_input_tokens, ephemeral_5m_input_tokens}`. Em turno com
+    mais de uma iteração o objeto de topo reflete só a ÚLTIMA iteração, enquanto o total é a
+    soma — medido em 8 de 1.611 turnos da F24.5 —, então a divisão vem de `iterations[]`
+    quando existe. Sem o objeto (transcript antigo), tudo conta como 5 min: é o que era.
+    """
+    if not isinstance(u, dict):
+        return {}
+    out = dict(u)
+    total = u.get("cache_creation_input_tokens") or 0
+    its = u.get("iterations")
+    if isinstance(its, list) and len(its) > 1:
+        h1 = sum((i.get("cache_creation") or {}).get("ephemeral_1h_input_tokens") or 0
+                 for i in its if isinstance(i, dict))
+    else:
+        h1 = (u.get("cache_creation") or {}).get("ephemeral_1h_input_tokens") or 0
+    h1 = min(h1, total)
+    out["cache_creation_1h_input_tokens"] = h1
+    out["cache_creation_input_tokens"] = total - h1
+    return out
 
 
 def parse_ts(s):
@@ -73,7 +100,14 @@ def carrega_precos(avisos):
     try:
         with open(caminho, encoding="utf-8") as fh:
             p = json.load(fh)
-        return p.get("anthropic_por_1m") or {}, p.get("atualizado_em") or "?"
+        tabela = p.get("anthropic_por_1m") or {}
+        # 47a: sem `cache_write_1h` em nenhuma entrada, a escrita de 1 h custaria ZERO em
+        # silêncio (preco.get devolve 0 para chave ausente). Silêncio demais: avisa.
+        if tabela and not any("cache_write_1h" in v for v in tabela.values()
+                              if isinstance(v, dict)):
+            avisos.append("precos.json sem `cache_write_1h` — escrita de cache de 1 h "
+                          "contabilizada a custo ZERO; atualize a tabela")
+        return tabela, p.get("atualizado_em") or "?"
     except (OSError, json.JSONDecodeError) as e:
         avisos.append(f"precos.json ilegível ({e}) — custo não calculado")
         return {}, None
@@ -123,7 +157,7 @@ def le_transcript(path, avisos):
             if chave not in por_request:
                 ordem.append(chave)
             por_request[chave] = (parse_ts(obj.get("timestamp")),
-                                  usage, msg.get("model") or "")
+                                  normaliza_usage(usage), msg.get("model") or "")
     reqs = [por_request[k] for k in ordem]
     primeiro = next((ts for ts, _, _ in reqs if ts), None)
     return reqs, primeiro

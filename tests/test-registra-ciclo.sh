@@ -65,6 +65,33 @@ GOTV=$(brutos_do_apendice "$PDV/24.3-REVIEWS.md")
 [ "$rc" = 0 ] && [ "$GOTV" = "$SEM" ] && ok "fase sem .intent/ registra $SEM brutos, exit 0" \
   || erro "fase antiga quebrou (rc=$rc, brutos=$GOTV)"
 
+echo "== 45(j) — o espelho da lane é lido pela FAMÍLIA (.roda-planrev-… na convergência)"
+PDE="$TMP/24-espelho"; monta "$PDE" convergencia
+esp() { printf '{"modelo_efetivo":"%s","fresco":true,"vazio":false,"banner":"%s","prova_leitura":true,"degradado":false}\n' "$1" "$2"; }
+esp modelo-INTENCAO banner-INTENCAO > "$PDE/pareceres/.roda-codex-c1.json"
+esp modelo-CONVERGENCIA banner-CONVERGENCIA > "$PDE/pareceres/.roda-planrev-codex-c1.json"
+"$SCRIPT" "$PDE" 24.3 1 convergencia >/dev/null 2>&1
+if grep -q 'modelo-CONVERGENCIA' "$PDE/24.3-REVIEWS.md"; then
+  ok "modo convergencia lê .roda-planrev-codex-c1.json"
+else
+  erro "modo convergencia leu o espelho errado" "$(grep -n 'modelo_efetivo' "$PDE/24.3-REVIEWS.md" | head -3)"
+fi
+grep -q 'modelo-INTENCAO' "$PDE/24.3-REVIEWS.md" \
+  && erro "modo convergencia leu o espelho da INTENÇÃO" || ok "o espelho da intenção não é lido na convergência"
+
+PDI="$TMP/24-espelho-int"; monta "$PDI" intencao
+esp modelo-INTENCAO banner-INTENCAO > "$PDI/pareceres/.roda-codex-c1.json"
+"$SCRIPT" "$PDI" 24.3 1 intencao >/dev/null 2>&1
+grep -q 'modelo-INTENCAO' "$PDI/24.3-REVIEWS.md" \
+  && ok "modo intencao continua lendo .roda-codex-c1.json (sem prefixo)" \
+  || erro "o modo intenção regrediu" "$(grep -n 'modelo_efetivo' "$PDI/24.3-REVIEWS.md" | head -3)"
+
+PDA="$TMP/24-espelho-antigo"; monta "$PDA" convergencia
+esp modelo-ANTIGO banner-ANTIGO > "$PDA/pareceres/.roda-codex-c1.json"
+"$SCRIPT" "$PDA" 24.3 1 convergencia >/dev/null 2>&1; rc=$?
+[ "$rc" = 0 ] && ok "fase anterior à separação (só o espelho sem prefixo): exit 0, lane pulada" \
+  || erro "fase antiga quebrou no modo convergencia (rc=$rc)"
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-registra-ciclo: TUDO OK" || echo "test-registra-ciclo: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

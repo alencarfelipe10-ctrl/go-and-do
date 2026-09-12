@@ -101,6 +101,13 @@ Comece todo bloco Bash com `cd "<project_root>"`.
    `id | classe | veredito | categoria` (ex.: `c2-03 | novo | confirmado | A-produto`;
    `confirmado_irrelevante` é o quarto valor do terceiro campo — nunca um quinto campo: o
    `decide-ciclo.sh` lê quatro e um excedente cairia dentro de `categoria` em silêncio).
+   **A célula `veredito` da tabela do INTENT-REVIEW.** Quem escreve a tabela é quem te despachou,
+   mas o valor é seu: entregue-o na forma `<veredito>` ou `<veredito> (<categoria>)`, e nunca com o
+   veredito dentro de uma frase. Os quatro valores são `confirmado`, `confirmado_irrelevante`,
+   `nao_sustentado` e `ja_coberto`; a categoria entre parênteses é opcional e informativa. O medidor
+   da auditoria (`etiqueta-achados.py`) lê a célula inteira: «o consultor tem razão, mas…» sai como
+   achado sem veredito, e a régua de proveniência da fase inteira sai `não_medida` — foi o que
+   aconteceu nas F24.3, F24.4 e F24.5.
 6b. **Vereditos das perguntas dirigidas (R8) — arquivo próprio, ao lado dos achados.**
    O briefing pediu ao consultor uma linha `- Q<n>: sim|não|incerto — evidência` na seção
    `## Respostas dirigidas`. Toda resposta **`não`** é provisória: só sai da contagem de
@@ -121,11 +128,26 @@ Comece todo bloco Bash com `cd "<project_root>"`.
    normalmente — falta de independência muda o peso do achado, não a completude das Q.
    `evidence` é obrigatória em `supported_no` e `unsupported_no` (neste, o que você
    procurou e não achou).
-7. **Prova de máquina de que você rodou:** como último ato antes do retorno,
-   `touch <phase_dir>/.intent/.verificador-c<C>.done` — é este marcador que o
-   `confere-rotas.sh` cruza com a `.tabela-c<C>.txt` no fecho da etapa para provar que
-   a rota de verificação independente foi respeitada. Só grave DEPOIS de os vereditos
-   estarem em disco; marcador sem trabalho é fabricação de evidência.
+7. **Prova de máquina de que você rodou:** como últimos atos antes do retorno, nesta ordem:
+   ```bash
+   IN="<phase_dir>/.intent"
+   printf '{"v":1,"ciclo":"<C>","run_id":"<run_id>","agente":"gad-verificador","mode":"<child|inline>","ts":"%s","n_linhas":%s,"sha256":"%s"}\n' \
+     "$(date -Is)" "$(grep -cvE '^\s*(#|$)' "$IN/.vereditos-c<C>.txt")" \
+     "$(sha256sum "$IN/.vereditos-c<C>.txt" | cut -d' ' -f1)" \
+     > "$IN/.vereditos-c<C>.origem.json"
+   touch "$IN/.verificador-c<C>.done"
+   ```
+   O `.verificador-c<C>.done` é o marcador que o `confere-rotas.sh` cruza com a
+   `.tabela-c<C>.txt` no fecho da etapa, para provar que a rota de verificação independente foi
+   respeitada. O recibo `.vereditos-c<C>.origem.json` é o que torna o arquivo de vereditos
+   **fechado**: o `confere-ciclo.sh --origem-vereditos` recalcula o sha256 e reprova qualquer linha
+   acrescentada depois de você sair. Grave-o só DEPOIS de os vereditos estarem completos em disco e
+   ANTES do `.done`: marcador sem trabalho é fabricação de evidência, e recibo sem os vereditos
+   finais é pior — sela o arquivo errado.
+   **Na rota `inline`** (ciclos 3+ com ≤ 2 brutos, quando quem te despachou verifica ele mesmo) o
+   recibo é gravado pelo coordenador com `"mode":"inline"`: a rota já está declarada na
+   `.rota-verificacao-c<C>.json` e o `confere-ciclo.sh` só aceita `inline` quando as duas dizem o
+   mesmo.
 
 ## Retorno (obrigatório, sem prosa antes ou depois)
 

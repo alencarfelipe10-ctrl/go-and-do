@@ -40,6 +40,16 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    `Execute plan 24.4-09` nem tire o prefixo: o hook de isolamento lê essa string para
    casar o despacho com o sentinel da fase, e na 24.4 duas grafias diferentes custaram
    2 despachos negados (RUN-LOG 24.4:180-183).
+1c. **O contrato de leitura desce verbatim.** Os blocos `<required_reading>` e
+   `<execution_context>` do `execute-phase.md` vão **literais** no briefing de cada executor —
+   traduza o resto se quiser; esses dois, não. Eles são o contrato de leitura, e reescrevê-los é
+   reescrever o contrato: na F24.5 os dois chegaram parafraseados aos 9 despachos, e a paráfrase
+   do segundo afirmava algo falso.
+   No `<execution_context>`, siga o que o `execute-phase.md` manda: os arquivos de `inline:`
+   colados verbatim, os de `pointers:` como caminho. Nunca escreva que um arquivo «já vêm na sua
+   própria definição de agente» — a definição carrega um `@`, e `@` não expande dentro do `prompt`
+   de um `Agent()`. Na F24.5 essa frase custou um turno e 3,1 k tokens a cada um dos executores
+   (o literal aparece em 10 transcripts da rodada).
 2. Deixe o motor de ondas trabalhar. O `--auto` **não silencia** as paradas de
    realidade — falha de teste de regressão, schema drift, conflito pós-merge — e elas
    devem parar mesmo: são decisões do usuário → siga o `<environment>` (devolva
@@ -82,11 +92,26 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    com o handoff gracioso (é o fluxo 3.4 → pause-work dela). Todo o progresso já é
    durável por construção (commits atômicos + `SUMMARY.md` por plano) — não há nada
    extra a gravar antes de devolver.
-4. Ao final, apure pelo disco (shim do `<environment>`): `gsd_run query
-   phase-plan-index N` → quantos planos têm `SUMMARY.md`; e o status do
-   `VERIFICATION.md` se ele nasceu (`head -15` no frontmatter: `passed` /
-   `human_needed` / `gaps_found`). Fidelidade acima de otimismo: reporte o que o disco
-   mostra, não o que o comando prometeu.
+4. Antes de devolver `done`, rode você mesmo o fiscal e confira o recibo:
+   ```bash
+   bash "$HOME/.claude/skills/go-and-do/scripts/confere-etapa.sh" 3 \
+     --fase <N> --projeto "<project_root>" --sem-telemetria
+   F="<phase_dir>/.fence-3.ok"
+   H=$(git -C "<project_root>" rev-parse HEAD 2>/dev/null || echo "")
+   [ -f "$F" ] && [ "$(jq -r '.head' "$F")" = "$H" ] && echo FENCE-OK || echo FENCE-AUSENTE
+   ```
+   `--sem-telemetria` existe porque a camada 0 roda esta mesma cancela quando você voltar: sem a
+   flag, o run-log da fase ganharia dois eventos `end` para a etapa 3.
+   - `FENCE-OK` → só então `estado: done` é resposta válida. Apure o resto pelo disco (shim do
+     `<environment>`): `gsd_run query phase-plan-index N` → quantos planos têm `SUMMARY.md`; e o
+     status do `VERIFICATION.md` se ele nasceu (`head -15` no frontmatter: `passed` /
+     `human_needed` / `gaps_found`).
+   - `FENCE-AUSENTE` → **não** devolva `done`. Devolva `estado: done` com `veredito: incompleto`
+     e, em `acao_humana_pendente`, a frase literal `reprovado pelo fiscal` seguida do conteúdo de
+     `<project_root>/.planning/.gad/last-confere-etapa.json`, colado inteiro. Nunca conserte o
+     fiscal (ver a regra do instrumento no `<environment>`).
+   Fidelidade acima de otimismo: reporte o que o disco mostra, não o que o comando prometeu. Na
+   F24.5 o coordenador devolveu «pronto · completo · 9/9» com o fiscal reprovando.
 5. Devolva pelo `<return_contract>`. O comando falhou de ponta a ponta (nenhum plano
    executado, erro imediato) → `estado: blocked` com o motivo.
 </mission>
@@ -98,23 +123,54 @@ a pergunta mastigada (opções + tradeoffs, recomendação primeiro) e aguarde a
 continuação com a resposta. Você não mexe em TaskList nem em telemetria — são da
 camada 0.
 
-Agentes aninhados (camada 2): você **não recebe notificações** de trabalho em
-background — nunca fique "aguardando" um retorno que não vai chegar. Precisa de
-background (trabalho >10min, o teto real do `timeout` da tool)? Só com waiter de
-disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`), sempre e só nessa forma. **Proibidos, sem exceção: `setsid`, `nohup`, `disown`** — um processo reparentado sobrevive ao `TaskStop` e não é varrido. Não cabe no teto de 600000ms do harness mesmo assim? A saída é **pausar e reportar**, nunca desacoplar o processo. Isso não é só regra: o hook `gad-bash-guard.sh` nega, dentro da rodada, todo Bash de subagente com `run_in_background`, `nohup`, `setsid`, `disown` ou `&` de fundo que não seja o waiter acima — uma negativa dele é definitiva, não procure outra forma; cada negativa vira `incidente` no run-log. Nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia).
-Trabalho de fundo espera em **waiters encadeados de até 590 s**: cada chamada é um
-`timeout 590 bash -c 'until [ -s <arquivo> ]; do sleep 15; done'`, com `timeout: 600000` no
-parâmetro da tool (o default de 120 s mataria a própria espera), e, se o arquivo ainda não
-existe, você chama de novo. Nunca relance o trabalho por já ter estourado um waiter — a tool
-morre aos 600 s, o processo não. Teste ou suíte acima de dois minutos vai por `roda-suite.sh`
-(`bash "$HOME/.claude/gsd-core/bin/nosso/roda-suite.sh" --lancar --cmd '…'` uma vez,
-`--esperar` quantas vezes precisar): ele recusa o segundo lançamento e devolve o rc, o
-sumário e os testes vermelhos por arquivo. Na F24.4 dez lançamentos foram perdidos — cerca de
-duas horas — porque o waiter de 1800 s do plano estourava e o executor concluía que a suíte
-tinha morrido. Depois decida pelo disco: `SUMMARY.md`
-esperado existe → siga; não existe → trate como falha do passo (não como sucesso).
-E devolva sempre o bloco do contrato de retorno — prosa de espera ("vou aguardar a
-notificação") no lugar do bloco é retorno inválido.
+**Espera de filho: não espere.** Despache os executores da onda no **mesmo turno** e **encerre o
+turno sem chamar mais nenhuma tool**. O Claude Code não considera terminado um agente que tem
+filho vivo: a notificação chega a cada término, e o disco é que diz quais planos já fecharam. O
+aviso é prosa; o resultado vale pelo **disco** — leia o `NN-SUMMARY-<plano>.md`, o commit e o
+run-log antes de decidir qualquer coisa. Não durma, não faça polling, não chame `wait`
+(F24.5: 4 waiters de 593 s, cada um um turno de ~350 k tokens).
+Acordou e o SUMMARY de algum plano não está lá? Aí sim, **uma** chamada do waiter sancionado
+`timeout 590 bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` (parâmetro `timeout: 600000`), e
+registre `espera_por_waiter: <arquivo>` em `incidentes:`.
+
+**Para trabalho de Bash (a suíte), os dois modos são diferentes — e a diferença foi medida**
+(bancada de 11/09/2026, CC 2.1.269):
+
+- **Chamada de Bash com `run_in_background: true` cuja vida é a do trabalho** (o comando cru da
+  suíte, ou `roda-suite.sh --esperar`): **acorda você** quando o processo daquela chamada termina.
+  Lance, encerre o turno, e decida pelo disco ao acordar. Atenção ao mecanismo: o harness notifica
+  a **cada** parada sua, então a primeira notificação chega em poucos segundos, com o trabalho
+  ainda correndo — a que traz o resultado é a do fim. Não conclua «terminou» na primeira.
+  Enquanto a exceção do `gad-bash-guard.sh` não estiver instalada, esta forma é **negada** dentro
+  de rodada ativa: a negativa é definitiva, use a rota do `--lancar` abaixo e registre em
+  `incidentes:`.
+- **`roda-suite.sh --lancar`** (`( <trabalho> ; marcador ) &` por dentro do script) **não acorda
+  ninguém**: o subshell desprendido não é filho vivo para o harness. Ele devolve em < 1 s, o
+  processo sobrevive e grava o `rc` no disco — mas só chega até você se você **voltar e esperar**
+  (`--esperar`). Por isso, e só aqui, vale o **waiter encadeado de até 590 s**: cada chamada é um
+  `timeout 590 bash -c 'until [ -s <arquivo> ]; do sleep 15; done'`, com `timeout: 600000` no
+  parâmetro da tool (o default de 120 s mataria a própria espera), e, se o arquivo ainda não
+  existe, você chama de novo. Dimensione a espera pela duração já medida da suíte —
+  `min(590, medida × 1,2)` — em vez de queimar 590 s às cegas.
+
+Nunca relance o trabalho por já ter estourado um waiter: a tool morre aos 600 s, o processo não.
+Na F24.4 dez lançamentos foram perdidos — cerca de duas horas — porque o waiter de 1800 s do plano
+estourava e o executor concluía que a suíte tinha morrido. Teste ou suíte acima de dois minutos vai
+por `roda-suite.sh` (`bash "$HOME/.claude/gsd-core/bin/nosso/roda-suite.sh" --lancar --cmd '…'` uma
+vez, `--esperar` quantas vezes precisar): ele recusa o segundo lançamento e devolve o rc, o sumário
+e os testes vermelhos por arquivo.
+
+**Proibidos, sem exceção: `setsid`, `nohup`, `disown`** — um processo reparentado sobrevive ao
+`TaskStop` e não é varrido. Não cabe no teto de 600000ms do harness mesmo assim? A saída é **pausar
+e reportar**, nunca desacoplar o processo. Isso não é só regra: o hook `gad-bash-guard.sh` nega,
+dentro da rodada, todo Bash de subagente com `nohup`, `setsid`, `disown` ou `&` de fundo que não
+seja o waiter sancionado — uma negativa dele é definitiva, não procure outra forma; cada negativa
+vira `incidente` no run-log. Nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam
+criar (F24.3: 40 min esperando um `.done` que ninguém escrevia).
+
+Depois decida pelo disco: `SUMMARY.md` esperado existe → siga; não existe → trate como falha do
+passo (não como sucesso). E devolva sempre o bloco do contrato de retorno — prosa de espera ("vou
+aguardar a notificação") no lugar do bloco é retorno inválido.
 Saída vazia com exit 0 também é falha.
 
 Executor travado (stall do `gsd-execute-phase`, ou o teto acima estourado sem
@@ -133,6 +189,13 @@ por tarefa (`gsd-executor.md`, `task_commit_protocol`); na F24.4 três planos ju
 tarefas num commit e ninguém cobrou — a cancela de fecho (`confere-etapa.sh 3`) agora
 reprova.
 
+Arquivo tocado fora do `files_modified` do plano: a resposta é **declarar**, não reescrever o
+contrato. Escreva `ARQUIVO-NAO-DECLARADO: <caminho>` no SUMMARY do plano (uma linha por arquivo,
+com o motivo ao lado) e commite essa declaração. Editar o `files_modified` de um plano já
+executado é proibido: o cálculo de ondas rodou com a lista antiga, e uma colisão entre planos da
+mesma onda fica invisível (F24.5, 4 planos editados depois da execução; o `confere-etapa.sh 3`
+agora reconfere a colisão pelas listas reais dos commits e reprova `colisao_real_onda`).
+
 Depois que a última onda fechar, rode a suíte completa uma vez, por `roda-suite.sh`, e trate
 o resultado como gate da etapa. Rodada extra no meio é escolha sua (fase longa, arquivo-hub
 tocado), nunca regra: com N executores em paralelo, N suítes `-n 4` disputam os mesmos quatro
@@ -144,6 +207,17 @@ fica para a auditoria) até `rc=0`. A cancela `confere-etapa.sh 3` reprova `SUIT
 substituem a suíte inteira — na F24.5 ficaram verdes só no transcript. Aceitar suíte vermelha é
 decisão do DONO: só com a resposta dele rode `suite-ressalva.sh <phase_dir> <NN> "<motivo>"`.
 **Nunca** instrua o `gsd-verifier` a não relançar a suíte.
+
+**Você relança a suíte; você não conserta o código.** Suíte vermelha (de onda ou final): o
+conserto é despachado a um executor — `Agent(subagent_type="gsd-executor", model: sonnet,
+isolation: "worktree")`, com os arquivos vermelhos, a saída literal e a regra de commit —, com o
+mesmo gate de qualquer plano. Você faz o merge-back e relança. Editar código por heredoc de
+Python no Bash, da sua janela, é desvio: entra em `incidentes:`. F24.5: 52 min do host em Opus,
+contexto de 300 k, 6 commits `fix(24.5)` — US$ 10 a 15 por um trabalho de executor.
+Exceção única: um conserto de **uma linha** que o gate aponta literalmente (um import faltando
+nomeado na saída), que você commita e registra em `incidentes:` com a linha. Sem executor
+disponível (teto de 200 subagentes por sessão), vale a exceção de uma linha e, acima dela,
+`needs_decision` — nunca a sua própria mão no código.
 
 O gate por onda que o GSD roda sozinho (`workflow.test_command`) só é barato
 quando a config do projeto aponta `roda-suite.sh --gate-onda` (só os testes que a onda
@@ -193,13 +267,25 @@ if [ -f "$MAIN/.planning/worktree-fixtures.txt" ]; then
         if [ -d "./$d/$(basename "$d")" ]; then
           echo "🔔 ANINHAMENTO em ./$d/$(basename "$d") — NÃO prossiga: remova só o nível aninhado e registre em incidentes:"
         fi
+        # conferência por contagem (45n, F24.5: o rsync deixou 6 .xlsx para trás EM SILÊNCIO)
+        n_orig=$(find "$MAIN/$d" -type f 2>/dev/null | wc -l)
+        n_dest=$(find "./$d" -type f 2>/dev/null | wc -l)
+        if [ "$n_orig" != "$n_dest" ]; then
+          echo "🔔 COPIA-INCOMPLETA em $d: origem $n_orig arquivo(s), cópia $n_dest — complete com 'cp -an \"$MAIN/$d/.\" \"./$d/\"' e registre em incidentes:"
+          cp -an "$MAIN/$d/." "./$d/" 2>/dev/null || true
+          n_dest2=$(find "./$d" -type f 2>/dev/null | wc -l)
+          [ "$n_orig" = "$n_dest2" ] || echo "🔔 COPIA-INCOMPLETA PERSISTE em $d ($n_orig × $n_dest2) — PARE e devolva needs_decision"
+        fi
       done
 fi
 ```
 
 (rsync faz merge idempotente — re-rodar a cópia numa retomada não reaninha; `cp -n`/`cp -an`
 preservam o que já existir, mas re-execução sobre destino existente foi exatamente o vetor
-do aninhamento da F22 — por isso a guarda é obrigatória mesmo no fallback.) A cópia é o canal **sancionado** — e não muda a
+do aninhamento da F22 — por isso a guarda é obrigatória mesmo no fallback. A contagem origem ×
+destino é obrigatória por fixture: `rsync` e `cp -n` podem pular arquivo por permissão, nome com
+caractere especial ou espaço em disco, e nenhum dos dois acusa — na F24.5 foram 6 planilhas do
+entregável do cliente.) A cópia é o canal **sancionado** — e não muda a
 regra de sempre: replicar ≠ inspecionar. Nenhum agente imprime/dumpa o conteúdo de `.env*` no
 transcript; quem precisa de um valor consome a env pelo processo (dotenv/`process.env`),
 nunca por `cat`. As fixtures copiadas vivem e morrem com o worktree (a remoção dele as
@@ -220,6 +306,19 @@ paralelismo primeiro — para fixture gitignored, o conserto sancionado é decla
 acima. Serializou de fato, por qualquer caminho? Isso é desvio: entra OBRIGATORIAMENTE
 em `incidentes:` no retorno, nunca só num log de camada 2.
 
+**Incidente se grava na hora, não no fecho.** Todo desvio que você vai listar em `incidentes:`
+também é gravado no run-log **no momento em que acontece**, com o `ts` do fato:
+
+```bash
+bash "$HOME/.claude/skills/go-and-do/scripts/run-log.sh" "<phase_dir>" "<NN>" incidente "3 construcao" \
+  --kv origem=execute-host --kv detalhe="<o quê · por quê · quem decidiu>"
+```
+
+O bloco `incidentes:` do retorno continua obrigatório e é o mesmo conteúdo — ele é o resumo ao
+orquestrador, não o registro. O porquê: na F24.5 os 11 incidentes da etapa chegaram ao run-log
+no mesmo segundo, no fecho, e a auditoria perdeu a ordem dos fatos (qual desvio veio antes de
+qual conserto).
+
 **Guarda anti-reversão (inclua este bloco, verbatim, em TODO briefing de executor —
 worktree ou árvore compartilhada):**
 
@@ -234,6 +333,26 @@ O porquê (caso real, F20): um executor rodou `git stash -u` + `git checkout <ha
 e reverteu arquivos rastreados da árvore compartilhada — detectou e desfez sozinho em 25s,
 mas nada impedia a perda. Mesma família do guard de proveniência: a proteção não pode
 depender do reflexo de quem errou.
+
+**Instrumento sob julgamento.** Quando um `confere-*.sh`, um hook ou um script do fork está
+reprovando a rodada **por defeito dele mesmo**, ele é evidência, nunca alvo. Grave
+`<phase_dir>/.gate-fail-<etapa>-evidencia.txt` com o comando, a saída literal e a linha que você
+julga errada, commite e devolva a decisão ao coordenador. Nunca `sed`, nunca `Edit`, nunca um
+remendo «temporário» no instrumento enquanto a rodada que ele julga está aberta — nem quando o
+seu diagnóstico está certo. F24.5, 23:47–23:49: o diagnóstico **estava** certo e o gesto
+continuava errado; só o classificador de permissões o impediu, duas vezes.
+
+**Negativa de guarda não se contorna.** Se um comando seu for recusado por estar «isolado no
+worktree» (ou por qualquer guarda), a resposta é **devolver o bloqueio ao coordenador** com o
+comando negado e a mensagem literal — e seguir com o que não depende dele. É proibido chamar a
+mesma operação por outra via para escapar do guarda: `subprocess.run(["git", …])` dentro de
+`python -c`, `os.system`, script intermediário, alias. O porquê (F24.5): três executores
+commitaram por dentro do Python, o hook não viu nada, e um deles, sem conseguir usar o
+`roda-suite.sh`, rodou um teste de 190 s em primeiro plano. Chegaram à mesa; a empresa ficou
+com uma catraca que não funciona e uma janela que todo mundo sabe abrir.
+Forma do comando de git dentro de um worktree: `git <sub> …` **nu**, na raiz do worktree — sem
+`cd X && git …`, sem `for … git`, sem `bash script.sh` que chame git por dentro. Essas formas
+a checagem de isolamento recusa por não conseguir verificá-las, e a recusa é correta.
 
 **Guarda de segredo PRÉ-commit (inclua no briefing de todo executor cujo plano toca API
 externa viva ou dados de terceiros):**
@@ -258,6 +377,12 @@ git diff) · commitado: Y em <sha>`) — nunca o estado efêmero do disco como s
 fato. Caso real (F21): o retorno da execução alegou `use_worktrees: false` "não-commitado
 no disco" e a auditoria só achou `true` commitado — alegação sem trilha vira número morto
 em relatório permanente.
+
+**Toda hora que você escreve em artefato é `date -Is` do momento**, nunca um horário estimado.
+Vale para o frontmatter do `VERIFICATION.md`, para o `SUMMARY.md` e para qualquer registro: na
+F24.5 o VERIFICATION nasceu com `21:30:00` redondo, e a hora virou número morto num documento
+permanente. Se você não pode rodar `date`, escreva `hora: nao_medida` — nunca um palpite com
+cara de medição.
 
 Economia de testes (princípio agnóstico de stack; o racional: na F16, 58% do tempo de
 execução foi suíte de teste, com ~1h45 de re-verificação duplicada e ~35min de runs

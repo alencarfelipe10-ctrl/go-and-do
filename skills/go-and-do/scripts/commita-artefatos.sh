@@ -3,7 +3,7 @@
 # bash prontos do 6.3b e do 6.5 viram funções de script — escritor único: script
 # commita, modelo não digita git).
 #
-# Uso: commita-artefatos.sh <phase_dir> <NN> <uat|runlog>
+# Uso: commita-artefatos.sh <phase_dir> <NN> <uat|runlog|intencao>
 #   uat    — NN-UAT.md + uat-evidencia/ (árvore limpa pro preflight do ship; caminhos
 #            explícitos — NUNCA git add de diretório .planning inteiro nem .err/.log).
 #            Em uat-evidencia/, a seleção é EXPLÍCITA por extensão de evidência
@@ -52,8 +52,25 @@ case "$MODO" in
   runlog)
     git add "$PD/$NN-RUN-LOG.jsonl" 2>/dev/null || true
     [ -f "$PD/$NN-DECISOES.md" ] && git add "$PD/$NN-DECISOES.md" 2>/dev/null || true
-    MSG="docs(fase $NN): run-log e decisões da rodada" ;;
-  *) echo "modo desconhecido: $MODO (uat|runlog)" >&2; exit 2 ;;
+    # 46(p): o state.json do GSD muda durante a rodada e ficava modificado fora do commit
+    # (árvore suja no preflight do ship, F24.5). Caminho explícito, nunca `git add .planning`.
+    [ -f "$ROOT/.planning/state.json" ] && git add "$ROOT/.planning/state.json" 2>/dev/null || true
+    MSG="docs(fase $NN): run-log, decisões e state da rodada" ;;
+  intencao)
+    # M6 (F24.5): `git commit --only` recusa arquivo NOVO (pareceres do 1º ciclo). `git add`
+    # com pathspec explícito aceita novo e rastreado, e continua sem tocar no resto do
+    # worktree sujo do usuário — que é o motivo de o `--only` ter sido escolhido em 2026-07.
+    for f in "$PD/$NN-PRE-SPEC.md" "$PD/$NN-SPEC.md" "$PD/$NN-CONTEXT.md" "$PD/$NN-INTENT-REVIEW.md"; do
+      [ -f "$f" ] && { git add -- "$f" 2>/dev/null || true; }
+    done
+    PAR=()
+    if [ -d "$PD/pareceres" ]; then
+      mapfile -d '' -t PAR < <(find "$PD/pareceres" -maxdepth 1 -type f \
+        -name "$NN-parecer-*.md" ! -name '.*' -print0 2>/dev/null)
+    fi
+    [ ${#PAR[@]} -gt 0 ] && { git add -- "${PAR[@]}" 2>/dev/null || true; }
+    MSG="docs(fase $NN): consultoria especializada de intenção" ;;
+  *) echo "modo desconhecido: $MODO (uat|runlog|intencao)" >&2; exit 2 ;;
 esac
 if git diff --cached --quiet 2>/dev/null; then
   STATUS=nada_a_commitar

@@ -39,10 +39,17 @@ retomada antes de te despachar — não re-cheque. Scripts em
    `<phase_dir>/pareceres/.briefing-review.md` e anexe a lista de arquivos do escopo
    (dos SUMMARY.md) + o caminho do repo. Lance em background:
    ```bash
+   rm -f "<phase_dir>/pareceres/.codex-review.done"
    ( $HOME/.claude/skills/go-and-do/scripts/roda-codex.sh "<phase_dir>" "<NN>" review \
        "<phase_dir>/pareceres/.briefing-review.md" \
-       --out "<phase_dir>/pareceres/<NN>-parecer-codex-review.md" ) &
+       --out "<phase_dir>/pareceres/<NN>-parecer-codex-review.md" ;
+     touch "<phase_dir>/pareceres/.codex-review.done" ) &
    ```
+   O `; touch <marcador>` **não é enfeite**: é a única forma de `&` de fundo que o
+   `gad-bash-guard` aceita (`hooks/gad-bash-guard.sh`, regex `WAITER`). Sem ele o comando
+   é negado — aconteceu na retomada de 10/09, 3 negações em 5 s (`setsid`, depois `&`), e
+   a lane acabou rodando em primeiro plano, fora do contrato. Não troque por `setsid`,
+   `nohup` nem `run_in_background`.
    e siga IMEDIATAMENTE para o passo 2 (o custo do Codex é só de parede). Exit 5
    (`revisor_ausente`) → siga sem a lane, sino declarado — o reviewer interno canônico
    é o piso do gate 22 (não bloqueia, PC-6 vale só para a revisão adversarial).
@@ -59,14 +66,27 @@ retomada antes de te despachar — não re-cheque. Scripts em
    ("Re-audit / View" — acontece no ciclo de conserto do UAT, quando o `NN-REVIEW.md`
    da rodada anterior já existe), escolha **re-auditar** você mesmo (é o propósito do
    despacho; não devolva `needs_decision` para isso).
-   **Nomenclatura das rodadas (ordem cronológica, regra dura):** rodou mais de uma
-   rodada? A 1ª fica/permanece em `NN-REVIEW.md` e as seguintes ganham sufixo crescente
-   (`NN-REVIEW.iter2.md` = 2ª rodada, e assim por diante) — NUNCA mova a rodada 1 para o
-   arquivo `iter2` deixando a 2ª no nome base (caso real F20: quem lia pelo nome lia as
-   rodadas ao contrário). Mesma regra para os `NN-REVIEW-FIX*.md`.
+   **Nomenclatura das rodadas — comando, não julgamento.** Antes de escrever a rodada k
+   (k ≥ 2), rode exatamente isto e escreva no caminho que ele imprimir:
+   ```bash
+   PD="<phase_dir>"; NN="<NN>"
+   k=$(find "$PD" -maxdepth 1 \( -name "$NN-REVIEW.md" -o -name "$NN-REVIEW.iter*.md" \) 2>/dev/null | wc -l)
+   dest="$PD/$NN-REVIEW.iter$((k+1)).md"; [ "$k" = 0 ] && dest="$PD/$NN-REVIEW.md"
+   echo "$dest"
+   ```
+   (A contagem é por `find`, não por `ls` com glob: sob zsh um glob sem correspondência
+   aborta o comando inteiro — o mesmo artefato de shell que já falseou uma varredura de
+   segredos na F2-rlr e a leitura do `INIT` no `plan-phase.md`.)
+   A rodada 1 fica, para sempre, em `NN-REVIEW.md`; a rodada k ≥ 2 nasce em
+   `NN-REVIEW.iter<k>.md`. **Nunca copie, mova ou renomeie um arquivo de rodada anterior**
+   — quem lê pelo nome leria as rodadas ao contrário (caso real F20, repetido na F24.5:
+   `cp REVIEW.md → .iter2.md` gravou a rodada 1 sob o nome da 2). Mesma regra para os
+   `NN-REVIEW-FIX*.md`.
 2b. **Funil + merge da lane Codex (iteração 1, depois que o comando fechar):** espere o
-   parecer com waiter de disco (marcador do roda-codex; deadline 10min — não chegou →
-   siga sem ele, sino). Parecer presente → despache **`gad-verificador`** (síncrono)
+   parecer com o waiter de disco pelo marcador que o passo 1 criou —
+   `timeout 570 bash -c 'until [ -e "<phase_dir>/pareceres/.codex-review.done" ]; do sleep 15; done'`,
+   chamado de novo enquanto o arquivo não existir, até o deadline de 10 min; não chegou →
+   siga sem ele, sino. Nunca com `run_in_background`. Parecer presente → despache **`gad-verificador`** (síncrono)
    com `prompts/intent-verifica.md` adaptado no despacho: "verifique cada achado do
    parecer `<caminho>` contra o código real; vereditos confirmado/nao_sustentado; sem
    classificação de ciclo". Então faça o merge no formato canônico:
