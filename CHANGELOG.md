@@ -2,7 +2,7 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
-## [Unreleased]
+## [2.6.1] - 2026-09-12
 
 - **Etapa 3 hospedada no `gad-execute`** (3B-01, trecho adiado da 2.6.0): o bullet do 3.3 e a
   Sub-rotina H do `workflow.md` passam a despachar `Agent(subagent_type="gad-execute")` sem
