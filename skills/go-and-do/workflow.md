@@ -79,7 +79,7 @@ gate (`pre-despacho.sh`) before it.
 | 1.5 | design contracts | 🎌 `setup-contratos.sh` → agent `gad-contratos` + `prompts/contratos.md` |
 | 2 | planning | 🔒 ⏭️ agent `gad-plan` + `prompts/plan.md`; 2.4b resolves `autonomous: false` |
 | 2.5 | plan convergence | 🔒 ⏭️ subagent + `prompts/convergence.md` (PC-6 fail-closed) |
-| 3 | build | 🔒 3.2 parallelism authority → subagent + `prompts/execute.md` → 3.4 crossroads → 3.5 gaps 1× |
+| 3 | build | 🔒 3.2 parallelism authority → `gad-execute` + `prompts/execute.md` → 3.4 crossroads → 3.5 gaps 1× |
 | 4 | quality gates | 🔒 ⏭️ per gate: code-review · 🎌 ui-review · 🎌 eval-review · secure (only blocking gate) · validate |
 | 5 | automated interactive UAT | resume by `NN-UAT.md` state; generate → run (Sonnet + `uat-playbook.md`) → 1 fix cycle |
 | 6 | close + ship | `pre-despacho.sh 6` routes pausa/handback/ship; Sub-rotina F; ship via `prompts/close.md`; `confere-etapa.sh 6` |
@@ -338,9 +338,17 @@ runs the `base-check` and measures the waves of ≥2 incomplete plans.
   briefing — and fails if `use_worktrees` turned `false` during the stage.
 
 **3.3 — Execution.** The fence opened in 3.2 (`pre-despacho.sh 3`). Default route = subagent (re-check `nao_autonomos`):
-- All autonomous (normal case) → subagent with `prompts/execute.md` (args
-  `N --auto --no-transition`): hosts `gsd-execute-phase` — executor waves (layer 2) → code +
-  commits + SUMMARY → verification. Inherited stops become `needs_decision`; human action →
+- All autonomous (normal case) → dispatch `Agent(subagent_type="gad-execute")` with
+  `prompts/execute.md` (args `N --auto --no-transition`), **without `model:` and without
+  `effort:` in the call** — the def pins Opus 5 / medium, and `gad-lifecycle.sh` denies a
+  `gad-*` dispatch whose call disagrees with the def (E7(b); F24.5 lost one dispatch of
+  `gad-verificador` to exactly that). The def carries `experimental: cacheTtl: 1h`: on F24.5
+  this host spent 75 % of the stage waiting, and 30 expirations of the 5-minute cache cost
+  US$ 57 of its US$ 94 (bench A, 12/09/2026: after a 6-min wait the new def re-read 44 k from
+  cache and wrote 214). If the dispatch fails because the def is not installed, that is an
+  installation error — stop and tell the user; it is not a reason to fall back to the inline
+  route. The host hosts `gsd-execute-phase` — executor waves (layer 2) → code + commits +
+  SUMMARY → verification. Inherited stops become `needs_decision`; human action →
   `done · incompleto`. Routing: `done` (any verdict) → 3.4 (the crossroads reads the DISK,
   not the return) · `needs_decision` → question + continuation · `blocked` → `stop`, stop.
 - Some `autonomous: false` left → inline (`Skill gsd-execute-phase --auto --no-transition` in
@@ -876,7 +884,9 @@ hosts (GSD's internal ones + this skill's `gad-*` children, defs in `~/.claude/a
 layer-0 window is the scarcest resource.
 
 Dispatch. A stage whose block says to dispatch runs in a `general-purpose` subagent (inherited
-model, unless the block pins one), always synchronous: explicit `run_in_background: false` —
+model, unless the block pins one). Stages with a def of their own (`gad-intent`, `gad-contratos`,
+`gad-plan`, `gad-execute`) are dispatched by that `subagent_type`, never as `general-purpose`, and
+never with `model`/`effort` in the call. Always synchronous: explicit `run_in_background: false` —
 a background dispatch breaks the flow (the notification does not resume the script). The
 dispatch prompt is minimal; the instructions live in `prompts/<etapa>.md`, which the SUBAGENT
 reads from disk. Do not read the prompt before dispatching — reference the path. The dispatch

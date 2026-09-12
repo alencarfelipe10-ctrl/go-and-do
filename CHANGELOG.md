@@ -2,6 +2,16 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Unreleased]
+
+- **Etapa 3 hospedada no `gad-execute`** (3B-01, trecho adiado da 2.6.0): o bullet do 3.3 e a
+  Sub-rotina H do `workflow.md` passam a despachar `Agent(subagent_type="gad-execute")` sem
+  `model`/`effort` na chamada. Destravado pela **bancada A** (12/09/2026, CC 2.1.269): def nova com
+  `Agent`+`Skill` em `tools:` e `experimental: cacheTtl: 1h` — após espera de 6 min 17 s o filho
+  releu 44.250 tokens do cache e escreveu 214 (`ephemeral_1h_input_tokens`, `5m = 0`); o
+  `gad-lifecycle.sh` grava o despacho com `camada:1`, `claude-opus-5`, `medium` e o `SubagentStop`
+  com `fim_real:true`. Sem prova em fase real.
+
 ## [2.6.0] - 2026-09-12
 
 Pacote da auditoria da F24.5 (grupo-inspired, 11/09) — tarefas 45/46/47. Planos em
