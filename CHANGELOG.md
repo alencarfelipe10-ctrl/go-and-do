@@ -2,12 +2,19 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
-## [Unreleased]
+## [2.6.0] - 2026-09-12
 
 Pacote da auditoria da F24.5 (grupo-inspired, 11/09) — tarefas 45/46/47. Planos em
 `gsd-optimize/go-and-do-evolucao/planos-acao-f24.5-consertos/`, executados por 4 subagentes
 (P1, P2, P3S, P3F) em worktrees próprios, mais 1 bancada de medição. Suíte 33/33.
-Número da release ainda não aprovado pelo dono.
+
+Decisões do dono em 12/09 que fecharam as pendências dos relatórios: o `gad-bash-guard` **mantém**
+a negativa de `run_in_background` para a suíte crua (só `roda-suite.sh --esperar`/`--gate-onda`
+passam — o rastro em `.git/gad-suite/` é o que o `/audit-gad` lê); a cláusula «não use o Monitor
+para vigiar filho `Agent`» **saiu** do `prompts/execute.md` (as 10 chamadas medidas na F24.5
+voltaram em 2–4 s sem queimar TTL — a regra é «encerre o turno», não «evite o Monitor»); no fork
+do GSD, a varredura de importadores do gate de onda ficou atrás de `workflow.gate_onda_importadores`
+(default false) e a capability `intel` foi desligada nos projetos Python (índice vazio).
 
 ### Etapa de intenção
 - Ciclo 0 só roda com sino em disco: sem sino, `.ciclo0.json` com `dispensado: true` e briefing do

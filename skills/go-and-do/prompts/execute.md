@@ -127,8 +127,8 @@ camada 0.
 turno sem chamar mais nenhuma tool**. O Claude Code não considera terminado um agente que tem
 filho vivo: a notificação chega a cada término, e o disco é que diz quais planos já fecharam. O
 aviso é prosa; o resultado vale pelo **disco** — leia o `NN-SUMMARY-<plano>.md`, o commit e o
-run-log antes de decidir qualquer coisa. Não durma, não faça polling, não chame `wait`, não use o
-Monitor para vigiar filho `Agent` (F24.5: 4 waiters de 593 s, cada um um turno de ~350 k tokens).
+run-log antes de decidir qualquer coisa. Não durma, não faça polling, não chame `wait`
+(F24.5: 4 waiters de 593 s, cada um um turno de ~350 k tokens).
 Acordou e o SUMMARY de algum plano não está lá? Aí sim, **uma** chamada do waiter sancionado
 `timeout 590 bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` (parâmetro `timeout: 600000`), e
 registre `espera_por_waiter: <arquivo>` em `incidentes:`.
