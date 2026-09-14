@@ -2,6 +2,18 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.6.2] - 2026-09-14
+
+- **Marcador de despacho do GSD 1.14.0 no contrato de leitura** (tarefa 11e): o 1c de
+  `prompts/execute.md` passa a mandar descer verbatim o `[gsd:dispatch phase="…" plan="…"]` que o
+  `execute-phase.md` 1.14.0 coloca no `<objective>` do executor (#4594), com o `plan_id` copiado do
+  `phase-plan-index`. O hook de isolamento lê o marcador antes da `description` do 1b; as duas
+  grafias precisam concordar. Sem prova em fase real.
+- **Precedência da regra de stall**: o GSD 1.14.0 traz `executor-progress-policy.md` (stall =
+  tempo sem progresso); nesta versão a regra «mata e relança» da skill prevalece, até a /audit-gad
+  medir na 1ª fase real (decisão 3b-5 de 14/09/2026).
+- `tests/test-contrato-execute.sh`: +3 literais.
+
 ## [2.6.1] - 2026-09-12
 
 - **Etapa 3 hospedada no `gad-execute`** (3B-01, trecho adiado da 2.6.0): o bullet do 3.3 e a

@@ -50,6 +50,11 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    própria definição de agente» — a definição carrega um `@`, e `@` não expande dentro do `prompt`
    de um `Agent()`. Na F24.5 essa frase custou um turno e 3,1 k tokens a cada um dos executores
    (o literal aparece em 10 transcripts da rodada).
+   Desde o GSD 1.14.0 (#4594) o `<objective>` do executor traz o marcador
+   `[gsd:dispatch phase="{phase_number}" plan="{plan_id}"]` — ele também desce **verbatim**, com
+   o `{phase_number}` do `init.execute-phase` e o `{plan_id}` copiado do `phase-plan-index`, nunca
+   digitado. O hook de isolamento lê esse marcador antes da `description` (1b); marcador e
+   description precisam dizer a mesma fase, senão o sentinel é descartado e o despacho negado.
 2. Deixe o motor de ondas trabalhar. O `--auto` **não silencia** as paradas de
    realidade — falha de teste de regressão, schema drift, conflito pós-merge — e elas
    devem parar mesmo: são decisões do usuário → siga o `<environment>` (devolva
@@ -175,6 +180,9 @@ Saída vazia com exit 0 também é falha.
 
 Executor travado (stall do `gsd-execute-phase`, ou o teto acima estourado sem
 `SUMMARY.md`): a única resposta automática é matar o executor e relançá-lo em cópia
+nova. O GSD 1.14.0 traz `executor-progress-policy.md` (stall = tempo sem progresso, nunca
+«Finalize immediately»); nesta versão a regra desta skill prevalece sobre a dele — a
+medição pela /audit-gad na 1ª fase real decide se as duas convergem. Relançar é em cópia
 nova (`isolation: worktree`, o mesmo despacho, idempotente pelos `SUMMARY.md` que já
 existem). Rodar o plano inline, na árvore principal, nunca é escolha sua — inline
 serializa a onda e some com a cópia isolada; só o dono autoriza, por `needs_decision`.
