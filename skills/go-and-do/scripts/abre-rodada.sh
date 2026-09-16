@@ -7,8 +7,6 @@
 #
 # Uso: abre-rodada.sh <N> [--ui] [--ai] [--no-ship] [--vault <perfil>] [--obs texto até a próxima flag]
 #                     [--projeto DIR] [--dry-run]
-#      abre-rodada.sh --registra-aninhamento <ok|falha>   (grava o resultado do probe
-#                     S.H com a versão do CC — cache versão-condicionado)
 #
 # Estágios (falha em QUALQUER um → exit != 0 com motivo e NADA meio-escrito; o evento
 # `run` e o ponteiro só nascem se tudo antes passou):
@@ -25,9 +23,9 @@
 #      agnóstico à versão que o criou, PC-2) · `etapa_2` = pular|despachar (2.A)
 #   6. detecção de vault (5.E-h): fase com cara de UI autenticada sem --vault →
 #      `vault_alerta` para a camada 0 perguntar ANTES de gastar a fase
-#   7. probe de aninhamento (S.H): cache versão-condicionado do CC em
-#      ~/.claude/.gad-aninhamento.json; versão diferente → `probe_necessario` (a camada
-#      0 roda o probe e registra com --registra-aninhamento)
+#   7. (removido — probe de aninhamento S.H: custava um subagente por versão do CC e não
+#      pegava o incidente real, o classificador negando spawn; quem vigia a retirada do
+#      recurso é o /cc-watch. `cc_version` segue gravada no evento `run`.)
 #   8. conferência do hook gad-lifecycle no settings (PC-4): ausente → degradação
 #      DECLARADA (`hook_instalado: false` no JSON + no evento run; asserts de despacho
 #      viram informativos)
@@ -46,18 +44,7 @@ set -euo pipefail
 shopt -s nullglob
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
 
-ANIN_CACHE="$HOME/.claude/.gad-aninhamento.json"
 cc_version() { claude --version 2>/dev/null | grep -o '[0-9][0-9.]*' | head -1 || echo desconhecida; }
-
-# ── modo --registra-aninhamento ──────────────────────────────────────────────
-if [ "${1:-}" = "--registra-aninhamento" ]; then
-  res="${2:-}"
-  case "$res" in ok|falha) ;; *) echo "uso: --registra-aninhamento <ok|falha>" >&2; exit 2 ;; esac
-  jq -cn --arg v "$(cc_version)" --arg r "$res" --arg ts "$(date -Is)" \
-    '{cc_version:$v, resultado:$r, ts:$ts}' > "$ANIN_CACHE"
-  echo "aninhamento=$res registrado para CC $(cc_version)"
-  exit 0
-fi
 
 # ── 1. parse fail-closed (0.1) ───────────────────────────────────────────────
 exige_valor() { case "${2-}" in ''|--*) echo "ERRO: $1 exige um valor" >&2; exit 2 ;; esac; }
@@ -162,13 +149,8 @@ if [ "$VAULT" = false ] && { [ "$UI" = true ] || [ "$(tem UI-SPEC.md)" = true ];
   [ -n "$VAULT_TERMOS" ] && VAULT_ALERTA=true
 fi
 
-# ── 7. aninhamento (S.H) — cache versão-condicionado ─────────────────────────
+# ── (7. removido — ver cabeçalho) ────────────────────────────────────────────
 CCV=$(cc_version)
-if [ -f "$ANIN_CACHE" ] && [ "$(jq -r '.cc_version' "$ANIN_CACHE" 2>/dev/null)" = "$CCV" ]; then
-  ANIN=$(jq -c '{cc_version, resultado, de_cache: true}' "$ANIN_CACHE")
-else
-  ANIN=$(jq -cn --arg v "$CCV" '{cc_version:$v, resultado:"desconhecido", probe_necessario:true}')
-fi
 
 # ── 8. hook gad-lifecycle no settings (PC-4) ─────────────────────────────────
 HOOK=false
@@ -220,7 +202,7 @@ if [ "$DRY" = 0 ]; then
     ${MODELO:+--modelo "$MODELO"} --camada 0 \
     --kv hook_instalado=$HOOK --kv etapa_1="$ETAPA1" --kv etapa_2="$ETAPA2" \
     --kv pre_spec="$([ -n "$PRE_SPEC" ] && echo detectado || echo ausente)" \
-    --kv inventario="$INVENTARIO"
+    --kv inventario="$INVENTARIO" --kv cc_version="$CCV"
   ABERTA=true
 fi
 
@@ -231,7 +213,7 @@ gad_json_out abre-rodada "$(jq -cn \
   --argjson retrato "$RETRATO" --argjson ctx "$CONTEXTO" \
   --arg e1 "$ETAPA1" --arg e2 "$ETAPA2" \
   --argjson valerta "$VAULT_ALERTA" --arg vtermos "$VAULT_TERMOS" \
-  --argjson anin "$ANIN" --argjson hook "$HOOK" --argjson tasks "$TASKS" --argjson aberta "$ABERTA" \
+  --argjson hook "$HOOK" --argjson tasks "$TASKS" --argjson aberta "$ABERTA" \
   --arg ps "$PRE_SPEC" --arg inv "$INVENTARIO" \
   '{args:{fase:$fase, ui:$ui, ai:$ai, no_ship:$ns, vault:$va, vault_profile:(if $vp == "" then null else $vp end), obs:$obs},
     retrato:$retrato, contexto:$ctx,
@@ -239,6 +221,6 @@ gad_json_out abre-rodada "$(jq -cn \
     etapa_1:$e1, etapa_2:$e2,
     vault_alerta:(if $valerta then {alerta:true, termos:$vtermos,
       pergunta:"A fase parece ter UI autenticada e a rodada veio SEM --vault — sem credenciais o UAT queima a fase (24/31 balde-3 da série eram login). Confirmar vault antes de começar?"} else false end),
-    aninhamento:$anin, hook_instalado:$hook,
+    hook_instalado:$hook,
     tasklist:$tasks,
     rodada:{aberta:$aberta, nn:$nn, phase_dir:$pd}}')"

@@ -12,6 +12,7 @@ sua resposta final é parseada por um programa — devolva somente o contrato de
 pedido no prompt da tarefa, sem preâmbulo nem posfácio.
 
 Regras permanentes:
+- Spawn negado: se uma chamada Agent sua for negada, não improvise outra rota. Grave o progresso e devolva estado: blocked com motivo: spawn_negado — <mensagem literal>; quem decide a rota é o dono, pela camada 0.
 - O trabalho verboso desce para filhos descartáveis de camada 2 (`gad-spec`,
   `gad-discuss`, `gad-explore`, `gad-verificador`) — na sua janela ficam triagem,
   briefing e decisões.

@@ -222,5 +222,25 @@ eq "termo só no PRE-SPEC → alerta" "$(campo "$J" .vault_alerta.alerta)" "true
 rm -f "$PD/02-PRE-SPEC.md"
 
 echo
+
+# ══════════════════════════ casos T2: sai o probe de aninhamento
+echo "── caso 15 (T2): --registra-aninhamento sumiu; sem chave aninhamento; cc_version no run ──"
+HOME_FALSO="$BASE/home-falso"; mkdir -p "$HOME_FALSO/.claude"
+roda_args --registra-aninhamento ok
+eq "--registra-aninhamento não é mais um modo (flag desconhecida)" "$EXIT" "2"
+
+roda_args 2 --dry-run
+nao_casa "JSON não tem mais a chave aninhamento" "$J" '"aninhamento"'
+
+rm -f "$ROOT/.planning/.gad-rodada-ativa.json"
+( cd "$ROOT" && HOME="$HOME_FALSO" CLAUDE_CODE_SESSION_ID= RUNLOG_SEM_ESPELHO=1 bash "$S" 2 ) \
+  > "$BASE/saida.txt" 2>&1
+EXIT=$?; J="$(cat "$BASE/saida.txt")"
+eq "abertura real (HOME falso): exit 0" "$EXIT" "0"
+RUNLOG="$PD/02-RUN-LOG.jsonl"
+casa "evento run grava cc_version" "$(cat "$RUNLOG" 2>/dev/null || true)" '"cc_version"'
+rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG"
+
+echo
 echo "abre-rodada: $OK ok · $FALHAS falhas"
 [ "$FALHAS" -eq 0 ]

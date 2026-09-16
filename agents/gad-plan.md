@@ -12,6 +12,7 @@ disco; sua resposta final é parseada por um programa — devolva somente o cont
 retorno pedido no prompt da tarefa, sem preâmbulo nem posfácio.
 
 Regras permanentes:
+- Spawn negado: se uma chamada Agent sua for negada, não improvise outra rota. Grave o progresso e devolva estado: blocked com motivo: spawn_negado — <mensagem literal>; quem decide a rota é o dono, pela camada 0.
 - Você hospeda o `gsd-plan-phase` INLINE na sua janela; os agentes que ele despacha
   são camada 2 legítima.
 - Quando várias ações não dependem umas das outras, faça todas no MESMO turno — cada

@@ -101,7 +101,7 @@ to every dispatch of the run — Sub-rotina H).
 **0.2 — Atomic opening.** Run `$HOME/.claude/skills/go-and-do/scripts/abre-rodada.sh N [flags]`
 and obey the JSON (mirror in `.planning/.gad/last-abre-rodada.json`): entry gates, phase
 snapshot (`phase_dir`/`padded_phase`/`has_plans`/`has_verification`), context gate, resume
-decisions (`etapa_1`/`etapa_2`), `vault_alerta`, `aninhamento`, `hook_instalado`, TaskList
+decisions (`etapa_1`/`etapa_2`), `vault_alerta`, `hook_instalado`, TaskList
 snapshot, `run` event + run pointer — all in one script. Exit ≠ 0 → stop with the script's reason (exit 2 =
 gate/argument · 3 = context at the ceiling · 4 = phase not found). Missing entry
 prerequisites are the first hard stop (Etapa 0).
@@ -111,8 +111,6 @@ prerequisites are the first hard stop (Etapa 0).
 - Mirror the TaskList (Sub-rotina C).
 - `vault_alerta` → ask BEFORE spending the phase (phase that looks like an authenticated UI
   without `--vault`).
-- `aninhamento.probe_necessario: true` → minimal probe + `--registra-aninhamento`
-  (Sub-rotina H).
 - `hook_instalado: false` → declared degradation (one line; dispatch asserts become
   informative).
 - `--ui`/UI-SPEC → read `workflow-ui.md`; `--ai`/AI-SPEC → `workflow-ai.md` (the only read of
@@ -961,17 +959,13 @@ return is routing data; the body lives on disk):
 - `blocked` — precondition unavailable. Handle by the stage block's semantics; descending into
   a subagent does not loosen any fail-closed — the block goes up and layer 0 stops.
 
-Nesting probe (S.H, mechanical cache). Nesting (layer 1 spawning layer 2) is a capability the
-runtime toggles between releases — no conclusion is timeless. `abre-rodada.sh` keeps the
-version-conditioned cache (`~/.claude/.gad-aninhamento.json`): `aninhamento.resultado:
-ok|falha` → obey; `aninhamento.probe_necessario: true` (CC version changed) → run the minimal
-probe (one `general-purpose` that answers whether it has the `Agent` tool, ~2k tokens) and
-record with `abre-rodada.sh --registra-aninhamento ok|falha`. Probe `falha` → inline route for
-the spawning stages, with two non-negotiable rules: (1) inline ⇒ read `prompts/<etapa>.md`
-before conducting (the "do not read before dispatching" rule INVERTS — you take the
-subagent's role and the disciplines live there); (2) version-conditioned record in
-`NN-DECISOES.md`/`.continue-here.md` ("na CC <versão-exata>…"), never timeless — on a resume
-or version bump, the cache re-requires the probe.
+Spawn denied (S.H). No pre-flight probe: `/cc-watch` watches for the removal of nesting. A
+layer-1 host whose `Agent` call is denied returns `blocked` with `motivo: spawn_negado — <literal
+message>`. Never take the stage over on your own (the harness treats it as permission
+laundering): it is a hard gate (Sub-rotina I, criterion 5) — ask «assumir a etapa inline nesta
+rodada» / «pausar a rodada». Only with the owner's yes, conduct inline: read
+`prompts/<etapa>.md` first, and record it in `NN-DECISOES.md` with the exact CC version plus
+one `incidente` event (`detalhe=spawn_negado`).
 
 Cross-session resume. Continuing a subagent only works in the SAME session. In a new session
 the state is on disk: layer 0 identifies the pending stage and re-dispatches; fine-grained
