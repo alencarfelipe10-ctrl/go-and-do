@@ -103,7 +103,8 @@ and obey the JSON (mirror in `.planning/.gad/last-abre-rodada.json`): entry gate
 snapshot (`phase_dir`/`padded_phase`/`has_plans`/`has_verification`), context gate, resume
 decisions (`etapa_1`/`etapa_2`), `vault_alerta`, TaskList
 snapshot, `run` event + run pointer — all in one script. Exit ≠ 0 → stop with the script's reason (exit 2 =
-gate/argument · 3 = context at the ceiling · 4 = phase not found). Missing entry
+gate/argument · 3 = context at the ceiling · 4 = phase not found · 5 = phase in the ROADMAP but
+its directory unresolvable). Missing entry
 prerequisites are the first hard stop (Etapa 0).
 
 **0.3 — Obey the snapshot.**

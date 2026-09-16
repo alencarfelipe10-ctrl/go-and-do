@@ -265,5 +265,26 @@ casa "evento run grava hook_instalado:true" "$(cat "$RUNLOG" 2>/dev/null || true
 rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG" "$HOME_FALSO/.claude/settings.json"
 
 echo
+
+# ══════════════════════════ casos T7: miudezas
+echo "── caso 17 (T7): pergunta sem \"24/31\"; dry-run não sobrescreve o espelho real ──"
+fixture_roadmap t5r2 '{"found":true,"section":"## Fase 2\nTela de login do usuário."}'
+roda_args 2 --ui
+nao_casa "pergunta não cita 24/31"     "$(campo "$J" .vault_alerta.pergunta)" '24/31'
+casa     "pergunta nova (balde 3)"     "$(campo "$J" .vault_alerta.pergunta)" 'balde 3'
+ESPELHO_REAL="$ROOT/.planning/.gad/last-abre-rodada.json"
+[ -f "$ESPELHO_REAL" ] || falha "espelho real precisa existir após abertura de verdade" "ausente: $ESPELHO_REAL"
+CONTEUDO_ANTES="$(cat "$ESPELHO_REAL" 2>/dev/null)"
+rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG"
+
+roda_args 2 --dry-run
+eq "dry-run não altera o espelho real" "$(cat "$ESPELHO_REAL" 2>/dev/null)" "$CONTEUDO_ANTES"
+[ -f "$ROOT/.planning/.gad/last-abre-rodada-dry.json" ] \
+  && ok "espelho do dry-run tem nome próprio" \
+  || falha "espelho do dry-run tem nome próprio" "last-abre-rodada-dry.json ausente"
+rm -f "$ROOT/.planning/.gad/last-abre-rodada-dry.json" "$ESPELHO_REAL"
+unset GAD_ROADMAP_FIXTURE
+
+echo
 echo "abre-rodada: $OK ok · $FALHAS falhas"
 [ "$FALHAS" -eq 0 ]

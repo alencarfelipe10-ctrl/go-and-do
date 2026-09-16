@@ -124,7 +124,7 @@ fi
 
 # ── 5. retomada mecânica: etapa_1 e etapa_2 ─────────────────────────────────
 HAS_PLANS=$(jq -r '.has_plans' <<<"$RETRATO")
-IR_FILE=$(ls "$PHASE_DIR/$NN-INTENT-REVIEW.md" 2>/dev/null | head -1 || true)
+IR_FILE=""; [ -f "$PHASE_DIR/$NN-INTENT-REVIEW.md" ] && IR_FILE="$PHASE_DIR/$NN-INTENT-REVIEW.md"
 IR_ESTADO=""
 [ -n "$IR_FILE" ] && IR_ESTADO=$(grep -m1 '^intent_review:' "$IR_FILE" | sed 's/^intent_review: *//' | tr -d ' \r' || true)
 if [ "$HAS_PLANS" = "true" ] || [ "$IR_ESTADO" = "done" ] || [ "$IR_ESTADO" = "skipped" ]; then
@@ -205,7 +205,8 @@ if [ "$DRY" = 0 ]; then
   ABERTA=true
 fi
 
-gad_json_out abre-rodada "$(jq -cn \
+SLUG=abre-rodada; [ "$DRY" = 1 ] && SLUG=abre-rodada-dry
+gad_json_out "$SLUG" "$(jq -cn \
   --arg fase "$FASE" --arg nn "$NN" --arg pd "$PHASE_DIR" \
   --argjson ui "$UI" --argjson ai "$AI" --argjson ns "$NO_SHIP" --argjson va "$VAULT" --arg obs "$OBS" \
   --arg vp "$VAULT_PROFILE" \
@@ -219,6 +220,6 @@ gad_json_out abre-rodada "$(jq -cn \
     pre_spec:(if $ps != "" then $ps else null end), inventario:$inv,
     etapa_1:$e1, etapa_2:$e2,
     vault_alerta:(if $valerta then {alerta:true, termos:$vtermos,
-      pergunta:"A fase parece ter UI autenticada e a rodada veio SEM --vault — sem credenciais o UAT queima a fase (24/31 balde-3 da série eram login). Confirmar vault antes de começar?"} else false end),
+      pergunta:"A fase parece ter login no navegador e a rodada veio sem --vault: sem credenciais, o UAT não verifica esses fluxos (balde 3). Informar um perfil de vault antes de começar?"} else false end),
     tasklist:$tasks,
     rodada:{aberta:$aberta, nn:$nn, phase_dir:$pd}}')"
