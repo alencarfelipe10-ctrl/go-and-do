@@ -61,6 +61,7 @@ roda() { # roda <N> → grava $EXIT e $J (stdout+stderr). Sem command substituti
   J="$(cat "$BASE/saida.txt")"
 }
 campo() { printf '%s' "$1" | grep -o '^{.*}$' | tail -1 | jq -r "$2" 2>/dev/null || printf '<json-invalido>'; }
+roda_args() { ( cd "$ROOT" && CLAUDE_CODE_SESSION_ID= RUNLOG_SEM_ESPELHO=1 bash "$S" "$@" ) > "$BASE/saida.txt" 2>&1; EXIT=$?; J="$(cat "$BASE/saida.txt")"; }
 
 # ═════════════════════════════════════ caso 1: pasta existe → phase_dir manda
 echo "── caso 1: phase_dir preenchido (pasta no disco) ──"
@@ -124,6 +125,33 @@ printf '# CONTEXT\n' > "$ROOT/.planning/phases/RLR-03-deploy-operacao/03-CONTEXT
 roda 3
 eq "SPEC e CONTEXT escritos → inventário muda"  "$(campo "$J" .inventario)" "spec=sim context=sim pre_spec=sim"
 eq "etapa_1 continua sendo relato do disco (despachar)" "$(campo "$J" .etapa_1)" "despachar"
+
+# ══════════════════════════ caso 7 (T6): flags de valor fail-closed
+echo "── caso 7 (T6): --obs/--vault/--projeto exigem valor ──"
+fixture t6 "{\"phase_found\":true,\"phase_number\":\"RLR-02\",\"phase_name\":\"identidade\",
+  \"phase_dir\":\"$ROOT/.planning/phases/RLR-02-identidade\",\"expected_phase_dir\":null,
+  \"padded_phase\":\"02\",\"planning_exists\":true,\"has_context\":true,\"has_plans\":false,
+  \"has_research\":false,\"has_reviews\":false,\"has_verification\":false,\"plan_count\":0}"
+rm -f "$ROOT/.planning/.gad-rodada-ativa.json"
+
+roda_args 2 --obs a b --dry-run
+eq   "--obs junta as palavras até a próxima flag" "$(campo "$J" .args.obs)" "a b"
+eq   "exit 0"                                     "$EXIT" "0"
+
+roda_args 2 --obs --dry-run
+eq "--obs sem texto → exit 2" "$EXIT" "2"
+
+roda_args 2 --projeto --dry-run
+eq "--projeto sem valor → exit 2" "$EXIT" "2"
+
+roda_args 2 --vault --ui
+eq "--vault sem valor → exit 2" "$EXIT" "2"
+nao_casa "nenhum dos 3 casos de erro criou .gad-rodada-ativa.json" \
+  "$(cat "$ROOT/.planning/.gad-rodada-ativa.json" 2>/dev/null || echo AUSENTE)" '^\{'
+
+roda_args 2 --vault p --dry-run
+eq   "--vault com valor → exit 0"      "$EXIT" "0"
+eq   "args.vault vira true (booleano)" "$(campo "$J" .args.vault)" "true"
 
 echo
 echo "abre-rodada: $OK ok · $FALHAS falhas"

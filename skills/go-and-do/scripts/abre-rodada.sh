@@ -5,7 +5,7 @@
 # 2 turnos: (1) rodar isto; (2) o modelo interpreta o JSON, espelha a TaskList e obedece
 # `etapa_1`/`etapa_2` — o único julgamento que fica, de propósito.
 #
-# Uso: abre-rodada.sh <N> [--ui] [--ai] [--no-ship] [--vault] [--obs "texto"]
+# Uso: abre-rodada.sh <N> [--ui] [--ai] [--no-ship] [--vault <perfil>] [--obs texto até a próxima flag]
 #                     [--projeto DIR] [--dry-run]
 #      abre-rodada.sh --registra-aninhamento <ok|falha>   (grava o resultado do probe
 #                     S.H com a versão do CC — cache versão-condicionado)
@@ -60,22 +60,25 @@ if [ "${1:-}" = "--registra-aninhamento" ]; then
 fi
 
 # ── 1. parse fail-closed (0.1) ───────────────────────────────────────────────
-FASE=""; UI=false; AI=false; NO_SHIP=false; VAULT=false; OBS=""; PROJ=""; DRY=0
+exige_valor() { case "${2-}" in ''|--*) echo "ERRO: $1 exige um valor" >&2; exit 2 ;; esac; }
+FASE=""; UI=false; AI=false; NO_SHIP=false; VAULT=false; VAULT_PROFILE=""; OBS=""; PROJ=""; DRY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --ui) UI=true; shift ;;
     --ai) AI=true; shift ;;
     --no-ship) NO_SHIP=true; shift ;;
-    --vault) VAULT=true; shift ;;
-    --obs) OBS="${2:-}"; shift 2 ;;
-    --projeto) PROJ="${2:-}"; shift 2 ;;
+    --vault) exige_valor --vault "${2-}"; VAULT=true; VAULT_PROFILE="$2"; shift 2 ;;
+    --obs) shift
+      while [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; do OBS="${OBS:+$OBS }$1"; shift; done
+      [ -n "$OBS" ] || { echo "ERRO: --obs exige um texto" >&2; exit 2; } ;;
+    --projeto) exige_valor --projeto "${2-}"; PROJ="$2"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     --*) echo "ERRO: flag desconhecida: $1 (aceitas: --ui --ai --no-ship --vault --obs --projeto --dry-run)" >&2; exit 2 ;;
     *) [ -z "$FASE" ] && FASE="$1" || { echo "ERRO: argumento extra: $1" >&2; exit 2; }; shift ;;
   esac
 done
 case "$FASE" in
-  ('') echo "ERRO: número da fase ausente. Uso: abre-rodada.sh <N> [flags]" >&2; exit 2 ;;
+  ('') echo "ERRO: número da fase ausente. Uso: abre-rodada.sh <N> [flags] (o número vem antes do --obs)" >&2; exit 2 ;;
   (*[!0-9.]*) echo "ERRO: fase \"$FASE\" não é um número (PC-9: aceita 999.3, não aceita texto)" >&2; exit 2 ;;
 esac
 
