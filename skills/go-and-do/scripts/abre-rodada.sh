@@ -118,6 +118,8 @@ PRE_SPEC=""
 # uma intenção já escrita), e o coordenador declara o inventário no primeiro turno.
 sn() { [ -f "$1" ] && echo sim || echo nao; }
 INVENTARIO="spec=$(sn "$PHASE_DIR/$NN-SPEC.md") context=$(sn "$PHASE_DIR/$NN-CONTEXT.md") pre_spec=$(sn "$PHASE_DIR/$NN-PRE-SPEC.md")"
+tem() { [ -e "$PHASE_DIR/$NN-$1" ] && echo true || echo false; }
+gr()  { grep -qE "$2" "$PHASE_DIR/$NN-$1" 2>/dev/null && echo true || echo false; }
 
 # ── 4. gate de contexto embutido ─────────────────────────────────────────────
 linha=$("$GAD_SCRIPTS_DIR/context-check.sh" 2>/dev/null || echo "tokens=0 limit=0 pct=0 status=unknown reason=context-check-falhou")
@@ -150,9 +152,13 @@ fi
 
 # ── 6. vault (5.E-h) ─────────────────────────────────────────────────────────
 VAULT_ALERTA=false; VAULT_TERMOS=""
-if [ "$VAULT" = false ]; then
-  VAULT_TERMOS=$(grep -m3 -ihoE 'login|autentica[çc][aã]o|senha|password|sign[ -]?in|sess[aã]o de usu[aá]rio' \
-    "$PHASE_DIR/$NN-SPEC.md" "$PHASE_DIR/$NN-CONTEXT.md" 2>/dev/null | sort -u | paste -sd, - || true)
+if [ "$VAULT" = false ] && { [ "$UI" = true ] || [ "$(tem UI-SPEC.md)" = true ]; } \
+   && [ "$(gr UAT.md '^pre_uat: executed')" = false ]; then
+  SECAO_ROADMAP=$(cd "$ROOT" && gsd_run query roadmap.get-phase "$FASE" 2>/dev/null | jq -r '.section // empty' 2>/dev/null || true)
+  VAULT_TERMOS=$( { printf '%s\n' "$SECAO_ROADMAP"
+                    cat "$PHASE_DIR/$NN-SPEC.md" "$PHASE_DIR/$NN-CONTEXT.md" "$PHASE_DIR/$NN-PRE-SPEC.md" 2>/dev/null; } \
+    | grep -ioE 'login|autentica[çc][aã]o|senha|password|sign[ -]?in|sess[aã]o de usu[aá]rio' \
+    | sort -u | head -5 | paste -sd, - || true)
   [ -n "$VAULT_TERMOS" ] && VAULT_ALERTA=true
 fi
 
@@ -173,8 +179,6 @@ tl() { # tl <id> <descricao> <aplicavel true|false> <pronta true|false>
   jq -cn --argjson n "$1" --arg t "$2" --argjson a "$3" --argjson p "$4" \
     '{tarefa:$n, titulo:$t, estado:(if ($a|not) then "nao_aplicavel" elif $p then "completed" else "pending" end)}'
 }
-tem() { [ -e "$PHASE_DIR/$NN-$1" ] && echo true || echo false; }
-gr()  { grep -qE "$2" "$PHASE_DIR/$NN-$1" 2>/dev/null && echo true || echo false; }
 INTENQ=true; [ "$ETAPA1" = pular ] && [ "$(tem SPEC.md)" = false ] && INTENQ=false
 TASKS=$(jq -cs '.' <<EOF
 $(tl 1  "Intenção — SPEC" $INTENQ "$(tem SPEC.md)")

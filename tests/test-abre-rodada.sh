@@ -38,11 +38,22 @@ printf '# ROADMAP\n' > "$ROOT/.planning/ROADMAP.md"
 export RUNTIME_DIR="$BASE/runtime"
 mkdir -p "$RUNTIME_DIR/gsd-core/bin"
 cat > "$RUNTIME_DIR/gsd-core/bin/gsd-tools.cjs" <<'CJS'
-// mock: só responde `query init.phase-op <N>` com a fixture apontada por GAD_FIXTURE.
+// mock: `query init.phase-op <N>` com a fixture apontada por GAD_FIXTURE; `query
+// roadmap.get-phase <N>` com a fixture apontada por GAD_ROADMAP_FIXTURE — sem ela,
+// devolve {"found":false} (T5: sem fixture do roadmap, o alerta de vault não deve
+// achar termos ali).
 const fs = require('fs');
 const a = process.argv.slice(2);
 if (a[0] === 'query' && a[1] === 'init.phase-op') {
   process.stdout.write(fs.readFileSync(process.env.GAD_FIXTURE, 'utf8'));
+  process.exit(0);
+}
+if (a[0] === 'query' && a[1] === 'roadmap.get-phase') {
+  if (process.env.GAD_ROADMAP_FIXTURE) {
+    process.stdout.write(fs.readFileSync(process.env.GAD_ROADMAP_FIXTURE, 'utf8'));
+  } else {
+    process.stdout.write('{"found":false}');
+  }
   process.exit(0);
 }
 process.exit(0);
@@ -50,6 +61,9 @@ CJS
 
 fixture() { # fixture <nome> <json> → exporta GAD_FIXTURE
   printf '%s' "$2" > "$BASE/$1.json"; export GAD_FIXTURE="$BASE/$1.json"
+}
+fixture_roadmap() { # fixture_roadmap <nome> <json> → exporta GAD_ROADMAP_FIXTURE
+  printf '%s' "$2" > "$BASE/$1.json"; export GAD_ROADMAP_FIXTURE="$BASE/$1.json"
 }
 EXIT=0
 J=""
@@ -167,6 +181,45 @@ eq "abertura real: exit 0"                     "$EXIT" "0"
 eq "ponteiro grava vault_profile"               \
   "$(jq -r '.args.vault_profile' "$ROOT/.planning/.gad-rodada-ativa.json" 2>/dev/null)" "p"
 rm -f "$ROOT/.planning/.gad-rodada-ativa.json"
+
+# ══════════════════════════ casos T5: alerta de vault antes de gastar a fase
+echo "── caso 9 (T5): login só no ROADMAP + --ui → alerta ──"
+PD="$ROOT/.planning/phases/RLR-02-identidade"
+fixture t5 "{\"phase_found\":true,\"phase_number\":\"RLR-02\",\"phase_name\":\"identidade\",
+  \"phase_dir\":\"$PD\",\"expected_phase_dir\":null,
+  \"padded_phase\":\"02\",\"planning_exists\":true,\"has_context\":false,\"has_plans\":false,
+  \"has_research\":false,\"has_reviews\":false,\"has_verification\":false,\"plan_count\":0}"
+fixture_roadmap t5r '{"found":true,"section":"## Fase 2\nTela de login do usuário."}'
+
+roda_args 2 --ui --dry-run
+eq "login no ROADMAP + --ui → vault_alerta.alerta" "$(campo "$J" .vault_alerta.alerta)" "true"
+
+echo "── caso 10 (T5): sem --ui e sem UI-SPEC → sem alerta ──"
+roda_args 2 --dry-run
+eq "sem --ui/UI-SPEC → vault_alerta false" "$(campo "$J" .vault_alerta)" "false"
+
+echo "── caso 11 (T5): com --vault → sem alerta ──"
+roda_args 2 --ui --vault p --dry-run
+eq "--vault presente → vault_alerta false" "$(campo "$J" .vault_alerta)" "false"
+
+echo "── caso 12 (T5): UAT já executed → sem alerta ──"
+printf 'pre_uat: executed\n' > "$PD/02-UAT.md"
+roda_args 2 --ui --dry-run
+eq "UAT executed → vault_alerta false" "$(campo "$J" .vault_alerta)" "false"
+rm -f "$PD/02-UAT.md"
+
+echo "── caso 13 (T5): sem UI-SPEC e sem --ui, mas UI-SPEC.md no disco → alerta ──"
+printf '# UI-SPEC\n' > "$PD/02-UI-SPEC.md"
+roda_args 2 --dry-run
+eq "UI-SPEC.md no disco basta (sem --ui)" "$(campo "$J" .vault_alerta.alerta)" "true"
+rm -f "$PD/02-UI-SPEC.md"
+
+echo "── caso 14 (T5): termo só no PRE-SPEC → alerta ──"
+unset GAD_ROADMAP_FIXTURE
+printf '# PRE-SPEC\nTela de login com senha.\n' > "$PD/02-PRE-SPEC.md"
+roda_args 2 --ui --dry-run
+eq "termo só no PRE-SPEC → alerta" "$(campo "$J" .vault_alerta.alerta)" "true"
+rm -f "$PD/02-PRE-SPEC.md"
 
 echo
 echo "abre-rodada: $OK ok · $FALHAS falhas"
