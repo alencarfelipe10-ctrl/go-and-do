@@ -120,9 +120,9 @@ da chamada, não do agente):
 
 O hook é global mas só age quando encontra uma rodada `/go-and-do` ativa **da própria
 sessão** (ponteiro `.planning/.gad-rodada-ativa.json`); fora disso é no-op em
-milissegundos. **Sem o hook a skill funciona normalmente** — a abertura detecta a
-ausência e declara a degradação (o run-log fica sem os eventos `despacho`/`retorno`,
-e as conferências que dependem deles viram informativas).
+milissegundos. **Sem o hook a skill funciona normalmente** — o evento `run` registra
+`hook_instalado: false` (o run-log fica sem os eventos `despacho`/`retorno`, e as
+conferências que dependem deles viram informativas).
 
 Atalho idempotente para o `SubagentStop` e para o `gad-gate-guard` (seção abaixo):
 `bash hooks/registra-hooks.sh --dry-run` mostra o que faria; sem `--dry-run` faz backup do

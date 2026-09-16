@@ -242,5 +242,28 @@ casa "evento run grava cc_version" "$(cat "$RUNLOG" 2>/dev/null || true)" '"cc_v
 rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG"
 
 echo
+
+# ══════════════════════════ casos T3: hook_instalado só na telemetria
+echo "── caso 16 (T3): hook_instalado sai do JSON, mas fica no evento run (HOME falso) ──"
+roda_args 2 --dry-run
+nao_casa "JSON não tem mais a chave hook_instalado" "$J" '"hook_instalado"'
+
+rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG"
+( cd "$ROOT" && HOME="$HOME_FALSO" CLAUDE_CODE_SESSION_ID= RUNLOG_SEM_ESPELHO=1 bash "$S" 2 ) \
+  > "$BASE/saida.txt" 2>&1
+EXIT=$?; J="$(cat "$BASE/saida.txt")"
+eq   "abertura real, sem hook no settings falso: exit 0" "$EXIT" "0"
+casa "evento run grava hook_instalado:false" "$(cat "$RUNLOG" 2>/dev/null || true)" '"hook_instalado":false'
+rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG"
+
+printf '{"hooks":{"PreToolUse":[{"hooks":[{"command":"gad-lifecycle.sh"}]}]}}\n' > "$HOME_FALSO/.claude/settings.json"
+( cd "$ROOT" && HOME="$HOME_FALSO" CLAUDE_CODE_SESSION_ID= RUNLOG_SEM_ESPELHO=1 bash "$S" 2 ) \
+  > "$BASE/saida.txt" 2>&1
+EXIT=$?; J="$(cat "$BASE/saida.txt")"
+eq   "abertura real, com hook no settings falso: exit 0" "$EXIT" "0"
+casa "evento run grava hook_instalado:true" "$(cat "$RUNLOG" 2>/dev/null || true)" '"hook_instalado":true'
+rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG" "$HOME_FALSO/.claude/settings.json"
+
+echo
 echo "abre-rodada: $OK ok · $FALHAS falhas"
 [ "$FALHAS" -eq 0 ]

@@ -26,9 +26,8 @@
 #   7. (removido — probe de aninhamento S.H: custava um subagente por versão do CC e não
 #      pegava o incidente real, o classificador negando spawn; quem vigia a retirada do
 #      recurso é o /cc-watch. `cc_version` segue gravada no evento `run`.)
-#   8. conferência do hook gad-lifecycle no settings (PC-4): ausente → degradação
-#      DECLARADA (`hook_instalado: false` no JSON + no evento run; asserts de despacho
-#      viram informativos)
+#   8. conferência do hook gad-lifecycle no settings (PC-4): só telemetria (`--kv
+#      hook_instalado` no evento `run`); não entra no JSON do modelo
 #   9. retrato da TaskList (S.C): tarefa → estado desejado, calculado do disco — a
 #      camada 0 só espelha com TaskCreate/TaskUpdate
 #  10. grava evento `run` (session_id, versão da skill, modelo da camada 0, hook) +
@@ -213,7 +212,7 @@ gad_json_out abre-rodada "$(jq -cn \
   --argjson retrato "$RETRATO" --argjson ctx "$CONTEXTO" \
   --arg e1 "$ETAPA1" --arg e2 "$ETAPA2" \
   --argjson valerta "$VAULT_ALERTA" --arg vtermos "$VAULT_TERMOS" \
-  --argjson hook "$HOOK" --argjson tasks "$TASKS" --argjson aberta "$ABERTA" \
+  --argjson tasks "$TASKS" --argjson aberta "$ABERTA" \
   --arg ps "$PRE_SPEC" --arg inv "$INVENTARIO" \
   '{args:{fase:$fase, ui:$ui, ai:$ai, no_ship:$ns, vault:$va, vault_profile:(if $vp == "" then null else $vp end), obs:$obs},
     retrato:$retrato, contexto:$ctx,
@@ -221,6 +220,5 @@ gad_json_out abre-rodada "$(jq -cn \
     etapa_1:$e1, etapa_2:$e2,
     vault_alerta:(if $valerta then {alerta:true, termos:$vtermos,
       pergunta:"A fase parece ter UI autenticada e a rodada veio SEM --vault — sem credenciais o UAT queima a fase (24/31 balde-3 da série eram login). Confirmar vault antes de começar?"} else false end),
-    hook_instalado:$hook,
     tasklist:$tasks,
     rodada:{aberta:$aberta, nn:$nn, phase_dir:$pd}}')"

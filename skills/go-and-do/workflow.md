@@ -101,7 +101,7 @@ to every dispatch of the run — Sub-rotina H).
 **0.2 — Atomic opening.** Run `$HOME/.claude/skills/go-and-do/scripts/abre-rodada.sh N [flags]`
 and obey the JSON (mirror in `.planning/.gad/last-abre-rodada.json`): entry gates, phase
 snapshot (`phase_dir`/`padded_phase`/`has_plans`/`has_verification`), context gate, resume
-decisions (`etapa_1`/`etapa_2`), `vault_alerta`, `hook_instalado`, TaskList
+decisions (`etapa_1`/`etapa_2`), `vault_alerta`, TaskList
 snapshot, `run` event + run pointer — all in one script. Exit ≠ 0 → stop with the script's reason (exit 2 =
 gate/argument · 3 = context at the ceiling · 4 = phase not found). Missing entry
 prerequisites are the first hard stop (Etapa 0).
@@ -111,8 +111,6 @@ prerequisites are the first hard stop (Etapa 0).
 - Mirror the TaskList (Sub-rotina C).
 - `vault_alerta` → ask BEFORE spending the phase (phase that looks like an authenticated UI
   without `--vault`).
-- `hook_instalado: false` → declared degradation (one line; dispatch asserts become
-  informative).
 - `--ui`/UI-SPEC → read `workflow-ui.md`; `--ai`/AI-SPEC → `workflow-ai.md` (the only read of
   the run). A phase with a server → `workflow-dev-server.md` at the first step that uses it
   (Sub-rotina B).
