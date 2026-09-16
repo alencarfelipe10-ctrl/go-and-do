@@ -153,6 +153,21 @@ roda_args 2 --vault p --dry-run
 eq   "--vault com valor → exit 0"      "$EXIT" "0"
 eq   "args.vault vira true (booleano)" "$(campo "$J" .args.vault)" "true"
 
+# ══════════════════════════ caso 8 (T4): vault_profile chega ao JSON e ao ponteiro
+echo "── caso 8 (T4): args.vault_profile persiste o nome do perfil ──"
+roda_args 2 --vault p --dry-run
+eq "args.vault_profile = \"p\" (dry-run, na saída)" "$(campo "$J" .args.vault_profile)" "p"
+
+roda_args 2 --dry-run
+eq "sem --vault → args.vault_profile null" "$(campo "$J" .args.vault_profile)" "null"
+
+rm -f "$ROOT/.planning/.gad-rodada-ativa.json"
+roda_args 2 --vault p
+eq "abertura real: exit 0"                     "$EXIT" "0"
+eq "ponteiro grava vault_profile"               \
+  "$(jq -r '.args.vault_profile' "$ROOT/.planning/.gad-rodada-ativa.json" 2>/dev/null)" "p"
+rm -f "$ROOT/.planning/.gad-rodada-ativa.json"
+
 echo
 echo "abre-rodada: $OK ok · $FALHAS falhas"
 [ "$FALHAS" -eq 0 ]

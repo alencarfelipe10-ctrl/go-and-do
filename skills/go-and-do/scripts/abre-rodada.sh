@@ -208,8 +208,9 @@ if [ "$DRY" = 0 ]; then
   jq -cn --arg sess "$SESS" --arg fase "$FASE" --arg nn "$NN" --arg pd "$PHASE_DIR" \
     --arg rl "$PHASE_DIR/$NN-RUN-LOG.jsonl" --arg ts "$(date -Is)" \
     --argjson ui "$UI" --argjson ai "$AI" --argjson ns "$NO_SHIP" --argjson va "$VAULT" --arg obs "$OBS" \
+    --arg vp "$VAULT_PROFILE" \
     '{session_id:$sess, fase:$fase, nn:$nn, phase_dir:$pd, runlog:$rl, aberta_em:$ts,
-      args:{ui:$ui, ai:$ai, no_ship:$ns, vault:$va, obs:$obs}}' \
+      args:{ui:$ui, ai:$ai, no_ship:$ns, vault:$va, vault_profile:(if $vp == "" then null else $vp end), obs:$obs}}' \
     > "$ROOT/.planning/.gad-rodada-ativa.json"
   gad_runlog "$PHASE_DIR" "$NN" run "0 abertura" \
     ${MODELO:+--modelo "$MODELO"} --camada 0 \
@@ -222,12 +223,13 @@ fi
 gad_json_out abre-rodada "$(jq -cn \
   --arg fase "$FASE" --arg nn "$NN" --arg pd "$PHASE_DIR" \
   --argjson ui "$UI" --argjson ai "$AI" --argjson ns "$NO_SHIP" --argjson va "$VAULT" --arg obs "$OBS" \
+  --arg vp "$VAULT_PROFILE" \
   --argjson retrato "$RETRATO" --argjson ctx "$CONTEXTO" \
   --arg e1 "$ETAPA1" --arg e2 "$ETAPA2" \
   --argjson valerta "$VAULT_ALERTA" --arg vtermos "$VAULT_TERMOS" \
   --argjson anin "$ANIN" --argjson hook "$HOOK" --argjson tasks "$TASKS" --argjson aberta "$ABERTA" \
   --arg ps "$PRE_SPEC" --arg inv "$INVENTARIO" \
-  '{args:{fase:$fase, ui:$ui, ai:$ai, no_ship:$ns, vault:$va, obs:$obs},
+  '{args:{fase:$fase, ui:$ui, ai:$ai, no_ship:$ns, vault:$va, vault_profile:(if $vp == "" then null else $vp end), obs:$obs},
     retrato:$retrato, contexto:$ctx,
     pre_spec:(if $ps != "" then $ps else null end), inventario:$inv,
     etapa_1:$e1, etapa_2:$e2,

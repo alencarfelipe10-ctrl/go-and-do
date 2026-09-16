@@ -53,7 +53,7 @@ Phase number + flags: $ARGUMENTS
 - `--vault <profile>` — a pre-configured gsd-browser vault profile, passed down to the UAT
   subagent so it can log in. With it, login flows move from basket 3 (couldn't verify) to
   objectively verifiable; without it, login walls stay basket 3. 2FA and captcha stay basket 3
-  either way.
+  either way. Not persisted across sessions: repeat the flag on a resume.
 - `--obs "<texto livre>"` — a free-text note for this run. Captured once in Etapa 0.1 and
   prefixed onto every subagent dispatch of this invocation (Sub-rotina H); each stage judges
   for itself whether it is relevant. Not persisted across sessions: repeat the flag on a resume.

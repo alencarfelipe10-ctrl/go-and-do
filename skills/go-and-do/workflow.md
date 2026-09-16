@@ -95,7 +95,8 @@ gate (`pre-despacho.sh`) before it.
 **0.1 — Arguments.** Phase number (first number) + flags `--ui`, `--ai`, `--no-ship`,
 `--vault <profile>`, `--obs "<texto>"` (unquoted: everything up to the next flag). No number →
 stop and ask. Keep `--no-ship` (terminal route of Etapa 6), `vault_profile` (goes down to the
-UAT) and `obs_text` (note to every dispatch of the run — Sub-rotina H).
+UAT — the 0.2 JSON and the run pointer carry it as `args.vault_profile`) and `obs_text` (note
+to every dispatch of the run — Sub-rotina H).
 
 **0.2 — Atomic opening.** Run `$HOME/.claude/skills/go-and-do/scripts/abre-rodada.sh N [flags]`
 and obey the JSON (mirror in `.planning/.gad/last-abre-rodada.json`): entry gates, phase
@@ -532,7 +533,7 @@ login without vault, 2FA, captcha → `[pending]`/`blocked`, blocks the ship (ha
    `NN-UAT.md` está em `<uat_path>`. Sua janela é dona do dev server. Use a sessão
    `uat-fase-NN`. [Sem GUI: cenários são api/logic/cli — use `<non_gui_surfaces>`.] [Wrapper:
    rode a prova via `<wrapper absoluto>`; não leia nem ecoe segredos.] [Vault: profile
-   `<profile>`.] Classifique nos 4 baldes, aplique `<push_on_it>` no balde 1, escreva
+   `<args.vault_profile>`.] Classifique nos 4 baldes, aplique `<push_on_it>` no balde 1, escreva
    results/Gaps/evidências no `NN-UAT.md`. Devolva só o qualitativo do `<return_contract>` —
    números são contados por script."
 3. Fence: `confere-etapa.sh 5` — reconciles baskets/probes/evidence from disk, lints the
