@@ -2,6 +2,12 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.6.4] - 2026-09-17
+
+- `abre-rodada.sh`: cabeçalho e marcadores de seção renumerados de 1 a 9, sem o estágio 7
+  removido na 2.6.3 (probe de aninhamento). A descrição do estágio 6 (vault) passa a refletir
+  a regra da 2.6.3. Só comentários; nenhuma mudança de comportamento.
+
 ## [2.6.3] - 2026-09-17
 
 Ajustes da abertura da rodada (`abre-rodada.sh`), vindos do mapa da skill

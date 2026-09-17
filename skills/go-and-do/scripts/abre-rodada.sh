@@ -21,16 +21,15 @@
 #   5. decisões de retomada mecânicas: `etapa_1` = pular|despachar|continuar_pergunta
 #      (retrato × frontmatter do NN-INTENT-REVIEW.md — por EXISTÊNCIA de artefato,
 #      agnóstico à versão que o criou, PC-2) · `etapa_2` = pular|despachar (2.A)
-#   6. detecção de vault (5.E-h): fase com cara de UI autenticada sem --vault →
+#   6. detecção de vault (5.E-h): fase com UI (--ui ou UI-SPEC), sem --vault e com UAT
+#      ainda não executado, com termos de login no ROADMAP/SPEC/CONTEXT/PRE-SPEC →
 #      `vault_alerta` para a camada 0 perguntar ANTES de gastar a fase
-#   7. (removido — probe de aninhamento S.H: custava um subagente por versão do CC e não
-#      pegava o incidente real, o classificador negando spawn; quem vigia a retirada do
-#      recurso é o /cc-watch. `cc_version` segue gravada no evento `run`.)
-#   8. conferência do hook gad-lifecycle no settings (PC-4): só telemetria (`--kv
+#   7. conferência do hook gad-lifecycle no settings (PC-4): só telemetria (`--kv
 #      hook_instalado` no evento `run`); não entra no JSON do modelo
-#   9. retrato da TaskList (S.C): tarefa → estado desejado, calculado do disco — a
+#   8. retrato da TaskList (S.C): tarefa → estado desejado, calculado do disco — a
 #      camada 0 só espelha com TaskCreate/TaskUpdate
-#  10. grava evento `run` (session_id, versão da skill, modelo da camada 0, hook) +
+#   9. grava evento `run` (session_id, versão da skill, modelo da camada 0, hook,
+#      cc_version) +
 #      ponteiro leve .planning/.gad-rodada-ativa.json (PC-3 — é como o hook global acha
 #      o run-log em ms; o stop/fecho da rodada o remove)
 #
@@ -148,14 +147,14 @@ if [ "$VAULT" = false ] && { [ "$UI" = true ] || [ "$(tem UI-SPEC.md)" = true ];
   [ -n "$VAULT_TERMOS" ] && VAULT_ALERTA=true
 fi
 
-# ── (7. removido — ver cabeçalho) ────────────────────────────────────────────
+# versão do CC para o evento run (o probe de aninhamento S.H saiu na 2.6.3; o /cc-watch vigia)
 CCV=$(cc_version)
 
-# ── 8. hook gad-lifecycle no settings (PC-4) ─────────────────────────────────
+# ── 7. hook gad-lifecycle no settings (PC-4) ─────────────────────────────────
 HOOK=false
 grep -q "gad-lifecycle" "$HOME/.claude/settings.json" 2>/dev/null && HOOK=true
 
-# ── 9. retrato da TaskList (S.C): tarefa → estado desejado, direto do disco ──
+# ── 8. retrato da TaskList (S.C): tarefa → estado desejado, direto do disco ──
 tl() { # tl <id> <descricao> <aplicavel true|false> <pronta true|false>
   jq -cn --argjson n "$1" --arg t "$2" --argjson a "$3" --argjson p "$4" \
     '{tarefa:$n, titulo:$t, estado:(if ($a|not) then "nao_aplicavel" elif $p then "completed" else "pending" end)}'
@@ -180,7 +179,7 @@ $(tl 15 "Encerramento + ship" true "$(gr RESUMO-EXECUTIVO.md '^go_and_do_resumo:
 EOF
 )
 
-# ── 10. abertura de fato (fora do --dry-run): evento run + ponteiro ──────────
+# ── 9. abertura de fato (fora do --dry-run): evento run + ponteiro ───────────
 SESS="${CLAUDE_CODE_SESSION_ID:-}"
 MODELO=""
 if [ -n "$SESS" ]; then
