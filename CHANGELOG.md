@@ -2,6 +2,35 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.6.3] - 2026-09-17
+
+Ajustes da abertura da rodada (`abre-rodada.sh`), vindos do mapa da skill
+(`gsd-optimize/mapa-gad/`, tarefas 2–7). Suíte 33/33; `test-abre-rodada.sh` 48 ok.
+
+- **Flags de valor fail-closed** (tarefa 6): `--obs` sem aspas junta tudo até a próxima flag,
+  como o `workflow.md` já prometia. `--obs`, `--vault` e `--projeto` sem valor, ou seguidas de
+  outra flag, saem com exit 2 sem abrir a rodada. Antes, `--obs --dry-run` guardava "--dry-run"
+  como nota e abria a rodada de verdade.
+- **`--vault <perfil>` funciona** (tarefa 4): antes dava exit 2 ("argumento extra"). O perfil
+  vai para `args.vault_profile` no JSON e no ponteiro `.gad-rodada-ativa.json`, e o despacho do
+  UAT o lê dali. `args.vault` continua booleano.
+- **Alerta de vault antes de gastar a fase** (tarefa 5): só em fase com interface (`--ui` ou
+  `NN-UI-SPEC.md`) cujo UAT ainda não rodou. Procura os termos também no bloco da fase no
+  ROADMAP e no `NN-PRE-SPEC.md`, que existem antes da Etapa 1 — antes, numa fase nova, o alerta
+  nunca disparava, e disparava à toa em fase de deploy. Frase nova, sem a estatística datada.
+- **Sai o probe de aninhamento** (tarefa 2): some o estágio 7, o modo
+  `--registra-aninhamento`, o cache `~/.claude/.gad-aninhamento.json` e a chave `aninhamento`.
+  O evento `run` passa a gravar `cc_version`. Spawn negado num hospedeiro de camada 1 vira
+  `blocked` com `motivo: spawn_negado` (regra nova em `gad-intent`, `gad-plan`, `gad-execute` e
+  `gad-contratos`), e a camada 0 pergunta ao dono se assume a etapa inline — numa bancada de
+  16/09 (CC 2.1.273) a camada 0 recusou assumir sozinha.
+- **`hook_instalado` só na telemetria** (tarefa 3): sai do JSON do modelo e do 0.3 do
+  `workflow.md` (nenhuma conferência lia o campo); continua no evento `run`.
+- **Miudezas** (tarefa 7): o `--dry-run` espelha em `last-abre-rodada-dry.json`, sem sobrescrever
+  o espelho da rodada real; exit 5 documentado no `workflow.md`; `IR_FILE` com `[ -f ]`.
+- **Não feito — injeção `!` na `SKILL.md`** (tarefa 1): o `$ARGUMENTS` é colado como texto no
+  comando e executa `$(…)` mesmo entre aspas duplas; e exit ≠ 0 aborta a skill sem nenhum turno.
+
 ## [2.6.2] - 2026-09-14
 
 - **Marcador de despacho do GSD 1.14.0 no contrato de leitura** (tarefa 11e): o 1c de
