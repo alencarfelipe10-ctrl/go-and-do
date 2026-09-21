@@ -1058,7 +1058,11 @@ if [ "$ETAPA" = "1" ]; then
   # E no NN-INTENT-REVIEW.md: a limpeza 1.5 apaga os sinos no fecho (assert
   # `limpeza_intent`, min/max 0) e a política diz que o conteúdo sobrevive no
   # INTENT-REVIEW — sem esta 2ª fonte a escapatória seria insatisfazível nesta cancela.
-  R6=$( { bash "$SETUP_I" --r6 "$PHASE_DIR" "$NN" 2>/dev/null || echo '{}'; } | tail -1 )
+  # FM-03INT (F4 RLR): o `--r6` passou a sair != 0 quando a entrada do ROADMAP nao tem
+  # **Goal:** — mas o JSON ja foi impresso. Um `|| echo '{}'` aqui APAGARIA a extracao
+  # inteira e o fiscal perderia o R6 no exato caso em que ele mais importa.
+  R6=$( bash "$SETUP_I" --r6 "$PHASE_DIR" "$NN" 2>/dev/null | tail -1 )
+  [ -n "$R6" ] || R6='{}'
   jq -e . >/dev/null 2>&1 <<<"$R6" || R6='{}'
   SINO_FONTES=("$PHASE_DIR/$NN-INTENT-REVIEW.md")
   for sf in "$PHASE_DIR/.intent/".sinos-*.txt; do [ -f "$sf" ] && SINO_FONTES+=("$sf"); done

@@ -132,6 +132,26 @@ eq "SPEC ruim → r2.status falha"                    "$(campo "$J" .r2.status)"
 casa "(a) MARCA-SEM-ID listada"                     "$(campo "$J" '.r2.falhas|join("|")')" 'MARCA-SEM-ID'
 casa "(b) ID-INEXISTENTE listada"                   "$(campo "$J" '.r2.falhas|join("|")')" 'ID-INEXISTENTE'
 
+# ═══════════════════════════════════════════ F4 RLR · FM-03INT (número + Goal)
+echo "── F4 RLR · FM-03INT: Phase 0*N e exit != 0 sem Goal ──"
+R94="$(monta_proj f4rlr)"
+J="$(bash "$S" --r6 "$(monta_fase "$R94" 94)" 94 2>/dev/null | tail -1)"
+eq "--r6 94 acha a entrada escrita 'Phase 094'" "$(campo "$J" .roadmap_entrada)" "true"
+casa "o Goal da entrada 094 foi lido" "$(campo "$J" .goal_roadmap)" "Phase 094"
+
+J="$(bash "$S" --r6 "$(monta_fase "$R94" 094)" 094 2>/dev/null | tail -1)"
+eq "--r6 094 acha a MESMA entrada" "$(campo "$J" .roadmap_entrada)" "true"
+
+# a 94 não pode ser alcançada por quem pede a 9 nem a 4
+J="$(bash "$S" --r6 "$(monta_fase "$R94" 9)" 9 2>/dev/null | tail -1)"
+eq "--r6 9 não casa com a 94 (nem com a 93/94/95…)" "$(campo "$J" .roadmap_entrada)" "false"
+
+# entrada sem **Goal:** → o SCRIPT sai != 0 (o JSON continua saindo no stdout)
+out="$(bash "$S" --r6 "$(monta_fase "$R94" 93)" 93 2>/dev/null)"; rc=$?
+[ "$rc" != 0 ] && ok "entrada sem **Goal:** → exit != 0 do script (rc=$rc)" \
+  || falha "entrada sem Goal saiu 0" "o chamador seguiria com goal_roadmap null"
+eq "mesmo saindo != 0, o JSON foi impresso" "$(campo "$(printf '%s' "$out" | tail -1)" .roadmap_entrada)" "true"
+
 # ═══════════════════════════════════════════════════════════════════ R6
 echo "── R6: goal_roadmap + issues estruturadas ──"
 R="$(monta_proj r6)"

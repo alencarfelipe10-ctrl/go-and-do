@@ -209,8 +209,10 @@ PY
 }
 
 if [ "$SO_R6" = 1 ]; then
-  r6_json
-  exit 0
+  # FM-03INT (F4 RLR): o rc do bloco R6 e PROPAGADO — `exit 0` fixo engolia o exit 4 de
+  # «entrada do ROADMAP sem **Goal:**» e o chamador seguia com goal_roadmap null. O JSON
+  # ja saiu no stdout antes do exit, entao quem captura `$(...)` continua recebendo tudo.
+  r6_json; exit $?
 fi
 
 mkdir -p "$PD/.intent"

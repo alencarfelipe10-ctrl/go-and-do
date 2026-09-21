@@ -413,6 +413,32 @@ saida=$(bash "$REV" "$PD" 1 2>&1); rc=$?
 case "$saida" in *PONTEIRO*SC-9*) ok "acusa PONTEIRO SC-9" ;; *) erro "sem o ponteiro" "$saida" ;; esac
 limpa
 
+echo "== F4RLR.9 — FIAÇÃO: o correcoes-commit.sh chama o revalida-documentos.sh"
+monta_repo; set_alvos
+cat > "$PD/24.3-CONTEXT.md" <<'MD'
+## Decisões
+Foram tomadas três decisões nesta fase.
+
+- **D-01** — uma
+- **D-02** — outra
+- **D-03** — mais uma
+- **D-04** — a quarta, que a contagem esqueceu
+MD
+G add -A >/dev/null; G commit -qm "context com deriva" >/dev/null
+RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1
+echo "spec corrigida pelo ciclo" >> "$PD/24.3-SPEC.md"
+vereditos 1 "c1-01 | bug | confirmado | codigo"
+saida=$(RUN "$PD" 1 --ids "c1-01" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "o ciclo fecha (a deriva SÓ avisa, não bloqueia)" || erro "fechou com rc=$rc" "$saida"
+case "$saida" in *"AVISO revalida-documentos"*) ok "o aviso do revalida-documentos chegou ao stderr" ;;
+  *) erro "o revalida-documentos não foi chamado (fiação morta)" "$saida" ;; esac
+case "$saida" in *CONTAGEM*) ok "o aviso nomeia a CONTAGEM divergente" ;; *) erro "aviso sem CONTAGEM" "$saida" ;; esac
+esp="$REPO/.planning/.gad/last-correcoes-commit.json"
+n=$(jq -r '.revalida_avisos // "ausente"' "$esp" 2>/dev/null)
+{ [ -n "$n" ] && [ "$n" != ausente ] && [ "$n" -gt 0 ]; } \
+  && ok "revalida_avisos=$n no JSON de saída" || erro "revalida_avisos" "$n"
+limpa
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-correcoes-commit: TUDO OK" || echo "test-correcoes-commit: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

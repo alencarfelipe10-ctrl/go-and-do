@@ -276,6 +276,9 @@ if [ -f "$VERED" ]; then
         echo "        (correção de releitura do mesmo ciclo usa a forma c${C}b-NN)" >&2
         exit 3
       fi
+      # No lote `--adiados` o dispensado e tolerado: dispensa JA E divida por definicao,
+      # e recusar ali so custaria um turno do coordenador. A porta fechada e a promocao.
+      if [ "$_v" = confirmado_irrelevante ] && [ "$_lote" = adiados ]; then continue; fi
       if [ "$_v" = confirmado_irrelevante ]; then
         echo "RECUSA: id '$cid' foi DISPENSADO pelo verificador (confirmado_irrelevante) — dispensa não se promove." >&2
         echo "        o destino dele é uma linha de dívida (planejamento, code-review ou dono); se você discorda," >&2
@@ -414,8 +417,8 @@ fi
 # parser de contagem que errasse bloquearia o ciclo inteiro. A lista sai no stderr e
 # o número entra no JSON de saída, para o coordenador decidir em 1 turno.
 REVALIDA_N=0; REVALIDA_TXT=""
-if [ -x "$GAD_SCRIPTS_DIR/scripts/revalida-documentos.sh" ] || [ -f "$GAD_SCRIPTS_DIR/scripts/revalida-documentos.sh" ]; then
-  REVALIDA_TXT=$(bash "$GAD_SCRIPTS_DIR/scripts/revalida-documentos.sh" "$PD" "$C" 2>/dev/null) || true
+if [ -f "$GAD_SCRIPTS_DIR/revalida-documentos.sh" ]; then
+  REVALIDA_TXT=$(bash "$GAD_SCRIPTS_DIR/revalida-documentos.sh" "$PD" "$C" 2>/dev/null) || true
   [ -z "$REVALIDA_TXT" ] || {
     REVALIDA_N=$(printf '%s\n' "$REVALIDA_TXT" | grep -c .)
     echo "AVISO revalida-documentos ($REVALIDA_N): deriva documental no ciclo $C —" >&2
