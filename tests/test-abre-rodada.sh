@@ -214,6 +214,22 @@ roda_args 2 --dry-run
 eq "UI-SPEC.md no disco basta (sem --ui)" "$(campo "$J" .vault_alerta.alerta)" "true"
 rm -f "$PD/02-UI-SPEC.md"
 
+echo "── caso 13b (2.7.0): observação pós-ship bloqueante de outra fase → alerta; superfície de UAT ──"
+roda_args 2 --dry-run
+eq "sem POS-SHIP.md → pos_ship_alerta false" "$(campo "$J" .pos_ship_alerta)" "false"
+eq "sem uat-superficie.md → null" "$(campo "$J" .uat_superficie)" "null"
+PD1="$ROOT/.planning/phases/RLR-01-fundacao"; mkdir -p "$PD1"
+printf '### 01-3. forma real da API\norigem: 01-UAT.md cenário 3\nobservado_em:\nbloqueia_proxima: sim\nverificavel_em: Fase 1.1 — API real\n' > "$PD1/01-POS-SHIP.md"
+printf '# superfície\n' > "$ROOT/.planning/uat-superficie.md"
+roda_args 2 --dry-run
+eq "bloqueante não observado → pos_ship_alerta.alerta" "$(campo "$J" .pos_ship_alerta.alerta)" "true"
+eq "…lista 1 pendente" "$(campo "$J" '.pos_ship_alerta.pendentes|length')" "1"
+eq "uat_superficie = caminho absoluto" "$(campo "$J" .uat_superficie)" "$ROOT/.planning/uat-superficie.md"
+sed -i 's/^observado_em:$/observado_em: 2026-09-25 — devolve id/' "$PD1/01-POS-SHIP.md"
+roda_args 2 --dry-run
+eq "observado → pos_ship_alerta false" "$(campo "$J" .pos_ship_alerta)" "false"
+rm -rf "$PD1" "$ROOT/.planning/uat-superficie.md"
+
 echo "── caso 14 (T5): termo só no PRE-SPEC → alerta ──"
 unset GAD_ROADMAP_FIXTURE
 printf '# PRE-SPEC\nTela de login com senha.\n' > "$PD/02-PRE-SPEC.md"

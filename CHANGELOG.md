@@ -2,6 +2,36 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.7.0] - 2026-09-21
+
+UAT: observação pós-ship, re-UAT do balde 3 e superfície de UAT do projeto. Origem: F4
+rl-representation (20/09) — 7 cenários no balde 3 travaram o ship; 2 eram simuláveis e só
+faltou um caminho sancionado até o webhook, 5 perguntavam como a produção se comporta.
+Construído e coberto por bancada; falta a 1ª rodada real.
+
+- **Observação pós-ship** (`scripts/pos-ship.py`, `prompts/uat-pos-ship.md`). Cenário com a
+  mecânica provada por teste e cuja pergunta só a produção responde sai do `NN-UAT.md` para o
+  `NN-POS-SHIP.md` e deixa de bloquear o ship. Arquivo próprio, e não um `result:` novo,
+  porque o predicado nativo `phase uat-passed` só aceita `pass`. Anti-fuga: o subagente de
+  UAT só marca `pos_ship: candidato`; um verificador independente (Sonnet) julga; o script
+  só move quem cumpre seis condições (candidato · `result` blocked/pending ·
+  `prova_mecanica` existe no disco · `bloqueia_proxima` sim|nao · `verificavel_em` ·
+  veredito `confirmado`). Recusado fica no UAT como balde 3.
+- **Gate na abertura da fase seguinte** (`abre-rodada.sh`, campo `pos_ship_alerta`). Item
+  `bloqueia_proxima: sim` sem `observado_em:` em outra fase → a camada 0 pergunta antes de
+  gastar a fase. Isentas: a própria fase e a nomeada no `verificavel_em` do item. Números de
+  fase normalizados (`04` = `4`).
+- **Re-UAT do balde 3, 1×** (workflow 5.6, `confere-etapa.sh 5 --reuat` →
+  `pre_uat_reuat: done`). Antes, uma rodada retomada com `pre_uat: executed` e balde 3 ia
+  direto ao hand-back e nunca re-tentava; agora re-executa só os cenários de balde 3 quando o
+  projeto declara uma superfície de UAT, e depois faz a triagem pós-ship.
+- **Superfície de UAT do projeto** (`.planning/uat-superficie.md` → campo `uat_superficie`
+  do `abre-rodada.sh` → cláusula no despacho do 5.4; seção `<project_surface>` no playbook).
+  É onde o projeto declara como subir e dirigir a stack com segredos efêmeros e dublês.
+- `confere-etapa.sh 5` reporta `pos_ship:{total, bloqueiam_proxima}`, à parte de `pending`.
+  Resumo executivo ganha o bloco «Observação pós-ship».
+- Bancadas: `test-pos-ship.sh` (27 ok, nova) e `test-abre-rodada.sh` (54 ok, +6).
+
 ## [2.6.4] - 2026-09-17
 
 - `abre-rodada.sh`: cabeçalho e marcadores de seção renumerados de 1 a 9, sem o estágio 7

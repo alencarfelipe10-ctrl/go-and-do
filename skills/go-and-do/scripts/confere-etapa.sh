@@ -64,8 +64,8 @@ shopt -s nullglob
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
 
 ETAPA="${1:-}"; shift || true
-[ -n "$ETAPA" ] || { echo "uso: confere-etapa.sh <etapa> [--fase N] [--projeto DIR] [--dry-run]" >&2; exit 2; }
-FASE=""; PROJ=""; DRY=0; SEMTEL=0; FIXCYCLE=0; POSPAUSA=0
+[ -n "$ETAPA" ] || { echo "uso: confere-etapa.sh <etapa> [--fase N] [--projeto DIR] [--dry-run] [--fix-cycle] [--reuat]" >&2; exit 2; }
+FASE=""; PROJ=""; DRY=0; SEMTEL=0; FIXCYCLE=0; POSPAUSA=0; REUAT=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --fase)    FASE="${2:-}"; shift 2 ;;
@@ -73,6 +73,7 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY=1; shift ;;
     --sem-telemetria) SEMTEL=1; shift ;;
     --fix-cycle) FIXCYCLE=1; shift ;;
+    --reuat) REUAT=1; shift ;;
     --pos-pausa) POSPAUSA=1; shift ;;
     *) echo "flag desconhecida: $1" >&2; exit 2 ;;
   esac
@@ -293,6 +294,11 @@ if [ "$ETAPA" = "5" ]; then
     EXTRAI=$(jq -c --argjson p "$n_pass" --argjson i "$n_issue" --argjson pe "$n_pend" \
       --argjson a "$n_assumed" --argjson pr "$n_probes" --argjson ev "$n_evid" \
       '. + {reconciliacao:{pass:$p, issue:$i, pending:$pe, assumed:$a, probes:$pr, evidencias:$ev}}' <<<"$EXTRAI")
+    # 2.7.0: observação pós-ship mora em NN-POS-SHIP.md (o predicado nativo só aceita
+    # pass) — contada à parte, NUNCA somada a pending; candidato que o pos-ship.py
+    # recusou segue no UAT.md como balde 3
+    PS=$(python3 "$GAD_SCRIPTS_DIR/pos-ship.py" lista "$PHASE_DIR" "$NN" 2>/dev/null || echo '{"total":0,"bloqueiam_proxima":0}')
+    EXTRAI=$(jq -c --argjson ps "$PS" '. + {pos_ship:{total:$ps.total, bloqueiam_proxima:$ps.bloqueiam_proxima}}' <<<"$EXTRAI")
     # 5.E-b: evidência dura — arquivos >= cenários GUI de balde 1+2 (F19-ox: pasta
     # VAZIA; F21-ins: path inexistente). Fase sem browser (só cli/logic/judgment/api)
     # não gera prova visual — esperado 0.
@@ -324,6 +330,10 @@ if [ "$ETAPA" = "5" ]; then
       grep -q '^pre_uat: generated' "$UAT" && sed -i 's/^pre_uat: generated/pre_uat: executed/' "$UAT"
       if [ "$FIXCYCLE" = 1 ] && ! grep -q '^pre_uat_fix_cycle:' "$UAT"; then
         sed -i '/^pre_uat: executed/a pre_uat_fix_cycle: done' "$UAT"
+      fi
+      # re-UAT do balde 3 (5.6): 1× por fase, mesmo desenho do fix cycle
+      if [ "$REUAT" = 1 ] && ! grep -q '^pre_uat_reuat:' "$UAT"; then
+        sed -i '/^pre_uat: executed/a pre_uat_reuat: done' "$UAT"
       fi
       if [ "$n_issue" = 0 ] && [ "$n_pend" = 0 ] && [ "$n_pass" -gt 0 ]; then
         grep -q '^status: testing' "$UAT" && sed -i 's/^status: testing/status: complete/' "$UAT"

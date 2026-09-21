@@ -80,6 +80,15 @@ para mostrar.
   > O sistema passou em tudo que dá pra verificar objetivamente. Estes pontos são de
   > **gosto/conteúdo** — só você decide se ficaram bons. O que aconteceu com o PR está
   > na seção "Desfecho do ship", no fim deste documento.
+- **`NN-POS-SHIP.md` existe** (em qualquer desfecho) → logo abaixo do bloco do desfecho:
+  > **🔭 Observação pós-ship — N itens (M bloqueiam a próxima fase):**
+  > [cada item: a pergunta que só a produção responde, onde se observa (`verificavel_em`)
+  > e a `sonda`]
+  >
+  > A mecânica de cada um está provada por teste. O que falta é ver como o ambiente real
+  > se comporta — e, para os M marcados, a próxima fase só abre depois que o item ganhar
+  > `observado_em:` no `NN-POS-SHIP.md` (ou que você mande abrir assim mesmo).
+  Os números vêm de `scripts/pos-ship.py lista <phase_dir> <NN>`, nunca de contagem sua.
 - **`ship` sem assumidos** → uma linha tranquila remetendo à seção "Desfecho do ship".
   **Nunca afirme que o PR foi aberto ou mergeado** — quando você escreve, o ship ainda
   não rodou; afirmar seria previsão narrada como fato.

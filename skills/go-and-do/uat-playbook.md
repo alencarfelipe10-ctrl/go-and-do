@@ -63,6 +63,26 @@ que é difícil e recuar**.
 | **3 · não-pude-verificar** | Login sem vault, 2FA, captcha, browser indisponível, setup destrutivo, fluxo inalcançável | `[pending]` ou `blocked` | **bloqueia o ship** → devolve pro humano |
 | **4 · subjetivo** | Só sobra juízo estético/de conteúdo ("ficou bom?", "a UX agrada?") | `assumed` | shipa **com aviso** no resumo |
 
+**Observação pós-ship — candidato, nunca veredito seu.** Alguns cenários não perguntam se o
+código funciona; perguntam como a produção se comporta (a forma real da resposta de uma API
+externa, a frequência de um evento no piloto). Se a mecânica já tem teste passando e o que
+falta só existe depois do deploy, grave `result: blocked` como em qualquer balde 3 e
+acrescente ao bloco, em coluna 0:
+
+```
+pos_ship: candidato
+prova_mecanica: <caminho do teste que prova a mecânica>
+bloqueia_proxima: sim|nao
+verificavel_em: Fase <N> — <onde e como se observa>
+sonda: <a linha de log, consulta ou medição que responde a pergunta>
+```
+
+`bloqueia_proxima: sim` quando a resposta pode invalidar o que a fase seguinte vai construir;
+`nao` para medição e curiosidade operacional; na dúvida, `sim`. Um verificador independente
+julga cada candidato e um script move os confirmados — você só marca. "Não consegui subir a
+stack", "faltou credencial" ou "não sei se funciona" **não** são observação pós-ship: são
+balde 3 sem marca.
+
 > **A distinção que mais importa: balde 3 ≠ balde 4.**
 > "Não consegui chegar/conferir" (3) **não é** "é questão de gosto" (4). Um fluxo atrás de login
 > que você não tem credencial é balde **3** (cego — bloqueia o ship), nunca balde 4. Só vire
@@ -244,6 +264,21 @@ malformado — o golpe adversarial se aplica igual) e a mesma escrita no `NN-UAT
   diagnóstico.
 
 </robustness>
+
+---
+
+<project_surface>
+
+## Superfície de UAT do projeto
+
+Se o orquestrador passou um `uat-superficie.md`, ele manda: leia-o antes do primeiro cenário
+e suba, dirija e derrube a stack só pelos comandos que ele lista — no lugar do
+`dev-server.sh` e de qualquer `docker compose` direto. Ele existe para o UAT exercitar a
+aplicação inteira com segredos efêmeros e dublês das APIs externas, sem tocar em credencial
+real. O que o próprio arquivo declara que a superfície não prova é candidato a observação
+pós-ship, não a `pass`.
+
+</project_surface>
 
 ---
 

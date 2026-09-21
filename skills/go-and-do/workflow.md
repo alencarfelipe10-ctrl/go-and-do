@@ -112,6 +112,11 @@ prerequisites are the first hard stop (Etapa 0).
 - Mirror the TaskList (Sub-rotina C).
 - `vault_alerta` → ask BEFORE spending the phase (phase that looks like an authenticated UI
   without `--vault`).
+- `pos_ship_alerta` → ask BEFORE spending the phase, listing `pendentes` (a previous phase left
+  a post-ship observation marked `bloqueia_proxima: sim` that nobody observed yet). The owner
+  decides; record the answer in `NN-DECISOES.md`. The phase named in the item's
+  `verificavel_em` never triggers it.
+- `uat_superficie` (absolute path or null) → keep it for 5.4: it is the project's UAT contract.
 - `--ui`/UI-SPEC → read `workflow-ui.md`; `--ai`/AI-SPEC → `workflow-ai.md` (the only read of
   the run). A phase with a server → `workflow-dev-server.md` at the first step that uses it
   (Sub-rotina B).
@@ -483,10 +488,16 @@ proof closed · 2 · issue — failed objectively → fix cycle (5.5) · 3 · n�
 login without vault, 2FA, captcha → `[pending]`/`blocked`, blocks the ship (hand-back) ·
 4 · assumed — only subjective judgment left → ships with a warning in the resumo.
 
+Post-ship observation is not a fifth `result:`. A scenario whose mechanics are proven by a
+test and whose question only production can answer leaves `NN-UAT.md` for `NN-POS-SHIP.md`
+(5.6). It does not block this phase's ship; with `bloqueia_proxima: sim` it raises
+`pos_ship_alerta` when a later phase opens.
+
 **5.1 — Resume (by STATE of `NN-UAT.md`).** Absent → 5.3 · without `pre_uat: executed` → 5.4
 (the subagent is idempotent per scenario) · `executed` + `issue` without
 `pre_uat_fix_cycle: done` → 5.5 · with the marker → Sub-rotina D (never a 2nd cycle) ·
-`executed` without open `issue` → Etapa 6.
+`executed` without open `issue`, with basket 3 and without `pre_uat_reuat: done` → 5.6 ·
+otherwise → Etapa 6.
 
 **5.3 — Generate `NN-UAT.md` (via SUBAGENT).** `pre-despacho.sh 5`. Dispatch an `Agent`
 (`model: sonnet`, synchronous) to reuse the verify-work derivation:
@@ -530,7 +541,8 @@ login without vault, 2FA, captcha → `[pending]`/`blocked`, blocks the ship (ha
    `NN-UAT.md` está em `<uat_path>`. Sua janela é dona do dev server. Use a sessão
    `uat-fase-NN`. [Sem GUI: cenários são api/logic/cli — use `<non_gui_surfaces>`.] [Wrapper:
    rode a prova via `<wrapper absoluto>`; não leia nem ecoe segredos.] [Vault: profile
-   `<args.vault_profile>`.] Classifique nos 4 baldes, aplique `<push_on_it>` no balde 1, escreva
+   `<args.vault_profile>`.] [Superfície do projeto: leia `<uat_superficie>` e dirija a stack
+   só por ela.] Classifique nos 4 baldes, aplique `<push_on_it>` no balde 1, escreva
    results/Gaps/evidências no `NN-UAT.md`. Devolva só o qualitativo do `<return_contract>` —
    números são contados por script."
 3. Fence: `confere-etapa.sh 5` — reconciles baskets/probes/evidence from disk, lints the
@@ -553,6 +565,23 @@ login without vault, 2FA, captcha → `[pending]`/`blocked`, blocks the ship (ha
 6. `confere-etapa.sh 5 --fix-cycle` validates and stamps `pre_uat_fix_cycle: done` (single
    writer — 5.1 uses it to never fire a 2nd cycle).
 - Closed → Etapa 6. Persisted → Sub-rotina D (`bug de UAT persistente`).
+
+**5.6 — Basket 3: post-ship triage + re-UAT (1× only).** Runs when 5.4 (or a resumed round)
+leaves basket 3 without open `issue`. Order matters: re-run first, triage what is left.
+1. `pre-despacho.sh 5`. `uat_superficie` present and some basket-3 note blames a missing
+   credential/surface → re-dispatch 5.4 restricted to the basket-3 scenarios, with the
+   `[Superfície do projeto: …]` clause. Fence: `confere-etapa.sh 5 --reuat` (stamps
+   `pre_uat_reuat: done`, single writer). No `uat_superficie` → skip the re-run, still stamp.
+2. Any scenario carrying `pos_ship: candidato` → dispatch the skeptic (`Agent`,
+   `model: sonnet`, synchronous) with `prompts/uat-pos-ship.md`; it writes
+   `.pos-ship-vereditos.json`. Whoever classifies never judges.
+3. `scripts/pos-ship.py move <phase_dir> <NN> <project_root>` — moves only what passes its six
+   conditions; a refused candidate stays in `NN-UAT.md` as basket 3 and keeps blocking the
+   ship. Then `confere-etapa.sh 5` again (it may now promote `status: complete`) and
+   `commita-artefatos.sh`.
+- The re-run produced a new `issue` → 5.5 (the fix cycle is still unspent; its re-UAT uses the
+  same project surface). Basket 3 empty → Etapa 6 by the ship route. Still there → Etapa 6
+  hand-back. Never a 2nd 5.6.
 
 </stage>
 

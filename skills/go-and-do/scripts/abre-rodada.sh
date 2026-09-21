@@ -147,6 +147,15 @@ if [ "$VAULT" = false ] && { [ "$UI" = true ] || [ "$(tem UI-SPEC.md)" = true ];
   [ -n "$VAULT_TERMOS" ] && VAULT_ALERTA=true
 fi
 
+# ── 6b. observação pós-ship de fases anteriores + superfície de UAT (2.7.0) ───
+# Item `bloqueia_proxima: sim` ainda sem `observado_em` em OUTRA fase → a camada 0
+# pergunta antes de gastar a fase (mesmo molde do vault). A fase nomeada no
+# `verificavel_em` do item é isenta — é nela que ele se observa.
+POS_SHIP=$(python3 "$GAD_SCRIPTS_DIR/pos-ship.py" gate "$ROOT" "$FASE" 2>/dev/null || true)
+jq -e '.pendentes' >/dev/null 2>&1 <<<"$POS_SHIP" || POS_SHIP='{"veredito":"ok","pendentes":[]}'
+# contrato de UAT do projeto (como subir/dirigir a superfície sem segredo real)
+UAT_SUPERFICIE=""; [ -f "$ROOT/.planning/uat-superficie.md" ] && UAT_SUPERFICIE="$ROOT/.planning/uat-superficie.md"
+
 # versão do CC para o evento run (o probe de aninhamento S.H saiu na 2.6.3; o /cc-watch vigia)
 CCV=$(cc_version)
 
@@ -214,11 +223,15 @@ gad_json_out "$SLUG" "$(jq -cn \
   --argjson valerta "$VAULT_ALERTA" --arg vtermos "$VAULT_TERMOS" \
   --argjson tasks "$TASKS" --argjson aberta "$ABERTA" \
   --arg ps "$PRE_SPEC" --arg inv "$INVENTARIO" \
+  --argjson posship "$POS_SHIP" --arg uats "$UAT_SUPERFICIE" \
   '{args:{fase:$fase, ui:$ui, ai:$ai, no_ship:$ns, vault:$va, vault_profile:(if $vp == "" then null else $vp end), obs:$obs},
     retrato:$retrato, contexto:$ctx,
     pre_spec:(if $ps != "" then $ps else null end), inventario:$inv,
     etapa_1:$e1, etapa_2:$e2,
     vault_alerta:(if $valerta then {alerta:true, termos:$vtermos,
       pergunta:"A fase parece ter login no navegador e a rodada veio sem --vault: sem credenciais, o UAT não verifica esses fluxos (balde 3). Informar um perfil de vault antes de começar?"} else false end),
+    pos_ship_alerta:(if ($posship.pendentes|length) > 0 then {alerta:true, pendentes:$posship.pendentes,
+      pergunta:"Há observação pós-ship de fase anterior marcada como bloqueante e ainda não observada. Abrir esta fase mesmo assim?"} else false end),
+    uat_superficie:(if $uats == "" then null else $uats end),
     tasklist:$tasks,
     rodada:{aberta:$aberta, nn:$nn, phase_dir:$pd}}')"
