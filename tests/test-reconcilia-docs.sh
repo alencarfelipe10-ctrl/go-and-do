@@ -193,6 +193,58 @@ R=$(monta_pausa j '"Fase 24.4 EM EXECUÇÃO → PAUSADA"' sim); H=$(git -C "$R" 
 [ "$(git -C "$R" rev-parse HEAD)" = "$H" ] && grep -q '^status: "Fase 24.4' "$R/.planning/STATE.md" \
   && ok "sem commit e sem reescrever o status ilegível" || erro "mexeu no que não sabe ler"
 
+# ════════════════════════════════════════════════════════════════════════════
+# F4 RLR · FM-01EXE — número da fase num lugar só (fase_norm/fase_rx/gad_phase_dir)
+# Fixture com as fases 4, 04.1 e 14 no MESMO projeto e as duas grafias do número.
+# ════════════════════════════════════════════════════════════════════════════
+echo "== F4RLR · FM-01EXE — fase_norm / gad_phase_dir / ROADMAP com zero à esquerda"
+SHIM="$AQUI/../skills/go-and-do/scripts/lib/gsd-shim.sh"
+. "$SHIM"
+
+for par in "4:4" "04:4" "RLR-04:4" "RLR-4:4" "04.1:4.1" "4.1:4.1" "14:14" "RLR-04.1-fundacao:4.1"; do
+  ent="${par%%:*}"; esp="${par##*:}"; got="$(fase_norm "$ent")"
+  [ "$got" = "$esp" ] && ok "fase_norm '$ent' → $esp" || erro "fase_norm '$ent'" "esperado $esp, veio $got"
+done
+fase_casa 04 4 && ok "fase_casa 04 × 4" || erro "fase_casa 04 × 4 falhou"
+fase_casa 4 4.1 && erro "fase_casa aceitou 4 × 4.1" || ok "fase_casa recusa 4 × 4.1"
+fase_casa 4 14  && erro "fase_casa aceitou 4 × 14"  || ok "fase_casa recusa 4 × 14"
+
+PROJ_N="$TMP/numeros"; mkdir -p "$PROJ_N/.planning/phases"
+mkdir -p "$PROJ_N/.planning/phases/RLR-04-alvo" \
+         "$PROJ_N/.planning/phases/RLR-04.1-vizinha" \
+         "$PROJ_N/.planning/phases/RLR-14-longe"
+for g in 4 04 RLR-04; do
+  d="$(gad_phase_dir "$PROJ_N" "$g")"
+  [ "$(basename "${d:-}")" = "RLR-04-alvo" ] && ok "gad_phase_dir '$g' → RLR-04-alvo" \
+    || erro "gad_phase_dir '$g'" "veio '${d:-<vazio>}'"
+done
+d="$(gad_phase_dir "$PROJ_N" 4.1)"
+[ "$(basename "${d:-}")" = "RLR-04.1-vizinha" ] && ok "gad_phase_dir '4.1' → RLR-04.1-vizinha" \
+  || erro "gad_phase_dir 4.1" "veio '${d:-<vazio>}'"
+d="$(gad_phase_dir "$PROJ_N" 14)"
+[ "$(basename "${d:-}")" = "RLR-14-longe" ] && ok "gad_phase_dir '14' → RLR-14-longe" \
+  || erro "gad_phase_dir 14" "veio '${d:-<vazio>}'"
+gad_phase_dir "$PROJ_N" 7 >/dev/null 2>&1 && erro "gad_phase_dir inventou a fase 7" \
+  || ok "fase inexistente → exit 1"
+
+# ROADMAP com o número ZERO-PADDED: o --ship tem de marcar [x] mesmo com --fase 4
+R4="$TMP/roadmap04"; mkdir -p "$R4/.planning/phases/04-alvo"
+: > "$R4/.planning/phases/04-alvo/04-01-PLAN.md"
+{ echo '---'; echo 'gsd_state_version: 1.0'; echo 'current_phase: 4'
+  echo 'status: executing'; echo 'stopped_at: Phase 4 executing'
+  echo 'last_activity_desc: x'; echo 'state_head: 0000000'; echo '---'; } > "$R4/.planning/STATE.md"
+{ echo '- [ ] **Phase 04: alvo** — coisa'; echo '- [ ] **Phase 04.1: vizinha** — outra'; } > "$R4/.planning/ROADMAP.md"
+git -c init.defaultBranch=main init -q "$R4"
+git -C "$R4" -c user.name=t -c user.email=t@t.io add -A >/dev/null
+git -C "$R4" -c user.name=t -c user.email=t@t.io -c commit.gpgsign=false commit -qm base
+( cd "$R4" && bash "$SCRIPT" --fase 4 ) >/dev/null 2>&1
+grep -q '^- \[x\] \*\*Phase 04: alvo\*\*' "$R4/.planning/ROADMAP.md" \
+  && ok "ROADMAP 'Phase 04:' marcado [x] com --fase 4 (zero à esquerda)" \
+  || erro "ROADMAP não marcado" "$(cat "$R4/.planning/ROADMAP.md")"
+grep -q '^- \[ \] \*\*Phase 04.1: vizinha\*\*' "$R4/.planning/ROADMAP.md" \
+  && ok "a 04.1 vizinha ficou intocada" || erro "a 04.1 foi marcada junto"
+
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-reconcilia-docs: TUDO OK" || echo "test-reconcilia-docs: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

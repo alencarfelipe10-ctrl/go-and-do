@@ -248,8 +248,10 @@ if [ "$(jq -r '.pre.paralelismo // false' "$MANIFEST")" = "true" ]; then
   if [ ! -f "$PG" ]; then PG_MOTIVO="last-plan-gate.json ausente (o portão não rodou)"
   elif [ "$(jq -r '.passed // false' "$PG" 2>/dev/null)" != true ]; then PG_MOTIVO="last-plan-gate.json com passed=$(jq -r 'if has("passed") then (.passed|tostring) else "ilegível" end' "$PG" 2>/dev/null): $(jq -r '[.falhas[]?.codigo]|unique|join(",")' "$PG" 2>/dev/null)"
   else
-    pg_fase=$(jq -r '.resumo.fase // ""' "$PG" 2>/dev/null | grep -oE '[0-9][0-9.]*$' || true)
-    fase_num=$(printf '%s' "$FASE" | grep -oE '[0-9][0-9.]*$' || true)
+    # FM-01EXE (F4 RLR): comparação pelo número NORMALIZADO (fase_norm do gsd-shim) —
+    # "04" e "4" são a mesma fase; "4" e "4.1" nunca são.
+    pg_fase=$(fase_norm "$(jq -r '.resumo.fase // ""' "$PG" 2>/dev/null)" || true)
+    fase_num=$(fase_norm "$FASE" || true)
     if [ -n "$pg_fase" ] && [ "$pg_fase" = "$fase_num" ]; then PG_OK=true; else PG_MOTIVO="last-plan-gate.json é da fase '$(jq -r '.resumo.fase // ""' "$PG")', não da $FASE"; fi
   fi
   PAR=$(jq -c --argjson ok "$PG_OK" --arg m "$PG_MOTIVO" '. + {plan_gate_ok:$ok} + (if $m != "" then {plan_gate_motivo:$m} else {} end)' <<<"$PAR")

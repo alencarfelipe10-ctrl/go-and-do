@@ -69,12 +69,52 @@ gad_project_root() {
 # Fase N no disco sem passar pelo SDK (barato; o retrato completo continua sendo do
 # init.phase-op). N é STRING OPACA (PC-9: "1.5"/"2.5"/"999.3" jamais viram int); a
 # variante com zero à esquerda cobre nomes tipo RLR-01-fundacao sem aritmética.
+# ── número da fase num lugar só (FM-01EXE, auditoria F4 RLR de 21/09/2026) ────
+# Cada script tinha o seu jeito de casar o número da fase, e o casamento era por
+# PEDAÇO: um glob `*-4-*` ou um `grep "Phase 4"` alcançava a 04.1. Agora há uma função:
+#   fase_norm "4" · "04" · "RLR-04" · "RLR-4" → "4"        (e "04.1" → "4.1")
+#   fase_num_do_nome "RLR-04.1-fundacao"      → "4.1"      (número do NOME da pasta)
+#   fase_rx "4"                                → "0*4"      (regex do número EXATO)
+#   fase_casa "04" "4"                         → exit 0
+# O número é STRING OPACA (PC-9): "1.5" nunca vira float; só os zeros à esquerda de
+# cada segmento saem, e o prefixo de projeto (`RLR-`, `INS-`) é descartado.
+fase_norm() { # <fase> → número canônico; exit 1 (e nada no stdout) se não houver número
+  local s="${1:-}" seg out=""
+  s="${s##*/}"
+  s="$(printf '%s' "$s" | sed -E 's/^([A-Za-z]+-)+//')"          # tira RLR-, INS-, …
+  s="$(printf '%s' "$s" | grep -oE '^[0-9]+(\.[0-9]+)*' || true)" # só o número da frente
+  [ -n "$s" ] || return 1
+  local IFS=.
+  for seg in $s; do
+    seg="$(printf '%s' "$seg" | sed -E 's/^0+([0-9])/\1/')"
+    out="${out:+$out.}$seg"
+  done
+  printf '%s' "$out"
+}
+
+fase_num_do_nome() { fase_norm "${1:-}"; }
+
+# Regex (ERE/PCRE, sem âncora) que casa o número da fase em qualquer grafia com zero
+# à esquerda, e SÓ ele: quem usa fecha com `(?![0-9.])` / `[^0-9.]` à direita.
+fase_rx() { # <fase> → "4" → "0*4" · "4.1" → "0*4\.0*1"
+  local n; n="$(fase_norm "${1:-}")" || return 1
+  printf '%s' "$n" | sed -E 's/\./\\./g; s/([0-9]+)/0*\1/g'
+}
+
+# Dois números de fase designam a MESMA fase? (exit 0 = sim)
+fase_casa() { [ "$(fase_norm "${1:-}" || echo _a)" = "$(fase_norm "${2:-}" || echo _b)" ]; }
+
+# Fase N no disco sem passar pelo SDK (barato; o retrato completo continua sendo do
+# init.phase-op). O casamento é pelo número NORMALIZADO do nome da pasta — nunca por
+# pedaço de string: com as fases 4, 04.1 e 14 no mesmo projeto, `4` acha só a 4.
 gad_phase_dir() {
-  local root="$1" n="$2" d pad
-  case "$n" in [0-9]) pad="0$n" ;; *) pad="$n" ;; esac
-  for d in "$root/.planning/phases/$n"-*   "$root/.planning/phases/$pad"-* \
-           "$root/.planning/phases/"*"-$n"-* "$root/.planning/phases/"*"-$pad"-*; do
-    [ -d "$d" ] && { echo "$d"; return 0; }
+  local root="$1" n="$2" d base num alvo
+  alvo="$(fase_norm "$n")" || return 1
+  for d in "$root/.planning/phases/"*; do
+    [ -d "$d" ] || continue
+    base="$(basename "$d")"
+    num="$(fase_norm "$base")" || continue
+    [ "$num" = "$alvo" ] && { echo "$d"; return 0; }
   done
   return 1
 }

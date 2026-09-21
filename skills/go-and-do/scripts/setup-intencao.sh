@@ -125,7 +125,11 @@ linhas = open(roadmap, encoding="utf-8", errors="replace").read().split("\n")
 # Entrada de detalhe da fase: heading em INGLÊS `### Phase <NN>` (o parser do GSD e o
 # nosso leem o mesmo heading; "Fase" em pt-BR quebra os dois). O lookahead impede que
 # a fase 24 case com a entrada da 24.3.
-rx_ini = re.compile(r'^#{2,4}\s+Phase\s+' + re.escape(nn) + r'(?![\w.])', re.I)
+# FM-03INT (F4 RLR): a MESMA regra de numero do `fase_rx` do gsd-shim — `Phase 04` e
+# `Phase 4` sao a mesma entrada; o lookahead impede que a 4 case com a 4.1 ou a 14.
+_num = re.sub(r'^0+([0-9])', r'\1', nn.split('-')[-1])
+rx_ini = re.compile(r'^#{2,4}\s+Phase\s+0*' + re.escape(_num).replace('\\.', '\\.0*')
+                    + r'(?![\w.])', re.I)
 rx_head = re.compile(r'^#{1,4}\s')
 ini = None
 for i, l in enumerate(linhas):
@@ -195,6 +199,12 @@ else:
     saida["motivo"] = "REQUIREMENTS.md ausente — todo id citado conta como ausente"
 
 print(json.dumps(saida, ensure_ascii=False))
+# FM-03INT: sem Goal na entrada do ROADMAP a intencao arranca cega — a etapa inteira
+# se apoia nele. Saida != 0 para que o chamador pare aqui em vez de seguir com null.
+if not saida["goal_roadmap"]:
+    print("ERRO: entrada `### Phase %s` do ROADMAP sem **Goal:** — a intencao nao arranca sem ele" % nn,
+          file=sys.stderr)
+    raise SystemExit(4)
 PY
 }
 
