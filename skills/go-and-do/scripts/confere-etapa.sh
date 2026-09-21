@@ -1268,8 +1268,14 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     | head -40; } || true )
   if [ -n "$SUJOS" ]; then
     n_sujos=$( { printf '%s\n' "$SUJOS" | grep -c . || true; } )
-    RES=$(jq -c --arg d "pasta da fase com $n_sujos arquivo(s) fora de commit ao fim da etapa $ETAPA (rode commita-artefatos.sh): $(printf '%s ' $SUJOS | cut -c1-350)" \
-      '. + [{id:"pasta_da_fase_suja", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    # AVISO, nao FALHA — e o plano manda PARAR e PERGUNTAR num caso assim (regra 6):
+    # a FM-06INT quer arvore limpa ao fim da etapa, mas o workflow.md roda o fiscal
+    # ANTES do commita-artefatos.sh (5.x linha 580, 6.3b linha 611). Como FALHA dura, o
+    # `NN-UAT.md` recem-escrito pelo proprio fiscal deixaria a etapa 5 em impasse: nao
+    # passa sem commit, nao commita sem passar. A lista sai igual; quem decide se isso
+    # vira gate duro (e em que ponto da ordem) e o dono.
+    RES=$(jq -c --arg d "AVISO: pasta da fase com $n_sujos arquivo(s) fora de commit na etapa $ETAPA (rode commita-artefatos.sh antes de fechar): $(printf '%s ' $SUJOS | cut -c1-350)" \
+      '. + [{id:"pasta_da_fase_suja", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
   fi
 fi
 
@@ -1349,6 +1355,23 @@ PYREV
     fi
   fi
   EXTRAI=$(jq -c --argjson r "$REVMAX" '. + {review_maior_iteracao: $r}' <<<"$EXTRAI")
+  # O manifest extrai `status`/`critical`/`warning`/`total` do `NN-REVIEW.md` — a PRIMEIRA
+  # iteracao. Era esse o numero que a camada 0 lia para rotear (medido na F4 RLR: o
+  # manifest dizia `issues_found · critical: 2` enquanto o iter4 ja dizia `all_fixed`).
+  # Sobrescrevemos com o arquivo de maior iteracao, MANTENDO o formato de string do
+  # manifest (`"status: all_fixed"`, com o rotulo) — quem parseia nao muda.
+  if [ -n "$rv_arq" ]; then
+    for campo in status critical warning total skipped; do
+      v=$(jq -r --arg k "$campo" '.[$k] // empty' <<<"$REVMAX")
+      [ -n "$v" ] || continue
+      case "$campo" in
+        status) fmt="status: $v" ;;
+        *)      fmt="  $campo: $v" ;;
+      esac
+      EXTRAI=$(jq -c --arg k "$campo" --arg v "$fmt" '. + {($k): $v}' <<<"$EXTRAI")
+    done
+    EXTRAI=$(jq -c --arg a "$rv_arq" '. + {review_fonte: $a}' <<<"$EXTRAI")
+  fi
 fi
 
 # ── veredito + eventos + medição ─────────────────────────────────────────────

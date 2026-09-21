@@ -609,12 +609,14 @@ IFS='|' read -r R PD <<<"$(monta suja 99)"
     -c commit.gpgsign=false commit -qm base >/dev/null 2>&1 )
 echo "parecer que ninguem commitou" > "$PD/99-parecer-codex.md"
 J="$(confere "$R" 99)"
-eq "arquivo novo na pasta da fase → FALHA" "$(assert_de "$J" pasta_da_fase_suja)" "FALHA"
+# AVISO, não FALHA: o workflow roda o fiscal ANTES do commita-artefatos.sh — como falha
+# dura a etapa 5 entraria em impasse. Contradição levada ao dono (regra 6 do plano).
+eq "arquivo novo na pasta da fase → AVISO" "$(assert_de "$J" pasta_da_fase_suja)" "AVISO"
 casa "a falha manda rodar o commita-artefatos" "$J" 'commita-artefatos\.sh'
 rm -f "$PD/99-parecer-codex.md"
 echo x > "$PD/.intent/rascunho.tmp"; echo y > "$PD/saida.log"
 J="$(confere "$R" 99)"
-eq "só temporários (.tmp/.log) → sem falha de pasta suja" "$(assert_de "$J" pasta_da_fase_suja)" "<ausente>"
+eq "só temporários (.tmp/.log) → sem aviso de pasta suja" "$(assert_de "$J" pasta_da_fase_suja)" "<ausente>"
 
 # — FM-04GAT: o 4.1 lê o arquivo de MAIOR iteração e reprova all_fixed com skipped
 IFS='|' read -r R PD <<<"$(monta review 99)"
@@ -624,6 +626,8 @@ printf 'status: all_fixed\ncritical: 0\nskipped: 4\n'    > "$PD/99-REVIEW-FIX.it
 JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
 eq "leu o arquivo de maior iteração" \
   "$(printf '%s' "$JR" | jq -r '.extrai.review_maior_iteracao.arquivo')" "99-REVIEW-FIX.iter4.md"
+eq "as contagens que a camada 0 lê vêm da maior iteração (não do REVIEW.md)" \
+  "$(printf '%s' "$JR" | jq -r '.extrai.status')" "status: all_fixed"
 eq "all_fixed com skipped > 0 → FALHA" "$(assert_de "$JR" all_fixed_com_skipped)" "FALHA"
 printf 'status: all_fixed\ncritical: 0\nskipped: 0\n' > "$PD/99-REVIEW-FIX.iter4.md"
 JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
