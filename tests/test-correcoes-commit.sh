@@ -47,7 +47,7 @@ DELTA_PRE=$(delta_conteudo)
 RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1 || erro "--inicio falhou"
 sed -i '2a linha inserida pelo ciclo' "$REPO/.planning/ROADMAP.md"            # delta do ciclo
 echo "spec corrigida pelo ciclo" >> "$PD/24.3-SPEC.md"
-saida=$(RUN "$PD" 1 --ids "c1-01:h1,c1-02:h2" "${ALVOS[@]}" 2>&1); rc=$?
+saida=$(RUN "$PD" 1 --ids "c1-01,c1-02" "${ALVOS[@]}" 2>&1); rc=$?
 if [ $rc -ne 0 ]; then erro "commit do ciclo falhou (rc=$rc)" "$saida"; else
   ok "commit do ciclo aceito"
   st=$(G diff --cached --name-only -- .planning/ROADMAP.md "$PD/24.3-SPEC.md")
@@ -66,9 +66,10 @@ if [ $rc -ne 0 ]; then erro "commit do ciclo falhou (rc=$rc)" "$saida"; else
   cam=$(jq -cr '.caminhos|sort|join(",")' "$apl" 2>/dev/null)
   [ "$cam" = ".planning/ROADMAP.md,.planning/phases/24.3-fase/24.3-SPEC.md" ] \
     && ok '.aplicado lista exatamente os caminhos comitados' || erro ".aplicado.caminhos" "$cam"
-  # C1: `h1`/`h2` não são caminhos comitados → são ignorados (era o placeholder
-  # `:<hash>` do intent.md, sem fonte). O ciclo tocou 2 caminhos e nenhum id declarou
-  # qual → hash vazio, mas DECLARADO em hash_ausente[].
+  # F4 RLR (FM-05INT): o placeholder `:<hash>` do intent.md deixou de ser tolerado em
+  # silêncio — caminho declarado fora do diff agora é RECUSA (caso próprio abaixo). Aqui
+  # a forma canônica só-ids: o ciclo tocou 2 caminhos e nenhum id declarou qual → hash
+  # vazio, mas DECLARADO em hash_ausente[].
   ids=$(jq -cr '.correcoes|map(.id)|join(",")' "$apl" 2>/dev/null)
   [ "$ids" = "c1-01,c1-02" ] && ok '.aplicado traz os ids das correcoes' || erro "ids" "$ids"
   vaz=$(jq -cr '[.correcoes[]|select(.hash=="")]|length' "$apl" 2>/dev/null)
@@ -76,9 +77,13 @@ if [ $rc -ne 0 ]; then erro "commit do ciclo falhou (rc=$rc)" "$saida"; else
   { [ "$vaz" = 2 ] && [ "$aus" = "c1-01,c1-02" ]; } \
     && ok '>1 caminho sem declaração → hash vazio E id em hash_ausente[]' \
     || erro "hash_ausente" "vazias=$vaz ausentes=$aus"
+  # FM-05INT: o assunto do commit sai da LISTA DE ARQUIVOS DO DIFF, não dos ids
   msg=$(G log -1 --pretty=%s)
-  [ "$msg" = "docs(fase 24.3): correções do ciclo 1 — c1-01:h1,c1-02:h2" ] \
-    && ok "mensagem canônica do commit" || erro "mensagem" "$msg"
+  [ "$msg" = "docs(fase 24.3): correções do ciclo 1 — .planning/phases/24.3-fase/24.3-SPEC.md, .planning/ROADMAP.md" ] \
+    && ok "assunto do commit = arquivos do diff" || erro "mensagem" "$msg"
+  body=$(G log -1 --pretty=%b)
+  case "$body" in *"ids: c1-01,c1-02"*) ok "corpo do commit registra os ids" ;;
+    *) erro "corpo sem os ids" "$body" ;; esac
 fi
 limpa
 
@@ -290,6 +295,123 @@ if [ "$rc" = 0 ]; then
 else
   erro "commit do ciclo com índice falhou (rc=$rc)" "$saida"
 fi
+
+# ════════════════════════════════════════════════════════════════════════════
+# F4 RLR — travas de id (FM-04INT + FJ-05INT), selo por caminho declarado
+# (FM-05INT), base preservada no re-selo e aborto que NÃO grava .vazio (FJ-04INT).
+# ════════════════════════════════════════════════════════════════════════════
+
+vereditos() { # escreve .intent/.vereditos-c<C>.txt com as linhas dadas
+  local c="$1"; shift
+  mkdir -p "$PD/.intent"
+  printf '%s\n' "$@" > "$PD/.intent/.vereditos-c$c.txt"
+}
+prepara_ciclo() { # monta repo + --inicio + uma emenda real na SPEC
+  monta_repo; set_alvos
+  RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1 || erro "--inicio falhou"
+  echo "spec corrigida pelo ciclo" >> "$PD/24.3-SPEC.md"
+}
+
+echo "== F4RLR.1 — id inventado é recusado ANTES de tocar o repositório"
+prepara_ciclo
+vereditos 1 "c1-01 | bug | confirmado | codigo"
+H0=$(G rev-parse HEAD)
+saida=$(RUN "$PD" 1 --ids "c1-01,c1-99" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 3 ] && ok "id inventado → exit 3" || erro "esperava exit 3, veio $rc" "$saida"
+case "$saida" in *"c1-99"*) ok "a recusa nomeia o id inventado" ;; *) erro "recusa sem o id" "$saida" ;; esac
+case "$saida" in *"ids válidos"*c1-01*) ok "a recusa lista os ids válidos" ;; *) erro "sem lista de válidos" "$saida" ;; esac
+[ "$(G rev-parse HEAD)" = "$H0" ] && ok "HEAD inalterado" || erro "HEAD avançou"
+[ -f "$PD/.intent/.correcoes-c1.vazio" ] && erro "aborto por erro gravou .vazio (FJ-04INT)" \
+  || ok "aborto por erro NÃO grava .vazio (FJ-04INT)"
+[ -f "$PD/.intent/.correcoes-c1.aplicado" ] && erro "gravou .aplicado numa recusa" || ok "nenhum .aplicado"
+limpa
+
+echo "== F4RLR.2 — id DISPENSADO (confirmado_irrelevante) é recusado"
+prepara_ciclo
+vereditos 1 "c1-01 | bug | confirmado | codigo" "c1-02 | nit | confirmado_irrelevante | doc"
+saida=$(RUN "$PD" 1 --ids "c1-01,c1-02" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 3 ] && ok "dispensado promovido → exit 3" || erro "esperava exit 3, veio $rc" "$saida"
+case "$saida" in *DISPENSADO*) ok "a recusa diz DISPENSADO" ;; *) erro "mensagem" "$saida" ;; esac
+case "$saida" in *dívida*) ok "a recusa aponta a dívida como destino" ;; *) erro "sem destino" "$saida" ;; esac
+limpa
+
+echo "== F4RLR.3 — achado CONFIRMADO sem destino é recusado; --adiados dá destino"
+prepara_ciclo
+vereditos 1 "c1-01 | bug | confirmado | codigo" "c1-02 | bug | confirmado | codigo"
+saida=$(RUN "$PD" 1 --ids "c1-01" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 3 ] && ok "confirmado sem destino → exit 3" || erro "esperava exit 3, veio $rc" "$saida"
+case "$saida" in *c1-02*) ok "a recusa nomeia o confirmado órfão" ;; *) erro "sem o id" "$saida" ;; esac
+saida=$(RUN "$PD" 1 --ids "c1-01" --adiados "c1-02" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "--adiados dá destino ao confirmado → exit 0" || erro "esperava exit 0, veio $rc" "$saida"
+case "$(G log -1 --pretty=%b)" in *"adiados: c1-02"*) ok "o corpo do commit registra os adiados" ;;
+  *) erro "corpo sem adiados" "$(G log -1 --pretty=%b)" ;; esac
+limpa
+
+echo "== F4RLR.4 — id de releitura do mesmo ciclo (c1b-NN) é aceito"
+prepara_ciclo
+vereditos 1 "c1-01 | bug | confirmado | codigo"
+saida=$(RUN "$PD" 1 --ids "c1-01,c1b-01" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "c1b-01 aceito sem estar nos vereditos" || erro "esperava exit 0, veio $rc" "$saida"
+limpa
+
+echo "== F4RLR.5 — caminho declarado ausente do diff é RECUSA (era silêncio)"
+prepara_ciclo
+vereditos 1 "c1-01 | bug | confirmado | codigo"
+H0=$(G rev-parse HEAD)
+saida=$(RUN "$PD" 1 --ids "c1-01:$PD/24.3-CONTEXT.md" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 3 ] && ok "caminho declarado fora do diff → exit 3" || erro "esperava exit 3, veio $rc" "$saida"
+[ "$(G rev-parse HEAD)" = "$H0" ] && ok "HEAD inalterado na recusa" || erro "HEAD avançou"
+limpa
+
+echo "== F4RLR.6 — re-selo: --inicio no mesmo HEAD não sobrescreve a base pré-ciclo"
+monta_repo; set_alvos
+RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1
+B0=$(cat "$PD/.intent/.correcoes-c1.base.json")
+echo "spec corrigida pelo ciclo" >> "$PD/24.3-SPEC.md"
+RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1 || erro "2º --inicio falhou"
+[ "$(cat "$PD/.intent/.correcoes-c1.base.json")" = "$B0" ] \
+  && ok "base pré-ciclo preservada no 2º --inicio" || erro "base foi sobrescrita (blob_pre viria emendado)"
+vereditos 1 "c1-01 | bug | confirmado | codigo"
+RUN "$PD" 1 --ids "c1-01" "${ALVOS[@]}" >/dev/null 2>&1 \
+  && ok "o fecho ainda enxerga o delta do ciclo" || erro "fecho falhou após re-selo"
+limpa
+
+echo "== F4RLR.7 — revalida-documentos.sh: contagem por extenso × lista"
+REV="$AQUI/../skills/go-and-do/scripts/revalida-documentos.sh"
+monta_repo
+cat > "$PD/24.3-CONTEXT.md" <<'MD'
+## Decisões
+Foram tomadas três decisões nesta fase.
+
+- **D-01** — uma coisa (revalidada no ciclo 1)
+- **D-02** — outra coisa
+- **D-03** — mais uma
+- **D-04** — a quarta, que a contagem esqueceu
+MD
+saida=$(bash "$REV" "$PD" 1 2>&1); rc=$?
+[ "$rc" != 0 ] && ok "contagem divergente → exit != 0" || erro "não acusou a contagem" "$saida"
+case "$saida" in *CONTAGEM*) ok "acusa CONTAGEM" ;; *) erro "sem CONTAGEM" "$saida" ;; esac
+sed -i 's/três decisões/quatro decisões/' "$PD/24.3-CONTEXT.md"
+saida=$(bash "$REV" "$PD" 1 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "contagem certa → exit 0" || erro "acusou com a contagem certa" "$saida"
+limpa
+
+echo "== F4RLR.8 — revalida-documentos.sh: ponteiro de decisão para critério inexistente"
+monta_repo
+cat > "$PD/24.3-CONTEXT.md" <<'MD'
+## Decisões
+- **D-01** — fecha o critério SC-2
+- **D-02** — fecha o critério SC-9
+MD
+cat > "$PD/24.3-SPEC.md" <<'MD'
+## Critérios
+- **SC-1** — um
+- **SC-2** — dois
+MD
+saida=$(bash "$REV" "$PD" 1 2>&1); rc=$?
+[ "$rc" != 0 ] && ok "ponteiro órfão → exit != 0" || erro "não acusou o ponteiro" "$saida"
+case "$saida" in *PONTEIRO*SC-9*) ok "acusa PONTEIRO SC-9" ;; *) erro "sem o ponteiro" "$saida" ;; esac
+limpa
 
 echo
 [ "$falhas" -eq 0 ] && echo "test-correcoes-commit: TUDO OK" || echo "test-correcoes-commit: $falhas falha(s)"
