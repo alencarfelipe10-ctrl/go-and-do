@@ -557,6 +557,81 @@ else
     "$(bash "$C" 0 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1 | jq -r '[.asserts[]|select(.resultado=="FALHA")|.id]|join(",")')"
 fi
 
+
+# ══════════════════════════════════════════ F4 RLR — regras gerais do fiscal
+# FM-07INT/FM-04PLAN/FM-07GAT (incidente tardio) · FM-06INT (pasta suja) ·
+# FM-04GAT (maior iteração + all_fixed com skipped) · FM-02ENC (local à frente).
+echo "── F4 RLR: incidente tardio, pasta suja, review de maior iteração ──"
+
+rl_linha() { # <evento> <etapa> <ts> [detalhe]
+  printf '{"evento":"%s","etapa":"%s","ts":%s,"detalhe":"%s"}\n' "$1" "$2" "$3" "${4:-}"
+}
+
+# — incidente POSTERIOR ao `end` da própria etapa reprova
+IFS='|' read -r R PD <<<"$(monta tardio 99)"
+RL="$PD/99-RUN-LOG.jsonl"
+{ rl_linha incidente "1 intencao" 1000 "na hora"
+  rl_linha end       "1 intencao" 2000
+  rl_linha incidente "1 intencao" 2500 "escrito no fecho, de memoria"; } > "$RL"
+J="$(confere "$R" 99)"
+eq "incidente depois do end da etapa → FALHA" "$(assert_de "$J" incidente_tardio)" "FALHA"
+casa "a falha diz quantos segundos depois" "$J" '\+500s do end'
+
+# — incidente de OUTRA etapa não reprova esta (recorte medido em 21/09)
+IFS='|' read -r R PD <<<"$(monta tardio_outra 99)"
+RL="$PD/99-RUN-LOG.jsonl"
+{ rl_linha end       "3 construcao" 2000
+  rl_linha incidente "3 construcao" 2500 "tardio, mas da etapa 3"
+  rl_linha incidente "1 intencao"   1000 "na hora"; } > "$RL"
+J="$(confere "$R" 99)"
+eq "tardio de outra etapa não reprova a etapa 1" "$(assert_de "$J" incidente_tardio)" "<ausente>"
+
+# — rajada: >= 3 incidentes no mesmo segundo
+IFS='|' read -r R PD <<<"$(monta rajada 99)"
+RL="$PD/99-RUN-LOG.jsonl"
+{ rl_linha incidente "1 intencao" 1500 a; rl_linha incidente "1 intencao" 1500 b
+  rl_linha incidente "1 intencao" 1500 c; } > "$RL"
+J="$(confere "$R" 99)"
+eq "3 incidentes no mesmo segundo → FALHA" "$(assert_de "$J" incidente_tardio)" "FALHA"
+casa "a falha nomeia a rajada" "$J" 'incidentes no mesmo segundo'
+
+# — run-log sadio não acusa nada
+IFS='|' read -r R PD <<<"$(monta sadio 99)"
+RL="$PD/99-RUN-LOG.jsonl"
+{ rl_linha incidente "1 intencao" 1000 a; rl_linha incidente "1 intencao" 1200 b
+  rl_linha end "1 intencao" 2000; } > "$RL"
+J="$(confere "$R" 99)"
+eq "run-log sadio → sem incidente_tardio" "$(assert_de "$J" incidente_tardio)" "<ausente>"
+
+# — FM-06INT: arquivo da pasta da fase fora de commit reprova; temporário não
+IFS='|' read -r R PD <<<"$(monta suja 99)"
+( cd "$R" && git add -A >/dev/null 2>&1 && git -c user.name=t -c user.email=t@t.io \
+    -c commit.gpgsign=false commit -qm base >/dev/null 2>&1 )
+echo "parecer que ninguem commitou" > "$PD/99-parecer-codex.md"
+J="$(confere "$R" 99)"
+eq "arquivo novo na pasta da fase → FALHA" "$(assert_de "$J" pasta_da_fase_suja)" "FALHA"
+casa "a falha manda rodar o commita-artefatos" "$J" 'commita-artefatos\.sh'
+rm -f "$PD/99-parecer-codex.md"
+echo x > "$PD/.intent/rascunho.tmp"; echo y > "$PD/saida.log"
+J="$(confere "$R" 99)"
+eq "só temporários (.tmp/.log) → sem falha de pasta suja" "$(assert_de "$J" pasta_da_fase_suja)" "<ausente>"
+
+# — FM-04GAT: o 4.1 lê o arquivo de MAIOR iteração e reprova all_fixed com skipped
+IFS='|' read -r R PD <<<"$(monta review 99)"
+printf 'status: issues_found\ncritical: 2\nskipped: 0\n' > "$PD/99-REVIEW.md"
+printf 'status: issues_found\ncritical: 1\nskipped: 0\n' > "$PD/99-REVIEW.iter3.md"
+printf 'status: all_fixed\ncritical: 0\nskipped: 4\n'    > "$PD/99-REVIEW-FIX.iter4.md"
+JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "leu o arquivo de maior iteração" \
+  "$(printf '%s' "$JR" | jq -r '.extrai.review_maior_iteracao.arquivo')" "99-REVIEW-FIX.iter4.md"
+eq "all_fixed com skipped > 0 → FALHA" "$(assert_de "$JR" all_fixed_com_skipped)" "FALHA"
+printf 'status: all_fixed\ncritical: 0\nskipped: 0\n' > "$PD/99-REVIEW-FIX.iter4.md"
+JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "all_fixed com skipped 0 → sem falha" "$(assert_de "$JR" all_fixed_com_skipped)" "<ausente>"
+printf 'sem cabecalho nenhum\n' > "$PD/99-REVIEW-FIX.iter4.md"
+JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "formato não reconhecido falha ALTO" "$(assert_de "$JR" review_formato)" "FALHA"
+
 echo "--------------------------------------------------"
 echo "test-confere-etapa.sh: $OK ok / $FALHAS falha(s)"
 [ "$FALHAS" -eq 0 ]

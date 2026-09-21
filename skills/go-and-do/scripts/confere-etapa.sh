@@ -70,7 +70,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --fase)    FASE="${2:-}"; shift 2 ;;
     --projeto) PROJ="${2:-}"; shift 2 ;;
-    --dry-run) DRY=1; shift ;;
+    --dry-run) DRY=1; export GAD_DRY_RUN=1; shift ;;
     --sem-telemetria) SEMTEL=1; shift ;;
     --fix-cycle) FIXCYCLE=1; shift ;;
     --reuat) REUAT=1; shift ;;
@@ -1179,6 +1179,176 @@ if [ "$ETAPA" = "1" ]; then
           issues: ($r6.issues // []),
           req_ids: ($r6.req_ids // []),
           r2_status: $st, r2_avisos: $av}' <<<"$EXTRAI")
+fi
+
+# ════════════════════════════════════════════════════════════════════════════
+# REGRAS GERAIS DA AUDITORIA F4 RLR — valem para TODA etapa
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── FM-07INT · FM-04PLAN · FM-07GAT: incidente tardio ────────────────────────
+# «Incidente na hora» virou frase em todos os prompts de etapa; aqui está a cancela
+# que a torna imponível. Dois sintomas, os dois medidos na F4 RLR:
+#   (1) incidente rotulado com a etapa Y e horário POSTERIOR ao `end` de Y — foi
+#       escrito depois, de memória, no fecho;
+#   (2) >= 3 incidentes no MESMO segundo — rajada digitada de uma vez.
+# Só olha os `end` que JÁ existem: o `end` da etapa corrente é gravado logo abaixo,
+# por este mesmo script, e ainda não está no arquivo.
+RLI="$PHASE_DIR/$NN-RUN-LOG.jsonl"
+if [ -f "$RLI" ]; then
+  TARDIOS=$(python3 - "$RLI" "$RUNLOG_ETAPA" 2>/dev/null <<'PYTARDIO'
+import json, sys, collections
+from datetime import datetime
+
+def ts(v):
+    if v is None: return None
+    if isinstance(v, (int, float)): return float(v)
+    t = str(v).replace("Z", "+00:00")
+    try: return datetime.fromisoformat(t).timestamp()
+    except Exception: return None
+
+# O fiscal de uma etapa julga SÓ os incidentes DELA (medido em 21/09: sem este recorte a
+# regra reprovava as 8 etapas das 3 fases reais por incidentes de outras etapas — «nenhuma
+# regra nova pode reprovar etapa antiga sem motivo real»).
+alvo = (sys.argv[2] if len(sys.argv) > 2 else "").strip()
+def da_etapa(et):
+    if not alvo:
+        return True
+    a = alvo.split()[0] if alvo.split() else alvo
+    b = (et or "").split()[0] if (et or "").split() else (et or "")
+    return a == b
+
+ends, eventos = {}, []
+for linha in open(sys.argv[1], encoding="utf-8", errors="replace"):
+    linha = linha.strip()
+    if not linha: continue
+    try: e = json.loads(linha)
+    except Exception: continue
+    t = ts(e.get("ts") or e.get("timestamp") or e.get("hora"))
+    et = str(e.get("etapa") or "")
+    if e.get("evento") == "end" and t is not None and et:
+        # `substitui`: um `end` re-emitido aposenta o anterior — fica o mais recente
+        ends[et] = max(ends.get(et, 0.0), t)
+    if e.get("evento") == "incidente" and da_etapa(et):
+        eventos.append((t, et, (e.get("detalhe") or e.get("kv", {}).get("detalhe") or "")[:70]))
+
+tardios, rajadas = [], []
+for t, et, det in eventos:
+    fim = ends.get(et)
+    if t is not None and fim is not None and t > fim + 1:
+        tardios.append("%s (+%ds do end)" % (det or et, int(t - fim)))
+
+por_segundo = collections.Counter(int(t) for t, _, _ in eventos if t is not None)
+for seg, n in por_segundo.items():
+    if n >= 3:
+        rajadas.append("%d incidentes no mesmo segundo (%d)" % (n, seg))
+
+print(json.dumps({"tardios": tardios, "rajadas": rajadas}, ensure_ascii=False))
+PYTARDIO
+) || TARDIOS=""
+  jq -e . >/dev/null 2>&1 <<<"$TARDIOS" || TARDIOS='{"tardios":[],"rajadas":[]}'
+  n_tard=$(jq '.tardios|length' <<<"$TARDIOS"); n_raj=$(jq '.rajadas|length' <<<"$TARDIOS")
+  if [ "${n_tard:-0}" -gt 0 ] || [ "${n_raj:-0}" -gt 0 ]; then
+    RES=$(jq -c --arg d "incidente escrito fora da hora do fato: $(jq -r '(.tardios + .rajadas)|join(" · ")' <<<"$TARDIOS" | cut -c1-400)" \
+      '. + [{id:"incidente_tardio", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+  fi
+  EXTRAI=$(jq -c --argjson t "$TARDIOS" '. + {incidente_tardio: $t}' <<<"$EXTRAI")
+fi
+
+# ── FM-06INT: a pasta da fase não pode terminar a etapa com git status sujo ───
+# 160 arquivos do `.intent/` da F4 ficaram fora de qualquer commit: eles são a
+# evidência da consultoria e sumiriam numa limpeza. A lista de temporários aceitos foi
+# medida contra as pastas reais (RLR F3/F4, inspired F24.5), não chutada.
+# A etapa 0 é a ABERTURA da rodada: a pasta da fase está justamente nascendo, e cobrar
+# árvore limpa ali seria cobrar o fim no começo. A regra vale das etapas 1 em diante.
+if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  SUJOS=$( { git -C "$ROOT" status --porcelain --untracked-files=all -- "$PHASE_DIR" 2>/dev/null \
+    | sed 's/^...//' \
+    | grep -vE '(^|/)\.(gad|gad-[a-z-]*|correcoes-c[0-9a-z]*\.(tmp|pre-[0-9]+\.patch))' \
+    | grep -vE '\.(tmp|swp|err|log|pyc)$|(^|/)__pycache__/|(^|/)\.DS_Store$' \
+    | head -40; } || true )
+  if [ -n "$SUJOS" ]; then
+    n_sujos=$( { printf '%s\n' "$SUJOS" | grep -c . || true; } )
+    RES=$(jq -c --arg d "pasta da fase com $n_sujos arquivo(s) fora de commit ao fim da etapa $ETAPA (rode commita-artefatos.sh): $(printf '%s ' $SUJOS | cut -c1-350)" \
+      '. + [{id:"pasta_da_fase_suja", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+  fi
+fi
+
+# ── FM-02ENC (fiscal): o local não pode terminar a fase à frente do remoto ────
+# AVISO, não falha: há projeto que proíbe push direto e fecha por PR. O que não pode
+# é o fecho passar em silêncio com commits que ninguém mais tem.
+if [ "$ETAPA" = "6" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  BR=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  case "$BR" in
+    master|main)
+      UP=$(git -C "$ROOT" rev-parse --abbrev-ref "$BR@{upstream}" 2>/dev/null || echo "")
+      if [ -n "$UP" ]; then
+        AF=$(git -C "$ROOT" rev-list --count "$UP..$BR" 2>/dev/null || echo 0)
+        if [ "${AF:-0}" -gt 0 ]; then
+          RES=$(jq -c --arg d "AVISO: $BR está $AF commit(s) à frente de $UP — o fecho da fase não foi empurrado (6.5: push explícito, ou banner com a pendência se o projeto proíbe push direto)" \
+            '. + [{id:"local_a_frente_do_remoto", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+          EXTRAI=$(jq -c --argjson n "$AF" --arg b "$BR" --arg u "$UP" \
+            '. + {local_a_frente: {ramo:$b, upstream:$u, commits:$n}}' <<<"$EXTRAI")
+        fi
+      fi ;;
+  esac
+fi
+
+# ── FM-04GAT: o 4.1 lê as contagens do arquivo de MAIOR iteração ─────────────
+# A F4 RLR tinha 04-REVIEW.md, .iter2, .iter3, .iter4, 04-REVIEW-FIX.md e
+# 04-REVIEW-FIX.iter4.md — o fiscal lia o `04-REVIEW.md` (a 1ª iteração) e dava o
+# veredito da rodada errada. Ordem: REVIEW-FIX mais recente > REVIEW.iterN mais alto >
+# REVIEW.md. E `status: all_fixed` com `skipped > 0` reprova: nada fica de fora sem ser
+# nomeado. Formato não reconhecido FALHA ALTO — leitor cego é pior que leitor ausente.
+if [ "$ETAPA" = "4-code-review" ]; then
+  REVMAX=$(python3 - "$PHASE_DIR" "$NN" 2>/dev/null <<'PYREV'
+import glob, json, os, re, sys
+pd, nn = sys.argv[1], sys.argv[2]
+
+def iter_de(nome):
+    m = re.search(r'\.iter(\d+)\.md$', nome)
+    return int(m.group(1)) if m else 1
+
+cands = []
+for pat, peso in ((f"{nn}-REVIEW-FIX*.md", 2), (f"{nn}-REVIEW.md", 1), (f"{nn}-REVIEW.iter*.md", 1)):
+    for f in glob.glob(os.path.join(pd, pat)):
+        cands.append((peso, iter_de(f), f))
+if not cands:
+    print(json.dumps({"arquivo": None})); raise SystemExit(0)
+cands.sort()
+_, it, alvo = cands[-1]
+
+txt = open(alvo, encoding="utf-8", errors="replace").read()
+def campo(nome):
+    m = re.search(r'^\s*%s:\s*(\S+)' % nome, txt, re.M)
+    return m.group(1) if m else None
+
+status = campo("status")
+nums = {}
+for k in ("critical", "warning", "info", "total", "skipped", "fixed"):
+    v = campo(k)
+    if v is not None:
+        try: nums[k] = int(v)
+        except ValueError: nums[k] = v
+saida = {"arquivo": os.path.basename(alvo), "iteracao": it, "status": status, **nums}
+if status is None:
+    saida["formato_nao_reconhecido"] = True
+print(json.dumps(saida, ensure_ascii=False))
+PYREV
+) || REVMAX=""
+  jq -e . >/dev/null 2>&1 <<<"$REVMAX" || REVMAX='{"arquivo":null,"formato_nao_reconhecido":true}'
+  rv_arq=$(jq -r '.arquivo // ""' <<<"$REVMAX")
+  if [ -n "$rv_arq" ]; then
+    if [ "$(jq -r '.formato_nao_reconhecido // false' <<<"$REVMAX")" = true ]; then
+      RES=$(jq -c --arg d "$rv_arq: formato não reconhecido (nenhum \`status:\` no cabeçalho) — o leitor de contagens falha alto em vez de devolver zeros" \
+        '. + [{id:"review_formato", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+    rv_st=$(jq -r '.status // ""' <<<"$REVMAX"); rv_sk=$(jq -r '.skipped // 0' <<<"$REVMAX")
+    if [ "$rv_st" = all_fixed ] && [ "${rv_sk:-0}" != 0 ] && [ "${rv_sk:-0}" != null ]; then
+      RES=$(jq -c --arg d "$rv_arq declara \`status: all_fixed\` com skipped: $rv_sk — achado pulado não é achado consertado; nomeie cada um" \
+        '. + [{id:"all_fixed_com_skipped", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+  fi
+  EXTRAI=$(jq -c --argjson r "$REVMAX" '. + {review_maior_iteracao: $r}' <<<"$EXTRAI")
 fi
 
 # ── veredito + eventos + medição ─────────────────────────────────────────────

@@ -125,7 +125,12 @@ gad_json_out() {
   [ -n "$compact" ] || {
     echo "ERRO: gad_json_out recebeu JSON inválido ou vazio ($slug)" >&2; return 1; }
   root="$(gad_project_root)"
-  if [ -d "$root/.planning" ]; then
+  # GAD_DRY_RUN=1 (F4 RLR, pré-requisito da «prova extra» do A3): o espelho é a ÚNICA
+  # escrita que o `--dry-run` dos gates ainda fazia — medimos 10 arquivos sujos no
+  # rl-representation ao rodar o fiscal em modo seco contra a F4. Uma cancela não muta
+  # estado para julgar (a própria linha 383 do confere-etapa.sh já dizia isso do
+  # reconcilia-docs.sh). Com a variável ligada, só o stdout sai.
+  if [ "${GAD_DRY_RUN:-0}" != 1 ] && [ -d "$root/.planning" ]; then
     mkdir -p "$root/.planning/.gad"
     printf '%s\n' "$compact" > "$root/.planning/.gad/last-$slug.json"
   fi
