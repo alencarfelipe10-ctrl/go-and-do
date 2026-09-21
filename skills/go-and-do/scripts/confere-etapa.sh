@@ -1363,7 +1363,12 @@ PYREV
   if [ -n "$rv_arq" ]; then
     for campo in status critical warning total skipped; do
       v=$(jq -r --arg k "$campo" '.[$k] // empty' <<<"$REVMAX")
-      [ -n "$v" ] || continue
+      if [ -z "$v" ]; then
+        # ausente no arquivo de maior iteração → null DECLARADO. Deixar o valor do
+        # NN-REVIEW.md aqui daria provenância MISTA (status do iter4, critical da 1ª
+        # rodada) — pior que errado, porque parece coerente.
+        EXTRAI=$(jq -c --arg k "$campo" '. + {($k): null}' <<<"$EXTRAI"); continue
+      fi
       case "$campo" in
         status) fmt="status: $v" ;;
         *)      fmt="  $campo: $v" ;;
