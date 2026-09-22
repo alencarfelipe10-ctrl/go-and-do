@@ -538,12 +538,15 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    onde mora a frase errada — é dela que a `/audit-gad` mede original × derivado. Sem ela o
    achado sai `não_medido`; não chute nem invente âncora.
 
-   **Um id, um papel.** Dentro de um ciclo, um `c<C>-NN` nomeia um achado **ou** uma correção,
-   nunca os dois. Correção que nasce de leitura sua (não de achado) continua a série do ciclo, a
+   **Um id, um papel (FJ-01INT: a correção HERDA o id do achado).** Dentro de um ciclo, um
+   `c<C>-NN` nomeia um achado **ou** uma correção, nunca os dois — e a correção de um achado
+   CONFIRMADO usa o mesmo id dele: «a correção do achado c1-04 chama-se c1-04». Correção que
+   nasce de leitura sua (não de achado) continua a série do ciclo, a
    partir do último id usado — não recomeça do `-01`. Motivo: o `confere-reconciliacao.sh` cruza id
    de veredito com id aplicado, e o mesmo id nos dois papéis casa a linha errada (F24.5: `c2-01`
    era um achado descartado e uma correção aplicada, e a tabela do INTENT-REVIEW teve de
-   desambiguar com `(achado)` à mão).
+   desambiguar com `(achado)` à mão). A garantia de verdade é o script (FM-04): id inventado ou
+   achado confirmado sem destino é recusado — este parágrafo só evita o turno perdido de recusa.
 
    **As correções do ciclo: um script, um turno.**
    1. ANTES de editar qualquer artefato:
