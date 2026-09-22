@@ -258,23 +258,6 @@ A consultoria é paga por **proteção do Goal**, não por achado: cada achado n
 medido do Goal que fica em risco se for ignorado; achado verdadeiro sem esse vínculo entra
 como dívida registrada e não compra ciclo. Nada se descarta — muda a contabilidade.
 
-**Roteiro de turnos (FJ-F4RLR-04INT).** Um ciclo cabe em 4 turnos nomeados — é a régua que o
-`/audit-gad --intent` mede (FM-F4RLR-01INT, ≤ 4 turnos/ciclo). Os passos abaixo não mudaram de
-número; isto é o mapa de qual chamada sai em paralelo com qual, dentro de cada turno.
-- **Turno 1 — abertura.** Passos 1–3: leia a intenção, monte a varredura reversa (seu único
-  insumo de modelo neste turno) e rode `briefing-build.sh`. Sequencial dentro do turno — o
-  briefing depende da varredura.
-- **Turno 2 — despacho.** Passo 4: `roda-lanes.sh` e o despacho do `gad-verificador`, as duas
-  chamadas paralelas do MESMO turno (a rota já gravada antes de qualquer uma das duas). Termine
-  o turno logo depois de despachar — a notificação do verificador acorda você; não espere.
-- **Turno 3 — leitura e convergência.** Ao acordar: passo 5 (ler a rota/contagem MEDIDA, nunca
-  autorreportada), passo 6 (`decide-ciclo.sh`) e passo 7 (escrever o `NN-INTENT-REVIEW.md`) —
-  as três leituras de disco do mesmo lote de vereditos, sem rodar nada de novo no meio.
-- **Turno 4 — fecho.** Passos 8–9: recibo do fiscal e o relato de turnos verbatim, antes de
-  devolver.
-Devolução de pergunta (destino 2) ou caminho bloqueado/pulado encerram o ciclo antes do turno
-4 — não force os 4 turnos onde o ciclo já parou.
-
 <!-- plano 1, P-06 (D1/D7b) — fiacao-P1-P-06.md §2 -->
 **SPEC escrito pelo dono (entrada `revisao` sem `gad-spec` nesta rodada — o setup devolve
 `pre_spec_precedencia: spec_e_context_em_disco` ou o inventário diz `spec=sim` sem despacho do
@@ -444,7 +427,7 @@ que o registro foi feito de memória, no fim, e não no ato.
    qualquer ciclo completo → `<blocked_path>`. Exceção única: com ≥1 ciclo já completo
    (parecer recebido, verificado e aplicado), registre `intent_review: done` com a ressalva
    `ciclo_final_nao_rodou` no frontmatter + `sinos`.
-5. **Verificação — rota decidida pelo volume MEDIDO, nos dois sentidos.**
+5. **Verificação — contagem MEDIDA, rota fixa `child`.**
 
    **(a) Contagem conservadora, PRÉ-rota** (sem `--vereditos` — ainda não existem):
    ```bash

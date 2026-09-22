@@ -610,9 +610,10 @@ leaves basket 3 without open `issue`. Order matters: re-run first, triage what i
    `pre_uat_reuat: done`, single writer). No `uat_superficie` → skip the re-run, still stamp.
 2. Before dispatching the skeptic: `scripts/pos-ship.py --conferir <phase_dir> <NN>
    <project_root>` — read-only format check of the `pos_ship: candidato` blocks (FJ-06UAT).
-   Exit 1 (JSON `malformados` non-empty — indented marker, or a `pos_ship:` field that is not
-   the literal `candidato`) → return to the conductor now with that list; do not spend the
-   skeptic's window on a malformed candidate. Exit 0 → proceed to step 3.
+   Exit 1 (JSON `malformados` non-empty — an indented `pos_ship:` marker, or a genuine
+   `candidato` block missing `prova_mecanica`/`bloqueia_proxima`/`verificavel_em`) → return to
+   the conductor now with that list; do not spend the skeptic's window on a malformed
+   candidate. Exit 0 → proceed to step 3.
 3. Any scenario carrying `pos_ship: candidato` → dispatch the skeptic (`Agent`,
    `model: sonnet`, synchronous) with `prompts/uat-pos-ship.md`; it writes
    `.pos-ship-vereditos.json`. Whoever classifies never judges.
@@ -643,9 +644,7 @@ dispatching the close**, same rigor as the fresh check; do not let the ship's ow
 discover it 12 minutes in — the digest is the same, only the order moves earlier. The `handback`
 route's closing `stop` carries etapa `handback` (6.5) — that is today's vocabulary for "this
 run of etapa 6 did not finish, it returned control"; it is a stop, not a finished etapa 6, and
-the next 5.1's checkpoint links the resumed window (5.1). ⚠️ Known gap, not yet closed:
-`confere-etapa.sh 6`'s `end` (the etapa's single writer) still stamps `veredito=pass`
-unconditionally on both routes (FM-F4RLR-04UAT) — a script-side fix, out of this text's reach.
+the next 5.1's checkpoint links the resumed window (5.1).
 
 **6.2 — Compose "🔔 O que precisa de você agora" + transparency.** Gather what deserves
 attention even though the run continued: review Criticals (+ `uat_humano`), UI pillars 1–2 /
