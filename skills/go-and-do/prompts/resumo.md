@@ -49,7 +49,10 @@ divergência volta pra você). Ponto de pausa/retomada: derive do `HANDOFF.json`
 (`plan`/`task`) ou da contagem de `NN-*-SUMMARY.md` — nunca de
 `remaining_tasks[].id`. Nº de ondas: do `=== waves ===` computado pelo execute, nunca
 da declaração do planner. Self-check: todo número citado mais de uma vez bate entre as
-menções e com a fonte.
+menções e com a fonte. **Ao regerar** um resumo já existente: o texto antigo serve só
+de guia de narrativa — nenhum número dele entra sem vir recitado, de novo, do
+`<bloco_numeros>` ou do arquivo-fonte; um número que só existir no resumo anterior sai
+do texto novo.
 
 **Honestidade.** Não infle nem esconda pendências; marque o que foi **assumido**
 (balde 4) e o que ficou **não-verificado** (balde 3). Um problema descrito

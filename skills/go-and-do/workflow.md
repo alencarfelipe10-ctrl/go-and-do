@@ -599,7 +599,10 @@ Two terminal routes: ship (happy path) and hand-back (returns without shipping).
 **6.1 — Route the outcome (mechanical).** `pre-despacho.sh 6` and obey `rota`: `pausa`
 (basket 2 left) → Sub-rotina D · `handback` (basket 3 or `--no-ship`) → 6.4-HB · `ship` →
 6.4-SHIP. The JSON brings `git_remote` (trigger of route B), `uat_passed_raw` (the MEASURED
-native predicate — paste it into the ship briefing) and `transparencia` (5 extracted lists). You do not decide the route; you read the verdict. A closing stop that takes the `handback`
+native predicate — paste it into the ship briefing) and `transparencia` (5 extracted lists). You do not decide the route; you read the verdict. `verification_stale.stale: true` (code
+committed after the last commit that touched `NN-VERIFICATION.md`) → **re-verify BEFORE
+dispatching the close**, same rigor as the fresh check; do not let the ship's own preflight
+discover it 12 minutes in — the digest is the same, only the order moves earlier. A closing stop that takes the `handback`
 route grants its own run-log veredito (`handback`, never a plain `pass`) — it is a stop, not a
 finished etapa 6, and the next 5.1 reads it to link the resumed window.
 
@@ -657,7 +660,10 @@ does). Reconcile the body with the post-close state (promotion `human_needed` �
 amend the old mention or append a note). The amendment obeys the state-of-the-world rule
 (`prompts/resumo.md`): real lookup, source+date, or omit. Commit (best-effort). Idempotent:
 section already filled → do not rewrite. The amendment reports the ship's RETURN, never an
-expectation.
+expectation. Reconcile in the body, pointed edits only (never regenerate the resumo for this):
+(1) fold into the incidents block whatever the close's return brought; (2) any decision the
+close reverted (e.g. "did not re-verify") gets a note next to the original mention; (3) the
+friction count is updated to match.
 
 **6.4-HB — Hand-back (no ship).** Banner in the standard frame — title
 `GO-AND-DO · Fase NN — pronta para o seu UAT`, fields `Balde 3` (how many) and `Resumo`
@@ -666,7 +672,10 @@ expectation.
 2. `/gsd-add-tests N` — broad suite.
 3. `/close-phase N` after the clean UAT *(or re-run `/go-and-do N` without `--no-ship`)*.
 
-**6.5 — Reconciliation + self-check + final banner.** On the ship route, BEFORE the fence:
+**6.5 — Reconciliation + self-check + final banner.** After reconciliation and the receipt, publish
+the close's own commits (`git push`) as an explicit step — or, when the project forbids direct
+push to master, say so in the banner as a pending item with the exact command. The stage-6
+fence warns (never fails) when local ends ahead of the remote. On the ship route, BEFORE the fence:
 `reconcilia-docs.sh --pr "#N <url>" [--proxima M]` (needed because route B does not run
 gsd-ship and route A only touches 2 fields — STATE.md/ROADMAP/REVIEWS would stay stale). Exit 3 (`FORMATO-INESPERADO`) → stop before the fence: the STATE.md
 `status` is in a form neither script can judge (typically a sentence where the token
