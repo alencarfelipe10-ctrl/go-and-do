@@ -386,15 +386,16 @@ que o registro foi feito de memória, no fim, e não no ato.
    (`pareceres/NN-parecer-<lane>-c<C>.md`) são aliases promovidos pelo run vencedor — são
    eles que o passo 7 commita.
 
-   **Antes do despacho, grave a rota.** A rota é decidida pelo ciclo e pelo volume pré-rota do
-   passo 5 (a): ciclos 1–2, ou 3+ com 3+ brutos → `child`; ciclos 3+ com ≤ 2 brutos → `inline`.
+   **Antes do despacho, grave a rota.** A rota é fixa em `child` (FJ-F4RLR-03INT: 18/18 ciclos
+   medidos em 5 fases saíram `child` — a rota não pode depender de um número de brutos que só
+   existe DEPOIS do despacho). `brutos_pre_rota` está aposentado como critério: não grave o
+   campo.
    ```bash
-   printf '{"run_id":"<run_id>","mode":"child","brutos_pre_rota":<n>}\n' \
+   printf '{"run_id":"<run_id>","mode":"child"}\n' \
      > "<phase_dir>/.intent/.rota-verificacao-c<C>.json"
    ```
    Gravar depois do despacho é escrever a regra sabendo o resultado: na F24.5 as duas rotas foram
-   gravadas 3 min DEPOIS de o verificador fechar. O passo 5 (b) segue valendo como a régua;
-   aqui é só a ordem.
+   gravadas 3 min DEPOIS de o verificador fechar. Aqui é só a ordem: antes, sempre.
 
    **No MESMO turno**, despache **`gad-verificador`** com `prompts/intent-verifica.md`,
    passando o `run_id`, `<phase_dir>/.intent` (dos `.status-c<C>-<lane>.json`), o run-dir
@@ -426,7 +427,7 @@ que o registro foi feito de memória, no fim, e não no ato.
    qualquer ciclo completo → `<blocked_path>`. Exceção única: com ≥1 ciclo já completo
    (parecer recebido, verificado e aplicado), registre `intent_review: done` com a ressalva
    `ciclo_final_nao_rodou` no frontmatter + `sinos`.
-5. **Verificação — rota decidida pelo volume MEDIDO, nos dois sentidos.**
+5. **Verificação — contagem MEDIDA, rota fixa `child`.**
 
    **(a) Contagem conservadora, PRÉ-rota** (sem `--vereditos` — ainda não existem):
    ```bash
@@ -456,19 +457,15 @@ que o registro foi feito de memória, no fim, e não no ato.
    zero achados — não devolva. Sem esta devolução a linha nova fica órfã e o zero vira
    convergência por prosa.
 
-   **(b) A regra da rota, nos dois sentidos — e declare a escolhida ANTES de verificar**
-   (o marcador `.verificador-c<C>.done` não distingue as rotas: a inline também o grava).
-   O `mode` do arquivo é a rota que você VAI usar; escrever `child` "por segurança" num c3
-   com 2 brutos é violação, igual a verificar 10 inline.
-   - **Ciclos 1–2, ou 3+ com 3+ brutos → `child`.** A rota já está gravada (passo 4); confira
-     que o `mode` dela é o que a régua manda e corrija se divergir, registrando `incidentes`.
-     Siga com o filho já despachado.
-   - **Ciclos 3+ com ≤2 brutos → `inline` OBRIGATÓRIO.** Grave o mesmo arquivo com
-     `"mode":"inline"` e verifique você mesmo, pelo protocolo do `intent-verifica.md`
-     (categoria revalidada pela regra de desempate, `.vereditos-c<C>.txt`, `vereditos-dirigidos.json`
-     no run-dir e `.verificador-c<C>.done`), registrando `verificacao_inline_c<C>` em
-     `transparencia:`.
-   O `confere-rotas.sh` reprova as DUAS violações (`VIOLACAO` e `VIOLACAO-INVERSA`, exit 1).
+   **(b) A rota é `child`, sempre (FJ-F4RLR-03INT).** Não há mais decisão a tomar aqui: o
+   filho já foi despachado no passo 4, junto com as lanes, antes de o volume de brutos deste
+   ciclo existir — decidir "inline" depois da contagem seria escrever a regra sabendo o
+   resultado, e o `.verificador-c<C>.done` não distingue as rotas para desfazer. Confira só
+   que `mode` no `.rota-verificacao-c<C>.json` é `child` e siga com o filho já despachado;
+   `mode` divergente é incidente (registre em `incidentes`), nunca conserto silencioso.
+   `confere-rotas.sh` ainda sabe ler `mode:"inline"` (exceção de script, não deste
+   workflow) — mas você nunca grava `inline`: a rota fixa `child` não tem mais exceção
+   por volume.
 
    **(c) Contagem FINAL, depois da verificação** — a mesma linha do (a) **mais** os
    vereditos dirigidos, sobrescrevendo a tabela:

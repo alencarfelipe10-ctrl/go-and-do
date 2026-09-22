@@ -525,9 +525,12 @@ test and whose question only production can answer leaves `NN-UAT.md` for `NN-PO
 (the subagent is idempotent per scenario) · `executed` + `issue` without
 `pre_uat_fix_cycle: done` → 5.5 · with the marker → Sub-rotina D (never a 2nd cycle) ·
 `executed` without open `issue`, with basket 3 and without `pre_uat_reuat: done` → 5.6 ·
-otherwise → Etapa 6. Resuming a phase whose etapa 5 previously closed in `handback`: grave um
-evento de retomada no run-log que ligue a janela nova da etapa 5 à antiga — as ferramentas de
-medição somam as duas janelas em vez de tratá-las como órfãs.
+otherwise → Etapa 6. Resuming a phase whose etapa 6 previously closed with a `handback` stop:
+just enter through `pre-despacho.sh 5` as usual — its checkpoint is the first etapa `5 …`
+checkpoint after the hand-back, and `run-log.sh` links it automatically (`retomada_de_seq`,
+`retomada_de_sessao`, pointing at the hand-back's `stop` line — FM-F4RLR-04UAT); nothing here
+calls that link, it is mechanical. Measurement tools then sum the two etapa-5 windows instead
+of treating either as orphaned.
 
 **5.3 — Generate `NN-UAT.md` (via SUBAGENT).** `pre-despacho.sh 5`. Dispatch an `Agent`
 (`model: sonnet`, synchronous) to reuse the verify-work derivation:
@@ -605,12 +608,12 @@ leaves basket 3 without open `issue`. Order matters: re-run first, triage what i
    credential/surface → re-dispatch 5.4 restricted to the basket-3 scenarios, with the
    `[Superfície do projeto: …]` clause. Fence: `confere-etapa.sh 5 --reuat` (stamps
    `pre_uat_reuat: done`, single writer). No `uat_superficie` → skip the re-run, still stamp.
-2. Before dispatching the skeptic: run `scripts/pos-ship.py` in a format-only, read-only
-   check of the `pos_ship: candidato` blocks (FJ-06UAT — the exact flag/arg shape is a script
-   change owned by the scripts lane, not landed as of this text; `--conferir <phase_dir> <NN>
-   <project_root>` is the proposed shape, matching `move`'s argument order). Zero well-formed
-   candidates despite the marker present → return to the conductor now; do not spend the
-   skeptic's window on a malformed candidate.
+2. Before dispatching the skeptic: `scripts/pos-ship.py --conferir <phase_dir> <NN>
+   <project_root>` — read-only format check of the `pos_ship: candidato` blocks (FJ-06UAT).
+   Exit 1 (JSON `malformados` non-empty — an indented `pos_ship:` marker, or a genuine
+   `candidato` block missing `prova_mecanica`/`bloqueia_proxima`/`verificavel_em`) → return to
+   the conductor now with that list; do not spend the skeptic's window on a malformed
+   candidate. Exit 0 → proceed to step 3.
 3. Any scenario carrying `pos_ship: candidato` → dispatch the skeptic (`Agent`,
    `model: sonnet`, synchronous) with `prompts/uat-pos-ship.md`; it writes
    `.pos-ship-vereditos.json`. Whoever classifies never judges.
@@ -638,9 +641,10 @@ basket 4 · basket 3 · `transparencia:` of the INTENT-REVIEW · run-log skips �
 session). You do not decide the route; you read the verdict. `verification_stale.stale: true` (code
 committed after the last commit that touched `NN-VERIFICATION.md`) → **re-verify BEFORE
 dispatching the close**, same rigor as the fresh check; do not let the ship's own preflight
-discover it 12 minutes in — the digest is the same, only the order moves earlier. A closing stop that takes the `handback`
-route grants its own run-log veredito (`handback`, never a plain `pass`) — it is a stop, not a
-finished etapa 6, and the next 5.1 reads it to link the resumed window.
+discover it 12 minutes in — the digest is the same, only the order moves earlier. The `handback`
+route's closing `stop` carries etapa `handback` (6.5) — that is today's vocabulary for "this
+run of etapa 6 did not finish, it returned control"; it is a stop, not a finished etapa 6, and
+the next 5.1's checkpoint links the resumed window (5.1).
 
 **6.2 — Compose "🔔 O que precisa de você agora" + transparency.** Gather what deserves
 attention even though the run continued: review Criticals (+ `uat_humano`), UI pillars 1–2 /
