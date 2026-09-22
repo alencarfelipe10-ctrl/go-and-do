@@ -46,16 +46,43 @@ IN=$(cat 2>/dev/null) || exit 0
 CWD=$(jq -r '.cwd // empty' <<<"$IN" 2>/dev/null) || exit 0
 [ -n "$CWD" ] || exit 0
 
-P="$CWD/.planning/.gad-rodada-ativa.json"
-if [ ! -f "$P" ]; then
-  ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) || exit 0
-  P="$ROOT/.planning/.gad-rodada-ativa.json"
-  [ -f "$P" ] || exit 0
-fi
-
 SESS=$(jq -r '.session_id // empty' <<<"$IN" 2>/dev/null)
-PSESS=$(jq -r '.session_id // empty' "$P" 2>/dev/null)
-[ -n "$SESS" ] && [ "$SESS" = "$PSESS" ] || exit 0
+[ -n "$SESS" ] || exit 0
+
+# FM-03EXE: o ponteiro leve é local à árvore (não versionado); um agente despachado numa
+# cópia (worktree isolado) não o acha nem por show-toplevel (que resolve o toplevel DELE,
+# não o da árvore principal). Caminho de falha, barato: 1 chamada git a mais só quando as
+# duas primeiras tentativas falham OU acham um ponteiro de outra sessão (ponteiro tracked/
+# obsoleto na cópia — visto em worktrees reais do RLR).
+achar_ponteiro() {
+  local cand="$CWD/.planning/.gad-rodada-ativa.json" root psess
+  if [ -f "$cand" ]; then
+    psess=$(jq -r '.session_id // empty' "$cand" 2>/dev/null)
+    [ "$SESS" = "$psess" ] && { printf '%s' "$cand"; return 0; }
+  fi
+  root=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null)
+  if [ -n "$root" ]; then
+    cand="$root/.planning/.gad-rodada-ativa.json"
+    if [ -f "$cand" ]; then
+      psess=$(jq -r '.session_id // empty' "$cand" 2>/dev/null)
+      [ "$SESS" = "$psess" ] && { printf '%s' "$cand"; return 0; }
+    fi
+  fi
+  local common main
+  common=$(git -C "$CWD" rev-parse --git-common-dir 2>/dev/null) || return 1
+  case "$common" in
+    /*) main=$(dirname "$common") ;;
+    *)  main=$(cd "$CWD" 2>/dev/null && cd "$(dirname "$common")" 2>/dev/null && pwd -P) ;;
+  esac
+  [ -n "$main" ] || return 1
+  cand="$main/.planning/.gad-rodada-ativa.json"
+  [ -f "$cand" ] || return 1
+  psess=$(jq -r '.session_id // empty' "$cand" 2>/dev/null)
+  [ "$SESS" = "$psess" ] || return 1
+  printf '%s' "$cand"
+}
+P=$(achar_ponteiro) || exit 0
+[ -n "$P" ] || exit 0
 
 RL=$(jq -r '.runlog // empty' "$P"); NN=$(jq -r '.nn // empty' "$P")
 PD=$(jq -r '.phase_dir // empty' "$P")
@@ -133,9 +160,39 @@ fi
 
 # etapa = janela aberta (último checkpoint do run-log); sem janela = abertura.
 # Calculada AQUI (e não mais junto da escrita) porque os gates abaixo também gravam.
-ET=$(grep '"evento":"checkpoint"' "$RL" 2>/dev/null | tail -n1 \
+# FM-04ENC: o checkpoint tem de ser DESTA SESSÃO — o grep global pegava o último checkpoint
+# do ARQUIVO (podia ser de uma sessão anterior já encerrada), rotulando os eventos que
+# chegam antes do 1º checkpoint da sessão nova com a etapa em que a sessão ANTERIOR parou
+# (medido real: F4 RLR seq 485, script rotulado "6 encerramento" logo após o `run` de uma
+# sessão nova que ainda não tinha checkpoint nenhum). O run-log.sh grava `sessao` com os 8
+# primeiros caracteres do session id — mesmo corte aqui, para casar.
+SESS8="${SESS:0:8}"
+ET=$(grep "\"sessao\":\"$SESS8\"" "$RL" 2>/dev/null | grep '"evento":"checkpoint"' | tail -n1 \
      | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
 : "${ET:=0 abertura}"
+
+AGN="${AG%% *}"   # nome puro do agente/alvo (o AG do SendMessage pode vir com sufixo) —
+# adiantado para o FM-02EXE logo abaixo; os gates E7/E3 mais adiante reusam a variável.
+
+# FM-02EXE: 2ª defesa. Quando o despacho bloqueado é aceito pelo dono, o checkpoint da etapa
+# só é gravado quando o workflow reabre a fase (texto em C3, fora desta lane) — até lá o
+# gancho rotularia o despacho com a etapa velha (ou "0 abertura"). Alguns tipos de agente
+# mapeiam para UMA etapa só e servem de defesa mecânica nesse intervalo; agentes que hospedam
+# mais de uma etapa (ex.: gad-gates, que roda 4.1/4.1b/4.4/4.5) NÃO entram aqui — vale o
+# checkpoint. Só corrige quando o ID da etapa aberta diverge do mapeado (não sobrescreve uma
+# etapa já certa, e não interfere se o mapeado for múltiplo/desconhecido).
+case "$AGN" in
+  gad-intent)  ET_TIPO="1 intencao" ;;
+  gad-plan)    ET_TIPO="2 planejamento" ;;
+  gad-execute) ET_TIPO="3 construcao" ;;
+  *)           ET_TIPO="" ;;
+esac
+ET_CORRIGIDA=0
+if [ -n "$ET_TIPO" ] && [ "${ET%% *}" != "${ET_TIPO%% *}" ]; then
+  ET_ANTERIOR="$ET"
+  ET="$ET_TIPO"
+  ET_CORRIGIDA=1
+fi
 
 # ══ GATES DE PREVENÇÃO (E7 + E3 — v2.2.0, plano dos 27 ajustes da intenção) ═══════════
 # Rodam ANTES de qualquer escrita no run-log. Um despacho negado NÃO pode deixar um
@@ -152,8 +209,6 @@ ET=$(grep '"evento":"checkpoint"' "$RL" 2>/dev/null | tail -n1 \
 # FAIL-OPEN por herança: como todo o resto do hook, os gates só existem dentro de uma
 # rodada ativa da /go-and-do (ponteiro presente, sessão casando, rodada não parada,
 # run-log.sh instalado). Fora disso o hook já saiu em no-op lá em cima.
-
-AGN="${AG%% *}"   # nome puro do agente/alvo (o AG do SendMessage pode vir com sufixo)
 
 # caminho da def do agente, se existir (home primeiro, projeto depois)
 gad_def() {
@@ -366,6 +421,7 @@ bash "$RUNLOG_SH" "$PD" "$NN" "$TIPO" "$ET" \
   ${AGID:+--kv agent_id="$AGID"} ${DUR:+--kv duracao_s="$DUR"} \
   $([ "$RETOMADA" = 1 ] && echo '--kv retomada=true') \
   $([ "$HERDADO" = 1 ] && echo '--kv modelo_herdado=true') \
+  $([ "$ET_CORRIGIDA" = 1 ] && printf -- '--kv etapa_corrigida=true --kv etapa_checkpoint=%s' "$(printf '%s' "$ET_ANTERIOR" | tr ' ' '_')") \
   ${DESC:+--kv descricao="$DESC"} ${ISOL:+--kv isolation="$ISOL"} >/dev/null 2>&1
 
 exit 0

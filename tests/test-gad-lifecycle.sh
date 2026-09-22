@@ -230,6 +230,68 @@ roda "$(p_agent gsd-executor '' '' tu-iso2)"
 [ "$(jq -r '.isolation // "ausente"' <<<"$ULT")" = ausente ] \
   && ok "isolation: sem o campo no tool_input, evento não o traz" || bad "isolation: sem o campo no tool_input, evento não o traz" "$ULT"
 
+# ═════════════════════ 3c. F4-RLR bloco B2 ═════════════════════
+
+# FM-02EXE: gad-execute despachado sem checkpoint desta sessão vira "3 construcao"
+# (2ª defesa; corrige o rótulo, não valida contra ele). O evento traz a trilha.
+monta
+roda "$(p_agent gad-execute '' '' tu-fm02a)"
+esp_passou "FM-02EXE: Agent(gad-execute) sem checkpoint corrige para etapa 3" gad-execute
+[ "$(jq -r '.etapa // ""' <<<"$ULT")" = "3 construcao" ] \
+  && ok "FM-02EXE: etapa corrigida para 3 construcao" || bad "FM-02EXE: etapa corrigida" "$ULT"
+[ "$(jq -r '.etapa_corrigida // false' <<<"$ULT")" = true ] \
+  && ok "FM-02EXE: etapa_corrigida=true na trilha" || bad "FM-02EXE: etapa_corrigida ausente" "$ULT"
+
+# gad-gates hospeda 4.1/4.1b/4.4/4.5 — não mapeia para etapa única, então não corrige nada;
+# vale o checkpoint (aqui, "0 abertura" por não haver checkpoint desta sessão).
+monta
+roda "$(p_agent gad-gates '' '' tu-fm02b)"
+esp_passou "FM-02EXE: Agent(gad-gates) não mapeia — checkpoint prevalece" gad-gates
+[ "$(jq -r '.etapa // ""' <<<"$ULT")" = "0 abertura" ] \
+  && ok "FM-02EXE: gad-gates não corrige (etapa continua 0 abertura)" || bad "FM-02EXE: gad-gates corrigiu indevidamente" "$ULT"
+
+# quando o checkpoint da SESSÃO já diz a etapa certa, nada muda (sem trilha)
+monta
+: > "$RL"
+printf '{"sessao":"%s","evento":"checkpoint","etapa":"3 construcao"}\n' "${SESS:0:8}" >> "$RL"
+roda "$(p_agent gad-execute '' '' tu-fm02c)"
+esp_passou "FM-02EXE: checkpoint já correto não gera trilha" gad-execute
+[ "$(jq -r 'has("etapa_corrigida")' <<<"$ULT")" = false ] \
+  && ok "FM-02EXE: sem etapa_corrigida quando já batia" || bad "FM-02EXE: trilha desnecessária" "$ULT"
+
+# FM-04ENC: checkpoint de uma sessão MORTA no mesmo arquivo não vaza para a sessão nova —
+# evento antes do 1º checkpoint DESTA sessão sai "0 abertura" (sem o mapeamento do FM-02EXE
+# entrando em jogo aqui: general-purpose não mapeia).
+monta
+: > "$RL"
+printf '{"sessao":"velhasess","evento":"checkpoint","etapa":"5 uat"}\n' >> "$RL"
+roda "$(p_agent general-purpose '' '' tu-fm04a)"
+esp_passou "FM-04ENC: evento pré-checkpoint da sessão nova não herda etapa da antiga" general-purpose
+[ "$(jq -r '.etapa // ""' <<<"$ULT")" = "0 abertura" ] \
+  && ok "FM-04ENC: etapa = 0 abertura (não 5 uat)" || bad "FM-04ENC: etapa herdada da sessão anterior" "$ULT"
+
+# FM-02GAT (parte do hook): checkpoint "4.1b re-review" é rótulo válido — o próximo evento
+# de um agente que NÃO mapeia (general-purpose) preserva o rótulo tal como está.
+monta
+: > "$RL"
+printf '{"sessao":"%s","evento":"checkpoint","etapa":"4.1b re-review"}\n' "${SESS:0:8}" >> "$RL"
+roda "$(p_agent general-purpose '' '' tu-fm02gat)"
+esp_passou "FM-02GAT: checkpoint 4.1b re-review reconhecido pelo gancho" general-purpose
+[ "$(jq -r '.etapa // ""' <<<"$ULT")" = "4.1b re-review" ] \
+  && ok "FM-02GAT: etapa = 4.1b re-review preservada" || bad "FM-02GAT: etapa 4.1b re-review perdida" "$ULT"
+
+# FM-03EXE: agente despachado num WORKTREE sem ponteiro local acha o ponteiro na árvore
+# principal via git-common-dir.
+monta
+git -c user.name=x -c user.email=x@x -C "$PROJ" init -q
+git -c user.name=x -c user.email=x@x -C "$PROJ" commit -q --allow-empty -m x
+WT="$PAI/$(basename "$T")-wt"
+git -C "$PROJ" worktree add -q "$WT" -b "wt-$(basename "$T")" >/dev/null 2>&1
+PROJ_REAL="$PROJ"; PROJ="$WT"
+roda "$(p_agent gad-intent '' '' tu-fm03 | jq -c --arg wt "$WT" '.cwd=$wt')"
+PROJ="$PROJ_REAL"
+esp_passou "FM-03EXE: Agent despachado em worktree acha o ponteiro pela árvore principal" gad-intent
+
 # ═════════════════════ 4. regressão — cenário normal × golden ═════════════════════
 # Sequência sem nenhum gate acionado; o run-log resultante (sem `ts`, que varia) deve ser
 # byte a byte igual ao produzido pelo hook PRÉ-mudança.
