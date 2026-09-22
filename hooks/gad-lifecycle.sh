@@ -181,6 +181,11 @@ AGN="${AG%% *}"   # nome puro do agente/alvo (o AG do SendMessage pode vir com s
 # mais de uma etapa (ex.: gad-gates, que roda 4.1/4.1b/4.4/4.5) NÃO entram aqui — vale o
 # checkpoint. Só corrige quando o ID da etapa aberta diverge do mapeado (não sobrescreve uma
 # etapa já certa, e não interfere se o mapeado for múltiplo/desconhecido).
+# SÓ no `despacho` (medido contra o RUN-LOG real do RLR, F3: um `retorno` de gad-execute
+# pode legitimamente aterrissar com o checkpoint já em "4.1 code-review" — despacho de
+# 7h atrás, camada 0 já tinha avançado a fase; sobrescrever o retorno para "3 construcao"
+# jogaria o custo dele pra etapa errada. O despacho é o único momento em que "ainda não
+# tem checkpoint aberto" é de fato um bug a corrigir — o retorno usa o checkpoint real.
 case "$AGN" in
   gad-intent)  ET_TIPO="1 intencao" ;;
   gad-plan)    ET_TIPO="2 planejamento" ;;
@@ -188,7 +193,7 @@ case "$AGN" in
   *)           ET_TIPO="" ;;
 esac
 ET_CORRIGIDA=0
-if [ -n "$ET_TIPO" ] && [ "${ET%% *}" != "${ET_TIPO%% *}" ]; then
+if [ "$TIPO" = despacho ] && [ -n "$ET_TIPO" ] && [ "${ET%% *}" != "${ET_TIPO%% *}" ]; then
   ET_ANTERIOR="$ET"
   ET="$ET_TIPO"
   ET_CORRIGIDA=1

@@ -259,6 +259,18 @@ esp_passou "FM-02EXE: checkpoint já correto não gera trilha" gad-execute
 [ "$(jq -r 'has("etapa_corrigida")' <<<"$ULT")" = false ] \
   && ok "FM-02EXE: sem etapa_corrigida quando já batia" || bad "FM-02EXE: trilha desnecessária" "$ULT"
 
+# SÓ o despacho corrige — um RETORNO que aterrissa com o checkpoint já adiante (caso real,
+# RLR F3 seq 660: gad-execute despachado na 2.5/3, retorno 7h depois com o checkpoint já em
+# "4.1 code-review") não pode ser reatribuído pra "3 construcao": o custo é do momento em
+# que o retorno chegou, não do momento do despacho.
+monta
+: > "$RL"
+printf '{"sessao":"%s","evento":"checkpoint","etapa":"4.1 code-review"}\n' "${SESS:0:8}" >> "$RL"
+roda "$(p_post gad-execute tu-fm02d)"
+[ "$(jq -r '.etapa // ""' <<<"$ULT")" = "4.1 code-review" ] && [ "$(jq -r 'has("etapa_corrigida")' <<<"$ULT")" = false ] \
+  && ok "FM-02EXE: retorno de gad-execute NÃO é reescrito para 3 construcao" \
+  || bad "FM-02EXE: retorno reescrito indevidamente" "$ULT"
+
 # FM-04ENC: checkpoint de uma sessão MORTA no mesmo arquivo não vaza para a sessão nova —
 # evento antes do 1º checkpoint DESTA sessão sai "0 abertura" (sem o mapeamento do FM-02EXE
 # entrando em jogo aqui: general-purpose não mapeia).

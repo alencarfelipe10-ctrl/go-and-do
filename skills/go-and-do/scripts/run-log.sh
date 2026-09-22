@@ -210,7 +210,7 @@ if [ "$1" = "--selftest" ]; then
   grep -q '"retomada_de_seq":2' "$F2" && grep -q '"retomada_de_sessao":"sessA000"' "$F2" \
     && ok "retomada: 1º checkpoint de etapa 5 após handback ganha o elo" \
     || bad "retomada: elo ausente no 1º checkpoint" "$(tail -n1 "$F2")"
-  bash "$SELF" "$D2" 98 checkpoint "5.1 retomada" 6000 2 "" 400000 >/dev/null
+  bash "$SELF" "$D2" 98 checkpoint "5 uat" 6000 2 "" 400000 >/dev/null
   tail -n1 "$F2" | grep -q 'retomada_de_seq' \
     && bad "retomada: 2º checkpoint de etapa 5 ganhou elo de novo (só o 1º deveria)" \
     || ok "retomada: 2º checkpoint de etapa 5 não repete o elo"
@@ -220,6 +220,23 @@ if [ "$1" = "--selftest" ]; then
   grep -q 'retomada_de' "$F3" \
     && bad "retomada: checkpoint de etapa 5 sem handback prévio ganhou elo indevido" \
     || ok "retomada: sem handback prévio, sem elo"
+
+  # a janela retomada pode abrir com um rótulo de sub-etapa ("5.1 retomada"), não só "5 uat"
+  D4="$TMP/.planning/phases/96-teste"; F4="$D4/96-RUN-LOG.jsonl"
+  export CLAUDE_CODE_SESSION_ID="sessC0000-0000"
+  bash "$SELF" "$D4" 96 checkpoint "5 uat" 90000 22 "" 400000 >/dev/null
+  bash "$SELF" "$D4" 96 stop "handback" 95000 24 "" 400000 "" "balde 3 pendente" >/dev/null
+  export CLAUDE_CODE_SESSION_ID="sessD0000-0000"
+  bash "$SELF" "$D4" 96 checkpoint "5.1 retomada" 3000 1 "" 400000 >/dev/null
+  grep -q 'retomada_de_seq' "$F4" \
+    && ok "retomada: 1º checkpoint pós-handback com rótulo 5.x (não só \"5 uat\") ganha o elo" \
+    || bad "retomada: rótulo 5.x não reconhecido" "$(tail -n1 "$F4")"
+
+  # FM-F4RLR-02GAT (confirmação): "4.1b re-review" é rótulo válido no vocabulário canônico
+  out=$(bash "$SELF" "$D" 99 checkpoint "4.1b re-review" 100 0 "" 400000 2>/dev/null)
+  echo "$out" | grep -q "fora do vocabulário" \
+    && bad "FM-02GAT: checkpoint 4.1b re-review rejeitado pelo vocabulário" \
+    || ok "FM-02GAT: checkpoint 4.1b re-review aceito no vocabulário canônico"
 
   seqs=$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$F" | tr '\n' ' ')
   python3 - "$F" <<'EOF' >/dev/null 2>&1 && ok "todas as linhas são JSON válido" || bad "linha JSON inválida"
@@ -496,7 +513,9 @@ fi
   # apontam para a linha do hand-back. Quem lê o run-log (dashboard, recortes) passa a somar
   # as duas janelas de etapa 5 sem adivinhar por timestamp.
   RETOMADA_SEQ=""; RETOMADA_SESS=""
-  if [ "$evento" = "checkpoint" ] && [ "${etapa%% *}" = "5" ] && [ -f "$f" ]; then
+  _et5=0
+  case "${etapa%% *}" in (5|5.*) _et5=1 ;; esac
+  if [ "$evento" = "checkpoint" ] && [ "$_et5" = 1 ] && [ -f "$f" ]; then
     _hb_ln1=$(grep -n '"evento":"stop".*"etapa":"handback' "$f" 2>/dev/null | tail -n1 | cut -d: -f1)
     _hb_ln2=$(grep -n '"evento":"end".*"etapa":"6[^"]*".*"veredito":"handback"' "$f" 2>/dev/null | tail -n1 | cut -d: -f1)
     _hb_ln=""
@@ -510,7 +529,7 @@ fi
         fi ;;
     esac
     if [ -n "$_hb_ln" ]; then
-      _ja=$(tail -n +"$((_hb_ln+1))" "$f" 2>/dev/null | grep -c '"evento":"checkpoint","etapa":"5')
+      _ja=$(tail -n +"$((_hb_ln+1))" "$f" 2>/dev/null | grep -cE '"evento":"checkpoint","etapa":"5([. ]|")')
       if [ "${_ja:-0}" -eq 0 ] 2>/dev/null; then
         _hb_row=$(sed -n "${_hb_ln}p" "$f")
         RETOMADA_SEQ=$(printf '%s' "$_hb_row" | sed -n 's/.*"seq":\([0-9]*\).*/\1/p')
