@@ -605,12 +605,11 @@ leaves basket 3 without open `issue`. Order matters: re-run first, triage what i
    credential/surface → re-dispatch 5.4 restricted to the basket-3 scenarios, with the
    `[Superfície do projeto: …]` clause. Fence: `confere-etapa.sh 5 --reuat` (stamps
    `pre_uat_reuat: done`, single writer). No `uat_superficie` → skip the re-run, still stamp.
-2. Before dispatching the skeptic: run `scripts/pos-ship.py` in a format-only, read-only
-   check of the `pos_ship: candidato` blocks (FJ-06UAT — the exact flag/arg shape is a script
-   change owned by the scripts lane, not landed as of this text; `--conferir <phase_dir> <NN>
-   <project_root>` is the proposed shape, matching `move`'s argument order). Zero well-formed
-   candidates despite the marker present → return to the conductor now; do not spend the
-   skeptic's window on a malformed candidate.
+2. Before dispatching the skeptic: `scripts/pos-ship.py --conferir <phase_dir> <NN>
+   <project_root>` — read-only format check of the `pos_ship: candidato` blocks (FJ-06UAT).
+   Exit 1 (JSON `malformados` non-empty — indented marker, or a `pos_ship:` field that is not
+   the literal `candidato`) → return to the conductor now with that list; do not spend the
+   skeptic's window on a malformed candidate. Exit 0 → proceed to step 3.
 3. Any scenario carrying `pos_ship: candidato` → dispatch the skeptic (`Agent`,
    `model: sonnet`, synchronous) with `prompts/uat-pos-ship.md`; it writes
    `.pos-ship-vereditos.json`. Whoever classifies never judges.
