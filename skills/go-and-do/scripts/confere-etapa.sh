@@ -342,10 +342,12 @@ if [ "$ETAPA" = "5" ]; then
         '. + [{id:"uat_logic_sem_comando", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
     fi
     if [ "${n_ssd:-0}" -gt 0 ]; then
-      # FALHA: devolve ao condutor com a lista. A saída de escape é declarada no próprio
-      # cenário — «🔍 não se aplica: <motivo>» —, não é o fiscal que dispensa.
-      RES=$(jq -c --arg d "$n_ssd cenário(s) conduzido(s) em pass sem linha 🔍 (sondagem adversarial) — devolva ao condutor; aceita «🔍 não se aplica: <motivo>»: $(jq -r '.pass_sem_sondagem|join(" · ")' <<<"$UATF" | cut -c1-300)" \
-        '. + [{id:"uat_pass_sem_sondagem", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      # AVISO NESTA RELEASE (decisão do dono, 21/09 — mesmo tratamento do `incidente_tardio`):
+      # volta a FALHA dura depois de UMA fase real rodar com o `uat-playbook.md` novo (C5),
+      # que é quem ensina a escotilha. A saída de escape é declarada no próprio cenário —
+      # «🔍 não se aplica: <motivo>» —, não é o fiscal que dispensa.
+      RES=$(jq -c --arg d "AVISO: $n_ssd cenário(s) conduzido(s) em pass sem linha 🔍 (sondagem adversarial) — devolva ao condutor; aceita «🔍 não se aplica: <motivo>»: $(jq -r '.pass_sem_sondagem|join(" · ")' <<<"$UATF" | cut -c1-300)" \
+        '. + [{id:"uat_pass_sem_sondagem", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
     fi
     EXTRAI=$(jq -c --argjson u "$UATF" '. + {uat_fiscal: ($u|del(.summary_novo))}' <<<"$EXTRAI")
 

@@ -112,6 +112,13 @@ sed -i '0,/^result: pass$/s//result: blocked/' "$U"
 python3 "$S" "$U" "$PD" --escrever >/dev/null
 grep -q '^status: testing' "$U" && ok "blocked no corpo trava a promoção" || erro "promoveu com blocked aberto"
 
+echo "== FJ-02UAT: severidade no consumidor — AVISO nesta release (decisão do dono 21/09)"
+CE="$AQUI/../skills/go-and-do/scripts/confere-etapa.sh"
+linha=$(grep -n 'id:"uat_pass_sem_sondagem"' "$CE" | cut -d: -f1)
+eq "confere-etapa.sh mapeia uat_pass_sem_sondagem como AVISO" \
+   "$(sed -n "${linha}p" "$CE" | grep -oE 'resultado:"[A-Z]+"')" 'resultado:"AVISO"'
+eq "…e NÃO incrementa FALHAS" "$(sed -n "${linha}p" "$CE" | grep -c 'FALHAS+1')" "0"
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-uat-fiscal: TUDO OK" || echo "test-uat-fiscal: $falhas falha(s)"
 [ "$falhas" -eq 0 ]
