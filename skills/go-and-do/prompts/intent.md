@@ -502,13 +502,25 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
      verificador (a linha `vinculo_goal: nenhum — …` dele) e o destino (`plan-phase`,
      `code-review`, `deferred` ou `dono`), e entrada em `<phase_dir>/deferred-items.md`
      quando a categoria for `A-produto` ou `B-viabilidade`. Dispensa não é descarte: o achado
-     sai da conta do ciclo, não do registro. Promover um dispensado a `confirmado` é seu
-     direito — escreva o porquê na mesma linha.
+     sai da conta do ciclo, não do registro. **Você não promove um achado dispensado
+     (FJ-05INT) — a porta está fechada, sem exceção dentro do ciclo.** Se discordar da
+     dispensa, marque a linha como **`contestada`** e escreva o motivo em uma frase: quem
+     decide é quem recebe a dívida no destino registrado, não você. (A garantia de verdade
+     fica no script: a trava de ids da FM-04 recusa um id dispensado passado ao
+     `correcoes-commit.sh`.)
    Bug de código que o consultor achou lendo o repositório é sempre registrado, mesmo sem
    vínculo com esta fase: entrada em `deferred-items.md`, que a verificação de trabalho e a
    auditoria forense do GSD leem, e linha em `## Dívidas registradas`.
    Os `nao_sustentado`/`ja_coberto` entram na tabela do INTENT-REVIEW com o
    porquê/ponteiro do filho — destino registrado, não filtro silencioso.
+
+   **A menor emenda que fecha o achado, nunca mais (FJ-06INT).** O padrão dos consertos que
+   geram erro novo é escrever MAIS do que o achado pedia — uma frase absoluta a mais, um
+   mecanismo a mais. Corrija em termos de **comportamento**, sem prescrever *como*; é isso
+   que a releitura do 5b audita com a pergunta «alguma frase nova é impossível de cumprir ou
+   contradiz o código citado?» (ver 5b — nesta versão ela roda depois do commit da correção,
+   não antes; mover a pergunta para antes do commit exige o script de correção aceitar uma
+   parada intermediária e não foi feito nesta rodada).
 
    **O que a correção escreve: INVARIANTE, nunca mecanismo (R1a).** Um AC é `MUST NOT` +
    modo de falha observável. Anti-exemplos, na forma:
@@ -753,6 +765,11 @@ Você não fala com o usuário — o orquestrador fala. O caminho:
 Responda **apenas** com um dos três blocos abaixo, preenchido — sem prosa antes ou
 depois (o retorno é parseado como dado de roteamento; conteúdo verboso vive no disco;
 tokens não se reportam — a medição é mecânica, do transcript, pela camada 0).
+
+**Números do bloco `done` saem do script, não da sua memória (FJ-10INT).** `ciclos`,
+`achados_confirmados`, `achados_descartados` e `achados_dispensados` são colados da ÚLTIMA
+linha de saída do `confere-reconciliacao.sh`/`decide-ciclo.sh` (a mesma que fechou o último
+ciclo) — nunca redigidos por você a partir do que lembra da rodada.
 
 ```
 estado: done

@@ -96,6 +96,11 @@ Comece todo bloco Bash com `cd "<project_root>"`.
    cedo demais. Achado sem tag → você classifica.
 5. Você **não** decide destino (correção factual × pausa de negócio × transparência) —
    isso é alçada de quem te despachou. Seu produto termina no veredito.
+
+   **Não atribua causa a um instrumento sem abri-lo (FJ-10INT).** Se um script/fiscal deu um
+   resultado que parece errado, a causa só entra no seu retorno depois de você ler o código
+   dele e confirmar — nunca por dedução da saída. Registre só o que você conferiu; um "parece
+   que o script X está bugado" sem tê-lo aberto não vira alegação.
 6. **Vereditos em disco (insumo do decide-ciclo.sh):** grave
    `<phase_dir>/.intent/.vereditos-c<C>.txt` — uma linha por achado, formato exato:
    `id | classe | veredito | categoria` (ex.: `c2-03 | novo | confirmado | A-produto`;

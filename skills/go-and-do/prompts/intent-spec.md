@@ -92,6 +92,11 @@ PRE-SPEC, `pre_spec_mode: structured|legacy` + o insumo correspondente. Traz ain
    cada linha em `r2_avisos` no retorno (o coordenador decide, o consultor lê). A
    `AC-ORIGEM-REPETIDA` é a pergunta de unicidade do Step 6 voltando: responda-a no SPEC
    (fundir ou distinguir), não a cale.
+   **Toda `EXTENSAO-SUSPEITA` sai tratada, não só listada (FJ-07INT).** Para cada aviso, uma
+   de duas saídas: mova o acréscimo para uma frase/AC marcado `[auto]` separado (se é mesmo
+   acréscimo seu), ou escreva em `r2_avisos` a justificativa em uma linha de por que não é
+   acréscimo (ex.: é um ponteiro de linha, não conteúdo novo). Um `EXTENSAO-SUSPEITA` que
+   atravessa o retorno sem uma das duas é aviso que virou ruído.
 7b. **Re-commite antes de selar.** O workflow commitou o SPEC no passo 2; os passos 4–7
    o editaram depois. Feche tudo num commit só — `--amend` se o commit foi do próprio
    workflow, commit novo se não — incluindo a reconciliação do ROADMAP (R6 exige o mesmo
