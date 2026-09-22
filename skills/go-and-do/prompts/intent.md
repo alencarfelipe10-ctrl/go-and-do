@@ -275,6 +275,12 @@ piso fail-closed: instalado-mas-falho em runtime é falha, não ausência (os DO
 ciclo completo → `<blocked_path>`). Prepare `mkdir -p "<phase_dir>/pareceres"` (pareceres
 são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
 
+**Incidente se grava na hora (FM-07INT).** Todo desvio entra no run-log NO TURNO em que
+acontece — `run-log.sh "<phase_dir>" "<NN>" incidente "1 intencao" --kv origem=… --kv
+detalhe=…` —, nunca junto no fecho do ciclo. O fiscal reprova (nesta versão, AVISO) lote de
+incidentes gravados depois do `end` da etapa, ou vários no mesmo segundo: os dois são sinal de
+que o registro foi feito de memória, no fim, e não no ato.
+
 1. **Leia a intenção UMA vez** (`NN-SPEC.md` + `NN-CONTEXT.md`). Do ciclo 2 em diante não
    releia os artefatos inteiros: o "o que mudou" vem da sua triagem + `git diff`; trecho
    pontual = `sed -n 'X,Yp'`.
@@ -517,10 +523,10 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    **A menor emenda que fecha o achado, nunca mais (FJ-06INT).** O padrão dos consertos que
    geram erro novo é escrever MAIS do que o achado pedia — uma frase absoluta a mais, um
    mecanismo a mais. Corrija em termos de **comportamento**, sem prescrever *como*; é isso
-   que a releitura do 5b audita com a pergunta «alguma frase nova é impossível de cumprir ou
-   contradiz o código citado?» (ver 5b — nesta versão ela roda depois do commit da correção,
-   não antes; mover a pergunta para antes do commit exige o script de correção aceitar uma
-   parada intermediária e não foi feito nesta rodada).
+   que a releitura do 5b passa a auditar (ver `prompts/intent-releitura.md`, "frase
+   impossível/contradiz o código"). **Limite declarado:** nesta versão a releitura do 5b
+   roda depois do commit da correção, não antes — mover a pergunta para antes do commit
+   exige o script `correcoes-commit.sh` aceitar uma parada intermediária, fora desta lane.
 
    **O que a correção escreve: INVARIANTE, nunca mecanismo (R1a).** Um AC é `MUST NOT` +
    modo de falha observável. Anti-exemplos, na forma:

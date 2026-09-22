@@ -129,8 +129,8 @@ retomada antes de te despachar — não re-cheque. Scripts em
    escrito) → `estado: blocked` com o motivo.
 
 **Incidente se grava na hora** (mesmo contrato de C1/C3): todo desvio entra no run-log no
-turno em que acontece, não junto no fim — `run-log.sh incidente "4.1 code-review" --kv
-origem=… --kv detalhe=…`.
+turno em que acontece, não junto no fim — `run-log.sh "<phase_dir>" "<NN>" incidente
+"4.1 code-review" --kv origem=… --kv detalhe=…`.
 </mission>
 
 <environment>
@@ -139,12 +139,21 @@ dele mandam levar ao usuário, não a contorne com flags: devolva `needs_decisio
 pergunta mastigada (opções + tradeoffs, recomendação primeiro) e aguarde a continuação
 com a resposta. Você não mexe em TaskList nem em telemetria — são da camada 0.
 
-Agentes aninhados (camada 2): você **não recebe notificações** de trabalho em
-background — nunca fique "aguardando" um retorno que não vai chegar. Precisa de
-background (trabalho >10min, o teto real do `timeout` da tool)? Só com waiter de
-disco: o trabalho escreve um arquivo combinado — **o próprio comando de fundo cria o marcador** (`( <trabalho> ; touch <arquivo> ) &`); nunca espere por um arquivo que "o harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém escrevia). Teto = duração esperada + 5 min; estourou → decida pelo disco na hora e a espera é um único
-`timeout <Ns> bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` — nunca polling
-picado, nunca espera de notificação. Depois decida pelo disco: o `NN-REVIEW.md`
+**Agente filho (`Agent`, camada 2 — ex.: o `gad-verificador` do passo 2b) acorda você (FJ-03GAT).**
+Despache e encerre o turno sem chamar mais nenhuma tool; a notificação de término chega quando
+ele termina (protocolo de filhos, provado 10/09) — só então leia o disco. Esperar por
+existência de arquivo no lugar da notificação é o erro que o FJ-03GAT corrige: espere o
+RETORNO do agente, não o arquivo aparecer.
+
+**Lane externa (`roda-codex.sh` via `&`, não é `Agent`) é a exceção — e ela é literal.**
+Processo Bash de fundo **não** emite `task-notification`: para ele, e só para ele, vale o
+waiter de disco — o trabalho escreve um arquivo combinado e **o próprio comando de fundo cria
+o marcador** (`( <trabalho> ; touch <arquivo> ) &`); nunca espere por um arquivo que "o
+harness" ou "a tool Agent" deveriam criar (F24.3: 40 min esperando um `.done` que ninguém
+escrevia). Teto = duração esperada + 5 min; estourou → decida pelo disco na hora e a espera é
+um único `timeout <Ns> bash -c 'until [ -s <arquivo> ]; do sleep 15; done'` — nunca polling
+picado.
+Depois decida pelo disco: o `NN-REVIEW.md`
 existe e está completo → siga; não existe → trate como falha do passo (não como
 sucesso). Saída vazia com exit 0 também é falha. E devolva sempre o bloco do
 contrato de retorno — prosa de espera ("vou aguardar a notificação") no lugar do

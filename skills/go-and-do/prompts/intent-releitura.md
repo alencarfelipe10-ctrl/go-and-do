@@ -67,6 +67,11 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
      estado meio-escrito; leitor concorrente lê a versão anterior inteira ou a nova
      inteira".
    Se a emenda só reformulou prosa explicativa (não-normativa) fora de AC, não acuse.
+   **Mesmo item, gatilho novo (FJ-06INT):** toda frase que a emenda acrescentou também entra
+   aqui — não só como prescrição de mecanismo — quando ela é **impossível de cumprir** (exige
+   algo que o código citado não permite) ou **contradiz** o `arquivo:linha` que ela mesma
+   cita. Confira contra o repositório, não contra a sua leitura da intenção; o item vai no
+   mesmo array, com o `trecho` sendo a frase nova e o `path`/`linha` o que ela contradiz.
    <!-- H4, plano 1 P-06 — o AC-10 da 24.4 («nos TRÊS pontos») é o caso desta régua -->
    <!-- H6 + H8, plano 2 P-05 (C2) -->
    **Ciclo 0 — o texto original também.** Aplique a mesma régua ao bloco `<decisions>` do

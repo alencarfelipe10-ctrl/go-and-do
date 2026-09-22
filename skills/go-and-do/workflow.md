@@ -500,7 +500,7 @@ the user «the parallelism may not have happened» with the clocks of all nine e
   something, re-run 4.5's suite alone afterward, not the whole validate (MGTm-01GAT).
 
 **Every gate host reports incidents at the moment they happen** (same contract as C1/C3),
-via `run-log.sh incidente "<etapa>" --kv origem=… --kv detalhe=…` — before whatever else the
+via `run-log.sh "<phase_dir>" "<NN>" incidente "<etapa>" --kv origem=… --kv detalhe=…` — before whatever else the
 host was about to do (FM-07GAT).
 
 </stage>
@@ -578,7 +578,10 @@ medição somam as duas janelas em vez de tratá-las como órfãs.
 3. Fence: `confere-etapa.sh 5` — reconciles baskets/probes/evidence from disk, lints the
    gap-YAML, runs the native `uat-passed` predicate, scans for SECRETS (gitleaks-style
    patterns, never generic PII) and, on pass, promotes `pre_uat: executed` (single writer —
-   5.C/5.E). Exit 1 → back to the SAME subagent. Do not ingest `NN-UAT.md`.
+   5.C/5.E). Exit 1 → back to the SAME subagent. Do not ingest `NN-UAT.md`. **Fence passed →
+   commit now** (`commita-artefatos.sh <phase_dir> <NN> uat`, FM-03UAT): whatever exit stage 5
+   takes next (5.5, 5.6, straight to Etapa 6), the UAT result the subagent just wrote is
+   already durable, instead of riding on whichever later step happens to commit next.
 
 > Cardinal rule of the playbook: never `pass` on the ambiguous — uncertainty → basket 3 (the
 > real basket 3 is a login/2FA wall).
@@ -602,8 +605,10 @@ leaves basket 3 without open `issue`. Order matters: re-run first, triage what i
    credential/surface → re-dispatch 5.4 restricted to the basket-3 scenarios, with the
    `[Superfície do projeto: …]` clause. Fence: `confere-etapa.sh 5 --reuat` (stamps
    `pre_uat_reuat: done`, single writer). No `uat_superficie` → skip the re-run, still stamp.
-2. Before dispatching the skeptic: `scripts/pos-ship.py --conferir <phase_dir> <NN>
-   <project_root>` — format-only check of the `pos_ship: candidato` blocks. Zero well-formed
+2. Before dispatching the skeptic: run `scripts/pos-ship.py` in a format-only, read-only
+   check of the `pos_ship: candidato` blocks (FJ-06UAT — the exact flag/arg shape is a script
+   change owned by the scripts lane, not landed as of this text; `--conferir <phase_dir> <NN>
+   <project_root>` is the proposed shape, matching `move`'s argument order). Zero well-formed
    candidates despite the marker present → return to the conductor now; do not spend the
    skeptic's window on a malformed candidate.
 3. Any scenario carrying `pos_ship: candidato` → dispatch the skeptic (`Agent`,
@@ -627,7 +632,10 @@ Two terminal routes: ship (happy path) and hand-back (returns without shipping).
 **6.1 — Route the outcome (mechanical).** `pre-despacho.sh 6` and obey `rota`: `pausa`
 (basket 2 left) → Sub-rotina D · `handback` (basket 3 or `--no-ship`) → 6.4-HB · `ship` →
 6.4-SHIP. The JSON brings `git_remote` (trigger of route B), `uat_passed_raw` (the MEASURED
-native predicate — paste it into the ship briefing) and `transparencia` (5 extracted lists). You do not decide the route; you read the verdict. `verification_stale.stale: true` (code
+native predicate — paste it into the ship briefing) and `transparencia` (6 extracted lists:
+basket 4 · basket 3 · `transparencia:` of the INTENT-REVIEW · run-log skips ·
+`riscos_aceitos` · `incidentes` — the 6th, FJ-04ENC, is every `incidente` event of the current
+session). You do not decide the route; you read the verdict. `verification_stale.stale: true` (code
 committed after the last commit that touched `NN-VERIFICATION.md`) → **re-verify BEFORE
 dispatching the close**, same rigor as the fresh check; do not let the ship's own preflight
 discover it 12 minutes in — the digest is the same, only the order moves earlier. A closing stop that takes the `handback`
@@ -642,7 +650,8 @@ plan they stayed in (`must_haves.desejaveis` of the PLAN.md × `## Desejáveis p
 VERIFICATION.md). A leftover is closing information, not a replan pending. The transparency
 lists already came EXTRACTED in 6.1 (basket 4 · basket 3 · `transparencia:` of the
 INTENT-REVIEW · run-log skips · `riscos_aceitos` from secure — a risk acceptance is the
-owner's signature: they REVIEW it in the resumo, they do not discover it in the code). Your job is to write the prose.
+owner's signature: they REVIEW it in the resumo, they do not discover it in the code — ·
+`incidentes`, the 6th list, FJ-04ENC). Your job is to write the prose.
 
 **6.3 — Executive summary (final mode).** Sub-rotina F with `modo: final`, the outcome and
 the 6.2 lists. F writes the transparency block at the TOP. Idempotent. Commit as per F.
