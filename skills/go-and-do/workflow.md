@@ -456,7 +456,21 @@ the user «the parallelism may not have happened» with the clocks of all nine e
   `calcula-files.sh` (4.C).
 - On return: `confere-etapa.sh 4-code-review` (extracts `status`/`critical`/`warning`/
   `total`). Always continues; remaining `critical` → strong 🔔. Keep `uat_humano` (input of
-  5.3). `needs_decision` → question + continuation. `blocked` → `stop`, stop.
+  5.3). `blocked` → `stop`, stop.
+- **`needs_decision`** → question + continuation via Sub-rotina I — including a finding the
+  reviewer tagged "não aplicar sem o dono": it returns `needs_decision`, never `done` with the
+  finding silently skipped (FJ-01GAT). Ask, apply the fix INSIDE this gate once answered, and
+  only then let the fiscal → `end` → recibo sequence close.
+- **Gate 4.1b is its own re-dispatch of 4.1, not a footnote of it** (FM-02GAT): open a
+  checkpoint labeled **"4.1b re-review"**, run `pre-despacho.sh 4-code-review` and
+  `confere-etapa.sh 4-code-review` exactly like 4.1, and stamp its own `.fence-4.1b.ok`. It
+  does not inherit 4.1's fence.
+- **The host never fixes a 4.1b finding itself** (FJ-04GAT): it goes to `gsd-code-fixer` with a
+  scope EQUAL to the finding's own scope. Widening that scope, or changing observable behavior
+  beyond what the finding names, is a question to the owner, not a host judgment call. Every
+  fix from the 4.1b fixer forces a re-review — it is not exempt from the loop it triggered.
+  Fixer briefing: run the finding's own suite before returning, and list, per commit, "what
+  else reads or writes this state" — the re-review starts from that list (MGTk-01GAT).
 
 ### 4.2 — UI review · only with `--ui` → conduct by `workflow-ui.md`.
 
@@ -474,6 +488,13 @@ the user «the parallelism may not have happened» with the clocks of all nine e
 ### 4.5 — Validate phase (via subagent)
 - `pre-despacho.sh 4-validate` → `ok`? Dispatch with `prompts/validate.md`. ⏸️ Gaps →
   `needs_decision` (Fix all recommended). On return: `confere-etapa.sh 4-validate`. Continue.
+  When gate 4.1b exists (secure or a late commit reopened it), dispatch 4.5 in PARALLEL with
+  4.1b instead of after it — validate only reads the map and runs the suite; if 4.1b fixes
+  something, re-run 4.5's suite alone afterward, not the whole validate (MGTm-01GAT).
+
+**Every gate host reports incidents at the moment they happen** (same contract as C1/C3),
+via `run-log.sh incidente "<etapa>" --kv origem=… --kv detalhe=…` — before whatever else the
+host was about to do (FM-07GAT).
 
 </stage>
 
@@ -1037,7 +1058,10 @@ Hard gate — stop and wait for the user when ANY holds:
    production. (The sanctioned rail — green phase up to the PR merge after a clean UAT, 6.D,
    including the automatic merge of the route-B clean room (`ship.py --merge`; owner's
    decision 27/08: they do not review PRs, they trust the stages) — is the default and does not
-   ask. What the route owes is the NOTICE: resumo/banner says "mergeado".)
+   ask. What the route owes is the NOTICE: resumo/banner says "mergeado".) An option that edits
+   `src/` **inside the triage of 4.4 or 4.5** (secure/validate reaching past their own gate into
+   production code) is never routine — hard gate, recommendation up front, ask (FJ-06GAT); in
+   the 23h–07h silence window it takes the graceful pause below, same as any other hard gate.
 4. No recommendation — without real conviction, the confession of uncertainty goes up in any
    category.
 5. Existing fail-closed — open threat, persistent basket 2, basket 3, gaps, `blocked`, context

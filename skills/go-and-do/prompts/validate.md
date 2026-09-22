@@ -37,7 +37,10 @@ em tudo. A camada 0 já confirmou que não existe `<phase_dir>/NN-VALIDATION.md`
 4. Ao final, colha do `NN-VALIDATION.md` os números do retorno: requisitos
    cobertos / parciais / faltantes, `nyquist_compliant`, e quantos testes foram gerados.
    Fidelidade acima de otimismo: um `partial` honesto vale mais que um `true` inflado —
-   a validação não bloqueia a fase, mas o dono lê o número no banner.
+   a validação não bloqueia a fase, mas o dono lê o número no banner. **Se a suíte que o
+   comando rodou tiver `skipped > 0`**, liste os pulados com `-rs`, nomeie cada um e diga
+   por que não é lacuna (marca de plataforma, dependência externa ausente por design,
+   etc.) — `skipped` silencioso no retorno é lacuna não declarada.
 5. **Se o veredito final é `partial`** (desfecho terminal — a estratégia já foi
    decidida), grave o marcador custom `go_and_do_validate: done` no frontmatter do
    `NN-VALIDATION.md` e commite (best-effort — falhou → anote em `sinos` e siga). O

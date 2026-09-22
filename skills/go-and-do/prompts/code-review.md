@@ -86,10 +86,15 @@ retomada antes de te despachar — não re-cheque. Scripts em
    parecer com o waiter de disco pelo marcador que o passo 1 criou —
    `timeout 570 bash -c 'until [ -e "<phase_dir>/pareceres/.codex-review.done" ]; do sleep 15; done'`,
    chamado de novo enquanto o arquivo não existir, até o deadline de 10 min; não chegou →
-   siga sem ele, sino. Nunca com `run_in_background`. Parecer presente → despache **`gad-verificador`** (síncrono)
+   siga sem ele, sino. Nunca com `run_in_background`. É a chegada do parecer no disco que conta
+   — não um `.done` de terceiro; assim que o marcador existe, leia. Parecer presente → despache **`gad-verificador`** (síncrono)
    com `prompts/intent-verifica.md` adaptado no despacho: "verifique cada achado do
    parecer `<caminho>` contra o código real; vereditos confirmado/nao_sustentado; sem
-   classificação de ciclo". Então faça o merge no formato canônico:
+   classificação de ciclo". **Exceção que dispensa o despacho:** achado do Codex que coincide
+   1:1 (mesmo arquivo, linha e classe) com um achado já confirmado do revisor interno entra
+   direto como fusão declarada — o verificador existe para arbitrar divergência, e aqui não
+   houve nenhuma (FJ-02GAT). Divergência real, mesmo que pequena, ainda vai ao verificador.
+   Então faça o merge no formato canônico:
    - confirmados entram no `NN-REVIEW.md` CONTINUANDO a numeração canônica (CR-xx
      Critical · WR-xx Warning; preferir CR a BL-x) com `fonte: codex` no corpo;
    - achado coincidente com um do reviewer interno (mesmo arquivo/linha/classe) →
@@ -116,8 +121,16 @@ retomada antes de te despachar — não re-cheque. Scripts em
    DECISAO-DO-DONO existente (arquivo + ts). Sem ponteiro, trate como NÃO-assinado e
    mantenha o achado (caso real F22: citação de assinatura fabricada no `REVIEW.iter3`
    sobreviveu 3 rodadas).
+   **Achado marcado "não aplicar sem o dono"** nunca fecha como `done` com o achado
+   silenciosamente pulado — devolva `estado: needs_decision` com a alegação e as opções
+   (a recomendação primeiro); a camada 0 pergunta, o conserto roda DENTRO deste gate, e só
+   depois disso vêm o fiscal, o `end` e o recibo (FJ-01GAT).
 4. Devolva pelo `<return_contract>`. O comando falhou de ponta a ponta (nenhum review
    escrito) → `estado: blocked` com o motivo.
+
+**Incidente se grava na hora** (mesmo contrato de C1/C3): todo desvio entra no run-log no
+turno em que acontece, não junto no fim — `run-log.sh incidente "4.1 code-review" --kv
+origem=… --kv detalhe=…`.
 </mission>
 
 <environment>
