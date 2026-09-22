@@ -28,6 +28,17 @@
 #                  fonte mecânica da régua 27(a) da auditoria; na F24 os 10 incidentes
 #                  foram parar em DECISOES.md por falta deste evento documentado.
 #
+# ── FM-F4RLR-04UAT: veredito `handback` + elo da retomada ──────────────────────────────
+#   `handback` é o veredito da etapa 6 que PAROU sem ship (rota 6.4-HB do workflow — hoje
+#   isso já é gravado por um `stop`/etapa "handback"; um `end` id 6 com `--kv
+#   veredito=handback`, quando o workflow vier a emiti-lo, também conta). Não é `pass`: a
+#   fase não terminou, só devolveu o controle.
+#   O 1º `checkpoint` de etapa "5 …" que aparece DEPOIS de um hand-back (sem nenhum outro
+#   checkpoint de etapa 5 no meio) ganha, sozinho e automaticamente, `retomada_de_seq` e
+#   `retomada_de_sessao` apontando para a linha do hand-back — mecânico, sem depender do
+#   workflow chamar nada de novo. Quem soma tempo/tokens por etapa (dashboard, recortes)
+#   trata as duas janelas de etapa 5 (a que parou + a que retomou) como uma coisa só.
+#
 # Modos:  run-log.sh <phase_dir> <NN> audit                    → audita a GRADE (não muta)
 #         run-log.sh <phase_dir> <NN> close --sessao <id> [m]  → fecho ADMINISTRATIVO de
 #                    janela órfã de sessão MORTA (2 ocorrências: F19-inspired e F2-rlr)
@@ -188,6 +199,27 @@ if [ "$1" = "--selftest" ]; then
   echo "$out" | grep -q "já está fechada" && ok "close é no-op na 2ª vez" || bad "close é no-op na 2ª vez"
   out=$(bash "$SELF" "$D" 99 close --sessao selftest0)
   echo "$out" | grep -q "SESSÃO ATUAL" && ok "close recusa a sessão atual" || bad "close recusa a sessão atual"
+
+  # FM-F4RLR-04UAT: elo da retomada (arquivo próprio — não interfere no seq do $F acima)
+  D2="$TMP/.planning/phases/98-teste"; F2="$D2/98-RUN-LOG.jsonl"
+  export CLAUDE_CODE_SESSION_ID="sessA0000-0000"
+  bash "$SELF" "$D2" 98 checkpoint "5 uat" 100000 25 "" 400000 >/dev/null
+  bash "$SELF" "$D2" 98 stop "handback" 110000 27 "" 400000 "" "balde 3 pendente" >/dev/null
+  export CLAUDE_CODE_SESSION_ID="sessB0000-0000"
+  bash "$SELF" "$D2" 98 checkpoint "5 uat" 5000 1 "" 400000 >/dev/null
+  grep -q '"retomada_de_seq":2' "$F2" && grep -q '"retomada_de_sessao":"sessA000"' "$F2" \
+    && ok "retomada: 1º checkpoint de etapa 5 após handback ganha o elo" \
+    || bad "retomada: elo ausente no 1º checkpoint" "$(tail -n1 "$F2")"
+  bash "$SELF" "$D2" 98 checkpoint "5.1 retomada" 6000 2 "" 400000 >/dev/null
+  tail -n1 "$F2" | grep -q 'retomada_de_seq' \
+    && bad "retomada: 2º checkpoint de etapa 5 ganhou elo de novo (só o 1º deveria)" \
+    || ok "retomada: 2º checkpoint de etapa 5 não repete o elo"
+  export CLAUDE_CODE_SESSION_ID="selftest0-0000-0000"
+  D3="$TMP/.planning/phases/97-teste"; F3="$D3/97-RUN-LOG.jsonl"
+  bash "$SELF" "$D3" 97 checkpoint "5 uat" 1000 1 "" 400000 >/dev/null
+  grep -q 'retomada_de' "$F3" \
+    && bad "retomada: checkpoint de etapa 5 sem handback prévio ganhou elo indevido" \
+    || ok "retomada: sem handback prévio, sem elo"
 
   seqs=$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$F" | tr '\n' ' ')
   python3 - "$F" <<'EOF' >/dev/null 2>&1 && ok "todas as linhas são JSON válido" || bad "linha JSON inválida"
@@ -453,6 +485,40 @@ fi
     case "$tokens" in
       (''|*[!0-9]*|0) echo "aviso: checkpoint sem tokens/pct — context-check falhou? re-rode o gate (1x) antes de seguir" ;;
     esac
+  fi
+
+  # FM-04UAT: elo da retomada. Um hand-back fecha a etapa 6 numa sessão (`stop`/etapa
+  # "handback", rota 6.4-HB) ou — quando o workflow vier a gravar o veredito próprio da
+  # FM-F4RLR-04UAT — um `end` da etapa 6 com `veredito=handback`; os dois disparadores são
+  # aceitos. A retomada abre em OUTRA sessão (não há `sessao` em comum para casar), então o
+  # 1º checkpoint da etapa 5 que aparece depois do hand-back — e só ele, sem outro checkpoint
+  # de etapa 5 no meio — ganha o elo mecânico de volta: `retomada_de_seq`/`retomada_de_sessao`
+  # apontam para a linha do hand-back. Quem lê o run-log (dashboard, recortes) passa a somar
+  # as duas janelas de etapa 5 sem adivinhar por timestamp.
+  RETOMADA_SEQ=""; RETOMADA_SESS=""
+  if [ "$evento" = "checkpoint" ] && [ "${etapa%% *}" = "5" ] && [ -f "$f" ]; then
+    _hb_ln1=$(grep -n '"evento":"stop".*"etapa":"handback' "$f" 2>/dev/null | tail -n1 | cut -d: -f1)
+    _hb_ln2=$(grep -n '"evento":"end".*"etapa":"6[^"]*".*"veredito":"handback"' "$f" 2>/dev/null | tail -n1 | cut -d: -f1)
+    _hb_ln=""
+    case "$_hb_ln1$_hb_ln2" in
+      '') ;;
+      *)
+        if [ -n "$_hb_ln1" ] && [ -n "$_hb_ln2" ]; then
+          [ "$_hb_ln1" -ge "$_hb_ln2" ] 2>/dev/null && _hb_ln="$_hb_ln1" || _hb_ln="$_hb_ln2"
+        else
+          _hb_ln="${_hb_ln1:-$_hb_ln2}"
+        fi ;;
+    esac
+    if [ -n "$_hb_ln" ]; then
+      _ja=$(tail -n +"$((_hb_ln+1))" "$f" 2>/dev/null | grep -c '"evento":"checkpoint","etapa":"5')
+      if [ "${_ja:-0}" -eq 0 ] 2>/dev/null; then
+        _hb_row=$(sed -n "${_hb_ln}p" "$f")
+        RETOMADA_SEQ=$(printf '%s' "$_hb_row" | sed -n 's/.*"seq":\([0-9]*\).*/\1/p')
+        RETOMADA_SESS=$(printf '%s' "$_hb_row" | sed -n 's/.*"sessao":"\([^"]*\)".*/\1/p')
+        [ -n "$RETOMADA_SEQ" ] && kvs+=("retomada_de_seq=$RETOMADA_SEQ")
+        [ -n "$RETOMADA_SESS" ] && kvs+=("retomada_de_sessao=$RETOMADA_SESS")
+      fi
+    fi
   fi
 
   # Auto-fechamento de janela: checkpoint novo com o checkpoint anterior da MESMA sessão
