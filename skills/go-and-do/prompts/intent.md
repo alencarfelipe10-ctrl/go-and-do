@@ -275,6 +275,12 @@ piso fail-closed: instalado-mas-falho em runtime é falha, não ausência (os DO
 ciclo completo → `<blocked_path>`). Prepare `mkdir -p "<phase_dir>/pareceres"` (pareceres
 são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
 
+**Incidente se grava na hora (FM-07INT).** Todo desvio entra no run-log NO TURNO em que
+acontece — `run-log.sh "<phase_dir>" "<NN>" incidente "1 intencao" --kv origem=… --kv
+detalhe=…` —, nunca junto no fecho do ciclo. O fiscal reprova (nesta versão, AVISO) lote de
+incidentes gravados depois do `end` da etapa, ou vários no mesmo segundo: os dois são sinal de
+que o registro foi feito de memória, no fim, e não no ato.
+
 1. **Leia a intenção UMA vez** (`NN-SPEC.md` + `NN-CONTEXT.md`). Do ciclo 2 em diante não
    releia os artefatos inteiros: o "o que mudou" vem da sua triagem + `git diff`; trecho
    pontual = `sed -n 'X,Yp'`.
@@ -502,13 +508,25 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
      verificador (a linha `vinculo_goal: nenhum — …` dele) e o destino (`plan-phase`,
      `code-review`, `deferred` ou `dono`), e entrada em `<phase_dir>/deferred-items.md`
      quando a categoria for `A-produto` ou `B-viabilidade`. Dispensa não é descarte: o achado
-     sai da conta do ciclo, não do registro. Promover um dispensado a `confirmado` é seu
-     direito — escreva o porquê na mesma linha.
+     sai da conta do ciclo, não do registro. **Você não promove um achado dispensado
+     (FJ-05INT) — a porta está fechada, sem exceção dentro do ciclo.** Se discordar da
+     dispensa, marque a linha como **`contestada`** e escreva o motivo em uma frase: quem
+     decide é quem recebe a dívida no destino registrado, não você. (A garantia de verdade
+     fica no script: a trava de ids da FM-04 recusa um id dispensado passado ao
+     `correcoes-commit.sh`.)
    Bug de código que o consultor achou lendo o repositório é sempre registrado, mesmo sem
    vínculo com esta fase: entrada em `deferred-items.md`, que a verificação de trabalho e a
    auditoria forense do GSD leem, e linha em `## Dívidas registradas`.
    Os `nao_sustentado`/`ja_coberto` entram na tabela do INTENT-REVIEW com o
    porquê/ponteiro do filho — destino registrado, não filtro silencioso.
+
+   **A menor emenda que fecha o achado, nunca mais (FJ-06INT).** O padrão dos consertos que
+   geram erro novo é escrever MAIS do que o achado pedia — uma frase absoluta a mais, um
+   mecanismo a mais. Corrija em termos de **comportamento**, sem prescrever *como*; é isso
+   que a releitura do 5b passa a auditar (ver `prompts/intent-releitura.md`, "frase
+   impossível/contradiz o código"). **Limite declarado:** nesta versão a releitura do 5b
+   roda depois do commit da correção, não antes — mover a pergunta para antes do commit
+   exige o script `correcoes-commit.sh` aceitar uma parada intermediária, fora desta lane.
 
    **O que a correção escreve: INVARIANTE, nunca mecanismo (R1a).** Um AC é `MUST NOT` +
    modo de falha observável. Anti-exemplos, na forma:
@@ -526,12 +544,15 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    onde mora a frase errada — é dela que a `/audit-gad` mede original × derivado. Sem ela o
    achado sai `não_medido`; não chute nem invente âncora.
 
-   **Um id, um papel.** Dentro de um ciclo, um `c<C>-NN` nomeia um achado **ou** uma correção,
-   nunca os dois. Correção que nasce de leitura sua (não de achado) continua a série do ciclo, a
+   **Um id, um papel (FJ-01INT: a correção HERDA o id do achado).** Dentro de um ciclo, um
+   `c<C>-NN` nomeia um achado **ou** uma correção, nunca os dois — e a correção de um achado
+   CONFIRMADO usa o mesmo id dele: «a correção do achado c1-04 chama-se c1-04». Correção que
+   nasce de leitura sua (não de achado) continua a série do ciclo, a
    partir do último id usado — não recomeça do `-01`. Motivo: o `confere-reconciliacao.sh` cruza id
    de veredito com id aplicado, e o mesmo id nos dois papéis casa a linha errada (F24.5: `c2-01`
    era um achado descartado e uma correção aplicada, e a tabela do INTENT-REVIEW teve de
-   desambiguar com `(achado)` à mão).
+   desambiguar com `(achado)` à mão). A garantia de verdade é o script (FM-04): id inventado ou
+   achado confirmado sem destino é recusado — este parágrafo só evita o turno perdido de recusa.
 
    **As correções do ciclo: um script, um turno.**
    1. ANTES de editar qualquer artefato:
@@ -753,6 +774,11 @@ Você não fala com o usuário — o orquestrador fala. O caminho:
 Responda **apenas** com um dos três blocos abaixo, preenchido — sem prosa antes ou
 depois (o retorno é parseado como dado de roteamento; conteúdo verboso vive no disco;
 tokens não se reportam — a medição é mecânica, do transcript, pela camada 0).
+
+**Números do bloco `done` saem do script, não da sua memória (FJ-10INT).** `ciclos`,
+`achados_confirmados`, `achados_descartados` e `achados_dispensados` são colados da ÚLTIMA
+linha de saída do `confere-reconciliacao.sh`/`decide-ciclo.sh` (a mesma que fechou o último
+ciclo) — nunca redigidos por você a partir do que lembra da rodada.
 
 ```
 estado: done

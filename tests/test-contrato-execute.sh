@@ -10,6 +10,8 @@
 #   47b  — o contrato de leitura (<required_reading>/<execution_context>) desce verbatim
 #   47d  — o host não conserta código: conserto pós-merge vai a executor
 #   47e  — a espera de filho `Agent` não é por waiter (a frase «não recebe notificações» caiu)
+#   F4RLR FJ-01EXE — mesma frase de handoff pro gsd-verifier em execute.md e workflow.md 3.4
+#   F4RLR FM-08EXE — escopo do commit por extenso no briefing (FM-08EXE)
 #   bash tests/test-contrato-execute.sh      · exit 0 = verde
 set -u
 RAIZ="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
@@ -37,6 +39,8 @@ tem "47b: a frase falsa do template é proibida"         'já vêm na sua'
 tem "47d: o host não conserta código"                   'Você relança a suíte; você não conserta o código'
 tem "47e: filho Agent acorda o pai"                              'encerre o turno'
 nao "47e: a frase falsa de que não chegam notificações saiu"     'você **não recebe notificações**'
+tem "FJ-01EXE: a mesma frase de handoff ao gsd-verifier"         'números medidos da suíte completa e o escopo de módulos tocados'
+tem "FM-08EXE: escopo do commit por extenso no briefing"         'escopo dos seus commits: (NN-PP)'
 
 echo
 echo "── resumo: $OK ok / $FALHAS falhas ──"

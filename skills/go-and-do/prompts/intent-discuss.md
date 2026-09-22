@@ -22,6 +22,13 @@ absolutos em tudo.
    prefixo `leitura_propria: <arquivo> — <fato>`. Os dois scripts de medição contra a
    base real continuam seus: rodá-los é barato, ler a base não é (na F24.4 a leitura de
    código foi 21 turnos relidos em cada um dos 70 turnos da janela).
+   **As duas linhas de invocação exatas (FJ-08INT — cole, não redescubra):**
+   ```
+   bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/scout.sh" "<N>" \
+     --spec "<phase_dir>/NN-SPEC.md" --out "<phase_dir>/.intent/.scout-discuss.md"
+   python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/decisions-index.py" \
+     .planning --out .planning/DECISIONS-INDEX.md
+   ```
 1. Se `<phase_dir>/NN-CONTEXT.md` já existe → não re-rode nada; pule ao passo 4
    (a neutralização da flag é idempotente e barata) e devolva `done` com
    `base_context: nao_gravado — CONTEXT pré-existente`. **Não sele** (passo 5): base

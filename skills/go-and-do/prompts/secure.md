@@ -46,7 +46,10 @@ em tudo. A camada 0 já confirmou que não existe `<phase_dir>/NN-SECURITY.md` c
    o aceite não tinha dono). Neste caso, ANTES de devolver o `needs_decision`, grave
    `aceites_sem_dono: <n>` no frontmatter do `NN-SECURITY.md` — o comando já escreveu
    o arquivo no estado "bom" (`threats_open: 0`), e sem o marcador uma retomada
-   cross-sessão pularia a 4.4 pelo frontmatter e a pergunta nunca re-emergiria.
+   cross-sessão pularia a 4.4 pelo frontmatter e a pergunta nunca re-emergiria. Esse
+   marcador é de **presença**, não de conteúdo — grave-o gravando o campo; **o que NÃO
+   fazer:** apagar/comentar a linha inteira do risco aceito para "resolver" o aceite sem
+   dono — isso não remove a decisão pendente, só grava 0 reprova no fiscal por engano.
    **Na continuação** (o comando já terminou — NÃO re-rode o `gsd-secure-phase`):
    usuário aceitou → registre a decisão e o ponteiro "resposta desta rodada" na seção
    de riscos aceitos do `NN-SECURITY.md`, REMOVA o `aceites_sem_dono` do frontmatter e

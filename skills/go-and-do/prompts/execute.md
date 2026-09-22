@@ -55,6 +55,15 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    o `{phase_number}` do `init.execute-phase` e o `{plan_id}` copiado do `phase-plan-index`, nunca
    digitado. O hook de isolamento lê esse marcador antes da `description` (1b); marcador e
    description precisam dizer a mesma fase, senão o sentinel é descartado e o despacho negado.
+1d. **Escopo do commit por extenso, no briefing.** Some ao briefing a linha literal —
+   «escopo dos seus commits: (NN-PP)» — calculada do cabeçalho do plano (o `{NN}` da fase, o
+   `PP` do plano). Tira a ambiguidade que o fiscal `SEM-COMMIT` mede em runtime: reprovando por
+   falta de commit no escopo, ele pode citar quais commits achou com escopo parecido (FM-08EXE).
+1e. **Exigência nova do hospedeiro é incidente + item cobrado.** Se você acrescentar ao
+   briefing algo que o plano não pede, registre o incidente na hora (mesma regra do "Incidente
+   se grava na hora" abaixo) e, ao receber o `SUMMARY.md`, confira aquele item específico antes
+   de aceitar o retorno — exigência que você inventou e não cobrou de volta é exigência que não
+   existiu (FJ-03EXE).
 2. Deixe o motor de ondas trabalhar. O `--auto` **não silencia** as paradas de
    realidade — falha de teste de regressão, schema drift, conflito pós-merge — e elas
    devem parar mesmo: são decisões do usuário → siga o `<environment>` (devolva
@@ -214,7 +223,10 @@ fica para a auditoria) até `rc=0`. A cancela `confere-etapa.sh 3` reprova `SUIT
 `SUITE-EM-CURSO` e `SUITE-COMPLETA-AUSENTE`. Reruns dirigidos («só os 12 que falharam») não
 substituem a suíte inteira — na F24.5 ficaram verdes só no transcript. Aceitar suíte vermelha é
 decisão do DONO: só com a resposta dele rode `suite-ressalva.sh <phase_dir> <NN> "<motivo>"`.
-**Nunca** instrua o `gsd-verifier` a não relançar a suíte.
+Ao despachar o `gsd-verifier` (3.4), a frase é a mesma dos dois lugares (FJ-01EXE): «Entrego os
+números medidos da suíte completa e o escopo de módulos tocados. A suíte completa já é gate
+desta etapa; relançar é decisão sua, com justificativa.» **Nunca** instrua o `gsd-verifier` a
+não relançar a suíte.
 
 **Você relança a suíte; você não conserta o código.** Suíte vermelha (de onda ou final): o
 conserto é despachado a um executor — `Agent(subagent_type="gsd-executor", model: sonnet,
