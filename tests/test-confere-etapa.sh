@@ -532,7 +532,7 @@ J=$(confere "$R" 99)
 eq "SPEC editado depois do selo → AVISO" "$(assert_de "$J" spec_context_sem_selo)" "AVISO"
 casa "…nomeia o arquivo e os dois blobs" "$J" '99-SPEC\.md: selado'
 
-echo "── FJ-02INT (metade script): aprovado_com_ressalva exige dívida nomeada ──"
+echo "── FJ-02INT (metade script): aprovado_com_ressalva exige ressalva_dividas vinculada (decisão do dono, rodada 4) ──"
 IFS='|' read -r R PD <<<"$(monta ressalva 99)"
 cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
 ---
@@ -545,12 +545,13 @@ intent_review: aprovado_com_ressalva
 |----|----------|-----------|------|---------|
 EOF
 J=$(confere "$R" 99)
-eq "ressalva sem NENHUMA dívida nomeada → FALHA" "$(assert_de "$J" intent_ressalva_sem_divida)" "FALHA"
-casa "…diz «sem NENHUMA dívida»" "$J" 'sem NENHUMA dívida'
+eq "ressalva sem \`ressalva_dividas:\` → FALHA" "$(assert_de "$J" intent_ressalva_sem_divida)" "FALHA"
+casa "…diz «sem \`ressalva_dividas:\`»" "$J" 'ressalva_dividas'
 
 cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
 ---
 intent_review: aprovado_com_ressalva
+ressalva_dividas: [c1-04]
 ---
 
 ## Dívidas registradas
@@ -560,11 +561,33 @@ intent_review: aprovado_com_ressalva
 | c1-04 | d | ev | Amplify | plan-phase |
 EOF
 J=$(confere "$R" 99)
-eq "dívida nomeada mas ausente do deferred-items.md → FALHA" "$(assert_de "$J" intent_ressalva_sem_divida)" "FALHA"
+eq "ressalva_dividas aponta id fora do deferred-items.md → FALHA" "$(assert_de "$J" intent_ressalva_sem_divida)" "FALHA"
 casa "…nomeia c1-04" "$J" 'c1-04'
 printf -- '- c1-04 — dívida\n' > "$PD/deferred-items.md"
 J=$(confere "$R" 99)
-eq "dívida nomeada e registrada no deferred-items.md → ok" "$(assert_de "$J" intent_ressalva_sem_divida)" "ok"
+eq "ressalva_dividas na seção e no deferred-items.md → ok" "$(assert_de "$J" intent_ressalva_sem_divida)" "ok"
+
+# Caso DISCRIMINANTE da decisão do dono (§3.1 do relatorio-F4-RLR-A.md): a seção tem MAIS
+# de uma dívida, e SÓ a apontada por ressalva_dividas precisa estar no deferred-items.md —
+# o resto da seção (c1-06, c1-10, sem destino nenhum) NÃO cobra este assert (fica visível
+# só como AVISO em cardinalidade_etapa_1/FM-09INT).
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: aprovado_com_ressalva
+ressalva_dividas: [c1-04]
+---
+
+## Dívidas registradas
+
+| id | alegação | evidência | dono | destino |
+|----|----------|-----------|------|---------|
+| c1-04 | d | ev | Amplify | plan-phase |
+| c1-06 | outra dívida, de outro ciclo | ev | Amplify | — |
+| c1-10 | outra ainda | ev | RL | — |
+EOF
+J=$(confere "$R" 99)
+eq "3 dívidas na seção, só c1-04 (a da ressalva) no deferred-items.md → ok, mesmo com c1-06/c1-10 soltas" \
+  "$(assert_de "$J" intent_ressalva_sem_divida)" "ok"
 
 IFS='|' read -r R PD <<<"$(monta semressalva 99)"
 printf 'intent_review: done\n' > "$PD/99-INTENT-REVIEW.md"
@@ -812,7 +835,7 @@ eq "resumo que cita WR-09 → sem acusação" "$(assert_de "$J" resumo_sem_id_ab
 J="$(confere6 "$(monta_state s6semresumo between_phases)")"
 eq "fase sem resumo ainda escrito → assert calado" "$(assert_de "$J" resumo_sem_id_aberto)" "<ausente>"
 
-echo "── FJ-02INT (metade etapa 6): dívida da ressalva tem de aparecer no resumo ──"
+echo "── FJ-02INT (metade etapa 6): dívida LIGADA à ressalva tem de aparecer no resumo (decisão do dono, rodada 4) ──"
 monta_ressalva() { # <nome> <texto do resumo> → raiz do projeto de bancada
   local root="$BASE/$1" pd
   mkdir -p "$root/.planning/phases/96-bancada"; git init -q "$root" >/dev/null 2>&1
@@ -821,6 +844,7 @@ monta_ressalva() { # <nome> <texto do resumo> → raiz do projeto de bancada
   cat > "$pd/96-INTENT-REVIEW.md" <<'EOF'
 ---
 intent_review: aprovado_com_ressalva
+ressalva_dividas: [c1-09]
 ---
 
 ## Dívidas registradas
@@ -828,6 +852,7 @@ intent_review: aprovado_com_ressalva
 | id | alegação | evidência | dono | destino |
 |----|----------|-----------|------|---------|
 | c1-09 | achado | ev | Amplify | plan-phase |
+| c1-11 | outra dívida, de outro ciclo, sem relação com a ressalva | ev | RL | — |
 EOF
   printf '%s\n' "$2" > "$pd/96-RESUMO-EXECUTIVO.md"
   printf '%s' "$root"
@@ -836,7 +861,7 @@ J="$(confere6 "$(monta_ressalva ressalva_sem 'Fase concluída sem pendências.')
 eq "resumo sem citar a dívida da ressalva → FALHA" "$(assert_de "$J" resumo_sem_id_aberto)" "FALHA"
 casa "…nomeia c1-09" "$J" 'c1-09'
 J="$(confere6 "$(monta_ressalva ressalva_com 'Fechada com ressalva: c1-09 segue pendente, aceite do dono no fim da fase.')")"
-eq "resumo que cita a dívida da ressalva → sem acusação" "$(assert_de "$J" resumo_sem_id_aberto)" "<ausente>"
+eq "resumo que cita a dívida da ressalva → sem acusação, mesmo sem citar c1-11 (fora do vínculo)" "$(assert_de "$J" resumo_sem_id_aberto)" "<ausente>"
 
 # ═══════════════ item 3 (F4 RLR, rodada 3): veredito=handback do `end` id 6 ═══════════════
 # Teste de INTEGRAÇÃO da função real gad_veredito_end (lib/veredito-end.sh), a mesma que

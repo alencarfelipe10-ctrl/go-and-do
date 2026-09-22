@@ -1123,23 +1123,56 @@ if [ "$ETAPA" = "1" ]; then
   # ── FJ-02INT (metade script): «aprovado_com_ressalva» exige dívida nomeada ──
   # Regra 5 do plano: «aprovado com ressalva» só vale na etapa 1 — aqui é onde intent_review
   # é lido, então é aqui que o veto mora. O manifesto (etapa-1.json) já aceita o rótulo no
-  # `intent_review_fechada`; este bloco cobra a contrapartida: sem dívida nomeada na «##
-  # Dívidas registradas» E registrada no deferred-items.md, a ressalva é bilhete em branco.
+  # `intent_review_fechada`; este bloco cobra a contrapartida.
+  #
+  # DECISÃO DO DONO (rodada 4, F4 RLR): a 1ª versão cobrava a seção INTEIRA de dívidas —
+  # medido contra as 3 fases reais (RLR F3/F4, inspired F24.5), isso reprovaria mesmo com a
+  # dívida da ressalva corretamente registrada, porque a seção carrega dívidas de outros
+  # ciclos que nunca foram para o deferred-items.md. Trocado por: cada ressalva do veredito
+  # precisa de UMA dívida nomeada com destino, ligada a ela — o resto da seção não é
+  # cobrado aqui (mas segue visível: `cardinalidade_etapa_1`/FM-09INT acima continua
+  # acusando DIVIDA-SEM-REGISTRO para toda a seção, como AVISO).
+  #
+  # O vínculo é o frontmatter `ressalva_dividas: [id, ...]` do INTENT-REVIEW — uma lista
+  # (uma fase pode ter mais de uma ressalva). Sem essa chave (ou lista vazia) com o rótulo
+  # `aprovado_com_ressalva` presente, a ressalva é bilhete em branco: mesma FALHA de antes,
+  # só que agora aponta a ausência do VÍNCULO, não da seção inteira. `prompts/intent.md`
+  # ainda não ensina o coordenador a escrever essa chave — FJ-02INT metade prompt, fora
+  # desta lane (relatorio-F4-RLR-C.md não tem "ressalva"; pendência declarada no relatório).
   # Reaproveita o `medido.dividas` que o confere-cardinalidade.sh (FM-09INT, acima) já
   # extraiu — não é um 2º parser do mesmo INTENT-REVIEW.md.
   IR_ARQ="$PHASE_DIR/$NN-INTENT-REVIEW.md"
   if [ -f "$IR_ARQ" ] && grep -qE '^intent_review: aprovado_com_ressalva' "$IR_ARQ"; then
-    na_secao_n=$(jq '(.medido.dividas.na_secao//[])|length' <<<"${cardout:-{\}}" 2>/dev/null || echo 0)
-    faltam=$(jq -r '(.medido.dividas.na_secao//[]) - (.medido.dividas.no_deferred//[]) | join(" ")' <<<"${cardout:-{\}}" 2>/dev/null)
-    if [ "${na_secao_n:-0}" -eq 0 ]; then
-      RES=$(jq -c '. + [{id:"intent_ressalva_sem_divida", resultado:"FALHA", detalhe:"intent_review: aprovado_com_ressalva sem NENHUMA dívida na «## Dívidas registradas» do INTENT-REVIEW — a ressalva não pode ficar sem nome"}]' <<<"$RES")
-      FALHAS=$((FALHAS+1))
-    elif [ -n "$faltam" ]; then
-      RES=$(jq -c --arg d "intent_review: aprovado_com_ressalva mas a(s) dívida(s) $faltam da «## Dívidas registradas» não está(ão) no deferred-items.md — a ressalva tem de ser rastreável até o fim da fase" \
-        '. + [{id:"intent_ressalva_sem_divida", resultado:"FALHA", detalhe:$d}]' <<<"$RES")
+    IR_RESSALVA_LINHA=$(grep -E '^ressalva_dividas:' "$IR_ARQ" | head -1 || true)
+    IR_RESSALVA_IDS=""
+    if [ -n "$IR_RESSALVA_LINHA" ]; then
+      IR_RESSALVA_IDS=$(printf '%s\n' "$IR_RESSALVA_LINHA" \
+        | sed -E 's/^ressalva_dividas:[[:space:]]*\[//; s/\][[:space:]]*$//' \
+        | tr ',' '\n' | sed -E 's/^[[:space:]"'"'"']+//; s/[[:space:]"'"'"']+$//' \
+        | grep -v '^$' || true)
+    fi
+    if [ -z "$IR_RESSALVA_IDS" ]; then
+      RES=$(jq -c '. + [{id:"intent_ressalva_sem_divida", resultado:"FALHA", detalhe:"intent_review: aprovado_com_ressalva sem `ressalva_dividas:` (frontmatter, lista de ids) apontando a dívida QUE SUSTENTA a ressalva — a ressalva não pode ficar sem nome (o resto da «## Dívidas registradas» não é cobrado aqui)"}]' <<<"$RES")
       FALHAS=$((FALHAS+1))
     else
-      RES=$(jq -c '. + [{id:"intent_ressalva_sem_divida", resultado:"ok", detalhe:"ressalva com dívida nomeada e registrada no deferred-items.md"}]' <<<"$RES")
+      NA_SECAO_LISTA=$(jq -r '(.medido.dividas.na_secao//[])[]' <<<"${cardout:-{\}}" 2>/dev/null || true)
+      NO_DEFERRED_LISTA=$(jq -r '(.medido.dividas.no_deferred//[])[]' <<<"${cardout:-{\}}" 2>/dev/null || true)
+      IR_PROBLEMAS=""
+      for _id in $IR_RESSALVA_IDS; do
+        if ! grep -qxF "$_id" <<<"$NA_SECAO_LISTA"; then
+          IR_PROBLEMAS="$IR_PROBLEMAS $_id(fora-da-«##-Dívidas-registradas»)"
+        elif ! grep -qxF "$_id" <<<"$NO_DEFERRED_LISTA"; then
+          IR_PROBLEMAS="$IR_PROBLEMAS $_id(ausente-do-deferred-items.md)"
+        fi
+      done
+      if [ -n "$IR_PROBLEMAS" ]; then
+        RES=$(jq -c --arg d "intent_review: aprovado_com_ressalva com \`ressalva_dividas:\` apontando id(s) problemático(s):$IR_PROBLEMAS — a dívida da ressalva tem de estar na seção E no deferred-items.md" \
+          '. + [{id:"intent_ressalva_sem_divida", resultado:"FALHA", detalhe:$d}]' <<<"$RES")
+        FALHAS=$((FALHAS+1))
+      else
+        RES=$(jq -c --arg ids "$(printf '%s' "$IR_RESSALVA_IDS" | tr '\n' ' ')" \
+          '. + [{id:"intent_ressalva_sem_divida", resultado:"ok", detalhe:("ressalva_dividas vinculada(s), na seção e registrada(s) no deferred-items.md: " + $ids)}]' <<<"$RES")
+      fi
     fi
   fi
 
@@ -1572,16 +1605,22 @@ if [ "$ETAPA" = "6" ]; then
     jq -e . >/dev/null 2>&1 <<<"$RVE" || RVE='{}'
     ABERTOS=$( { jq -r '(.abertos//[])[]' <<<"$RVE" 2>/dev/null || true; } )
     # FJ-02INT (metade etapa 6): a fase fechada com `intent_review: aprovado_com_ressalva`
-    # tem a(s) dívida(s) que a sustentam como aceite pendente — a régua é a MESMA do WR-09
-    # acima («todo ID aberto aparece no resumo»), só que a lista vem do
-    # confere-cardinalidade.sh (medido.dividas.na_secao) em vez do review-maior.py. Um
-    # `FALTAM` só, um assert só — não duplica o resumo_sem_id_aberto.
+    # tem a(s) dívida(s) QUE A SUSTENTAM como aceite pendente — a régua é a MESMA do WR-09
+    # acima («todo ID aberto aparece no resumo»). DECISÃO DO DONO (rodada 4, mesma da etapa
+    # 1, `intent_ressalva_sem_divida` acima): só a(s) dívida(s) LIGADA(S) à ressalva
+    # (frontmatter `ressalva_dividas: [...]`) entram nesta cobrança — não a seção inteira
+    # (`medido.dividas.na_secao`), que carrega dívidas de outros ciclos sem relação com a
+    # ressalva. Um `FALTAM` só, um assert só — não duplica o resumo_sem_id_aberto.
     IR_ARQ6="$PHASE_DIR/$NN-INTENT-REVIEW.md"
-    CCARD6="$GAD_SCRIPTS_DIR/confere-cardinalidade.sh"
-    if [ -f "$IR_ARQ6" ] && grep -qE '^intent_review: aprovado_com_ressalva' "$IR_ARQ6" && [ -f "$CCARD6" ]; then
-      card6rc=0; cardout6=$(bash "$CCARD6" "$PHASE_DIR" "$NN" --json 2>/dev/null) || card6rc=$?
-      jq -e . >/dev/null 2>&1 <<<"$cardout6" || cardout6='{"medido":{}}'
-      RESSALVA_IDS=$( { jq -r '(.medido.dividas.na_secao//[])[]' <<<"$cardout6" 2>/dev/null || true; } )
+    if [ -f "$IR_ARQ6" ] && grep -qE '^intent_review: aprovado_com_ressalva' "$IR_ARQ6"; then
+      RESSALVA_LINHA6=$(grep -E '^ressalva_dividas:' "$IR_ARQ6" | head -1 || true)
+      RESSALVA_IDS=""
+      if [ -n "$RESSALVA_LINHA6" ]; then
+        RESSALVA_IDS=$(printf '%s\n' "$RESSALVA_LINHA6" \
+          | sed -E 's/^ressalva_dividas:[[:space:]]*\[//; s/\][[:space:]]*$//' \
+          | tr ',' '\n' | sed -E 's/^[[:space:]"'"'"']+//; s/[[:space:]"'"'"']+$//' \
+          | grep -v '^$' || true)
+      fi
       ABERTOS="$ABERTOS $RESSALVA_IDS"
     fi
     FALTAM=""
