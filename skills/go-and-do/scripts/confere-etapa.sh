@@ -325,6 +325,30 @@ if [ "$ETAPA" = "5" ]; then
       RES=$(jq -c --arg d "padrão de segredo no artefato/evidência: $(head -c 60 <<<"$VAZOU")…" \
         '. + [{id:"segredo_no_artefato", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
+    # ── F4 RLR · FM-01UAT · FJ-01UAT · FJ-02UAT: o que o `pass` conduzido tem de ter ──
+    # Um leitor só do NN-UAT.md (uat-fiscal.py) — dois parsers do mesmo arquivo é como o
+    # fiscal do 4.1 acabou dando veredito da iteração errada (FM-04GAT).
+    UATF=$(python3 "$GAD_SCRIPTS_DIR/uat-fiscal.py" "$UAT" "$PHASE_DIR" 2>/dev/null || echo '{}')
+    jq -e . >/dev/null 2>&1 <<<"$UATF" || UATF='{}'
+    n_sev=$(jq '(.pass_sem_evidencia//[])|length' <<<"$UATF")
+    n_slc=$(jq '(.logic_sem_comando//[])|length' <<<"$UATF")
+    n_ssd=$(jq '(.pass_sem_sondagem//[])|length' <<<"$UATF")
+    if [ "${n_sev:-0}" -gt 0 ]; then
+      RES=$(jq -c --arg d "AVISO: $n_sev cenário(s) conduzido(s) em pass sem arquivo de evidência (exceção declarável na nota: «ação sem saída»): $(jq -r '.pass_sem_evidencia|join(" · ")' <<<"$UATF" | cut -c1-300)" \
+        '. + [{id:"uat_pass_sem_evidencia", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+    fi
+    if [ "${n_slc:-0}" -gt 0 ]; then
+      RES=$(jq -c --arg d "AVISO: $n_slc cenário(s) type: logic em pass cuja evidência não tem nenhuma linha '\$ ' — pass por leitura de código: $(jq -r '.logic_sem_comando|join(" · ")' <<<"$UATF" | cut -c1-300)" \
+        '. + [{id:"uat_logic_sem_comando", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+    fi
+    if [ "${n_ssd:-0}" -gt 0 ]; then
+      # FALHA: devolve ao condutor com a lista. A saída de escape é declarada no próprio
+      # cenário — «🔍 não se aplica: <motivo>» —, não é o fiscal que dispensa.
+      RES=$(jq -c --arg d "$n_ssd cenário(s) conduzido(s) em pass sem linha 🔍 (sondagem adversarial) — devolva ao condutor; aceita «🔍 não se aplica: <motivo>»: $(jq -r '.pass_sem_sondagem|join(" · ")' <<<"$UATF" | cut -c1-300)" \
+        '. + [{id:"uat_pass_sem_sondagem", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+    EXTRAI=$(jq -c --argjson u "$UATF" '. + {uat_fiscal: ($u|del(.summary_novo))}' <<<"$EXTRAI")
+
     # 5.C: promoção dos marcadores — escritor único; modelo reporta, ESTE script promove
     if [ "$FALHAS" = 0 ] && [ "$DRY" = 0 ]; then
       grep -q '^pre_uat: generated' "$UAT" && sed -i 's/^pre_uat: generated/pre_uat: executed/' "$UAT"
@@ -335,9 +359,16 @@ if [ "$ETAPA" = "5" ]; then
       if [ "$REUAT" = 1 ] && ! grep -q '^pre_uat_reuat:' "$UAT"; then
         sed -i '/^pre_uat: executed/a pre_uat_reuat: done' "$UAT"
       fi
-      if [ "$n_issue" = 0 ] && [ "$n_pend" = 0 ] && [ "$n_pass" -gt 0 ]; then
-        grep -q '^status: testing' "$UAT" && sed -i 's/^status: testing/status: complete/' "$UAT"
-      fi
+      # FM-02UAT: o bloco `## Summary` é RECALCULADO e escrito por este script, o
+      # `status` é promovido e o bloco `## Current Test` (rascunho do condutor) some —
+      # TUDO ANTES do commit e do recibo. Medido na F4 RLR: no commit que o recibo do
+      # fiscal aponta o cabeçalho ainda dizia `testing` e o resumo dizia 33/20/13 com 29
+      # `pass` no corpo; o resumo só foi corrigido 6,5 min depois, já no encerramento.
+      # O próprio uat-fiscal.py promove o status (mesma condição de antes, mais
+      # `blocked`), é idempotente e não toca o arquivo se o conteúdo não muda.
+      ESCRITO=$(python3 "$GAD_SCRIPTS_DIR/uat-fiscal.py" "$UAT" "$PHASE_DIR" --escrever 2>/dev/null || echo '{}')
+      EXTRAI=$(jq -c --argjson e "$(jq -c '{escrito:(.escrito//[]), summary:(.summary_novo//"")}' <<<"${ESCRITO:-\{\}}" 2>/dev/null || echo '{}')" \
+        '. + {uat_reconciliado: $e}' <<<"$EXTRAI")
     fi
   fi
 fi
