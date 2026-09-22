@@ -687,6 +687,36 @@ printf 'sem cabecalho nenhum\n' > "$PD/99-REVIEW-FIX.iter4.md"
 JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
 eq "formato não reconhecido falha ALTO" "$(assert_de "$JR" review_formato)" "FALHA"
 
+# ══════════════════════════════════════════ F4 RLR — FJ-01ENC (etapa 6)
+# Os dois resumos da F4 RLR disseram que as rodadas «fecharam os avisos restantes» com
+# WR-09 aberto. O fiscal da etapa 6 agora cobra ID por ID, da MESMA lista que o 4.1 lê.
+echo "── F4 RLR: ID aberto do code review tem de aparecer no resumo (FJ-01ENC) ──"
+monta_res() { # <nome> <texto do resumo> → raiz do projeto de bancada
+  local root="$BASE/$1" pd
+  mkdir -p "$root/.planning/phases/96-bancada"; git init -q "$root" >/dev/null 2>&1
+  printf -- '---\ncurrent_phase: 96\nstatus: between_phases\n---\n' > "$root/.planning/STATE.md"
+  pd="$root/.planning/phases/96-bancada"
+  cat > "$pd/96-REVIEW-FIX.iter2.md" <<'MD'
+---
+iteration: 2
+status: all_fixed
+---
+## Fechados
+### WR-01 — consertado
+## Deixados ABERTOS e declarados
+- **WR-09** (processo) — fora deste conserto.
+MD
+  printf '%s\n' "$2" > "$pd/96-RESUMO-EXECUTIVO.md"
+  printf '%s' "$root"
+}
+J="$(confere6 "$(monta_res resumo_sem 'As rodadas fecharam os avisos restantes.')")"
+eq "resumo que não cita o ID aberto → FALHA" "$(assert_de "$J" resumo_sem_id_aberto)" "FALHA"
+casa "…e o assert nomeia o ID que falta" "$J" 'WR-09'
+J="$(confere6 "$(monta_res resumo_com 'Segue aberto: WR-09 (processo), sem conserto sem reescrever histórico.')")"
+eq "resumo que cita WR-09 → sem acusação" "$(assert_de "$J" resumo_sem_id_aberto)" "<ausente>"
+J="$(confere6 "$(monta_state s6semresumo between_phases)")"
+eq "fase sem resumo ainda escrito → assert calado" "$(assert_de "$J" resumo_sem_id_aberto)" "<ausente>"
+
 echo "--------------------------------------------------"
 echo "test-confere-etapa.sh: $OK ok / $FALHAS falha(s)"
 [ "$FALHAS" -eq 0 ]

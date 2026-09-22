@@ -127,6 +127,61 @@ PYEX
   exit 0
 fi
 
+# ── FJ-01ENC: radiografia dos gates ─────────────────────────────────────────
+# A F4 RLR fechou com WR-09 aberto e 16 Info abertos, e os DOIS resumos executivos
+# disseram que as rodadas «fecharam os avisos restantes» — o escritor narrou em prosa
+# sem abrir o 04-REVIEW*. Aqui os vereditos dos gates saem prontos, no bloco que o
+# escritor já é obrigado a copiar. Info vai como CONTAGEM (+ os IDs que o leitor
+# declarou abertos), nunca como lista narrada.
+# Leitores ÚNICOS: lib/review-maior.py (code review) · lib/riscos-aceitos.py (security) ·
+# uat-fiscal.py (placar do UAT). Nenhum segundo parser.
+LIBD="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
+radiografia_gates() { # <phase_dir> <NN>
+  local pd="$1" nn="$2" rv sec val uat
+  echo "-- radiografia dos gates (FJ-01ENC — cite ID por ID, não «todos fechados») --"
+  rv=$(python3 "$LIBD/lib/review-maior.py" "$pd" "$nn" 2>/dev/null) || rv=""
+  if [ -n "$rv" ] && printf '%s' "$rv" | jq -e '.arquivo' >/dev/null 2>&1; then
+    printf 'code_review_fonte: %s (iteração %s) · status: %s\n' \
+      "$(jq -r '.arquivo' <<<"$rv")" "$(jq -r '.iteracao // "?"' <<<"$rv")" "$(jq -r '.status // "?"' <<<"$rv")"
+    printf 'code_review_severidade: critical=%s warning=%s info=%s total=%s skipped=%s fixed=%s\n' \
+      "$(jq -r '.critical // "n/d"' <<<"$rv")" "$(jq -r '.warning // "n/d"' <<<"$rv")" \
+      "$(jq -r '.info // "n/d"' <<<"$rv")" "$(jq -r '.total // "n/d"' <<<"$rv")" \
+      "$(jq -r '.skipped // "n/d"' <<<"$rv")" "$(jq -r '.fixed // "n/d"' <<<"$rv")"
+    printf 'code_review_ids_abertos (%s): %s\n' \
+      "$(jq -r '(.abertos//[])|length' <<<"$rv")" \
+      "$(jq -r 'if ((.abertos//[])|length)==0 then "nenhum declarado aberto" else (.abertos|join(" ")) end' <<<"$rv")"
+    printf 'code_review_abertos_fonte: %s\n' "$(jq -r '(.abertos_fonte//[])|join(" · ")' <<<"$rv")"
+  else
+    echo "code_review_fonte: nenhum ${nn}-REVIEW*.md na pasta da fase"
+  fi
+  sec="$pd/$nn-SECURITY.md"
+  if [ -f "$sec" ]; then
+    printf 'security_status: %s · threats_open: %s\n' \
+      "$(grep -m1 '^status:' "$sec" | sed 's/^status: *//' || true)" \
+      "$(grep -m1 '^threats_open:' "$sec" | sed 's/^threats_open: *//' || true)"
+    local ra; ra=$(python3 "$LIBD/lib/riscos-aceitos.py" "$sec" 2>/dev/null) || ra='[]'
+    printf 'security_riscos_aceitos (%s): %s\n' "$(jq 'length' <<<"$ra" 2>/dev/null || echo 0)" \
+      "$(jq -r 'if length==0 then "nenhum" else map(.[0:60])|join(" · ") end' <<<"$ra" 2>/dev/null || echo '?')"
+  else
+    echo "security_status: sem $nn-SECURITY.md"
+  fi
+  val="$pd/$nn-VALIDATION.md"
+  if [ -f "$val" ]; then
+    printf 'validacao: status=%s nyquist_compliant=%s\n' \
+      "$(grep -m1 '^status:' "$val" | sed 's/^status: *//' || true)" \
+      "$(grep -m1 '^nyquist_compliant:' "$val" | sed 's/^nyquist_compliant: *//' || echo 'n/d')"
+  else
+    echo "validacao: sem $nn-VALIDATION.md"
+  fi
+  uat="$pd/$nn-UAT.md"
+  if [ -f "$uat" ]; then
+    printf 'uat_placar: %s\n' \
+      "$(python3 "$LIBD/uat-fiscal.py" "$uat" "$pd" 2>/dev/null | jq -r '.summary_novo // "n/d"' 2>/dev/null || echo 'n/d')"
+  else
+    echo "uat_placar: sem $nn-UAT.md"
+  fi
+}
+
 if [ "$3" != "--conferir" ]; then
   echo "== numeros-da-fase (fonte estrutural — copie DAQUI, nunca de memória) =="
   echo "planos_total (PLAN.md no disco): $n_plans"
@@ -136,6 +191,7 @@ if [ "$3" != "--conferir" ]; then
   echo "ondas_distintas (frontmatter wave): $n_waves — valores: ${waves_linha:-nenhum}"
   echo "summaries_por_dia (mtime): ${por_dia:-nenhum} — 'desta rodada' = só os do(s) dia(s) da rodada"
   echo "testes: NÃO derivável daqui — cite contagem de testes SÓ com fonte nomeada (arquivo/log + ponteiro)"
+  radiografia_gates "$dir" "$nn"
   exit 0
 fi
 

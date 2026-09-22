@@ -28,6 +28,54 @@ casa "planos_total = 3"         "$OUT" 'planos_total \(PLAN.md no disco\): 3'
 casa "planos_com_summary = 1"   "$OUT" 'planos_com_summary: 1'
 casa "ondas_distintas = 2"      "$OUT" 'ondas_distintas \(frontmatter wave\): 2'
 
+echo "── FJ-01ENC: radiografia dos gates ──"
+# sem artefato nenhum: a radiografia diz o que FALTA, nunca inventa «nenhum achado»
+casa "sem REVIEW → nomeia a ausência"  "$OUT" 'code_review_fonte: nenhum 95-REVIEW'
+cat > "$PD/95-REVIEW.md" <<'EOF'
+---
+findings:
+  critical: 0
+  warning: 2
+  info: 3
+status: issues_found
+---
+## Warnings
+### WR-01: algo
+### WR-02: outra coisa
+EOF
+cat > "$PD/95-REVIEW-FIX.iter3.md" <<'EOF'
+---
+iteration: 3
+fixed: 1
+skipped: 2
+status: all_fixed
+---
+## Fechados
+### WR-01 — consertado
+## Deixados ABERTOS e declarados
+- **WR-02** (processo) — fora deste conserto.
+- **IN-07** — informativo, segue para a próxima fase.
+EOF
+cat > "$PD/95-SECURITY.md" <<'EOF'
+---
+status: verified
+threats_open: 1
+---
+## Accepted Risks Log
+| Risk | Threat | Justificativa |
+|---|---|---|
+| R-95-A | T-95-A | aceito em tempo de plano |
+EOF
+printf -- '---\nstatus: validated\nnyquist_compliant: true\n---\n' > "$PD/95-VALIDATION.md"
+OUT="$(bash "$S" "$PD" 95 2>&1)"
+casa "lê o arquivo de MAIOR iteração, não o 95-REVIEW.md" "$OUT" 'code_review_fonte: 95-REVIEW-FIX.iter3.md \(iteração 3\)'
+casa "IDs abertos saem nomeados"                          "$OUT" 'code_review_ids_abertos \(2\): WR-02 IN-07'
+casa "…e declara de onde saíram"                          "$OUT" 'abertos_fonte: Deixados ABERTOS'
+casa "ameaças abertas do SECURITY"                        "$OUT" 'threats_open: 1'
+casa "risco aceito pela tabela (não pelo cabeçalho)"       "$OUT" 'security_riscos_aceitos \(1\): R-95-A'
+casa "veredito da validação"                              "$OUT" 'validacao: status=validated'
+casa "sem UAT → nomeia a ausência"                        "$OUT" 'uat_placar: sem 95-UAT.md'
+
 echo "── --conferir: N planos/ondas ──"
 printf '# R\n\nForam 3 planos em 2 ondas.\n' > "$BASE/bom.md"
 bash "$S" "$PD" 95 --conferir "$BASE/bom.md" >/dev/null 2>&1

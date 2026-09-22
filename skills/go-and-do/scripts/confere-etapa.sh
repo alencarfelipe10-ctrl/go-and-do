@@ -1411,6 +1411,30 @@ if [ "$ETAPA" = "6" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; the
   esac
 fi
 
+# ── FJ-01ENC (fiscal): todo ID aberto da radiografia aparece no resumo ───────
+# Os DOIS resumos da F4 RLR narraram as rodadas em prosa e disseram que elas «fecharam os
+# avisos restantes»; o code review fechou com WR-09 aberto e 16 Info. A régua do resumo
+# manda citar o ID de cada achado ABERTO — aqui ela vira medição. A lista sai do MESMO
+# leitor do fiscal do 4.1 (lib/review-maior.py): não há segundo parser.
+if [ "$ETAPA" = "6" ]; then
+  RSM="$PHASE_DIR/$NN-RESUMO-EXECUTIVO.md"
+  if [ -f "$RSM" ]; then
+    RVE=$(python3 "$GAD_SCRIPTS_DIR/lib/review-maior.py" "$PHASE_DIR" "$NN" 2>/dev/null) || RVE=""
+    jq -e . >/dev/null 2>&1 <<<"$RVE" || RVE='{}'
+    ABERTOS=$( { jq -r '(.abertos//[])[]' <<<"$RVE" 2>/dev/null || true; } )
+    FALTAM=""
+    for id in $ABERTOS; do
+      grep -qF "$id" "$RSM" || FALTAM="$FALTAM $id"
+    done
+    if [ -n "$FALTAM" ]; then
+      n_falta=$( { printf '%s\n' $FALTAM | grep -c . || true; } )
+      RES=$(jq -c --arg d "$n_falta ID(s) aberto(s) do $(jq -r '.arquivo // "code review"' <<<"$RVE") ausente(s) do resumo executivo:$FALTAM — a régua manda citar cada achado ABERTO (número ruim é o que este documento existe para mostrar); o bloco do numeros-da-fase.sh já traz a lista pronta" \
+        '. + [{id:"resumo_sem_id_aberto", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      EXTRAI=$(jq -c --arg f "${FALTAM# }" '. + {resumo_ids_abertos_ausentes: $f}' <<<"$EXTRAI")
+    fi
+  fi
+fi
+
 # ── FM-04GAT: o 4.1 lê as contagens do arquivo de MAIOR iteração ─────────────
 # A F4 RLR tinha 04-REVIEW.md, .iter2, .iter3, .iter4, 04-REVIEW-FIX.md e
 # 04-REVIEW-FIX.iter4.md — o fiscal lia o `04-REVIEW.md` (a 1ª iteração) e dava o
