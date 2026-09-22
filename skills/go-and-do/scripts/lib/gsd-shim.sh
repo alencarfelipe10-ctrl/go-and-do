@@ -157,15 +157,26 @@ gad_runlog() {
 # rodar DENTRO de uma rodada ativa (descoberta pelo ponteiro PC-3; sem rodada = no-op).
 # Uso típico: trap 'gad_autoregistro "<nome>.sh" "$?"' EXIT
 gad_autoregistro() { # <nome> <exit> [resumo]
-  local root p nn pd rl et
+  local root p nn pd rl et sess8
   root="$(gad_project_root)" || return 0
   p="$root/.planning/.gad-rodada-ativa.json"
   [ -f "$p" ] || return 0
   nn=$(jq -r '.nn // empty' "$p" 2>/dev/null); pd=$(jq -r '.phase_dir // empty' "$p" 2>/dev/null)
   rl=$(jq -r '.runlog // empty' "$p" 2>/dev/null)
   [ -n "$nn" ] && [ -n "$pd" ] || return 0
-  et=$(grep '"evento":"checkpoint"' "$rl" 2>/dev/null | tail -n1 \
-       | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p'); : "${et:=0 abertura}"
+  # Mesma causa do FM-04ENC (gad-lifecycle.sh, bloco B2): o último checkpoint do ARQUIVO
+  # pode ser de uma sessão já encerrada — filtra pelo checkpoint DESTA sessão (mesmo corte
+  # de 8 caracteres que o run-log.sh grava em "sessao"). Sem CLAUDE_CODE_SESSION_ID (script
+  # rodado fora do CC), cai no comportamento antigo — não há sessão para filtrar por.
+  sess8="${CLAUDE_CODE_SESSION_ID:0:8}"
+  if [ -n "$sess8" ]; then
+    et=$(grep "\"sessao\":\"$sess8\"" "$rl" 2>/dev/null | grep '"evento":"checkpoint"' | tail -n1 \
+         | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
+  else
+    et=$(grep '"evento":"checkpoint"' "$rl" 2>/dev/null | tail -n1 \
+         | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
+  fi
+  : "${et:=0 abertura}"
   gad_runlog "$pd" "$nn" script "$et" \
     --kv script="$1" --kv exit="${2:-0}" ${3:+--kv resumo="$3"} >/dev/null
   return 0
