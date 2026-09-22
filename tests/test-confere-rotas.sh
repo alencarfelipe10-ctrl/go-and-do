@@ -86,6 +86,22 @@ printf '%s' "$saida" | grep -q "aviso: c3 sem .rota-verificacao-c3.json" \
 [ "$rc" = 0 ] && ok "por ora não derruba (o intent.md ainda não grava o arquivo)" \
   || erro "ausência já está derrubando" "$saida"
 
+echo "== FJ-F4RLR-03INT + FM-F4RLR-02INT — rota fixa child sem brutos_pre_rota"
+D="$TMP/h"; monta_ciclo "$TMP/h" 3 5 sim
+printf '{"run_id":"r-h"}\n' > "$D/.rota-verificacao-c3.json"  # sem mode nenhum: continua SEM-ROTA
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "SEM-ROTA c3" && [ "$rc" = 1 ] \
+  && ok "sem mode nenhum: ainda SEM-ROTA (regra não afrouxou geral)" || erro "sem mode deveria continuar falhando" "$saida"
+printf '{"run_id":"r-h2","mode":"child"}\n' > "$D/.rota-verificacao-c3.json"  # child, SEM brutos_pre_rota
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "rota ok c3 (mode=child, rota fixa" && [ "$rc" = 0 ] \
+  && ok "mode=child sem brutos_pre_rota → rota fixa válida, não SEM-ROTA" || erro "child fixo devia passar" "$saida"
+printf '{"run_id":"r-h3","mode":"inline"}\n' > "$D/.rota-verificacao-c3.json"  # inline SEM brutos_pre_rota continua exigindo
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "SEM-ROTA c3" && [ "$rc" = 1 ] \
+  && ok "mode=inline sem brutos_pre_rota continua SEM-ROTA (só a rota fixa child ganhou a isenção)" \
+  || erro "inline sem pre devia continuar falhando" "$saida"
+
 echo "== regressão — as checagens antigas continuam valendo"
 D="$TMP/g"; mkdir -p "$D"; : > "$D/.done-c1-codex"
 saida=$("$SCRIPT" "$D" 2>&1); rc=$?
