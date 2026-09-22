@@ -1471,7 +1471,13 @@ fi
 case "${RUNLOG_ETAPA%% *}" in
   0|1|1.5|2|2.5|3|4.1|4.1b) ;;
   *)
+    # FM-02GAT: `.fence-4.1b.ok` (re-review, workflow.md §4.1) não herda o recibo do
+    # 4.1 — é o mais recente dos dois que vale (o 4.1b substitui o 4.1 quando existe).
     F41="$PHASE_DIR/.fence-4.1.ok"
+    F41B="$PHASE_DIR/.fence-4.1b.ok"
+    if [ -f "$F41B" ] && { [ ! -f "$F41" ] || [ "$F41B" -nt "$F41" ]; }; then
+      F41="$F41B"
+    fi
     if [ -f "$F41" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
       H41=$(jq -r '.head // ""' "$F41" 2>/dev/null || echo "")
       if [ -n "$H41" ] && git -C "$ROOT" cat-file -e "$H41^{commit}" 2>/dev/null; then
