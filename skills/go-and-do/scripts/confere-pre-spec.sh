@@ -526,8 +526,17 @@ RE_CAMEL     = re.compile(r'\b[A-Z][a-z0-9]+(?:[A-Z][a-z0-9]+)+\b')
 RE_NUM       = re.compile(r'(?<![\w.])\d+(?:[.,]\d+)*%?(?![\w])')
 LITERAIS     = ["None", "null", "NULL", "default", "True", "False", "nil", "undefined"]
 RE_LITERAL   = re.compile(r'\b(?:' + "|".join(LITERAIS) + r')\b')
+# FJ-F4RLR-07INT: número usado como PONTEIRO DE LINHA não é extensão de conteúdo — a
+# maioria dos avisos que atravessaram os 4 ciclos sem tratamento eram isso (§N, linhas
+# X-Y; arquivo.py:120; "linha 42"), não número novo no texto. Ignorado ANTES do token-level.
+RE_PONTEIRO_LINHA = re.compile(
+    r'§\s*\d+(?:[.,]\d+)*(?:\s*,\s*linhas?\s+\d+\s*[-–]\s*\d+)?'
+    r'|\blinhas?\s+\d+\s*(?:[-–]\s*\d+)?\b'
+    r'|\b[\w./-]+\.[A-Za-z0-9_]+:\d+(?:[-–]\d+)?\b'
+)
 
 def tokens(texto):
+    texto = RE_PONTEIRO_LINHA.sub(" ", texto)
     t = RE_IDS_DOC.sub(" ", texto)
     achados = []
     for rx in (RE_SNAKE, RE_CAMEL, RE_NUM, RE_LITERAL):
