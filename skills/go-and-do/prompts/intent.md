@@ -67,7 +67,10 @@ Regras do despacho, iguais para todos:
   **Uma rodada, um marcador.** A releitura grava `.releitura-<rodada>.done`, com o rótulo da rodada
   (`c0`, `c0b`, `c0c`, `c1`, `c1b`, …), nunca só o número do ciclo — passe o rótulo no despacho, em
   `rodada: <rótulo>`. Marcador de rodada anterior nunca satisfaz a espera da seguinte, e o `.json`
-  (`.releitura-c<C>.json`) continua com o nome fixo do ciclo, sobrescrito in-place. Para
+  leva o nome da própria rodada (`.releitura-<rodada>.json`, igual ao `.done`): a rodada
+  `c<C>b` grava `.releitura-c<C>b.json`, próprio, sem sobrescrever o `.releitura-c<C>.json`
+  da primeira rodada — o briefing do ciclo seguinte lê o `b` quando existir, senão o
+  normal. Para
   redespacho de uma MESMA rodada (o filho morreu, você relança o `c0b`), apague o marcador antes do
   `Agent` (`rm -f <marcador>`). F24.5: 5 rodadas de releitura no c0 porque o `.done` era um só.
 - **NUNCA passe `model` nem `effort` no `Agent` de um `gad-*`** (E7): a def pina os dois e
@@ -596,7 +599,7 @@ que o registro foi feito de memória, no fim, e não no ato.
      `confere-reconciliacao.sh "<phase_dir>" <C>` e passe as linhas `D-NN-DESATUALIZADA
      c<C> …` (informativas; uma por decisão, com o id) — a releitura as trata como
      `omissoes_novas`. <!-- plano 2, P-06 (C3) — fiacao-P2-P06-releitura.md -->
-   Ele grava `.intent/.releitura-c<C>.json` (objeto inteiro, `v: 2`, com o veredito) +
+   Ele grava `.intent/.releitura-<rodada>.json` (objeto inteiro, `v: 2`, com o veredito) +
    `.releitura-<rodada>.done` — encerre o turno; a notificação te acorda; então leia o `.json`.
    Devolveu item (`contradiz`, `prescreve_mecanismo`,
    `omissoes_novas`, `cardinalidade`, `unicidade` ou par em `consistencia`) → corrija **no

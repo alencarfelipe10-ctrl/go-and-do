@@ -101,6 +101,19 @@ def carrega(p, rotulo):
     except Exception as e:
         die("%s ilegível (%s): %s" % (rotulo, p, e))
 
+
+def caminho_releitura(IN, ciclo):
+    """FM-F4RLR-10INT: a rodada `c<ciclo>b` (correção pós-releitura) grava um `.json`
+    PRÓPRIO — `.releitura-c<ciclo>b.json` —, sem sobrescrever o da primeira rodada
+    (`.releitura-c<ciclo>.json`). O briefing do ciclo seguinte lê o mais recente do
+    ciclo: o `b` quando existir, senão o normal. Rodadas além de `b` (`c`, `d`, …)
+    não têm arquivo próprio ainda — ficam para quando uma fase real precisar; o `b` é
+    o caso medido (F4-RLR/F24.5)."""
+    b = os.path.join(IN, ".releitura-c%sb.json" % ciclo)
+    if os.path.exists(b):
+        return b
+    return os.path.join(IN, ".releitura-c%s.json" % ciclo)
+
 def exige_chaves(d, chaves, rotulo):
     if not isinstance(d, dict):
         die("%s não é um objeto JSON" % rotulo)
@@ -335,7 +348,9 @@ if str(C) == "1":
 
         # 45(h): o `.done` passou a carregar o rótulo da rodada (`c0`, `c0b`, `c0c`…). O gate
         # exige que EXISTA um marcador da família do ciclo 0; qual rodada fechou por último é
-        # decidido pelo `.releitura-c0.json`, que continua com nome fixo.
+        # decidido pelo `.ciclo0.json`.`releitura` que o coordenador copiou do `.json` da
+        # rodada vigente (FM-F4RLR-10INT: `.releitura-c0.json` na 1ª rodada,
+        # `.releitura-c0b.json` na correção pós-releitura — ver `caminho_releitura`).
         import glob as _glob
         if not _glob.glob(os.path.join(IN, ".releitura-c0*.done")):
             die("`.intent/.releitura-c0*.done` ausente (R1: a releitura do ciclo 0 não fechou)")
@@ -372,9 +387,9 @@ else:
                        if isinstance(c, dict) and not str(c.get("hash", "")).strip()]
         valida_hashes(aplicado, sem_hash_ap,
                       "`.correcoes-c%d.aplicado`.correcoes" % prev, info["avisos"])
-    rel = carrega(os.path.join(IN, ".releitura-c%d.json" % prev),
-                  "`.intent/.releitura-c%d.json` (R1)" % prev)
-    paths = valida_releitura(rel, aplicado, tem_vaz, "`.releitura-c%d.json`" % prev,
+    rel_path = caminho_releitura(IN, prev)
+    rel = carrega(rel_path, "`%s` (R1)" % os.path.basename(rel_path))
+    paths = valida_releitura(rel, aplicado, tem_vaz, "`%s`" % os.path.basename(rel_path),
                              "c%d" % prev)
     info["ciclo_anterior"] = prev
     info["correcoes_vazio"] = tem_vaz
