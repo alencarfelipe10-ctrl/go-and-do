@@ -171,6 +171,10 @@ As três regras do probe:
 3. **Probe que revela falha objetiva (assert fail / erro no console / 4xx-5xx) vira balde 2** —
    `issue` + gap-YAML, a mesma trilha de qualquer falha. O probe pode surfar bug novo; é para
    isso que ele existe.
+4. **Sem 🔍 não fecha em `pass`** — o fiscal da etapa 5 cobra, por cenário conduzido, ≥1 linha
+   `🔍`. A única escotilha é declarada no próprio cenário, nunca dispensada por fora: cenário de
+   pura limpeza/setup que não tem o que sondar escreve **«🔍 não se aplica: <motivo>»** — a linha
+   existe, com o motivo, em vez de faltar.
 
 > **Isto não duplica os gates da Etapa 4.** Code review, security e Nyquist são gates
 > *estáticos* — leem código. O probe é ataque adversarial *em runtime, na superfície já
@@ -199,6 +203,12 @@ Cada tipo de superfície tem um lugar de observação e uma prova objetiva próp
 **Blindagem RTK nos comandos de prova:** com o hook RTK instalado, comandos bash de
 prova rodam via `rtk proxy <cmd>` — saída CRUA (o filtro do RTK capou um `| wc -l` e
 derrubou um UAT inteiro; prova truncada = veredito errado).
+
+**Comando barrado pelo guarda é comando que NÃO rodou.** Se um comando de prova (mesmo em
+pipeline com vários pedaços — esperar, listar, ler logs) for negado pelo guarda de segurança,
+**refaça cada pedaço dele** de um jeito que passe, ou **não cite** aquele pedaço na nota do
+cenário como se tivesse rodado. Exemplo de prova blindada: `rtk proxy docker compose logs
+<serviço>` no lugar do `docker compose logs` cru que o guarda barrar.
 
 **Regra-âncora: função interna não é superfície.** Se o cenário aponta para uma função, siga até
 o CLI / a requisição / o render que a *alcança* — é lá que se verifica. Se a fase não tem nenhuma
@@ -277,6 +287,12 @@ e suba, dirija e derrube a stack só pelos comandos que ele lista — no lugar d
 aplicação inteira com segredos efêmeros e dublês das APIs externas, sem tocar em credencial
 real. O que o próprio arquivo declara que a superfície não prova é candidato a observação
 pós-ship, não a `pass`.
+
+Se a superfície usa um **dublê** (stub/mock de uma API externa) para gerar a evidência do
+cenário, salve a **lista de chamadas que o dublê recebeu** no arquivo de evidência do cenário
+**antes de qualquer reset** da stack — reset limpa o estado do dublê, e a chamada que provou o
+cenário some com ele. Exemplo: `browser_extract`/`curl` sobre o endpoint de introspecção do
+dublê, gravado em disco, só então `stack.sh down`/reset.
 
 </project_surface>
 
@@ -377,7 +393,10 @@ conhecido do gsd-browser) e referencie na linha do cenário no `NN-UAT.md`
 (`evidencia: uat-evidencia/cenario-<n>.pdf`). O porquê: sem o arquivo, a prova vive só na
 sua janela — que é descartável; numa fase real a pasta `uat-evidencia/` terminou VAZIA e o
 humano do verify-work ficou sem ver o que o robô viu. Falhou ao salvar → registre numa linha
-e siga (a verificação é o que importa; a evidência não vira gate).
+e siga (a verificação é o que importa; a evidência não vira gate). O fiscal da etapa 5 avisa
+quando um cenário `pass` não tem nenhum arquivo de evidência; a única exceção declarável é o
+cenário que não produz saída nenhuma para salvar (ex.: limpeza, teardown) — nesses, escreva na
+nota do cenário a frase **«ação sem saída»** em vez de deixar o campo vazio.
 
 **Frontmatter — NÃO toque nos marcadores de estado (regra do escritor único, 5.C):**
 `pre_uat: generated→executed` e `status: testing→complete` são promovidos pelo
@@ -404,5 +423,10 @@ balde_4_descricoes: [<1 linha por item subjetivo — vira o aviso "shipei assumi
 incidentes: [<OBRIGATÓRIO — todo desvio entre o anunciado e o executado; sem desvio: nenhum>]
 sinos: [<ex.: "dev server não subiu — cenários de UI em balde 3"; ausente se vazio>]
 ```
+
+**Erro no log da aplicação é do cenário que estava rodando.** Todo erro/traceback que aparecer
+no log do worker/aplicação durante a condução entra na **nota daquele cenário específico** —
+nunca só no resumo geral —, com a causa **provada** (reproduzida) ou marcada explicitamente
+«causa não provada» quando você não conseguiu confirmar de onde veio.
 
 </return_contract>
