@@ -351,7 +351,11 @@ if [ "${1:-}" = "--tabela" ]; then
             [ -n "$FROOT_ENG" ] && [ "${c#/}" = "$c" ] && cp="$FROOT_ENG/$c"
             [ -e "$cp" ] && { ACHOU_ENG=1; break; }
           done <<<"$CITADOS_ENG"
-          [ "$ACHOU_ENG" = 0 ] && EXTRAS+=("sem_engajamento: ${LANE} (caminhos citados não existem no repo)")
+          # forma igual a `sem_achado_novo: <lane>` — grava-convergence.sh (lane B, fora
+          # daqui) já sabe extrair o nome da lane com `sed 's/^sem_engajamento: //'`; o
+          # motivo, livre-texto, entra numa 2ª linha para não quebrar esse parser.
+          [ "$ACHOU_ENG" = 0 ] && EXTRAS+=("sem_engajamento: ${LANE}
+# motivo: caminhos citados por ${LANE} não existem no repo")
         fi
       fi
     fi

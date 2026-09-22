@@ -105,6 +105,8 @@ eq "conferir não cria POS-SHIP" "$([ -f "$PD3/06-POS-SHIP.md" ] && echo sim || 
 OUT=$(python3 "$S" conferir "$PD" 04 "$R"); RC=$?
 eq "conferir em fase já sem malformado → exit 0" "$RC" 0
 eq "conferir malformados vazio" "$(jq -c .malformados <<<"$OUT")" "[]"
+OUT=$(python3 "$S" --conferir "$PD" 04 "$R"); RC=$?
+eq "alias --conferir (contrato literal do regras-comuns) funciona igual" "$RC" 0
 BEFORE=$(md5sum "$PD/04-UAT.md")
 python3 "$S" conferir "$PD" 04 "$R" >/dev/null
 AFTER=$(md5sum "$PD/04-UAT.md")

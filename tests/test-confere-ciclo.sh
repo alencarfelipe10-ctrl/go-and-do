@@ -192,8 +192,11 @@ echo "== FM-F4RLR-02CONV — zero achados + caminhos citados que não existem no
 printf 'Não achei nada digno de nota.\nVi que src/nao-existe-de-jeito-nenhum.py:12 já resolve isso.\n' \
   > "$TMP/24.3-parecer-fantasma-c1.md"
 "$SCRIPT" --tabela "$TMP/24.3-parecer-fantasma-c1.md" > "$TMP/t18.txt" 2>/dev/null
-grep -qx 'sem_engajamento: fantasma (caminhos citados não existem no repo)' "$TMP/t18.txt" \
-  && ok "caminho citado inexistente → sem_engajamento" || erro "sem_engajamento ausente" "$(cat "$TMP/t18.txt")"
+grep -qx 'sem_engajamento: fantasma' "$TMP/t18.txt" \
+  && ok "caminho citado inexistente → sem_engajamento: <lane> (forma igual a sem_achado_novo)" \
+  || erro "sem_engajamento ausente" "$(cat "$TMP/t18.txt")"
+grep -q '^# motivo:.*fantasma' "$TMP/t18.txt" \
+  && ok "…e o motivo vem numa 2ª linha, sem quebrar o parser sed da 1ª" || erro "motivo ausente" "$(cat "$TMP/t18.txt")"
 printf 'Não achei nada digno de nota, mas confirmei em %s:1.\n' "$AQUI/test-confere-ciclo.sh" \
   > "$TMP/24.3-parecer-real-c1.md"
 "$SCRIPT" --tabela "$TMP/24.3-parecer-real-c1.md" > "$TMP/t19.txt" 2>/dev/null

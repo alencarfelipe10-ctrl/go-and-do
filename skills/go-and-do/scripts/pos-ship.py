@@ -290,7 +290,7 @@ def main(argv: list[str]) -> int:
     try:
         if argv[1] == "move" and len(argv) == 5:
             return cmd_move(Path(argv[2]), argv[3], Path(argv[4]))
-        if argv[1] == "conferir" and len(argv) == 5:
+        if argv[1] in ("conferir", "--conferir") and len(argv) == 5:
             return cmd_conferir(Path(argv[2]), argv[3], Path(argv[4]))
         if argv[1] == "lista" and len(argv) == 4:
             return cmd_lista(Path(argv[2]), argv[3])
