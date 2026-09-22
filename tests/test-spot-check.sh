@@ -82,5 +82,17 @@ else
   erro "permalink https ignorado" "$saida"
 fi
 
+# --- 6. FM-F4RLR-12INT: sem root explícito, resolve pela RAIZ DO REPO, não pelo cwd ---
+REPO="$TMP/repo-fake"; mkdir -p "$REPO/sub/mais-fundo"
+git -C "$REPO" init -q
+cp "$FIX/x.py" "$REPO/x.py"
+printf 'Ver x.py:5 para o detalhe.\n' > "$REPO/sub/doc.md"
+saida=$(cd "$REPO/sub/mais-fundo" && "$SCRIPT" "../doc.md")
+if ! echo "$saida" | grep -q '^MISSING-FILE'; then
+  ok "sem root: resolve x.py pela raiz do repo, mesmo chamado de subpasta funda"
+else
+  erro "sem root não resolveu pela raiz do repo" "$saida"
+fi
+
 echo "test-spot-check.sh: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

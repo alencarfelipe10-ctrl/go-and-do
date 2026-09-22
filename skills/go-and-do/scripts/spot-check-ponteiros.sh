@@ -30,7 +30,19 @@ set -u
 DOC="${1:?uso: spot-check-ponteiros.sh <arquivo.md> [root ...]}"
 shift
 ROOTS=("$@")
-[ ${#ROOTS[@]} -eq 0 ] && ROOTS=("$(pwd)")
+# FM-F4RLR-12INT: sem root explícito, resolver a partir da RAIZ DO REPO (git
+# rev-parse --show-toplevel a partir do próprio documento), não do cwd de quem chamou —
+# o cwd de um agente varia (5 agentes perderam turno com MISSING-FILE falso por isso).
+# cwd continua no fim da lista como fallback (compat com documento fora de repo git).
+if [ ${#ROOTS[@]} -eq 0 ]; then
+  GR="$(cd "$(dirname -- "$DOC")" && git rev-parse --show-toplevel 2>/dev/null || true)"
+  PWD_ATUAL="$(pwd)"
+  if [ -n "$GR" ] && [ "$GR" != "$PWD_ATUAL" ]; then
+    ROOTS=("$GR" "$PWD_ATUAL")
+  else
+    ROOTS=("${GR:-$PWD_ATUAL}")
+  fi
+fi
 
 [ -f "$DOC" ] || { echo "ERRO: arquivo não encontrado: $DOC" >&2; exit 2; }
 for r in "${ROOTS[@]}"; do
