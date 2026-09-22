@@ -646,6 +646,29 @@ eq "atestado de OUTRA etapa fora de commit → FALHA dura" \
    "$(assert_de "$J2" evidencia_fora_do_git)" "FALHA"
 rm -f "$PD/.fence-1.ok"
 
+# — FM-01GAT: recibo do 4.1 vencido por commit de CÓDIGO posterior ao head aprovado
+IFS='|' read -r R PD <<<"$(monta recibo 99)"
+gitq() { git -C "$R" -c user.name=t -c user.email=t@t.io -c commit.gpgsign=false "$@" >/dev/null 2>&1; }
+mkdir -p "$R/src"; echo v1 > "$R/src/fluxo.py"; gitq add -A; gitq commit -qm base
+H=$(git -C "$R" rev-parse HEAD)
+printf '{"v":1,"etapa":"4.1","fase":"99","head":"%s"}\n' "$H" > "$PD/.fence-4.1.ok"
+J="$(bash "$C" 4-secure --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "recibo do 4.1 com o head atual → não reprova" "$(assert_de "$J" recibo_4_1_vencido)" "<ausente>"
+echo v2 > "$R/src/fluxo.py"; gitq add -A; gitq commit -qm "fix(WR-14): conserto depois do gate"
+J="$(bash "$C" 4-secure --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "commit de código depois do recibo → FALHA (o gate reabre)" \
+   "$(assert_de "$J" recibo_4_1_vencido)" "FALHA"
+casa "a falha nomeia o novo fiscal + novo end + novo recibo" "$J" 'novo fiscal'
+# artefato da rodada NÃO vence o recibo: recibo vencido é código que mudou
+gitq checkout -- . ; echo v2 > "$R/src/fluxo.py"; gitq add -A; gitq commit -qm x
+H2=$(git -C "$R" rev-parse HEAD)
+printf '{"v":1,"etapa":"4.1","fase":"99","head":"%s"}\n' "$H2" > "$PD/.fence-4.1.ok"
+echo nota > "$PD/99-NOTA.md"; gitq add -A; gitq commit -qm "docs: artefato da rodada"
+J="$(bash "$C" 4-secure --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "commit só em .planning/ não vence o recibo" "$(assert_de "$J" recibo_4_1_vencido)" "<ausente>"
+eq "o 4.1 não julga o próprio recibo" \
+   "$(assert_de "$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)" recibo_4_1_vencido)" "<ausente>"
+
 # — FM-04GAT: o 4.1 lê o arquivo de MAIOR iteração e reprova all_fixed com skipped
 IFS='|' read -r R PD <<<"$(monta review 99)"
 printf 'status: issues_found\ncritical: 2\nskipped: 0\n' > "$PD/99-REVIEW.md"

@@ -866,8 +866,19 @@ for w, ids in waves.items():
                                capture_output=True, text=True, timeout=20)
             for f in s.stdout.splitlines():
                 f = f.strip()
-                if f and not f.startswith(".planning/") and not f.endswith("-SUMMARY.md"):
-                    arqs.add(f)
+                # FM-11EXE: a isenção era larga demais («todo .planning/, todo
+                # *-SUMMARY.md») e escondia colisão real entre dois planos da mesma onda
+                # em artefato de planejamento. Agora ignora SÓ o que o modo worktree do
+                # GSD manda todo plano tocar — o REQUIREMENTS.md — e o SUMMARY do
+                # PRÓPRIO plano. O SUMMARY de OUTRO plano volta a contar.
+                if not f:
+                    continue
+                if f.endswith("REQUIREMENTS.md") or f.endswith("/STATE.md") or f.endswith("state.json"):
+                    continue
+                base = f.rsplit("/", 1)[-1]
+                if base.endswith("-SUMMARY.md") and base.startswith(pid):
+                    continue
+                arqs.add(f)
         tocados[pid] = arqs
 out = []
 for w, ids in waves.items():
@@ -1347,6 +1358,36 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
       '. + {pasta_suja: {total:$n, evidencia_dura:($du|ltrimstr(" ")|rtrimstr(" "))}}' <<<"$EXTRAI")
   fi
 fi
+
+# ── FM-01GAT: recibo do 4.1 vencido por commit de código posterior ───────────
+# Um recibo fiscal existe para dizer «o que foi aprovado é ISTO». Medido na F4 RLR: o
+# `.fence-4.1.ok` apontava para o commit das 20:40 e, das 21:19 às 21:22, o fixer
+# commitou WR-14, IN-11 e IN-10 em `fluxo.py`, `posse.py` e `tasks.py` — sem novo `end`,
+# sem novo recibo e sem revisor. O gate reabre: novo fiscal → novo `end` → novo recibo
+# (e, para warning/critical, re-review estreitado pelo mesmo mecanismo do 4.1b).
+# Vale das etapas POSTERIORES ao 4.1 (4.1b/4.4/4.5, 5 e 6) — a própria 4.1 escreve o
+# recibo adiante, neste mesmo script.
+# O rótulo do run-log é a chave (o argumento `4-code-review` vira `4.1 code-review`).
+case "${RUNLOG_ETAPA%% *}" in
+  0|1|1.5|2|2.5|3|4.1|4.1b) ;;
+  *)
+    F41="$PHASE_DIR/.fence-4.1.ok"
+    if [ -f "$F41" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+      H41=$(jq -r '.head // ""' "$F41" 2>/dev/null || echo "")
+      if [ -n "$H41" ] && git -C "$ROOT" cat-file -e "$H41^{commit}" 2>/dev/null; then
+        # `:!.planning` tira os artefatos da rodada: recibo vencido é CÓDIGO que mudou.
+        DEPOIS=$( { git -C "$ROOT" log --format='%h %s' "$H41..HEAD" -- . ':!.planning' 2>/dev/null \
+                    | head -5; } || true )
+        if [ -n "$DEPOIS" ]; then
+          n_dep=$( { printf '%s\n' "$DEPOIS" | grep -c . || true; } )
+          RES=$(jq -c --arg d "recibo do 4.1 vencido: $n_dep commit(s) de código depois do head aprovado ($H41) — o gate reabre (novo fiscal 4.1 → novo end → novo recibo; warning/critical pedem re-review estreitado, mecanismo do 4.1b): $(printf '%s · ' $DEPOIS | cut -c1-300)" \
+            '. + [{id:"recibo_4_1_vencido", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+          EXTRAI=$(jq -c --arg h "$H41" --argjson n "$n_dep" \
+            '. + {recibo_4_1: {head:$h, commits_depois:$n}}' <<<"$EXTRAI")
+        fi
+      fi
+    fi ;;
+esac
 
 # ── FM-02ENC (fiscal): o local não pode terminar a fase à frente do remoto ────
 # AVISO, não falha: há projeto que proíbe push direto e fecha por PR. O que não pode
