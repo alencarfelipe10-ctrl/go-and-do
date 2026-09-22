@@ -126,7 +126,9 @@ HAS_PLANS=$(jq -r '.has_plans' <<<"$RETRATO")
 IR_FILE=""; [ -f "$PHASE_DIR/$NN-INTENT-REVIEW.md" ] && IR_FILE="$PHASE_DIR/$NN-INTENT-REVIEW.md"
 IR_ESTADO=""
 [ -n "$IR_FILE" ] && IR_ESTADO=$(grep -m1 '^intent_review:' "$IR_FILE" | sed 's/^intent_review: *//' | tr -d ' \r' || true)
-if [ "$HAS_PLANS" = "true" ] || [ "$IR_ESTADO" = "done" ] || [ "$IR_ESTADO" = "skipped" ]; then
+# Item 4 (F4 RLR): `aprovado_com_ressalva` fecha a etapa 1 tanto quanto done/skipped —
+# senão uma fase fechada com ressalva reabre a etapa 1 ao retomar.
+if [ "$HAS_PLANS" = "true" ] || [ "$IR_ESTADO" = "done" ] || [ "$IR_ESTADO" = "skipped" ] || [ "$IR_ESTADO" = "aprovado_com_ressalva" ]; then
   ETAPA1=pular
 elif [ "$IR_ESTADO" = "needs_decision" ]; then
   ETAPA1=continuar_pergunta
@@ -172,7 +174,7 @@ INTENQ=true; [ "$ETAPA1" = pular ] && [ "$(tem SPEC.md)" = false ] && INTENQ=fal
 TASKS=$(jq -cs '.' <<EOF
 $(tl 1  "Intenção — SPEC" $INTENQ "$(tem SPEC.md)")
 $(tl 2  "Intenção — CONTEXT" $INTENQ "$(tem CONTEXT.md)")
-$(tl 3  "Consultoria especializada de intenção" $INTENQ "$(gr INTENT-REVIEW.md '^intent_review: (done|skipped)')")
+$(tl 3  "Consultoria especializada de intenção" $INTENQ "$(gr INTENT-REVIEW.md '^intent_review: (done|skipped|aprovado_com_ressalva)')")
 $(tl 4  "Contrato de UI" $UI "$(tem UI-SPEC.md)")
 $(tl 5  "Contrato de IA" $AI "$(tem AI-SPEC.md)")
 $(tl 6  "Planejar" true "$HAS_PLANS")

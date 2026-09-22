@@ -70,6 +70,8 @@
 
 set -euo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
+# B1: auto-registro do próprio resultado no run-log (no-op sem rodada ativa/--r6 barato).
+trap 'gad_autoregistro "setup-intencao.sh" "$?"' EXIT
 
 # ── modo --r6: só a extração do ROADMAP, sem tocar disco (o confere-etapa.sh 1 usa) ──
 SO_R6=0
@@ -222,8 +224,10 @@ ESTADO=""
 [ -f "$IR" ] && ESTADO=$(grep -m1 '^intent_review:' "$IR" | sed 's/^intent_review: *//' | tr -d ' \r' || true)
 
 # ── higiene idempotente da flag de chain ─────────────────────────────────────
+# Item 4 (F4 RLR, pergunta 3 do relatório A): `aprovado_com_ressalva` é etapa 1 concluída,
+# igual a done/skipped — sem isto uma fase fechada com ressalva reabre a etapa 1 ao retomar.
 CHAIN=nao_aplicavel
-if [ -f "$CTX_F" ] && [ "$ESTADO" != "done" ] && [ "$ESTADO" != "skipped" ]; then
+if [ -f "$CTX_F" ] && [ "$ESTADO" != "done" ] && [ "$ESTADO" != "skipped" ] && [ "$ESTADO" != "aprovado_com_ressalva" ]; then
   ROOT="$(gad_project_root "$PD")"
   if (cd "$ROOT" && gsd_run query config-set workflow._auto_chain_active false >/dev/null 2>&1); then
     CHAIN=zerada
@@ -234,7 +238,7 @@ fi
 
 # ── entrada fina pelo disco ──────────────────────────────────────────────────
 if [ "$COM_RESPOSTA" = 1 ]; then          ENTRADA=incorporar_resposta
-elif [ "$ESTADO" = done ] || [ "$ESTADO" = skipped ]; then ENTRADA=ja_pronto
+elif [ "$ESTADO" = done ] || [ "$ESTADO" = skipped ] || [ "$ESTADO" = aprovado_com_ressalva ]; then ENTRADA=ja_pronto
 elif [ "$ESTADO" = needs_decision ]; then ENTRADA=reapresentar_pergunta
 elif [ "$ESTADO" = blocked ]; then        ENTRADA=revisao
 elif [ ! -f "$SPEC_F" ]; then             ENTRADA=spec
