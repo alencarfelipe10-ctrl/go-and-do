@@ -62,6 +62,7 @@
 set -euo pipefail
 shopt -s nullglob
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
+. "$(dirname -- "${BASH_SOURCE[0]}")/lib/veredito-end.sh"
 
 ETAPA="${1:-}"; shift || true
 [ -n "$ETAPA" ] || { echo "uso: confere-etapa.sh <etapa> [--fase N] [--projeto DIR] [--dry-run] [--fix-cycle] [--reuat]" >&2; exit 2; }
@@ -1702,15 +1703,10 @@ if [ "$DRY" = 0 ]; then
     # `stop`/etapa "handback" que já existia. A rota (pausa/handback/ship) foi decidida no
     # DESPACHO da etapa 6 por `pre-despacho.sh 6` (6.1) e sobrevive no espelho
     # last-pre-despacho.json (mesmo etapa 6, ninguém mais rodou pre-despacho.sh no meio) —
-    # lido aqui em vez de recalculado, para não ter 2º lugar que decide a rota.
-    VEREDITO_END=pass
-    if [ "${RUNLOG_ETAPA%% *}" = "6" ]; then
-      PD6="$ROOT/.planning/.gad/last-pre-despacho.json"
-      if [ -f "$PD6" ] && [ "$(jq -r '.etapa // ""' "$PD6" 2>/dev/null)" = "6" ] \
-         && [ "$(jq -r '.paralelismo.rota // .rota // ""' "$PD6" 2>/dev/null)" = "handback" ]; then
-        VEREDITO_END=handback
-      fi
-    fi
+    # lido aqui em vez de recalculado, para não ter 2º lugar que decide a rota. Fatorado
+    # em lib/veredito-end.sh (F4 RLR, item 3 da rodada 3) — permite teste de integração
+    # sem montar uma bancada de PASS real da etapa 6 inteira.
+    VEREDITO_END=$(gad_veredito_end "$ROOT" "$RUNLOG_ETAPA")
     if [ "$SEMTEL" = 1 ]; then
       :
     elif [ "$(jq -r '.status' <<<"$MEDICAO")" = ok ]; then

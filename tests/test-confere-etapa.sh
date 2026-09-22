@@ -838,6 +838,44 @@ casa "…nomeia c1-09" "$J" 'c1-09'
 J="$(confere6 "$(monta_ressalva ressalva_com 'Fechada com ressalva: c1-09 segue pendente, aceite do dono no fim da fase.')")"
 eq "resumo que cita a dívida da ressalva → sem acusação" "$(assert_de "$J" resumo_sem_id_aberto)" "<ausente>"
 
+# ═══════════════ item 3 (F4 RLR, rodada 3): veredito=handback do `end` id 6 ═══════════════
+# Teste de INTEGRAÇÃO da função real gad_veredito_end (lib/veredito-end.sh), a mesma que
+# confere-etapa.sh chama para o `end` id 6 — sourceada aqui direto (sem simular), contra
+# uma bancada real de `.planning/.gad/last-pre-despacho.json`. O R2 tentou montar uma
+# bancada de PASS real da etapa 6 inteira (STATE.md, resumo, worktrees, git_remote) e não
+# terminou por tempo; fatorar a derivação numa função pura testável isoladamente é mais
+# barato e cobre o mesmo código de produção — decisão de desenho, registrada no relatório.
+echo "── item 3: gad_veredito_end (FM-04UAT, veredito=handback do end id 6) ──"
+. "$RAIZ/skills/go-and-do/scripts/lib/veredito-end.sh"
+
+monta_pd6() { # <nome> <json do last-pre-despacho.json ou "" p/ nenhum arquivo> → ecoa root
+  local root="$BASE/$1"
+  mkdir -p "$root/.planning/.gad"
+  [ -n "${2:-}" ] && printf '%s' "$2" > "$root/.planning/.gad/last-pre-despacho.json"
+  printf '%s' "$root"
+}
+
+R="$(monta_pd6 ve1 '{"etapa":"6","rota":"handback"}')"
+eq "etapa 6 + rota=handback (campo plano) → handback" "$(gad_veredito_end "$R" "6 encerramento")" "handback"
+
+R="$(monta_pd6 ve2 '{"etapa":"6","paralelismo":{"rota":"handback"}}')"
+eq "etapa 6 + paralelismo.rota=handback (campo aninhado) → handback" "$(gad_veredito_end "$R" "6")" "handback"
+
+R="$(monta_pd6 ve3 '{"etapa":"6","rota":"ship"}')"
+eq "etapa 6 + rota=ship → pass" "$(gad_veredito_end "$R" "6 encerramento")" "pass"
+
+R="$(monta_pd6 ve4 '{"etapa":"6","rota":"pausa"}')"
+eq "etapa 6 + rota=pausa → pass (só handback vira handback)" "$(gad_veredito_end "$R" "6")" "pass"
+
+R="$(monta_pd6 ve5 '')"
+eq "etapa 6 sem last-pre-despacho.json nenhum → pass" "$(gad_veredito_end "$R" "6")" "pass"
+
+R="$(monta_pd6 ve6 '{"etapa":"5","rota":"handback"}')"
+eq "espelho de OUTRA etapa (5, stale) → pass, não herda o handback" "$(gad_veredito_end "$R" "6")" "pass"
+
+R="$(monta_pd6 ve7 '{"etapa":"6","rota":"handback"}')"
+eq "etapa != 6 (mesmo com espelho de handback) → pass, não se aplica" "$(gad_veredito_end "$R" "1 intencao")" "pass"
+
 echo "--------------------------------------------------"
 echo "test-confere-etapa.sh: $OK ok / $FALHAS falha(s)"
 [ "$FALHAS" -eq 0 ]
