@@ -332,6 +332,27 @@ if [ "${1:-}" = "--tabela" ]; then
         EXTRAS+=("sem_achado_novo: ${LANE}")
       elif [ -n "$CICLO" ] && parecer_substantivo "$P"; then
         EXTRAS+=("$(cancela_parecer_informe "$P" "$LANE" "$CICLO" "$STATUSDIR")")
+      else
+        # FM-F4RLR-02CONV: zero achados, sem "Achado 0" declarado e sem corpo
+        # substantivo — só vale como revisão se mostrar o que examinou. O teste
+        # mecânico é: os caminhos `arquivo:linha` que o parecer cita EXISTEM no
+        # repositório? Se cita ao menos um e nenhum existe, é MARCA (não descarte
+        # automático — um parecer legítimo pode citar arquivo a criar), a lane vira
+        # `sem_engajamento` e para de contar como revisor efetivo em revisores_efetivos
+        # (grava-convergence.sh, fora desta lane, é quem consome o rótulo).
+        FROOT_ENG="$(cd "$(dirname -- "$P")" && git rev-parse --show-toplevel 2>/dev/null || echo "")"
+        CITADOS_ENG=$(grep -oP '(?<![/:])(?:[^\s:]*[/\\][^\s:]*|[^\s:]*\.[A-Za-z0-9]{1,16})(?=:[0-9]+)' \
+          "$P" 2>/dev/null | sort -u || true)
+        if [ -n "$CITADOS_ENG" ]; then
+          ACHOU_ENG=0
+          while IFS= read -r c; do
+            [ -z "$c" ] && continue
+            cp="$c"
+            [ -n "$FROOT_ENG" ] && [ "${c#/}" = "$c" ] && cp="$FROOT_ENG/$c"
+            [ -e "$cp" ] && { ACHOU_ENG=1; break; }
+          done <<<"$CITADOS_ENG"
+          [ "$ACHOU_ENG" = 0 ] && EXTRAS+=("sem_engajamento: ${LANE} (caminhos citados não existem no repo)")
+        fi
       fi
     fi
     while IFS= read -r linha; do

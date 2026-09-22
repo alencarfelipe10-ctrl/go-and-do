@@ -92,6 +92,21 @@ esp modelo-ANTIGO banner-ANTIGO > "$PDA/pareceres/.roda-codex-c1.json"
 [ "$rc" = 0 ] && ok "fase anterior à separação (só o espelho sem prefixo): exit 0, lane pulada" \
   || erro "fase antiga quebrou no modo convergencia (rc=$rc)"
 
+echo "== FM-F4RLR-05CONV — «## Seção» citada no parecer precisa existir como título de verdade"
+PDS="$TMP/24-secao"; mkdir -p "$PDS/pareceres"
+printf -- '# Fase 24.3\n\n## Requisitos\n\ncorpo\n' > "$PDS/24.3-PLAN.md"
+printf 'prova_leitura: PROVA-abc\nConferi conforme `## Requisitos` e bateu. Também citei `## Secao Fantasma`, que não existe.\nsrc/x.py:1 — citação.\n' \
+  > "$PDS/pareceres/24.3-parecer-codex-c1.md"
+jq -cn --arg p "$PDS/pareceres/24.3-parecer-codex-c1.md" \
+  '{modelo_efetivo:"m", fresco:true, vazio:false, banner:"", prova_leitura:"ok", degradado:false, parecer:$p}' \
+  > "$PDS/pareceres/.roda-codex-c1.json"
+"$SCRIPT" "$PDS" 24.3 1 intencao >/dev/null 2>&1
+grep -qF '`## Secao Fantasma`' "$PDS/24.3-REVIEWS.md" \
+  && ok "seção inexistente vira aviso no apêndice" || erro "aviso de seção ausente não apareceu" "$(cat "$PDS/24.3-REVIEWS.md")"
+grep -qF '`## Requisitos`' "$PDS/24.3-REVIEWS.md" \
+  && erro "seção que EXISTE não devia gerar aviso" "$(cat "$PDS/24.3-REVIEWS.md")" \
+  || ok "seção que existe de verdade não dispara aviso"
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-registra-ciclo: TUDO OK" || echo "test-registra-ciclo: $falhas falha(s)"
 [ "$falhas" -eq 0 ]

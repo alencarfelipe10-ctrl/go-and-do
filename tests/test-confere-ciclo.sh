@@ -188,6 +188,18 @@ grep -qx 'parecer_informe: ruido devolver' "$TMP/t16.txt" && ok "canário e rubr
 "$SCRIPT" "$TMP/24.3-parecer-ruido-c1.md" "$TMP/24.3-parecer-curto-c1.md" > "$TMP/t17.txt" 2>/dev/null
 grep -q 'parecer_informe' "$TMP/t17.txt" && ok "modo padrão (parecer + resumo) também avisa parecer_informe" || erro "modo padrão mudo" "$(cat "$TMP/t17.txt")"
 
+echo "== FM-F4RLR-02CONV — zero achados + caminhos citados que não existem no repo → sem_engajamento"
+printf 'Não achei nada digno de nota.\nVi que src/nao-existe-de-jeito-nenhum.py:12 já resolve isso.\n' \
+  > "$TMP/24.3-parecer-fantasma-c1.md"
+"$SCRIPT" --tabela "$TMP/24.3-parecer-fantasma-c1.md" > "$TMP/t18.txt" 2>/dev/null
+grep -qx 'sem_engajamento: fantasma (caminhos citados não existem no repo)' "$TMP/t18.txt" \
+  && ok "caminho citado inexistente → sem_engajamento" || erro "sem_engajamento ausente" "$(cat "$TMP/t18.txt")"
+printf 'Não achei nada digno de nota, mas confirmei em %s:1.\n' "$AQUI/test-confere-ciclo.sh" \
+  > "$TMP/24.3-parecer-real-c1.md"
+"$SCRIPT" --tabela "$TMP/24.3-parecer-real-c1.md" > "$TMP/t19.txt" 2>/dev/null
+grep -q '^sem_engajamento:' "$TMP/t19.txt" && erro "caminho real não devia disparar" "$(cat "$TMP/t19.txt")" \
+  || ok "caminho citado que EXISTE não dispara sem_engajamento"
+
 echo "== R4 (plano 3, 05/09/2026) — «irrelevante, com evidência do Goal» é resposta forte; a palavra solta segue fraca"
 printf '{"v":1,"ciclo":"1","qids":["Q1","Q2","Q3","Q4"],"detalhe":[]}\n' > "$TMP/perguntas-r4.json"
 cat > "$TMP/24.3-parecer-goal-c1.md" <<'EOF'
