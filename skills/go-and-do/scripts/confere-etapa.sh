@@ -79,6 +79,50 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# ── B1 (F4 RLR, FM-08INT+FM-07EXE+FM-05UAT): o fiscal grava o PRÓPRIO evento `script`
+# a cada execução, com o exit REAL — inclusive quando falha/repassa. Antes, só os dois
+# sites de escrita manual abaixo (pos-fail e fail) geravam o evento; um pass comum não
+# gravava nada. Um único `trap EXIT` cobre os três casos (pass comum, pos-fail, fail) e
+# qualquer saída antecipada (uso, manifest ausente). `rc` é capturado ANTES de qualquer
+# outro comando no trap — "$?" sozinho no corpo do trap pegaria o exit do PRÓPRIO teste
+# `[ ... ]`, não o do script (mesma lição do `trap` do spot-check-ponteiros.sh, B1 R2).
+# --sem-telemetria (46 j/r): contrato documentado "NÃO grava evento nenhum no run-log" —
+# a guarda abaixo respeita isso; --dry-run já sai de graça via GAD_DRY_RUN (gad_autoregistro
+# e o `gad_runlog` direto abaixo escrevem em $PHASE_DIR/$NN, que só existe fora do dry-run
+# porque DRY guarda toda a lógica de escrita mais abaixo — não há caminho de escrita real
+# sob --dry-run mesmo sem essa guarda; a guarda por GAD_DRY_RUN é só para o `gad_autoregistro`
+# de fallback nos exits antecipados).
+_gad_ce_resumo() { # linha "etapa modo veredito baldes" — sempre resolvível, mesmo cedo
+  local etapa="${RUNLOG_ETAPA:-$ETAPA}" modo="" n extra=""
+  [ "$ETAPA" = pausa ] && modo="pausa"
+  [ "${POSPAUSA:-0}" = 1 ] && modo="${modo:+$modo,}pos-pausa"
+  [ "${FIXCYCLE:-0}" = 1 ] && modo="${modo:+$modo,}fixcycle"
+  [ "${REUAT:-0}" = 1 ] && modo="${modo:+$modo,}reuat"
+  [ -n "$modo" ] || modo="normal"
+  n=$(jq 'length' <<<"${RES:-[]}" 2>/dev/null) || n=0
+  if [ "${VEREDITO:-}" = fail ] && [ -n "${resumo:-}" ]; then extra=" falhas: $resumo"; fi
+  if [ "${POS_FAIL:-0}" = 1 ]; then extra="$extra pass pós-fail (lock removido)"; fi
+  printf 'etapa=%s modo=%s veredito=%s baldes=%s%s' "$etapa" "$modo" "${VEREDITO:-${ver:-erro}}" "$n" "$extra"
+}
+_gad_ce_grava_script() { # <rc> <resumo>
+  # --dry-run: nenhuma escrita, nem por este caminho direto — gad_runlog não olha
+  # GAD_DRY_RUN sozinho (só gad_autoregistro/gad_json_out olham); a guarda é daqui.
+  [ "${GAD_DRY_RUN:-0}" = 1 ] && return 0
+  if [ -n "${PHASE_DIR:-}" ] && [ -n "${NN:-}" ] && [ -n "${RUNLOG_ETAPA:-}" ]; then
+    # sites com fase/etapa já resolvidos (via --fase/--projeto OU ponteiro): grava direto,
+    # sem depender do ponteiro `.gad-rodada-ativa.json` (o gad_autoregistro exige `.nn` +
+    # `.phase_dir` NELE — bancadas que passam --fase sem ponteiro completo, como
+    # test-confere-etapa.sh, ficariam mudas se dependessem só dele).
+    gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
+      --kv script=confere-etapa.sh --kv exit="$1" --kv resumo="$2"
+  else
+    # exit antecipado (uso, manifest ausente, fase não resolvida): sem PHASE_DIR/NN não
+    # há onde escrever direto — só resta o ponteiro de rodada ativa, via gad_autoregistro.
+    gad_autoregistro "confere-etapa.sh" "$1" "$2"
+  fi
+}
+trap 'rc=$?; [ "${SEMTEL:-0}" = 1 ] || _gad_ce_grava_script "$rc" "$(_gad_ce_resumo)"' EXIT
+
 if [ "$ETAPA" != "pausa" ]; then
   MANIFEST="$GAD_SCRIPTS_DIR/manifests/etapa-$ETAPA.json"
   [ -f "$MANIFEST" ] || { echo "ERRO: manifest inexistente para etapa \"$ETAPA\" ($MANIFEST)" >&2; exit 2; }
@@ -1617,11 +1661,12 @@ if [ "$DRY" = 0 ]; then
   if [ "$VEREDITO" = pass ]; then
     POS_FAIL=0
     if [ "$SEMTEL" = 0 ] && [ -f "$LOCK" ]; then
-      POS_FAIL=1; rm -f "$LOCK"
       # v2.1.9: o pass que destrava um fail também fica no run-log como evento `script`
-      # (F24.3 4.4: só a reprovação aparecia; a re-cancela verde só existia no transcript)
-      gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
-        --kv script=confere-etapa.sh --kv exit=0 --kv resumo="pass pós-fail (lock removido)"
+      # (F24.3 4.4: só a reprovação aparecia; a re-cancela verde só existia no transcript).
+      # B1 (F4 RLR): a escrita saiu daqui — o `trap EXIT` no topo do arquivo grava o
+      # evento `script` uma vez, no fim, com o exit real; `POS_FAIL=1` só alimenta o
+      # resumo dele (_gad_ce_resumo) e o `--kv pos_gate_fail=true` do `end` abaixo.
+      POS_FAIL=1; rm -f "$LOCK"
     fi
     HEAD_NOW=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "")
     jq -cn --arg e "${RUNLOG_ETAPA%% *}" --arg f "$NN" --arg h "$HEAD_NOW" \
@@ -1684,8 +1729,8 @@ if [ "$DRY" = 0 ]; then
     if [ "$SEMTEL" = 0 ]; then
       printf '{"etapa":"%s","ts":"%s","resumo":"falhas: %s"}\n' \
         "${RUNLOG_ETAPA%% *}" "$(date -Is)" "$resumo" > "$LOCK"
-      gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
-        --kv script=confere-etapa.sh --kv exit=1 --kv resumo="falhas: $resumo"
+      # B1 (F4 RLR): idem — o `trap EXIT` grava o evento `script` (exit=1, resumo com
+      # "falhas: $resumo" via _gad_ce_resumo, que lê a variável `resumo` acima).
     fi
   fi
 fi
