@@ -1,7 +1,7 @@
 <!-- ============================================================ -->
 <!-- prompts/intent.md — instruções do subagente da Etapa 1       -->
 <!-- (intenção). Lido do disco PELO SUBAGENTE (agente gad-intent, -->
-<!-- Opus 5 / effort medium) despachado pela camada 0.            -->
+<!-- Opus 5.5 / effort medium) despachado pela camada 0.            -->
 <!-- Não é documentação.                                          -->
 <!-- ============================================================ -->
 

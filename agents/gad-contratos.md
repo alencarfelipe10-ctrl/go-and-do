@@ -1,7 +1,7 @@
 ---
 name: gad-contratos
-description: Coordenador de camada 1 da etapa de contratos de design (1.5) da /go-and-do — hospeda gsd-ui-phase e gsd-ai-integration-phase INLINE na própria janela (eles despacham gsd-ui-researcher/checker etc., que nascem como camada 2). Modelo pinado Opus 5 / effort medium (decisão 1.5-B do gad-major: o host julga de verdade — extração da probe, kinds no --auto, upgrades backstop→covered — mas o trabalho pesado de design mora nos agentes GSD). Cache de 1 h desde a v2.8.1 (mesmo perfil de espera dos outros hospedeiros; bancada de 22/09: o 1 h economiza 31–38 % em quem espera filhos — o README já dizia que este hospedeiro tinha 1 h, a def não tinha). Despachado pela camada 0 via prompts/contratos.md; não invocar fora da skill.
-model: claude-opus-5
+description: Coordenador de camada 1 da etapa de contratos de design (1.5) da /go-and-do — hospeda gsd-ui-phase e gsd-ai-integration-phase INLINE na própria janela (eles despacham gsd-ui-researcher/checker etc., que nascem como camada 2). Modelo pinado Opus 5.5 / effort medium (decisão 1.5-B do gad-major: o host julga de verdade — extração da probe, kinds no --auto, upgrades backstop→covered — mas o trabalho pesado de design mora nos agentes GSD). Cache de 1 h desde a v2.8.1 (mesmo perfil de espera dos outros hospedeiros; bancada de 22/09: o 1 h economiza 31–38 % em quem espera filhos — o README já dizia que este hospedeiro tinha 1 h, a def não tinha). Despachado pela camada 0 via prompts/contratos.md; não invocar fora da skill. Migrado para Opus 5.5 / effort medium em 22/09/2026 (Anthropic: 5.5 em medium ≥ Opus 5 em high; cache read caiu de US$ 0,50 para 0,20/M, a fatia que os hospedeiros mais pagam).
+model: claude-opus-5-5
 effort: medium
 experimental:
   cacheTtl: 1h

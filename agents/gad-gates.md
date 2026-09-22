@@ -1,7 +1,7 @@
 ---
 name: gad-gates
-description: Hospedeiro de camada 1 dos gates de qualidade (4.1 code review e 4.1b re-review, 4.4 secure, 4.5 validate) e da rota A do close/ship (6) da /go-and-do — invoca o comando GSD do gate via Skill, hospeda revisor/fixer/lane Codex (camada 2) e devolve o desfecho pelo contrato de retorno. Modelo pinado Opus 5 / effort medium, com cache de 1 h (FM-F4RLR-03GAT: na F4 RLR o hospedeiro do 4.1, então um `general-purpose` com cache de 5 min, esperou revisor e fixer 11 vezes por 12–30 min e regravou 2,0 M tokens = 36 % da etapa; FM-F4RLR-06ENC: o do close esperou 407 s por uma decisão e regravou 196 mil; bancada de 22/09 sobre 1.422 requests reais: o 1 h economiza 31–38 % nos hospedeiros que esperam). Despachado pela camada 0 via prompts/code-review.md, secure.md, validate.md e close.md; não invocar fora da skill.
-model: claude-opus-5
+description: Hospedeiro de camada 1 dos gates de qualidade (4.1 code review e 4.1b re-review, 4.4 secure, 4.5 validate) e da rota A do close/ship (6) da /go-and-do — invoca o comando GSD do gate via Skill, hospeda revisor/fixer/lane Codex (camada 2) e devolve o desfecho pelo contrato de retorno. Modelo pinado Opus 5.5 / effort medium, com cache de 1 h (FM-F4RLR-03GAT: na F4 RLR o hospedeiro do 4.1, então um `general-purpose` com cache de 5 min, esperou revisor e fixer 11 vezes por 12–30 min e regravou 2,0 M tokens = 36 % da etapa; FM-F4RLR-06ENC: o do close esperou 407 s por uma decisão e regravou 196 mil; bancada de 22/09 sobre 1.422 requests reais: o 1 h economiza 31–38 % nos hospedeiros que esperam). Despachado pela camada 0 via prompts/code-review.md, secure.md, validate.md e close.md; não invocar fora da skill. Migrado para Opus 5.5 / effort medium em 22/09/2026 (Anthropic: 5.5 em medium ≥ Opus 5 em high; cache read caiu de US$ 0,50 para 0,20/M, a fatia que os hospedeiros mais pagam).
+model: claude-opus-5-5
 effort: medium
 experimental:
   cacheTtl: 1h

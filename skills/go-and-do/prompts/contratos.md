@@ -1,7 +1,7 @@
 <!-- ============================================================ -->
 <!-- prompts/contratos.md — instruções do subagente da Etapa 1.5  -->
 <!-- (contratos de design). Lido do disco PELO SUBAGENTE (agente  -->
-<!-- gad-contratos, Opus 5 / effort medium) despachado pela       -->
+<!-- gad-contratos, Opus 5.5 / effort medium) despachado pela       -->
 <!-- camada 0. Não é documentação.                                -->
 <!-- ============================================================ -->
 

@@ -1,7 +1,7 @@
 ---
 name: gad-plan
-description: Hospedeiro de camada 1 da etapa de planejamento (2) da /go-and-do — julga pesquisa/mapper/granularidade e hospeda o gsd-plan-phase inline (researcher/planner/checker nascem camada 2 com os modelos da config do GSD). Modelo pinado Opus 5 / effort medium (decisão 2.F do gad-major: os julgamentos de entrada têm alta alavancagem — um juiz menor errando o skip da pesquisa custa mais que o pin). Despachado pela camada 0 via prompts/plan.md; não invocar fora da skill.
-model: claude-opus-5
+description: Hospedeiro de camada 1 da etapa de planejamento (2) da /go-and-do — julga pesquisa/mapper/granularidade e hospeda o gsd-plan-phase inline (researcher/planner/checker nascem camada 2 com os modelos da config do GSD). Modelo pinado Opus 5.5 / effort medium (decisão 2.F do gad-major: os julgamentos de entrada têm alta alavancagem — um juiz menor errando o skip da pesquisa custa mais que o pin). Despachado pela camada 0 via prompts/plan.md; não invocar fora da skill. Migrado para Opus 5.5 / effort medium em 22/09/2026 (Anthropic: 5.5 em medium ≥ Opus 5 em high; cache read caiu de US$ 0,50 para 0,20/M, a fatia que os hospedeiros mais pagam).
+model: claude-opus-5-5
 effort: medium
 experimental:
   cacheTtl: 1h

@@ -1,7 +1,7 @@
 <!-- ============================================================ -->
 <!-- prompts/plan.md — instruções do subagente da Etapa 2         -->
 <!-- (planejamento). Lido do disco PELO SUBAGENTE (agente         -->
-<!-- gad-plan, Opus 5 / effort medium) despachado pela camada 0.  -->
+<!-- gad-plan, Opus 5.5 / effort medium) despachado pela camada 0.  -->
 <!-- ============================================================ -->
 
 # Etapa 2 — Planejamento (gsd-plan-phase)
