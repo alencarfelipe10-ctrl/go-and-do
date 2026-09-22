@@ -628,7 +628,11 @@ que o registro foi feito de memória, no fim, e não no ato.
    simultaneamente satisfazíveis. Esses são os freios COMPLETOS — seu juízo de "o consultor
    não teria mais o que achar" não encerra o loop.
 7. **Escreva o `<phase_dir>/NN-INTENT-REVIEW.md`** com frontmatter:
-   `intent_review: done` · `revisores_efetivos: [...]` · `codex_model_evidencia:` /
+   `intent_review: done` (ou `intent_review: aprovado_com_ressalva` quando a etapa fecha
+   com uma limitação nomeada — aí é obrigatório `ressalva_dividas: [id, ...]` apontando a(s)
+   dívida(s) da «## Dívidas registradas» que sustentam a ressalva, cada uma também no
+   `deferred-items.md`; o fiscal recusa ressalva sem esse vínculo. Exemplo:
+   `intent_review: aprovado_com_ressalva` + `ressalva_dividas: [c2-03]`) · `revisores_efetivos: [...]` · `codex_model_evidencia:` /
    `agy_model_evidencia:` · `ciclos: N` · `motivo_encerramento:` (decisão do
    decide-ciclo, verbatim) · `achados_confirmados: N` · `achados_descartados: N` ·
    `achados_dispensados: N` (os `confirmado_irrelevante`, somados dos `dispensados` do
