@@ -26,7 +26,7 @@
 # Régua da skill: verificação vira script; julgamento fica no modelo.
 
 set -u
-. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null && trap 'gad_autoregistro "spot-check-ponteiros.sh" "$?"' EXIT || true
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null || true
 DOC="${1:?uso: spot-check-ponteiros.sh <arquivo.md> [root ...]}"
 shift
 ROOTS=("$@")
@@ -50,7 +50,10 @@ for r in "${ROOTS[@]}"; do
 done
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/spot-check-XXXXXX") || exit 2
-trap 'rm -rf "$TMP"' EXIT
+# B1/§6.1: um único trap EXIT — o segundo `trap` em bash SUBSTITUI o primeiro, então o
+# auto-registro (que estava na linha acima) nunca rodava. Captura o rc ANTES do rm, senão
+# o auto-registro gravaria o exit do próprio `rm -rf`, não o do script.
+trap 'rc=$?; rm -rf "$TMP"; gad_autoregistro "spot-check-ponteiros.sh" "$rc"' EXIT
 
 # Extração + normalização (python3 stdlib): uma referência por linha, na ordem do documento.
 python3 - "$DOC" > "$TMP/refs" <<'PY'
