@@ -186,6 +186,28 @@ monta
 roda "$(p_agent gad-execute sonnet '' tu-ex2)"
 esp_negado "47a: Agent(gad-execute, model=sonnet) negado pelo E7(b) — o host fica em Opus"
 
+# ── FM-03GAT (bloco D da F4 RLR): a def `gad-gates` (host dos gates 4.x e da rota A do close)
+# entra nos mesmos trilhos; serve duas etapas, então NÃO corrige o checkpoint no despacho.
+monta
+roda "$(p_agent gad-gates '' '' tu-gt1)"
+esp_passou "FM-03GAT: Agent(gad-gates) sem model/effort passa" gad-gates
+[ "$(jq -r '.camada // ""' <<<"$ULT")" = 1 ] \
+  && ok "FM-03GAT: gad-gates classificado camada 1 (tools: tem Agent)" \
+  || bad "FM-03GAT: gad-gates classificado camada 1" "camada=$(jq -r .camada <<<"$ULT")"
+[ "$(jq -r '.modelo // ""' <<<"$ULT")" = claude-opus-5 ] \
+  && ok "FM-03GAT: modelo lido da def (claude-opus-5)" \
+  || bad "FM-03GAT: modelo lido da def" "modelo=$(jq -r .modelo <<<"$ULT")"
+[ "$(jq -r '.etapa_corrigida // false' <<<"$ULT")" = false ] \
+  && ok "FM-03GAT: gad-gates não corrige o checkpoint (serve 4.x e 6)" \
+  || bad "FM-03GAT: gad-gates não corrige o checkpoint" "$(jq -c . <<<"$ULT")"
+monta
+roda "$(p_agent gad-gates sonnet '' tu-gt2)"
+esp_negado "FM-03GAT: Agent(gad-gates, model=sonnet) negado pelo E7(b) — o host fica em Opus"
+grep -q 'cacheTtl: 1h' "$REPO/agents/gad-gates.md" "$REPO/agents/gad-contratos.md" 2>/dev/null \
+  && [ "$(grep -l 'cacheTtl: 1h' "$REPO"/agents/gad-*.md | wc -l)" -eq 5 ] \
+  && ok "FM-03GAT/06ENC: 5 hospedeiros com cacheTtl 1h (intent, contratos, plan, execute, gates)" \
+  || bad "FM-03GAT/06ENC: hospedeiros com cacheTtl 1h" "$(grep -l 'cacheTtl: 1h' "$REPO"/agents/gad-*.md | tr '\n' ' ')"
+
 # ═════════════════════ 2. E3a — SendMessage a filho encerrado ═════════════════════
 monta
 roda "$(p_send gad-discuss)"

@@ -53,15 +53,18 @@ descartáveis (`gad-spec`, `gad-discuss`, `gad-explore`, `gad-verificador`) cuja
 (o `cp` acima; symlinks também funcionam). Sem eles o despacho do filho falha e a
 intenção degrada para o fluxo inline antigo.
 
-As etapas 1, 1.5, 2 e 3 têm **hospedeiro próprio** (`gad-intent`, `gad-contratos`, `gad-plan`,
-`gad-execute`), com modelo e effort pinados na def e `experimental: cacheTtl: 1h` — o TTL longo é
-o que evita que a espera do hospedeiro reescreva o cache a cada 5 minutos (medido na F24.5: o host
-da execução, então um `general-purpose` sem def, escreveu 9,6 M de cache, 95,6 % em reescritas por
-expiração). **A def `gad-execute` precisa estar instalada antes da primeira rodada da v2.6.0** e o
-Claude Code só carrega defs novas **na abertura da sessão**:
+As etapas 1, 1.5, 2, 3, os gates (4.1/4.1b/4.4/4.5) e a rota A do close têm **hospedeiro próprio**
+(`gad-intent`, `gad-contratos`, `gad-plan`, `gad-execute`, `gad-gates`), com modelo e effort pinados
+na def e `experimental: cacheTtl: 1h` — o TTL longo é o que evita que a espera do hospedeiro
+reescreva o cache a cada 5 minutos (medido na F24.5: o host da execução, então um `general-purpose`
+sem def, escreveu 9,6 M de cache, 95,6 % em reescritas por expiração; bancada de 22/09 sobre 1.422
+requests reais: o 1 h economiza 31–38 % nos hospedeiros). **As defs `gad-execute` (v2.6.0) e
+`gad-gates` (v2.8.1) precisam estar instaladas antes da primeira rodada** e o Claude Code só carrega
+defs novas **na abertura da sessão**:
 
 ```bash
 ln -s "$(pwd)/go-and-do/agents/gad-execute.md" ~/.claude/agents/gad-execute.md
+ln -s "$(pwd)/go-and-do/agents/gad-gates.md"   ~/.claude/agents/gad-gates.md
 # e reinicie a sessão do Claude Code
 ```
 

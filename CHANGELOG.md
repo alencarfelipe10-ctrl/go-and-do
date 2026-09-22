@@ -2,6 +2,30 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.8.1] - 2026-09-22
+
+Bloco D da auditoria F4 rl-representation, liberado pela bancada do cache (bloco G, respondida
+offline sobre 1.422 requests reais das fases F24.x e F3/F4: o cache de 1 h economiza 31–38 % nos
+hospedeiros que esperam filhos; os «regrava mesmo com 1 h» são a mensagem assíncrona de hand-back
+injetada na conversa, não TTL — `gsd-optimize/go-and-do-evolucao/bancada-cache-1h/relatorio.md`).
+
+**⚠️ Exige sessão nova antes da 1ª fase:** a def `gad-gates` só entra no registro do Claude Code na
+abertura da sessão. Instale (`ln -s …/agents/gad-gates.md ~/.claude/agents/`) e reinicie; sem isso,
+uma fase que chegar à etapa 4 devolve `blocked · spawn_negado`.
+
+- **`agents/gad-gates.md` (novo)** — hospedeiro de camada 1 dos gates 4.1/4.1b/4.4/4.5 e da rota A
+  do close (6): Opus 5, effort medium, `cacheTtl: 1h`, no molde do `gad-execute`. Antes eram
+  `general-purpose` com cache de 5 min: na F4 RLR o do 4.1 esperou revisor/fixer 11 vezes e regravou
+  2,0 M tokens (36 % da etapa) — FM-F4RLR-03GAT; o do close esperou 407 s por uma decisão e regravou
+  196 mil — FM-F4RLR-06ENC. `workflow.md`: 4.1, 4.4, 4.5 e a rota A despacham
+  `Agent(subagent_type="gad-gates")`; Sub-rotina H lista a def. Hook: `gad-gates` serve duas etapas,
+  então não corrige checkpoint no despacho (comentário no `case`; 6 asserções novas na suíte).
+- **`gad-contratos`: `cacheTtl: 1h`** — mesmo perfil de espera; o README já afirmava que este
+  hospedeiro tinha 1 h, a def não tinha.
+- README: `gad-gates` na lista de hospedeiros e no passo de instalação.
+- Fora do repositório: `/audit-gad` (`etapas/gates.md`, `etapas/fecho.md`) passa a dizer que o
+  hospedeiro dos gates/close é `gad-gates` desde esta versão.
+
 ## [2.8.0] - 2026-09-22
 
 Auditoria por etapa da F4 rl-representation (`/audit-gad` nas 6 etapas, 20–21/09): 91 melhorias

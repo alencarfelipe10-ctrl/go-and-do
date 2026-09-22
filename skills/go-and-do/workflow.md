@@ -456,7 +456,9 @@ the user «the parallelism may not have happened» with the clocks of all nine e
 > and the 🔔 prose at the close.
 
 ### 4.1 — Code review (via subagent)
-- `pre-despacho.sh 4-code-review` → `ok`? Dispatch via Sub-rotina H with
+- `pre-despacho.sh 4-code-review` → `ok`? Dispatch via Sub-rotina H as
+  `Agent(subagent_type="gad-gates")` (own def: Opus 5, cache 1 h — FM-F4RLR-03GAT; also
+  iterations 2+ and 4.1b) with
   `prompts/code-review.md` (`iteracao: 1`): hosts `gsd-code-review N --fix --auto` with the
   parallel Codex lane (4.D, merged as `fonte: codex`; codex absent does not block). Iterations
   2+ and the 4.1b gate dispatch with `iteracao: 2+` — the subagent narrows via
@@ -484,7 +486,7 @@ the user «the parallelism may not have happened» with the clocks of all nine e
 ### 4.3 — Eval review · only with `--ai` → conduct by `workflow-ai.md`.
 
 ### 4.4 — Secure phase (via subagent)
-- `pre-despacho.sh 4-secure` → `ok`? Dispatch with `prompts/secure.md`. A threat decision
+- `pre-despacho.sh 4-secure` → `ok`? Dispatch as `Agent(subagent_type="gad-gates")` with `prompts/secure.md`. A threat decision
   comes up as `needs_decision` already digested (4.E: threat, severity, options with the
   recommendation first).
 - On return: `confere-etapa.sh 4-secure` — exit ≠ 0 (`threats_open` > 0 or acceptance
@@ -493,7 +495,7 @@ the user «the parallelism may not have happened» with the clocks of all nine e
   4.1.
 
 ### 4.5 — Validate phase (via subagent)
-- `pre-despacho.sh 4-validate` → `ok`? Dispatch with `prompts/validate.md`. ⏸️ Gaps →
+- `pre-despacho.sh 4-validate` → `ok`? Dispatch as `Agent(subagent_type="gad-gates")` with `prompts/validate.md`. ⏸️ Gaps →
   `needs_decision` (Fix all recommended). On return: `confere-etapa.sh 4-validate`. Continue.
   When gate 4.1b exists (secure or a late commit reopened it), dispatch 4.5 in PARALLEL with
   4.1b instead of after it — validate only reads the map and runs the suite; if 4.1b fixes
@@ -679,7 +681,9 @@ returns the same refusal.
   canonical config — the source is the project, the judge is you. Automatic merge of the own
   path (e.g. `ship.py --merge`) is an approved route (owner, 27/08) — do not ask; keep the PR
   number/URL and the fact "mergeado" for 6.4c and the banner.
-- Route A (with remote) — via subagent with `prompts/close.md`: hosts the skill
+- Route A (with remote) — via `Agent(subagent_type="gad-gates")` (cache 1 h: the close host
+  is the one long subagent of the stage that stops mid-way for a decision — FM-F4RLR-06ENC)
+  with `prompts/close.md`: hosts the skill
   `close-phase N` (learnings → promotion with evidence "UAT automatizado" → docs commit → PR
   → auto-"Skip" review stamped → direct merge, 6.D). Inherited brake: it only promotes/ships
   with the native `phase uat-passed` predicate clean — `assumed` (basket 4) FAILS that
@@ -971,7 +975,8 @@ layer-0 window is the scarcest resource.
 
 Dispatch. A stage whose block says to dispatch runs in a `general-purpose` subagent (inherited
 model, unless the block pins one). Stages with a def of their own (`gad-intent`, `gad-contratos`,
-`gad-plan`, `gad-execute`) are dispatched by that `subagent_type`, never as `general-purpose`, and
+`gad-plan`, `gad-execute`, and `gad-gates` for 4.1/4.1b/4.4/4.5 and the close's route A) are
+dispatched by that `subagent_type`, never as `general-purpose`, and
 never with `model`/`effort` in the call. Always synchronous: explicit `run_in_background: false` —
 a background dispatch breaks the flow (the notification does not resume the script). The
 dispatch prompt is minimal; the instructions live in `prompts/<etapa>.md`, which the SUBAGENT

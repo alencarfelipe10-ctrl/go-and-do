@@ -190,6 +190,8 @@ case "$AGN" in
   gad-intent)  ET_TIPO="1 intencao" ;;
   gad-plan)    ET_TIPO="2 planejamento" ;;
   gad-execute) ET_TIPO="3 construcao" ;;
+  # gad-gates serve a etapa 4 (4.1/4.1b/4.4/4.5) E a rota A do close (6): não há etapa única
+  # a corrigir — fica com o checkpoint real, como qualquer agente sem mapa.
   *)           ET_TIPO="" ;;
 esac
 ET_CORRIGIDA=0
