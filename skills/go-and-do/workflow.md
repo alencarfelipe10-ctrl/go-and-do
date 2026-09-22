@@ -497,7 +497,9 @@ test and whose question only production can answer leaves `NN-UAT.md` for `NN-PO
 (the subagent is idempotent per scenario) · `executed` + `issue` without
 `pre_uat_fix_cycle: done` → 5.5 · with the marker → Sub-rotina D (never a 2nd cycle) ·
 `executed` without open `issue`, with basket 3 and without `pre_uat_reuat: done` → 5.6 ·
-otherwise → Etapa 6.
+otherwise → Etapa 6. Resuming a phase whose etapa 5 previously closed in `handback`: grave um
+evento de retomada no run-log que ligue a janela nova da etapa 5 à antiga — as ferramentas de
+medição somam as duas janelas em vez de tratá-las como órfãs.
 
 **5.3 — Generate `NN-UAT.md` (via SUBAGENT).** `pre-despacho.sh 5`. Dispatch an `Agent`
 (`model: sonnet`, synchronous) to reuse the verify-work derivation:
@@ -572,16 +574,21 @@ leaves basket 3 without open `issue`. Order matters: re-run first, triage what i
    credential/surface → re-dispatch 5.4 restricted to the basket-3 scenarios, with the
    `[Superfície do projeto: …]` clause. Fence: `confere-etapa.sh 5 --reuat` (stamps
    `pre_uat_reuat: done`, single writer). No `uat_superficie` → skip the re-run, still stamp.
-2. Any scenario carrying `pos_ship: candidato` → dispatch the skeptic (`Agent`,
+2. Before dispatching the skeptic: `scripts/pos-ship.py --conferir <phase_dir> <NN>
+   <project_root>` — format-only check of the `pos_ship: candidato` blocks. Zero well-formed
+   candidates despite the marker present → return to the conductor now; do not spend the
+   skeptic's window on a malformed candidate.
+3. Any scenario carrying `pos_ship: candidato` → dispatch the skeptic (`Agent`,
    `model: sonnet`, synchronous) with `prompts/uat-pos-ship.md`; it writes
    `.pos-ship-vereditos.json`. Whoever classifies never judges.
-3. `scripts/pos-ship.py move <phase_dir> <NN> <project_root>` — moves only what passes its six
+4. `scripts/pos-ship.py move <phase_dir> <NN> <project_root>` — moves only what passes its six
    conditions; a refused candidate stays in `NN-UAT.md` as basket 3 and keeps blocking the
    ship. Then `confere-etapa.sh 5` again (it may now promote `status: complete`) and
    `commita-artefatos.sh`.
 - The re-run produced a new `issue` → 5.5 (the fix cycle is still unspent; its re-UAT uses the
-  same project surface). Basket 3 empty → Etapa 6 by the ship route. Still there → Etapa 6
-  hand-back. Never a 2nd 5.6.
+  same project surface). Basket 3 empty → Etapa 6 by the ship route. Still there → **commit the
+  UAT result before leaving this stage** (`commita-artefatos.sh <phase_dir> <NN> uat`, the same
+  single writer as 6.3b) and go to Etapa 6 hand-back. Never a 2nd 5.6.
 
 </stage>
 
@@ -592,7 +599,9 @@ Two terminal routes: ship (happy path) and hand-back (returns without shipping).
 **6.1 — Route the outcome (mechanical).** `pre-despacho.sh 6` and obey `rota`: `pausa`
 (basket 2 left) → Sub-rotina D · `handback` (basket 3 or `--no-ship`) → 6.4-HB · `ship` →
 6.4-SHIP. The JSON brings `git_remote` (trigger of route B), `uat_passed_raw` (the MEASURED
-native predicate — paste it into the ship briefing) and `transparencia` (5 extracted lists). You do not decide the route; you read the verdict.
+native predicate — paste it into the ship briefing) and `transparencia` (5 extracted lists). You do not decide the route; you read the verdict. A closing stop that takes the `handback`
+route grants its own run-log veredito (`handback`, never a plain `pass`) — it is a stop, not a
+finished etapa 6, and the next 5.1 reads it to link the resumed window.
 
 **6.2 — Compose "🔔 O que precisa de você agora" + transparency.** Gather what deserves
 attention even though the run continued: review Criticals (+ `uat_humano`), UI pillars 1–2 /
