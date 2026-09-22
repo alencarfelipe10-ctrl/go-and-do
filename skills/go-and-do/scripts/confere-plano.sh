@@ -179,7 +179,21 @@ CODIGOS=()
 [ ${#PERMITIDOS[@]} -gt 0 ] || CODIGOS+=("LISTA-VAZIA")
 [ ${#FORA_NAO_DECL[@]} -eq 0 ] || CODIGOS+=("FORA-DA-LISTA")
 [ ${#RECONHECIDOS[@]} -eq 0 ] || INFORMATIVOS+=("ARQUIVO-NAO-DECLARADO ($(printf '%s ' "${RECONHECIDOS[@]}" | sed 's/ $//'))")
-if [ "$N_COMMITS" -eq 0 ]; then CODIGOS+=("SEM-COMMIT")
+PARECIDOS=()
+if [ "$N_COMMITS" -eq 0 ]; then
+  CODIGOS+=("SEM-COMMIT")
+  # FM-F4RLR-08EXE: ao reprovar SEM-COMMIT, listar os commits com ESCOPO PARECIDO que
+  # o fiscal achou — geralmente é o executor usando outra tag do mesmo prefixo de fase
+  # (typo no slug do plano), não ausência real de commit. Prefixo = a parte numérica
+  # (fase[.sub][-plano]) antes do primeiro trecho não numérico do slug do plano.
+  PREFIXO_PLAN=$(printf '%s' "$PLAN" | grep -oE '^[0-9]+(\.[0-9]+)?' || true)
+  if [ -n "$PREFIXO_PLAN" ]; then
+    mapfile -t PARECIDOS < <(git -C "$ROOT" log --format='%h %s' -E \
+      --grep="^[a-z]+\($(esc "$PREFIXO_PLAN")[-)][^)]*\)(!)?:" 2>/dev/null | head -5)
+  fi
+  if [ ${#PARECIDOS[@]} -gt 0 ]; then
+    INFORMATIVOS+=("SEM-COMMIT-ESCOPO-PARECIDO ($(printf '%s; ' "${PARECIDOS[@]}" | sed 's/; $//'))")
+  fi
 elif [ "$N_TAREFA" -lt "$N_TASKS" ]; then CODIGOS+=("COMMITS-A-MENOS ($N_TAREFA commits para $N_TASKS tarefas)")
 fi
 VER=ok; [ ${#CODIGOS[@]} -eq 0 ] || VER=falha
@@ -190,8 +204,9 @@ JSON=$(jq -cn --arg plan "$PLAN" --argjson t "$N_TASKS" --argjson c "$N_COMMITS"
   --argjson rec "$(printf '%s\n' ${RECONHECIDOS[@]+"${RECONHECIDOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
   --argjson cod "$(printf '%s\n' ${CODIGOS[@]+"${CODIGOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
   --argjson inf "$(printf '%s\n' ${INFORMATIVOS[@]+"${INFORMATIVOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
+  --argjson par "$(printf '%s\n' ${PARECIDOS[@]+"${PARECIDOS[@]}"} | sed '/^$/d' | jq -R . | jq -cs .)" \
   --arg v "$VER" --arg de "$D_ESTADO" --argjson dp "$D_PLAN" --argjson ds "$D_SUM" --argjson df "$D_FALT" --argjson di "$D_INFO" \
   '{plan:$plan, tasks:$t, commits:$c, commits_tarefa:$ct, fora_da_lista:$fora, declarado_nao_tocado:$nt, arquivo_nao_declarado:$rec, veredito:$v, codigos:$cod,
-    informativos:$inf, decisoes:{estado:$de, plan:$dp, summary:$ds, faltantes:$df, informational:$di}}')
+    informativos:$inf, sem_commit_escopo_parecido:$par, decisoes:{estado:$de, plan:$dp, summary:$ds, faltantes:$df, informational:$di}}')
 (cd "$ROOT" && gad_json_out "confere-plano-$PLAN" "$JSON")
 [ "$VER" = ok ]

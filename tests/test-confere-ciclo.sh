@@ -188,6 +188,21 @@ grep -qx 'parecer_informe: ruido devolver' "$TMP/t16.txt" && ok "canário e rubr
 "$SCRIPT" "$TMP/24.3-parecer-ruido-c1.md" "$TMP/24.3-parecer-curto-c1.md" > "$TMP/t17.txt" 2>/dev/null
 grep -q 'parecer_informe' "$TMP/t17.txt" && ok "modo padrão (parecer + resumo) também avisa parecer_informe" || erro "modo padrão mudo" "$(cat "$TMP/t17.txt")"
 
+echo "== FM-F4RLR-02CONV — zero achados + caminhos citados que não existem no repo → sem_engajamento"
+printf 'Não achei nada digno de nota.\nVi que src/nao-existe-de-jeito-nenhum.py:12 já resolve isso.\n' \
+  > "$TMP/24.3-parecer-fantasma-c1.md"
+"$SCRIPT" --tabela "$TMP/24.3-parecer-fantasma-c1.md" > "$TMP/t18.txt" 2>/dev/null
+grep -qx 'sem_engajamento: fantasma' "$TMP/t18.txt" \
+  && ok "caminho citado inexistente → sem_engajamento: <lane> (forma igual a sem_achado_novo)" \
+  || erro "sem_engajamento ausente" "$(cat "$TMP/t18.txt")"
+grep -q '^# motivo:.*fantasma' "$TMP/t18.txt" \
+  && ok "…e o motivo vem numa 2ª linha, sem quebrar o parser sed da 1ª" || erro "motivo ausente" "$(cat "$TMP/t18.txt")"
+printf 'Não achei nada digno de nota, mas confirmei em %s:1.\n' "$AQUI/test-confere-ciclo.sh" \
+  > "$TMP/24.3-parecer-real-c1.md"
+"$SCRIPT" --tabela "$TMP/24.3-parecer-real-c1.md" > "$TMP/t19.txt" 2>/dev/null
+grep -q '^sem_engajamento:' "$TMP/t19.txt" && erro "caminho real não devia disparar" "$(cat "$TMP/t19.txt")" \
+  || ok "caminho citado que EXISTE não dispara sem_engajamento"
+
 echo "== R4 (plano 3, 05/09/2026) — «irrelevante, com evidência do Goal» é resposta forte; a palavra solta segue fraca"
 printf '{"v":1,"ciclo":"1","qids":["Q1","Q2","Q3","Q4"],"detalhe":[]}\n' > "$TMP/perguntas-r4.json"
 cat > "$TMP/24.3-parecer-goal-c1.md" <<'EOF'
@@ -325,6 +340,27 @@ mkdir -p "$PDF/pareceres"; touch -d "2026-09-03 10:00:00" "$PDF/pareceres/briefi
 J="$("$SCRIPT" --frescor "$PDF" 24 2)"
 printf '%s' "$J" | jq -e '.codigos|index("BRIEFING-STALE")' >/dev/null \
   && ok "--frescor: briefing mais velho que o PLAN.md → BRIEFING-STALE" || erro "--frescor BRIEFING-STALE: $J"
+
+# (4c) FM-F4RLR-01CONV — causa real: EMPATE de epoch (commit em lote) entre iter-*.yaml
+# cuja ordem alfabética não é a ordem numérica. iter9×iter10 sozinho NÃO reproduz (a
+# ordem lexical de "iter-10" < "iter-9" coincide com o desempate certo por acaso); o
+# repro real precisa de um trio onde o glob alfabético erra: iter-2, iter-9, iter-19
+# commitados juntos (mesmo epoch) — alfabeticamente "iter-19" < "iter-2" < "iter-9", e
+# pegar o primeiro do glob (iter-19) por acaso ainda acerta o maior. O caso que quebra de
+# verdade é quando o iter de maior N não é o primeiro alfabético do lote: iter-2 e iter-9
+# no mesmo commit — alfabeticamente iter-2 vem depois de iter-19 mas antes de iter-9, e
+# SEM iter-19 no lote o primeiro do glob é iter-2, que "vence" o empate mesmo iter-9
+# sendo o mais novo de verdade.
+PDF="$(monta_fr empate)"; R4C="$(dirname "$(dirname "$(dirname "$PDF")")")"
+mkdir -p "$PDF/.plan-checker"
+printf 'status: PASSED\n' > "$PDF/.plan-checker/iter-2.yaml"
+printf 'status: PASSED\n' > "$PDF/.plan-checker/iter-9.yaml"
+GG "$R4C" add -A >/dev/null 2>&1
+GGC "$R4C" "2026-09-02T10:00:00" "checker em lote (iter-2 e iter-9 no mesmo commit)"
+J="$("$SCRIPT" --frescor "$PDF" 24 1)"; RC=$?
+[ "$(printf '%s' "$J" | jq -r .checker_mais_novo)" = "$PDF/.plan-checker/iter-9.yaml" ] && [ "$RC" = 0 ] \
+  && ok "--frescor: empate de epoch escolhe iter-9 (maior N), não o 1º do glob (iter-2)" \
+  || erro "--frescor empate de epoch: $J rc=$RC"
 
 # (5) fora de repositório git → cai para mtime, não quebra
 PDF="$(monta_fr semgit)"; rm -rf "$(dirname "$(dirname "$(dirname "$PDF")")")/.git"
