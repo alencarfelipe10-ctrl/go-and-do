@@ -158,6 +158,10 @@ gad_runlog() {
 # Uso típico: trap 'gad_autoregistro "<nome>.sh" "$?"' EXIT
 gad_autoregistro() { # <nome> <exit> [resumo]
   local root p nn pd rl et sess8
+  # GAD_DRY_RUN=1: nenhuma prova seca escreve run-log (mesma regra do gad_json_out acima) —
+  # sem isto, `confere-etapa.sh 1 --dry-run` (que chama `setup-intencao.sh --r6`, documentado
+  # como "SEM efeito colateral") passaria a gravar um evento `script` mesmo em modo seco.
+  [ "${GAD_DRY_RUN:-0}" = 1 ] && return 0
   root="$(gad_project_root)" || return 0
   p="$root/.planning/.gad-rodada-ativa.json"
   [ -f "$p" ] || return 0

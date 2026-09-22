@@ -53,7 +53,7 @@ TMP=$(mktemp -d "${TMPDIR:-/tmp}/spot-check-XXXXXX") || exit 2
 # B1/§6.1: um único trap EXIT — o segundo `trap` em bash SUBSTITUI o primeiro, então o
 # auto-registro (que estava na linha acima) nunca rodava. Captura o rc ANTES do rm, senão
 # o auto-registro gravaria o exit do próprio `rm -rf`, não o do script.
-trap 'rc=$?; rm -rf "$TMP"; gad_autoregistro "spot-check-ponteiros.sh" "$rc"' EXIT
+trap 'rc=$?; rm -rf "$TMP"; type gad_autoregistro >/dev/null 2>&1 && gad_autoregistro "spot-check-ponteiros.sh" "$rc"; true' EXIT
 
 # Extração + normalização (python3 stdlib): uma referência por linha, na ordem do documento.
 python3 - "$DOC" > "$TMP/refs" <<'PY'
