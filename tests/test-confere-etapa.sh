@@ -812,6 +812,32 @@ eq "resumo que cita WR-09 → sem acusação" "$(assert_de "$J" resumo_sem_id_ab
 J="$(confere6 "$(monta_state s6semresumo between_phases)")"
 eq "fase sem resumo ainda escrito → assert calado" "$(assert_de "$J" resumo_sem_id_aberto)" "<ausente>"
 
+echo "── FJ-02INT (metade etapa 6): dívida da ressalva tem de aparecer no resumo ──"
+monta_ressalva() { # <nome> <texto do resumo> → raiz do projeto de bancada
+  local root="$BASE/$1" pd
+  mkdir -p "$root/.planning/phases/96-bancada"; git init -q "$root" >/dev/null 2>&1
+  printf -- '---\ncurrent_phase: 96\nstatus: between_phases\n---\n' > "$root/.planning/STATE.md"
+  pd="$root/.planning/phases/96-bancada"
+  cat > "$pd/96-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: aprovado_com_ressalva
+---
+
+## Dívidas registradas
+
+| id | alegação | evidência | dono | destino |
+|----|----------|-----------|------|---------|
+| c1-09 | achado | ev | Amplify | plan-phase |
+EOF
+  printf '%s\n' "$2" > "$pd/96-RESUMO-EXECUTIVO.md"
+  printf '%s' "$root"
+}
+J="$(confere6 "$(monta_ressalva ressalva_sem 'Fase concluída sem pendências.')")"
+eq "resumo sem citar a dívida da ressalva → FALHA" "$(assert_de "$J" resumo_sem_id_aberto)" "FALHA"
+casa "…nomeia c1-09" "$J" 'c1-09'
+J="$(confere6 "$(monta_ressalva ressalva_com 'Fechada com ressalva: c1-09 segue pendente, aceite do dono no fim da fase.')")"
+eq "resumo que cita a dívida da ressalva → sem acusação" "$(assert_de "$J" resumo_sem_id_aberto)" "<ausente>"
+
 echo "--------------------------------------------------"
 echo "test-confere-etapa.sh: $OK ok / $FALHAS falha(s)"
 [ "$FALHAS" -eq 0 ]

@@ -180,6 +180,17 @@ radiografia_gates() { # <phase_dir> <NN>
   else
     echo "uat_placar: sem $nn-UAT.md"
   fi
+  # FJ-02INT (metade etapa 6): a fase que fechou com `intent_review: aprovado_com_ressalva`
+  # tem as dívidas dessa ressalva como aceite pendente — mesma régua do WR-09 acima, ID por
+  # ID. Leitor único: confere-cardinalidade.sh (medido.dividas.na_secao), o mesmo do FM-09INT.
+  local ir="$pd/$nn-INTENT-REVIEW.md"
+  if [ -f "$ir" ] && grep -qE '^intent_review: aprovado_com_ressalva' "$ir"; then
+    local card cardrc=0; card=$(bash "$LIBD/confere-cardinalidade.sh" "$pd" "$nn" --json 2>/dev/null) || cardrc=$?
+    jq -e . >/dev/null 2>&1 <<<"$card" || card='{"medido":{}}'
+    printf 'intent_ressalva_dividas (%s): %s\n' \
+      "$(jq -r '(.medido.dividas.na_secao//[])|length' <<<"$card")" \
+      "$(jq -r 'if ((.medido.dividas.na_secao//[])|length)==0 then "nenhuma nomeada (ressalva sem dívida)" else (.medido.dividas.na_secao|join(" ")) end' <<<"$card")"
+  fi
 }
 
 if [ "$3" != "--conferir" ]; then

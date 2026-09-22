@@ -76,6 +76,27 @@ casa "risco aceito pela tabela (não pelo cabeçalho)"       "$OUT" 'security_ri
 casa "veredito da validação"                              "$OUT" 'validacao: status=validated'
 casa "sem UAT → nomeia a ausência"                        "$OUT" 'uat_placar: sem 95-UAT.md'
 
+echo "── FJ-02INT: dívida da ressalva na radiografia ──"
+if printf '%s' "$OUT" | grep -q 'intent_ressalva_dividas'; then
+  falha "sem intent_review: aprovado_com_ressalva → linha ausente" "apareceu sem gatilho"
+else
+  ok "sem intent_review: aprovado_com_ressalva → linha ausente"
+fi
+cat > "$PD/95-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: aprovado_com_ressalva
+---
+
+## Dívidas registradas
+
+| id | alegação | evidência | dono | destino |
+|----|----------|-----------|------|---------|
+| c1-09 | achado | ev | Amplify | plan-phase |
+EOF
+OUT_RES="$(bash "$S" "$PD" 95 2>&1)"
+casa "ressalva → nomeia a dívida c1-09"                    "$OUT_RES" 'intent_ressalva_dividas \(1\): c1-09'
+rm -f "$PD/95-INTENT-REVIEW.md"
+
 echo "── --conferir: N planos/ondas ──"
 printf '# R\n\nForam 3 planos em 2 ondas.\n' > "$BASE/bom.md"
 bash "$S" "$PD" 95 --conferir "$BASE/bom.md" >/dev/null 2>&1

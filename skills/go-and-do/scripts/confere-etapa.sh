@@ -1109,6 +1109,15 @@ if [ "$ETAPA" = "1" ]; then
   # Diferente = alguém escreveu no arquivo depois do último selo. AVISO (não falha: o plano diz
   # «acusar», e o mesmo veto da FM-09INT vale aqui — travar a etapa por um artefato que o
   # coordenador ainda pode emendar custaria caro).
+  # LIMITE MEDIDO: só cobre a janela DEPOIS do último selo. A edição 53dbda6 aconteceu ENTRE
+  # dois ciclos selados (foi absorvida pelo selo do ciclo seguinte) — este assert, rodado hoje
+  # contra a F4 RLR real, dá `[]` (nenhum diff sem selo), porque não há como este mecanismo
+  # enxergar uma escrita que um selo posterior já cobriu com blob_commit igual ao atual. Cobrir
+  # a janela INTER-ciclo pediria encadear `c<N>.aplicado.blobs[].blob_commit` contra
+  # `c<N+1>.base.json.alvos[].blob_pre` — e no rl-representation real o `.correcoes-c1.base.json`
+  # em disco tem `head_pre` de DEPOIS do ciclo 4 (o próprio re-selo que a FM-05INT/A1 endereça),
+  # então essa cadeia não fecha nos dados existentes hoje. Fica como próximo passo declarado,
+  # não como bug: ver relatório.
   # (A 2ª metade do achado — "re-emissão de veredito sem escritor registrado" — já é o que o
   # J5/`confere-ciclo.sh --origem-vereditos` mede pelo sha256 do `.vereditos-c<C>.origem.json`
   # contra o `escritores[]`: um bloco abaixo, sem duplicar aqui.)
@@ -1509,8 +1518,22 @@ if [ "$ETAPA" = "6" ]; then
     RVE=$(python3 "$GAD_SCRIPTS_DIR/lib/review-maior.py" "$PHASE_DIR" "$NN" 2>/dev/null) || RVE=""
     jq -e . >/dev/null 2>&1 <<<"$RVE" || RVE='{}'
     ABERTOS=$( { jq -r '(.abertos//[])[]' <<<"$RVE" 2>/dev/null || true; } )
+    # FJ-02INT (metade etapa 6): a fase fechada com `intent_review: aprovado_com_ressalva`
+    # tem a(s) dívida(s) que a sustentam como aceite pendente — a régua é a MESMA do WR-09
+    # acima («todo ID aberto aparece no resumo»), só que a lista vem do
+    # confere-cardinalidade.sh (medido.dividas.na_secao) em vez do review-maior.py. Um
+    # `FALTAM` só, um assert só — não duplica o resumo_sem_id_aberto.
+    IR_ARQ6="$PHASE_DIR/$NN-INTENT-REVIEW.md"
+    CCARD6="$GAD_SCRIPTS_DIR/confere-cardinalidade.sh"
+    if [ -f "$IR_ARQ6" ] && grep -qE '^intent_review: aprovado_com_ressalva' "$IR_ARQ6" && [ -f "$CCARD6" ]; then
+      card6rc=0; cardout6=$(bash "$CCARD6" "$PHASE_DIR" "$NN" --json 2>/dev/null) || card6rc=$?
+      jq -e . >/dev/null 2>&1 <<<"$cardout6" || cardout6='{"medido":{}}'
+      RESSALVA_IDS=$( { jq -r '(.medido.dividas.na_secao//[])[]' <<<"$cardout6" 2>/dev/null || true; } )
+      ABERTOS="$ABERTOS $RESSALVA_IDS"
+    fi
     FALTAM=""
     for id in $ABERTOS; do
+      [ -n "$id" ] || continue
       grep -qF "$id" "$RSM" || FALTAM="$FALTAM $id"
     done
     if [ -n "$FALTAM" ]; then
