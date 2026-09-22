@@ -1109,10 +1109,12 @@ if [ "$ETAPA" = "1" ]; then
   # Diferente = alguém escreveu no arquivo depois do último selo. AVISO (não falha: o plano diz
   # «acusar», e o mesmo veto da FM-09INT vale aqui — travar a etapa por um artefato que o
   # coordenador ainda pode emendar custaria caro).
-  # LIMITE MEDIDO: só cobre a janela DEPOIS do último selo. A edição 53dbda6 aconteceu ENTRE
-  # dois ciclos selados (foi absorvida pelo selo do ciclo seguinte) — este assert, rodado hoje
-  # contra a F4 RLR real, dá `[]` (nenhum diff sem selo), porque não há como este mecanismo
-  # enxergar uma escrita que um selo posterior já cobriu com blob_commit igual ao atual. Cobrir
+  # LIMITE MEDIDO: só cobre a janela DEPOIS do último selo. Rodado hoje contra a F4 RLR real
+  # (que tem a evidência do 53dbda6), este assert dá `[]` — não há regressão a mostrar porque
+  # não foi medida a ordem exata do 53dbda6 frente aos selos c2/c3/c4, só o fato de que uma
+  # escrita anterior a um selo posterior fica com o mesmo blob_commit do estado atual e por
+  # isso é invisível a este mecanismo, que só compara "selo mais recente" × "worktree agora".
+  # Cobrir
   # a janela INTER-ciclo pediria encadear `c<N>.aplicado.blobs[].blob_commit` contra
   # `c<N+1>.base.json.alvos[].blob_pre` — e no rl-representation real o `.correcoes-c1.base.json`
   # em disco tem `head_pre` de DEPOIS do ciclo 4 (o próprio re-selo que a FM-05INT/A1 endereça),
