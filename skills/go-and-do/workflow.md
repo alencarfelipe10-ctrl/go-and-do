@@ -330,7 +330,10 @@ runs the `base-check` and measures the waves of ≥2 incomplete plans.
   `pergunta_ao_dono`, which already carries the real `base-check` message — or, when `motivo`
   starts with `plan_gate_ausente_ou_reprovado:`, the choice «replanejar (volta à etapa 2) ou
   aceitar o despacho sabendo que a onda pode serializar». Do not diagnose on your own nor
-  apply an antidote by hand: the script measures instead of presuming.
+  apply an antidote by hand: the script measures instead of presuming. **Owner accepts the
+  blocked dispatch** → record the stage-3 checkpoint (`run-log.sh checkpoint "3 construcao"`)
+  BEFORE dispatching, not after — a dispatch accepted this way is still an etapa-3 dispatch and
+  needs its window open for the run-log to attribute it correctly (FM-02EXE).
   **Exception — `acao_mecanica: true`** (`motivo` starts with `precondicao_worktree_obsoleta:`):
   no question. Fix the listed PLAN.md yourself exactly as `pergunta_ao_dono` says (drop
   `isolation: none`, rewrite the precondition to the worktree-fixtures sentence), commit, re-run
@@ -401,10 +404,14 @@ the exact action (never treat it as `human_needed`). Otherwise, the VERIFICATION
   disobeyed the instruction and saved the phase). Dispatch `Agent(subagent_type="gsd-verifier")`
   directly, synchronous, handing: `phase_dir`, `NN`, the plan ids, and **the test scope** — the
   modules touched since the previous VERIFICATION
-  (`git diff --name-only <sha-da-verificação>..HEAD -- src tests`), never the full suite. The
-  dispatch carries, verbatim: «Rode apenas os testes dos módulos listados. A suíte completa é
-  gate de fase e já rodou — não a relance.» The project's own testing rule comes first when it
-  exists (`CLAUDE.md`; the inspired's says, in writing, to run only the touched module).
+  (`git diff --name-only <sha-da-verificação>..HEAD -- src tests`), plus the FULL suite's
+  measured numbers (rc, duration) from the stage-3 run. The dispatch carries, verbatim, the
+  same sentence `prompts/execute.md` uses for the same handoff: «Entrego os números medidos da
+  suíte completa e o escopo de módulos tocados. A suíte completa já é gate desta etapa; relançar
+  é decisão sua, com justificativa.» (FJ-01EXE — resolves the contradiction between this stage
+  and the host prompt, which used to forbid the verifier from ever relaunching). The project's
+  own testing rule comes first when it exists (`CLAUDE.md`; the inspired's says, in writing, to
+  run only the touched module).
   F24.5: an unscoped dispatch ran the fast suite whole for 30+ min with 4 GB of swap, and the
   full suite took 56 min 50 s against a measured band of 17–35 min. Still absent after the
   re-verification → Sub-rotina D.
