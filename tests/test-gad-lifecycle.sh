@@ -199,7 +199,10 @@ esp_negado "E3a: SendMessage(to: a1b2c3…) cujo meta é gad-spec negado"
 monta
 meta a9f9f9 gad-verificador tu-y 2
 roda "$(p_send a9f9f9)"
-esp_passou "E3a: SendMessage cujo alvo resolve para gad-verificador passa" a9f9f9
+# FM-05UAT (F4 RLR, B1 §3): `agente=` no run-log tem de ser o TIPO (agentType do meta),
+# não o id hex bruto do `to` — antes deste caso o hook gravava "a9f9f9" (o id), que é
+# exatamente o rótulo cego que a auditoria pediu para corrigir.
+esp_passou "E3a: SendMessage cujo alvo resolve para gad-verificador passa (agente=TIPO, não id)" gad-verificador
 
 monta
 roda "$(p_send gad-verificador)"

@@ -375,6 +375,12 @@ if [ -z "$CAM" ] && [ "$RETOMADA" = 1 ] && [ -d "$SUBDIR" ]; then
     case "$SD" in (''|*[!0-9]*) ;; (*) CAM=$SD ;; esac
     MODELO=$(jq -r '.model // empty' "$META" 2>/dev/null)
     [ -n "$MODELO" ] || MODELO=$(modelo_do_jsonl "${META%.meta.json}.jsonl")
+    # FM-05UAT (F4 RLR, B1 §3): a devolução ao mesmo subagente por SendMessage grava o
+    # TIPO do agente (agentType do meta), nunca o `to` bruto — que na retomada por id
+    # hex sem nome (F24: 5 pares a<hex>… sem campo) É o id, não o tipo. Quando `to` já
+    # era o nome/tipo literal (1º grep acima casou), $_at sai igual a $AG — no-op.
+    _at=$(jq -r '.agentType // empty' "$META" 2>/dev/null)
+    [ -n "$_at" ] && AG="$_at"
   fi
 fi
 # despacho (ou fallback do retorno sem meta): heurística dos hosts abertos
