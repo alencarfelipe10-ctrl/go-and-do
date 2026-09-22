@@ -1418,41 +1418,9 @@ fi
 # REVIEW.md. E `status: all_fixed` com `skipped > 0` reprova: nada fica de fora sem ser
 # nomeado. Formato não reconhecido FALHA ALTO — leitor cego é pior que leitor ausente.
 if [ "$ETAPA" = "4-code-review" ]; then
-  REVMAX=$(python3 - "$PHASE_DIR" "$NN" 2>/dev/null <<'PYREV'
-import glob, json, os, re, sys
-pd, nn = sys.argv[1], sys.argv[2]
-
-def iter_de(nome):
-    m = re.search(r'\.iter(\d+)\.md$', nome)
-    return int(m.group(1)) if m else 1
-
-cands = []
-for pat, peso in ((f"{nn}-REVIEW-FIX*.md", 2), (f"{nn}-REVIEW.md", 1), (f"{nn}-REVIEW.iter*.md", 1)):
-    for f in glob.glob(os.path.join(pd, pat)):
-        cands.append((peso, iter_de(f), f))
-if not cands:
-    print(json.dumps({"arquivo": None})); raise SystemExit(0)
-cands.sort()
-_, it, alvo = cands[-1]
-
-txt = open(alvo, encoding="utf-8", errors="replace").read()
-def campo(nome):
-    m = re.search(r'^\s*%s:\s*(\S+)' % nome, txt, re.M)
-    return m.group(1) if m else None
-
-status = campo("status")
-nums = {}
-for k in ("critical", "warning", "info", "total", "skipped", "fixed"):
-    v = campo(k)
-    if v is not None:
-        try: nums[k] = int(v)
-        except ValueError: nums[k] = v
-saida = {"arquivo": os.path.basename(alvo), "iteracao": it, "status": status, **nums}
-if status is None:
-    saida["formato_nao_reconhecido"] = True
-print(json.dumps(saida, ensure_ascii=False))
-PYREV
-) || REVMAX=""
+  # Leitor fatorado para `lib/review-maior.py` (21/09) — o `numeros-da-fase.sh` (FJ-01ENC)
+  # lê o MESMO arquivo pela MESMA regra. Não escreva um segundo parser.
+  REVMAX=$(python3 "$GAD_SCRIPTS_DIR/lib/review-maior.py" "$PHASE_DIR" "$NN" 2>/dev/null) || REVMAX=""
   jq -e . >/dev/null 2>&1 <<<"$REVMAX" || REVMAX='{"arquivo":null,"formato_nao_reconhecido":true}'
   rv_arq=$(jq -r '.arquivo // ""' <<<"$REVMAX")
   if [ -n "$rv_arq" ]; then
