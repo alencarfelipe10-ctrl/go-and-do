@@ -532,6 +532,45 @@ J=$(confere "$R" 99)
 eq "SPEC editado depois do selo → AVISO" "$(assert_de "$J" spec_context_sem_selo)" "AVISO"
 casa "…nomeia o arquivo e os dois blobs" "$J" '99-SPEC\.md: selado'
 
+echo "── FJ-02INT (metade script): aprovado_com_ressalva exige dívida nomeada ──"
+IFS='|' read -r R PD <<<"$(monta ressalva 99)"
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: aprovado_com_ressalva
+---
+
+## Dívidas registradas
+
+| id | alegação | evidência | dono | destino |
+|----|----------|-----------|------|---------|
+EOF
+J=$(confere "$R" 99)
+eq "ressalva sem NENHUMA dívida nomeada → FALHA" "$(assert_de "$J" intent_ressalva_sem_divida)" "FALHA"
+casa "…diz «sem NENHUMA dívida»" "$J" 'sem NENHUMA dívida'
+
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: aprovado_com_ressalva
+---
+
+## Dívidas registradas
+
+| id | alegação | evidência | dono | destino |
+|----|----------|-----------|------|---------|
+| c1-04 | d | ev | Amplify | plan-phase |
+EOF
+J=$(confere "$R" 99)
+eq "dívida nomeada mas ausente do deferred-items.md → FALHA" "$(assert_de "$J" intent_ressalva_sem_divida)" "FALHA"
+casa "…nomeia c1-04" "$J" 'c1-04'
+printf -- '- c1-04 — dívida\n' > "$PD/deferred-items.md"
+J=$(confere "$R" 99)
+eq "dívida nomeada e registrada no deferred-items.md → ok" "$(assert_de "$J" intent_ressalva_sem_divida)" "ok"
+
+IFS='|' read -r R PD <<<"$(monta semressalva 99)"
+printf 'intent_review: done\n' > "$PD/99-INTENT-REVIEW.md"
+J=$(confere "$R" 99)
+eq "sem aprovado_com_ressalva → assert calado" "$(assert_de "$J" intent_ressalva_sem_divida)" "<ausente>"
+
 echo "── FM-09INT: fiação do confere-cardinalidade.sh dentro do fiscal da etapa 1 ──"
 IFS='|' read -r R PD <<<"$(monta card 99)"
 cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'

@@ -1075,6 +1075,29 @@ if [ "$ETAPA" = "1" ]; then
     EXTRAI=$(jq -c --argjson c "$cardout" '. + {cardinalidade: $c}' <<<"$EXTRAI")
   fi
 
+  # ── FJ-02INT (metade script): «aprovado_com_ressalva» exige dívida nomeada ──
+  # Regra 5 do plano: «aprovado com ressalva» só vale na etapa 1 — aqui é onde intent_review
+  # é lido, então é aqui que o veto mora. O manifesto (etapa-1.json) já aceita o rótulo no
+  # `intent_review_fechada`; este bloco cobra a contrapartida: sem dívida nomeada na «##
+  # Dívidas registradas» E registrada no deferred-items.md, a ressalva é bilhete em branco.
+  # Reaproveita o `medido.dividas` que o confere-cardinalidade.sh (FM-09INT, acima) já
+  # extraiu — não é um 2º parser do mesmo INTENT-REVIEW.md.
+  IR_ARQ="$PHASE_DIR/$NN-INTENT-REVIEW.md"
+  if [ -f "$IR_ARQ" ] && grep -qE '^intent_review: aprovado_com_ressalva' "$IR_ARQ"; then
+    na_secao_n=$(jq '(.medido.dividas.na_secao//[])|length' <<<"${cardout:-{\}}" 2>/dev/null || echo 0)
+    faltam=$(jq -r '(.medido.dividas.na_secao//[]) - (.medido.dividas.no_deferred//[]) | join(" ")' <<<"${cardout:-{\}}" 2>/dev/null)
+    if [ "${na_secao_n:-0}" -eq 0 ]; then
+      RES=$(jq -c '. + [{id:"intent_ressalva_sem_divida", resultado:"FALHA", detalhe:"intent_review: aprovado_com_ressalva sem NENHUMA dívida na «## Dívidas registradas» do INTENT-REVIEW — a ressalva não pode ficar sem nome"}]' <<<"$RES")
+      FALHAS=$((FALHAS+1))
+    elif [ -n "$faltam" ]; then
+      RES=$(jq -c --arg d "intent_review: aprovado_com_ressalva mas a(s) dívida(s) $faltam da «## Dívidas registradas» não está(ão) no deferred-items.md — a ressalva tem de ser rastreável até o fim da fase" \
+        '. + [{id:"intent_ressalva_sem_divida", resultado:"FALHA", detalhe:$d}]' <<<"$RES")
+      FALHAS=$((FALHAS+1))
+    else
+      RES=$(jq -c '. + [{id:"intent_ressalva_sem_divida", resultado:"ok", detalhe:"ressalva com dívida nomeada e registrada no deferred-items.md"}]' <<<"$RES")
+    fi
+  fi
+
   # ── FM-05INT (metade fiscal): diff em SPEC/CONTEXT sem selo ──
   # Achado F4 RLR: 4 linhas entraram no 04-SPEC.md por fora do correcoes-commit.sh (dentro de
   # um commit de artefatos, sem id nem selo). O `.correcoes-c<C>.aplicado` de cada ciclo grava
