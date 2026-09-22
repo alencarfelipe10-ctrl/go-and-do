@@ -326,6 +326,27 @@ J="$("$SCRIPT" --frescor "$PDF" 24 2)"
 printf '%s' "$J" | jq -e '.codigos|index("BRIEFING-STALE")' >/dev/null \
   && ok "--frescor: briefing mais velho que o PLAN.md → BRIEFING-STALE" || erro "--frescor BRIEFING-STALE: $J"
 
+# (4c) FM-F4RLR-01CONV — causa real: EMPATE de epoch (commit em lote) entre iter-*.yaml
+# cuja ordem alfabética não é a ordem numérica. iter9×iter10 sozinho NÃO reproduz (a
+# ordem lexical de "iter-10" < "iter-9" coincide com o desempate certo por acaso); o
+# repro real precisa de um trio onde o glob alfabético erra: iter-2, iter-9, iter-19
+# commitados juntos (mesmo epoch) — alfabeticamente "iter-19" < "iter-2" < "iter-9", e
+# pegar o primeiro do glob (iter-19) por acaso ainda acerta o maior. O caso que quebra de
+# verdade é quando o iter de maior N não é o primeiro alfabético do lote: iter-2 e iter-9
+# no mesmo commit — alfabeticamente iter-2 vem depois de iter-19 mas antes de iter-9, e
+# SEM iter-19 no lote o primeiro do glob é iter-2, que "vence" o empate mesmo iter-9
+# sendo o mais novo de verdade.
+PDF="$(monta_fr empate)"; R4C="$(dirname "$(dirname "$(dirname "$PDF")")")"
+mkdir -p "$PDF/.plan-checker"
+printf 'status: PASSED\n' > "$PDF/.plan-checker/iter-2.yaml"
+printf 'status: PASSED\n' > "$PDF/.plan-checker/iter-9.yaml"
+GG "$R4C" add -A >/dev/null 2>&1
+GGC "$R4C" "2026-09-02T10:00:00" "checker em lote (iter-2 e iter-9 no mesmo commit)"
+J="$("$SCRIPT" --frescor "$PDF" 24 1)"; RC=$?
+[ "$(printf '%s' "$J" | jq -r .checker_mais_novo)" = "$PDF/.plan-checker/iter-9.yaml" ] && [ "$RC" = 0 ] \
+  && ok "--frescor: empate de epoch escolhe iter-9 (maior N), não o 1º do glob (iter-2)" \
+  || erro "--frescor empate de epoch: $J rc=$RC"
+
 # (5) fora de repositório git → cai para mtime, não quebra
 PDF="$(monta_fr semgit)"; rm -rf "$(dirname "$(dirname "$(dirname "$PDF")")")/.git"
 J="$("$SCRIPT" --frescor "$PDF" 24 1)"; RC=$?

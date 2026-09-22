@@ -237,12 +237,30 @@ if [ "${1:-}" = "--frescor" ]; then
     printf '%s\t%s\n' "$melhor" "$quem"
   }
 
+  # FM-F4RLR-01CONV: para iter-*.yaml o desempate NÃO pode ser a ordem alfabética do glob.
+  # Causa real medida (não era iter9×iter10, que por acaso empata certo): quando dois
+  # arquivos têm o MESMO epoch (commit em lote, comum no confere-etapa), _fr_max fica com
+  # o primeiro do glob — e a ordem lexical de "iter-N.yaml" não é a ordem numérica de N
+  # (ex.: iter-19.yaml < iter-2.yaml < iter-9.yaml alfabeticamente). Escolher pelo NÚMERO
+  # da iteração, extraído do nome — nunca pela ordem em que o glob devolveu os arquivos.
+  _fr_max_iter() { # <dir> → maior epoch e o caminho do iter-N.yaml de maior N
+    local dir="$1" melhor=-1 quem="" f n
+    for f in "$dir"/.plan-checker/iter-*.yaml; do
+      [ -e "$f" ] || continue
+      n="$(basename "$f" .yaml)"; n="${n#iter-}"
+      case "$n" in ''|*[!0-9]*) continue ;; esac
+      if [ "$n" -gt "$melhor" ]; then melhor="$n"; quem="$f"; fi
+    done
+    if [ -n "$quem" ]; then printf '%s\t%s\n' "$(_fr_epoch "$quem")" "$quem"
+    else printf '0\t\n'; fi
+  }
+
   # o briefing do ciclo k da convergência (untracked por desenho → mtime)
   FBRIEF="$FPD/pareceres/briefing-planrev-c$FK.md"
   [ -e "$FBRIEF" ] || FBRIEF="$FPD/.convergencia/briefing-c$FK.md"
 
   IFS=$'\t' read -r PLAN_E PLAN_Q < <(_fr_max "$FPD"/*-PLAN.md)
-  IFS=$'\t' read -r CHK_E  CHK_Q  < <(_fr_max "$FPD"/.plan-checker/iter-*.yaml)
+  IFS=$'\t' read -r CHK_E  CHK_Q  < <(_fr_max_iter "$FPD")
   BRF_E=0; [ -e "$FBRIEF" ] && BRF_E="$(stat -c %Y "$FBRIEF" 2>/dev/null || echo 0)"
 
   FCOD='[]'; FVER=ok
