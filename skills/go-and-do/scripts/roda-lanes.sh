@@ -73,6 +73,11 @@
 set -uo pipefail
 
 GAD_LANES_SELF="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)/$(basename -- "${BASH_SOURCE[0]}")"
+# B1 (F4 RLR): sourcear o shim só pelo helper gad_autoregistro (gap apontado pelo R2 —
+# o lançador não gravava evento `script` nenhum). Sourcear nunca falha (resolução do
+# gsd-tools é lazy) — os dois `set` (aqui `-uo`, no shim `-euo`) não colidem porque o
+# shim não muda `set` do caller.
+. "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Lock por ciclo (mkdir + PID) — com detecção de lock órfão
@@ -152,7 +157,16 @@ if [ "${1:-}" = "--supervisiona" ]; then
 
   # Rede de segurança: qualquer saída anômala (menos SIGKILL) ainda deixa um status
   # completo — verificador esperando 12 min por nada é exatamente o que o E4 mata.
-  trap '[ "$STATUS_ESCRITO" = 1 ] || grava_status 99 supervisor_abortou false false false false false' EXIT
+  # B1 (F4 RLR, gap apontado pelo R2): o supervisor é o único lugar com o exit REAL da
+  # lane (o lançador volta em <1s, antes de a lane terminar) — grava o evento `script`
+  # aqui, sempre, mesmo em abort. `rc` capturado ANTES de qualquer outro comando (mesma
+  # lição do trap do confere-etapa.sh/spot-check: "$?" solto no corpo do trap pegaria o
+  # exit do comando anterior do trap, não o do script).
+  # gad_autoregistro resolve a raiz por $PWD (sem parâmetro de root) — o supervisor
+  # nasce de `nohup … & disown` e pode herdar um cwd que não é a raiz do projeto; o
+  # subshell com `cd "$PD"` (a pasta da fase, sempre dentro da raiz) garante a raiz
+  # certa sem mexer no gsd-shim.sh.
+  trap 'rc=$?; [ "$STATUS_ESCRITO" = 1 ] || grava_status 99 supervisor_abortou false false false false false; ( cd "$PD" 2>/dev/null && gad_autoregistro "roda-lanes.sh" "$rc" "lane=$LANE familia=$FAMILIA usable=${USABLE:-?} independent=${INDEPENDENT:-?}" )' EXIT
 
   LANES_DIR="${GAD_LANES_DIR:-$(dirname -- "$GAD_LANES_SELF")}"
   SCRIPT_LANE="$LANES_DIR/roda-$LANE.sh"
