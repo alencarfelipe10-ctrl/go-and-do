@@ -1652,15 +1652,29 @@ if [ "$DRY" = 0 ]; then
       MEDICAO='{"status":"sem_medicao","reason":"sem sessão ou sem checkpoint da etapa no run-log"}'
     fi
     POSFLAG=(); [ "$POS_FAIL" = 1 ] && POSFLAG=(--kv pos_gate_fail=true)
+    # FM-04UAT (lado script, pendência do relatório B §6): a etapa 6 que PAROU sem ship
+    # (rota 6.4-HB) grava veredito=handback, não pass, no PRÓPRIO `end` id 6 — não só no
+    # `stop`/etapa "handback" que já existia. A rota (pausa/handback/ship) foi decidida no
+    # DESPACHO da etapa 6 por `pre-despacho.sh 6` (6.1) e sobrevive no espelho
+    # last-pre-despacho.json (mesmo etapa 6, ninguém mais rodou pre-despacho.sh no meio) —
+    # lido aqui em vez de recalculado, para não ter 2º lugar que decide a rota.
+    VEREDITO_END=pass
+    if [ "${RUNLOG_ETAPA%% *}" = "6" ]; then
+      PD6="$ROOT/.planning/.gad/last-pre-despacho.json"
+      if [ -f "$PD6" ] && [ "$(jq -r '.etapa // ""' "$PD6" 2>/dev/null)" = "6" ] \
+         && [ "$(jq -r '.paralelismo.rota // .rota // ""' "$PD6" 2>/dev/null)" = "handback" ]; then
+        VEREDITO_END=handback
+      fi
+    fi
     if [ "$SEMTEL" = 1 ]; then
       :
     elif [ "$(jq -r '.status' <<<"$MEDICAO")" = ok ]; then
       gad_runlog "$PHASE_DIR" "$NN" end "$RUNLOG_ETAPA" \
         --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens + (.total.cache_creation_1h_tokens // 0)' <<<"$MEDICAO")" \
         --custo "$(jq -r '.total.custo_usd // 0' <<<"$MEDICAO")" \
-        --kv veredito=pass ${POSFLAG[@]+"${POSFLAG[@]}"}
+        --kv veredito="$VEREDITO_END" ${POSFLAG[@]+"${POSFLAG[@]}"}
     else
-      gad_runlog "$PHASE_DIR" "$NN" end "$RUNLOG_ETAPA" --kv veredito=pass \
+      gad_runlog "$PHASE_DIR" "$NN" end "$RUNLOG_ETAPA" --kv veredito="$VEREDITO_END" \
         --kv medicao="$(jq -r '.reason // "indisponivel"' <<<"$MEDICAO")" \
         ${POSFLAG[@]+"${POSFLAG[@]}"}
     fi
