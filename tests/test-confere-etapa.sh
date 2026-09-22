@@ -515,6 +515,23 @@ eq "linha acrescentada depois do recibo → VEREDITO-ALTERADO reprova a etapa 1"
    "$(assert_de "$J" j5_origem_c1)" "FALHA"
 casa "…com a mensagem literal" "$J" 'VEREDITO-ALTERADO c1'
 
+echo "── FM-05INT (metade fiscal): SPEC/CONTEXT mudou depois do último selo ──"
+IFS='|' read -r R PD <<<"$(monta selo 99)"
+printf 'spec v1\n' > "$PD/99-SPEC.md"
+BLOB_V1=$(git -C "$R" hash-object -- "${PD#"$R"/}/99-SPEC.md")
+REL="${PD#"$R"/}/99-SPEC.md"
+cat > "$PD/.intent/.correcoes-c1.aplicado" <<EOF
+{"v":1,"ciclo":"1","ids":["c1-01"],"correcoes":[{"id":"c1-01","hash":"$BLOB_V1"}],
+ "commit":"deadbeef","caminhos":["$REL"],"hash_ausente":[],
+ "blobs":[{"path":"$REL","blob_commit":"$BLOB_V1","blob_worktree":"$BLOB_V1"}]}
+EOF
+J=$(confere "$R" 99)
+eq "selo intacto → sem spec_context_sem_selo" "$(assert_de "$J" spec_context_sem_selo)" "<ausente>"
+printf 'spec v1\nlinha acrescentada por fora do selo\n' > "$PD/99-SPEC.md"
+J=$(confere "$R" 99)
+eq "SPEC editado depois do selo → AVISO" "$(assert_de "$J" spec_context_sem_selo)" "AVISO"
+casa "…nomeia o arquivo e os dois blobs" "$J" '99-SPEC\.md: selado'
+
 echo "── FM-09INT: fiação do confere-cardinalidade.sh dentro do fiscal da etapa 1 ──"
 IFS='|' read -r R PD <<<"$(monta card 99)"
 cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'

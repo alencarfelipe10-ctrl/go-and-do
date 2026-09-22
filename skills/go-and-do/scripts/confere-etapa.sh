@@ -1075,6 +1075,51 @@ if [ "$ETAPA" = "1" ]; then
     EXTRAI=$(jq -c --argjson c "$cardout" '. + {cardinalidade: $c}' <<<"$EXTRAI")
   fi
 
+  # ── FM-05INT (metade fiscal): diff em SPEC/CONTEXT sem selo ──
+  # Achado F4 RLR: 4 linhas entraram no 04-SPEC.md por fora do correcoes-commit.sh (dentro de
+  # um commit de artefatos, sem id nem selo). O `.correcoes-c<C>.aplicado` de cada ciclo grava
+  # `blobs[].blob_commit` — o blob do arquivo COMO FICOU depois daquele selo. Pega, por path
+  # (só NN-SPEC.md/NN-CONTEXT.md), o `blob_commit` do ciclo MAIS ALTO que menciona aquele path
+  # e compara com o blob do arquivo agora no worktree (`git hash-object`, não `git log`: um
+  # squash-merge da PR reescreve o histórico e apaga os commits que a evidência original citava
+  # — medido no rl-representation real, onde o commit 53dbda6 da auditoria não existe mais).
+  # Diferente = alguém escreveu no arquivo depois do último selo. AVISO (não falha: o plano diz
+  # «acusar», e o mesmo veto da FM-09INT vale aqui — travar a etapa por um artefato que o
+  # coordenador ainda pode emendar custaria caro).
+  # (A 2ª metade do achado — "re-emissão de veredito sem escritor registrado" — já é o que o
+  # J5/`confere-ciclo.sh --origem-vereditos` mede pelo sha256 do `.vereditos-c<C>.origem.json`
+  # contra o `escritores[]`: um bloco abaixo, sem duplicar aqui.)
+  declare -A SELO_BLOB=()
+  for ap in "$PHASE_DIR/.intent/".correcoes-c*.aplicado; do
+    [ -f "$ap" ] || continue
+    c_ap=$(basename "$ap" | sed -n 's/^\.correcoes-c\([0-9][0-9]*\)b\?\.aplicado$/\1/p')
+    [ -n "$c_ap" ] || c_ap=0
+    while IFS=$'\t' read -r bp bc; do
+      [ -n "$bp" ] || continue
+      case "$bp" in
+        */"$NN"-SPEC.md|*/"$NN"-CONTEXT.md) ;;
+        *) continue ;;
+      esac
+      prev="${SELO_BLOB[$bp]:-}"
+      c_prev="${prev%%:*}"
+      if [ -z "$prev" ] || [ "${c_ap:-0}" -ge "${c_prev:-0}" ] 2>/dev/null; then
+        SELO_BLOB["$bp"]="$c_ap:$bc"
+      fi
+    done < <(jq -r '(.blobs//[])[] | "\(.path)\t\(.blob_commit)"' "$ap" 2>/dev/null)
+  done
+  SEM_SELO=()
+  for bp in "${!SELO_BLOB[@]}"; do
+    bc="${SELO_BLOB[$bp]#*:}"
+    fp="$ROOT/$bp"
+    [ -f "$fp" ] || continue
+    atual=$(git -C "$ROOT" hash-object -- "$bp" 2>/dev/null) || continue
+    [ "$atual" = "$bc" ] || SEM_SELO+=("$(basename "$bp"): selado $bc, agora $atual")
+  done
+  if [ "${#SEM_SELO[@]}" -gt 0 ]; then
+    d="SPEC/CONTEXT.md mudou depois do último selo do correcoes-commit.sh — ${SEM_SELO[*]}"
+    RES=$(jq -c --arg d "${d:0:400}" '. + [{id:"spec_context_sem_selo", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+  fi
+
   # ── J5 (45k, F24.5): proveniência do veredito. O R5 acima já pega correção promovida SEM
   # linha de veredito; o que ele não vê é a linha de veredito escrita pelo próprio coordenador
   # depois que o verificador saiu (24.5: 3 linhas às 12:12, verificador fechado às 11:15).
