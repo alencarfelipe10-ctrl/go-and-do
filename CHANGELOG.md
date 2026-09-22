@@ -2,6 +2,72 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.8.0] - 2026-09-22
+
+Auditoria por etapa da F4 rl-representation (`/audit-gad` nas 6 etapas, 20–21/09): 91 melhorias
+aprovadas, implementadas em 22/09 nos blocos A (scripts), B (run-log/gancho) e C (prompts). A
+parte do fork do GSD e da `/audit-gad` mora fora deste repositório. Plano e relatórios:
+`gsd-optimize/go-and-do-evolucao/planos-auditorias-dinamicas/F4-RLR.md` e `relatorio-F4-RLR*.md`.
+
+**Fiscal (`confere-etapa.sh`) e travas**
+- `correcoes-commit.sh`: recusa id inventado, id DISPENSADO e achado confirmado sem destino
+  (`--adiados`); aceita ids da releitura do ciclo; abortar por erro não grava `.vazio`. Selo fiel:
+  hash e caminhos saem do diff; base do ciclo nunca sobrescrita em re-selo. `revalida-documentos.sh`
+  (ponteiros, contagens, carimbos «revalidada no ciclo N») roda dentro dele.
+- Etapa 1: `intent_review: aprovado_com_ressalva` exige `ressalva_dividas: [ids]` apontando a
+  dívida que sustenta a ressalva (só ela é cobrada); `confere-cardinalidade.sh` novo (número
+  declarado × lista); SPEC/CONTEXT re-emitidos sem selo → aviso (`spec_context_sem_selo`).
+- Fecho com evidência no git: `commita-artefatos.sh --modo evidencia` leva `.intent/`, pareceres,
+  atestados, run-log, deferred-items e `NN-DECISOES.md`; o fiscal reprova só o que a etapa não
+  produz e ainda está fora do git.
+- Etapa 6: `pre-despacho.sh 6` (FM-03/FM-01/FJ-04ENC), `numeros-da-fase.sh` e o fiscal leem o
+  review de maior iteração por um leitor só (`lib/review-maior.py`); VERIFICATION anterior a
+  mudanças no código → aviso (comparação por HEAD).
+- Gates: recibo `.fence-4.1b.ok` e checkpoint «4.1b re-review» dão identidade ao re-review;
+  `recibo_4_1_vencido` (FM-01GAT); `veredito=handback` no `end` da etapa 6 que parou
+  (`lib/veredito-end.sh`).
+- UAT: `uat-fiscal.py` novo (asserts de UAT num leitor só) — reconhece a escotilha «🔍 não se
+  aplica: <motivo>» e a exceção «ação sem saída»; `pos-ship.py --conferir` (não move nada) e
+  recusa lista vazia silenciosa quando há `pos_ship: candidato`.
+- Nesta release ficam em **AVISO** (viram falha dura após a 1ª fase real com os prompts novos):
+  `incidente_tardio`, `uat_pass_sem_sondagem`, `spec_context_sem_selo`.
+
+**Scripts novos e consertos**
+- `varre-mencoes.sh <pasta-da-fase> <id-do-plano>` (replan) e `confere-ponteiros-plano.sh`
+  (`read_first` × `files_modified` das ondas anteriores; §N × posição real — só avisa).
+- `confere-ciclo.sh --frescor` escolhe o checker por número de iteração; `roda-lanes.sh` e
+  `roda-agy.sh` leem a evidência de modelo do agy («Propagating selected model override … label=»),
+  vazio ⇒ `modelo_ok=false`; parecer sem engajamento vira marca `sem_engajamento`;
+  `registra-ciclo.sh` avisa seção citada inexistente; `spot-check-ponteiros.sh` resolve da raiz do
+  repo e tem um só `trap EXIT`; `confere-rotas.sh` aceita rota fixa `child` sem `brutos_pre_rota`;
+  `confere-pre-spec.sh` ignora ponteiro de linha; `confere-plano.sh` lista commits parecidos ao
+  reprovar SEM-COMMIT; `setup-intencao.sh` aceita «Phase 4»/«Phase 04» e falha alto sem Goal;
+  `setup-intencao.sh`/`abre-rodada.sh` tratam `aprovado_com_ressalva` como etapa 1 concluída.
+- Releitura: cada rodada de correção pós-releitura grava `.releitura-c<C><letra>.json` próprio;
+  `briefing-build.sh` lê o mais recente do ciclo.
+- Número da fase num lugar só (`fase_norm`/`fase_rx`/`gad_phase_dir` no `gsd-shim.sh`).
+
+**Run-log e gancho**
+- Scripts gravam o próprio evento `script` com o exit real via `trap EXIT`
+  (`confere-etapa.sh`, scripts da etapa 1, supervisor do `roda-lanes.sh`), respeitando
+  `GAD_DRY_RUN=1`; `gad_json_out` só é somente-leitura sob `GAD_DRY_RUN=1`.
+- `hooks/gad-lifecycle.sh`: ponteiro da rodada achado em worktree isolado
+  (`git rev-parse --git-common-dir`); etapa pelo tipo de agente como 2ª defesa (só em despacho e só
+  quando o tipo mapeia para uma etapa); evento antes do 1º checkpoint da sessão sai «0 abertura»;
+  grava o tipo do agente, não o id.
+- `run-log.sh`: hand-back liga a retomada da etapa 5 à janela antiga (`retomada_de_seq`,
+  `retomada_de_sessao`); rótulo de sessão morta não vaza para `script`/`incidente`.
+
+**Prompts e workflow (6 etapas)** — frases mínimas por item aprovado: correção chama-se pelo id
+do achado; dispensado → dívida com destino, discordância = linha «contestada»; incidente na hora
+em todas as etapas; rota fixa `child`; roteiro do ciclo em 4 turnos; hand-back chama
+`commita-artefatos.sh` antes de sair da etapa 5; `pos-ship.py --conferir` antes do cético; etapa 6
+que para registra `handback`, não `pass`.
+
+- Bancadas: `tests/roda.sh` 40 arquivos (era 34): novos `test-uat-fiscal`, `test-confere-cardinalidade`,
+  `test-varre-mencoes`, `test-confere-ponteiros-plano`, `test-contrato-uat-playbook`,
+  `test-contrato-intent-releitura`; `test-confere-etapa` 153→179, `test-gad-lifecycle` 55.
+
 ## [2.7.0] - 2026-09-21
 
 UAT: observação pós-ship, re-UAT do balde 3 e superfície de UAT do projeto. Origem: F4
