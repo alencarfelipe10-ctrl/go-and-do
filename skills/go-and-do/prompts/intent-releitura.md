@@ -172,13 +172,14 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
      rodada do ciclo 0, `c0b` na correção pós-releitura, `c0c` na seguinte, e assim por diante
      (`c1`, `c1b`, …). O **`.json` leva o nome da própria rodada** (`.releitura-<RODADA>.json`,
      igual ao `.done`): a primeira rodada do ciclo (`c<C>`) grava `.releitura-c<C>.json` — o
-     nome fixo de sempre —, e a rodada `c<C>b` (correção pós-releitura) grava um arquivo
-     PRÓPRIO, `.releitura-c<C>b.json`, sem sobrescrever o da primeira rodada. O `.done` já
-     ganhava o nome da rodada por este mesmo motivo: sem isso, o marcador da rodada anterior
-     satisfaz a espera da seguinte e o coordenador abre a rodada nova sobre premissa falsa
-     (F24.5: 5 rodadas de releitura no ciclo 0, `c0c` lançado 51 s antes de o `c0b` acabar).
-     O gate do `briefing-build.sh` lê, para cada ciclo, o arquivo `b` quando ele existe — senão
-     o normal (mais recente primeiro).
+     nome fixo de sempre —, e CADA rodada de correção pós-releitura (`c<C>b`, `c<C>c`, …)
+     grava um arquivo PRÓPRIO — `.releitura-c<C>b.json`, `.releitura-c<C>c.json`, … —, sem
+     sobrescrever o da rodada anterior do mesmo ciclo. O `.done` já ganhava o nome da rodada
+     por este mesmo motivo: sem isso, o marcador da rodada anterior satisfaz a espera da
+     seguinte e o coordenador abre a rodada nova sobre premissa falsa (F24.5: 5 rodadas de
+     releitura no ciclo 0, `c0c` lançado 51 s antes de o `c0b` acabar — a mesma fase em que a
+     rodada MAIS RECENTE, não a primeira, importa). O gate do `briefing-build.sh` lê, para
+     cada ciclo, a rodada de letra mais alta que existir — senão a primeira (`.releitura-c<C>.json`).
    - Despacho sem `<RODADA>` declarado → use o próprio ciclo (`c<C>`), que é o comportamento antigo
      (grava `.releitura-c<C>.json`, igual a sempre).
    - **Veredito dos itens que você devolveu (J5b).** Todo item que você devolve (`contradiz`,
@@ -204,15 +205,18 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
      quem você está auditando.
    - **Ciclo 0, primeira rodada:** você grava **só** `.releitura-c0.json` + `.releitura-c0.done`.
      O `.ciclo0.json` (sinos, correções, releitura) é escrito pelo **coordenador**, não por
-     você — e o campo `.ciclo0.json`.`releitura` dele é o objeto **inteiro** do
-     `.releitura-c0.json` que você gravou (com o `v: 2` e o veredito), por isso você
-     devolve o mesmo objeto no retorno: é o que ele copia, sem recalcular.
-   - **Correção pós-releitura (`c<C>b`):** quem te despachou corrige no mesmo turno, gera
-     **novo commit** e te despacha **de novo**. A segunda releitura grava um arquivo **próprio**,
-     `.releitura-c<C>b.json` — **não sobrescreve** `.releitura-c<C>.json` da primeira rodada. O
-     briefing do ciclo seguinte lê o mais recente do ciclo (o `b` quando existir, senão o
-     normal). Invariante: `commit` e conjunto de `path` sempre idênticos ao
-     `.correcoes-c<C>.aplicado` vigente.
+     você — e o campo `.ciclo0.json`.`releitura` dele é o objeto **inteiro** do arquivo da
+     **rodada mais recente que você gravou** (com o `v: 2` e o veredito), por isso você
+     devolve o mesmo objeto no retorno: é o que ele copia, sem recalcular. Numa fase com
+     `c0b`/`c0c`/…, o coordenador copia do arquivo da ÚLTIMA rodada (`.releitura-c0c.json`,
+     não `.releitura-c0.json`) — copiar o da primeira rodada reintroduziria o veredito velho
+     (possivelmente `ok: false`) que a rodada seguinte já corrigiu.
+   - **Correção pós-releitura (`c<C>b`, `c<C>c`, …):** quem te despachou corrige no mesmo
+     turno, gera **novo commit** e te despacha **de novo**. Cada releitura seguinte grava um
+     arquivo **próprio** (`.releitura-c<C>b.json`, `.releitura-c<C>c.json`, …) — **não
+     sobrescreve** o da rodada anterior do mesmo ciclo. O briefing do ciclo seguinte lê a
+     rodada mais recente do ciclo (a de letra mais alta, senão a primeira). Invariante:
+     `commit` e conjunto de `path` sempre idênticos ao `.correcoes-c<C>.aplicado` vigente.
 
 ## Retorno (obrigatório, sem prosa antes ou depois)
 

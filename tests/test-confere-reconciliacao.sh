@@ -137,6 +137,21 @@ saida=$("$SCRIPT" "$D" --ordem 2>&1); rc=$?
 printf '%s' "$saida" | grep -q "^aviso: releitura c4 em formato legado" && [ "$rc" = 0 ] \
   && ok "releitura sem \`v\` (os stubs da F24.4) → aviso legado, exit 0" || erro "legado" "$saida"
 
+echo "== FM-F4RLR-10INT — RELEITURA-ABERTA lê a rodada MAIS RECENTE do ciclo (b vence o normal)"
+D=$(fase rel-aberta-b); vereditos "$D" 4 "c4-01|novo|confirmado|A-produto"; aplicado "$D" 4 c4-01
+touch -d '2026-08-30 09:00:00' "$D/.intent/.correcoes-c4.aplicado"
+echo '{"v":2,"ciclo":4,"commit":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","artefatos":[],"contradiz":[{"ac_a":"AC-1","ac_b":"AC-2","porque":"x"}],"prescreve_mecanismo":[],"omissoes_novas":[],"cardinalidade":[],"consistencia":"não_disponível","ok":false}' > "$D/.intent/.releitura-c4.json"
+touch -d '2026-08-30 09:05:00' "$D/.intent/.releitura-c4.json"
+saida=$("$SCRIPT" "$D" --ordem 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "^RELEITURA-ABERTA c4" && [ "$rc" = 1 ] \
+  && ok "só o normal, ok:false → RELEITURA-ABERTA (baseline antes do 'b')" || erro "baseline não acusou" "$saida"
+echo '{"v":2,"ciclo":4,"commit":"deadbeefdeadbeefdeadbeefdeadbeefdeadbeef","artefatos":[],"contradiz":[],"prescreve_mecanismo":[],"omissoes_novas":[],"cardinalidade":[],"consistencia":"não_disponível","ok":true}' > "$D/.intent/.releitura-c4b.json"
+touch -d '2026-08-30 09:10:00' "$D/.intent/.releitura-c4b.json"
+saida=$("$SCRIPT" "$D" --ordem 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "RELEITURA-ABERTA" && erro "com .releitura-c4b.json (ok:true) ainda acusou — não leu a rodada mais recente" "$saida" \
+  || { [ "$rc" = 0 ] && ok ".releitura-c4b.json (ok:true) presente → sem RELEITURA-ABERTA, mesmo com .releitura-c4.json (ok:false) intacto" || erro "rc=$rc" "$saida"; }
+printf '%s' "$saida" | grep -q "^ordem: n/a (sem .releitura-c4.json" && erro "mensagem de 'sem arquivo' ficou com nome fixo, ignorando o .aplicado presente" "$saida" || ok "…mensagens não travam no nome fixo c4.json"
+
 echo "== fase sem ciclos e usos inválidos"
 D=$(fase vazia)
 saida=$("$SCRIPT" "$D" 2>&1); rc=$?

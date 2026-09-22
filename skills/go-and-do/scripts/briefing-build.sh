@@ -77,7 +77,7 @@ AVISOS=()
 # correção → commit → releitura, com os blobs conferidos contra o commit E contra o
 # worktree atual (edição depois da releitura invalida a releitura).
 GATE_JSON=$(GAD_PD="$PD" GAD_C="$C" GAD_ROOT="$ROOT" python3 - <<'PY'
-import json, os, re, subprocess, sys
+import glob, json, os, re, subprocess, sys
 
 PD   = os.environ["GAD_PD"]
 C    = os.environ["GAD_C"]
@@ -103,15 +103,15 @@ def carrega(p, rotulo):
 
 
 def caminho_releitura(IN, ciclo):
-    """FM-F4RLR-10INT: a rodada `c<ciclo>b` (correção pós-releitura) grava um `.json`
-    PRÓPRIO — `.releitura-c<ciclo>b.json` —, sem sobrescrever o da primeira rodada
-    (`.releitura-c<ciclo>.json`). O briefing do ciclo seguinte lê o mais recente do
-    ciclo: o `b` quando existir, senão o normal. Rodadas além de `b` (`c`, `d`, …)
-    não têm arquivo próprio ainda — ficam para quando uma fase real precisar; o `b` é
-    o caso medido (F4-RLR/F24.5)."""
-    b = os.path.join(IN, ".releitura-c%sb.json" % ciclo)
-    if os.path.exists(b):
-        return b
+    """FM-F4RLR-10INT: cada rodada de correção pós-releitura (`c<ciclo>b`, `c<ciclo>c`, …)
+    grava um `.json` PRÓPRIO — `.releitura-c<ciclo><letra>.json` —, sem sobrescrever o da
+    rodada anterior do mesmo ciclo (mesma convenção do `.releitura-<rodada>.done`, que já
+    globava `c0*.done`). O briefing do ciclo seguinte lê a rodada MAIS RECENTE do ciclo:
+    a de letra mais alta quando existir (F24.5 teve 5 rodadas no ciclo 0, até `c0e`),
+    senão a normal (`.releitura-c<ciclo>.json`, primeira rodada)."""
+    letradas = sorted(glob.glob(os.path.join(IN, ".releitura-c%s[a-z].json" % ciclo)))
+    if letradas:
+        return letradas[-1]
     return os.path.join(IN, ".releitura-c%s.json" % ciclo)
 
 def exige_chaves(d, chaves, rotulo):
@@ -351,8 +351,7 @@ if str(C) == "1":
         # decidido pelo `.ciclo0.json`.`releitura` que o coordenador copiou do `.json` da
         # rodada vigente (FM-F4RLR-10INT: `.releitura-c0.json` na 1ª rodada,
         # `.releitura-c0b.json` na correção pós-releitura — ver `caminho_releitura`).
-        import glob as _glob
-        if not _glob.glob(os.path.join(IN, ".releitura-c0*.done")):
+        if not glob.glob(os.path.join(IN, ".releitura-c0*.done")):
             die("`.intent/.releitura-c0*.done` ausente (R1: a releitura do ciclo 0 não fechou)")
 
         info["ciclo0_vazio"] = not cors

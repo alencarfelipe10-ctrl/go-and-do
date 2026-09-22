@@ -589,6 +589,23 @@ J=$(confere "$R" 99)
 eq "3 dívidas na seção, só c1-04 (a da ressalva) no deferred-items.md → ok, mesmo com c1-06/c1-10 soltas" \
   "$(assert_de "$J" intent_ressalva_sem_divida)" "ok"
 
+# Negativo: ressalva_dividas aponta um id que nem sequer existe na «## Dívidas registradas».
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: aprovado_com_ressalva
+ressalva_dividas: [c9-99]
+---
+
+## Dívidas registradas
+
+| id | alegação | evidência | dono | destino |
+|----|----------|-----------|------|---------|
+| c1-04 | d | ev | Amplify | plan-phase |
+EOF
+J=$(confere "$R" 99)
+eq "ressalva_dividas aponta id AUSENTE da seção → FALHA" "$(assert_de "$J" intent_ressalva_sem_divida)" "FALHA"
+casa "…nomeia c9-99 e diz fora da seção" "$J" 'c9-99\(fora-da'
+
 IFS='|' read -r R PD <<<"$(monta semressalva 99)"
 printf 'intent_review: done\n' > "$PD/99-INTENT-REVIEW.md"
 J=$(confere "$R" 99)

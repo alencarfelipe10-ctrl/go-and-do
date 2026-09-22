@@ -65,8 +65,9 @@
 #
 # Grava `.intent/.correcoes-c<C>.aplicado` (atômico, tmp + mv), SEMPRE no mesmo nome —
 # uma correção pós-releitura (`c<C>b`) sobrescreve IN-PLACE com o commit e os hashes
-# novos, e a nova releitura sobrescreve `.releitura-c<C>.json`; o briefing-build.sh lê
-# só o nome fixo, então não há ciclo "b" pendurado no gate:
+# novos. A releitura seguinte (FM-F4RLR-10INT) já NÃO sobrescreve mais o `.releitura-c<C>.json`
+# — grava `.releitura-c<C>b.json`, arquivo próprio; o `briefing-build.sh` (`caminho_releitura`)
+# lê a rodada mais recente do ciclo, não mais um nome fixo só:
 #   {v:1, ciclo, ids, correcoes:[{id,hash}], commit, caminhos:[...],
 #    hash_ausente:[...], blobs:[{path, blob_commit, blob_worktree}], mensagem}
 # — insumo do `--mudancas`, do R1 (releitura) e do T3.

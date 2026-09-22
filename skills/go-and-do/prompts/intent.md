@@ -67,10 +67,10 @@ Regras do despacho, iguais para todos:
   **Uma rodada, um marcador.** A releitura grava `.releitura-<rodada>.done`, com o rótulo da rodada
   (`c0`, `c0b`, `c0c`, `c1`, `c1b`, …), nunca só o número do ciclo — passe o rótulo no despacho, em
   `rodada: <rótulo>`. Marcador de rodada anterior nunca satisfaz a espera da seguinte, e o `.json`
-  leva o nome da própria rodada (`.releitura-<rodada>.json`, igual ao `.done`): a rodada
-  `c<C>b` grava `.releitura-c<C>b.json`, próprio, sem sobrescrever o `.releitura-c<C>.json`
-  da primeira rodada — o briefing do ciclo seguinte lê o `b` quando existir, senão o
-  normal. Para
+  leva o nome da própria rodada (`.releitura-<rodada>.json`, igual ao `.done`): cada rodada
+  de correção pós-releitura (`c<C>b`, `c<C>c`, …) grava seu próprio arquivo, sem sobrescrever
+  o da rodada anterior — o briefing do ciclo seguinte lê a rodada de letra mais alta quando
+  existir, senão a normal (`.releitura-c<C>.json`, 1ª rodada). Para
   redespacho de uma MESMA rodada (o filho morreu, você relança o `c0b`), apague o marcador antes do
   `Agent` (`rm -f <marcador>`). F24.5: 5 rodadas de releitura no c0 porque o `.done` era um só.
 - **NUNCA passe `model` nem `effort` no `Agent` de um `gad-*`** (E7): a def pina os dois e
@@ -342,10 +342,12 @@ que o registro foi feito de memória, no fim, e não no ato.
    `{"v":1, "sinos":[{"id":"c0-01","origem":"spec|discuss","disposicao":"corrigido|
    descartado|aberto","correcao_id":"c0-01"}], "correcoes":[{"id":"c0-01","hash":"<copiado
    verbatim de .correcoes-c0.aplicado>"}],
-   "releitura":<o objeto INTEIRO do .releitura-c0.json, com "v":2 e o veredito>}`
-   Copie o objeto de releitura inteiro (`jq .` sobre `.intent/.releitura-c0.json`), não só
-   `commit` e `artefatos`: o gate do c1 lê o `v: 2` e o `ok` de lá, e um recorte perderia o
-   veredito. O `hash` vem do disco: `jq -r '.correcoes[] | .id + " " + .hash'` sobre
+   "releitura":<o objeto INTEIRO da rodada mais recente do ciclo 0, com "v":2 e o veredito>}`
+   Copie o objeto de releitura inteiro (`jq .` sobre o `.intent/.releitura-c0<letra>.json`
+   da ÚLTIMA rodada — `.releitura-c0.json` se não houve correção pós-releitura, senão o de
+   letra mais alta, ex.: `.releitura-c0c.json`), não só `commit` e `artefatos`: o gate do c1
+   lê o `v: 2` e o `ok` de lá, e copiar o arquivo da primeira rodada reintroduziria um
+   veredito `ok: false` já corrigido. O `hash` vem do disco: `jq -r '.correcoes[] | .id + " " + .hash'` sobre
    `.intent/.correcoes-c0.aplicado`, copiado caractere a caractere. Desde o conserto C1 ele
    carrega um blob sha real (ou string vazia, quando o `.aplicado` listou o id em
    `hash_ausente[]`), e o gate do briefing c1 compara os dois lados — valor divergente sai

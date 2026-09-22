@@ -322,6 +322,13 @@ printf '%s' "$OK1" > "$PD/.intent/.releitura-c1.json"
 RUN "$PD" 24.3 2 >/dev/null 2>&1; rc=$?
 [ "$rc" = 0 ] && ok "sem 'b', o gate cai de volta no .releitura-c1.json normal (ok:true) e passa" \
   || erro "esperado 0 (fallback pro normal), veio $rc"
+FALHOU1B='{"v":2,"ciclo":1,"commit":"","artefatos":[],"contradiz":[],"prescreve_mecanismo":[],"omissoes_novas":[],"cardinalidade":[],"consistencia":"não_disponível","ok":false}'
+printf '%s' "$FALHOU1B" > "$PD/.intent/.releitura-c1b.json"
+printf '%s' "$OK1" > "$PD/.intent/.releitura-c1c.json"
+saida=$(RUN "$PD" 24.3 2 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "com c1b (ok:false) E c1c (ok:true) presentes, o gate lê a letra MAIS ALTA (c1c) — F24.5 teve 5 rodadas" \
+  || erro "esperado 0 (deveria ler c1c, a mais recente), veio $rc" "$saida"
+rm -f "$PD/.intent/.releitura-c1b.json" "$PD/.intent/.releitura-c1c.json"
 limpa
 
 echo "== E2xR1 — ROADMAP pré-sujo: releitura vale contra o COMMIT, worktree contra o pós-commit"
