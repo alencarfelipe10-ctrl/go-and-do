@@ -73,8 +73,19 @@ for N in $ciclos; do
   else
     modo=$(sed -n 's/.*"mode"[[:space:]]*:[[:space:]]*"\([a-z]*\)".*/\1/p' "$rota" | head -1)
     pre=$(sed -n 's/.*"brutos_pre_rota"[[:space:]]*:[[:space:]]*\([0-9]*\).*/\1/p' "$rota" | head -1)
-    if [ -z "$modo" ] || [ -z "$pre" ]; then
-      echo "SEM-ROTA c$N (.rota-verificacao-c$N.json sem mode/brutos_pre_rota legíveis)"
+    # FJ-F4RLR-03INT + FM-F4RLR-02INT: nos 4 ciclos medidos a rota foi SEMPRE `child`
+    # (18/18 em 5 fases, apurado 20/09) — `brutos_pre_rota` deixou de ser pré-condição
+    # cumprível para essa rota fixa (o E4 não pode depender de um número que ainda não
+    # existe no momento do despacho). `mode:"child"` sem `brutos_pre_rota` é rota fixa
+    # válida, não SEM-ROTA; só `mode:"inline"` continua exigindo o número (é a exceção
+    # que precisa justificar o próprio gatilho de custo).
+    if [ -z "$modo" ]; then
+      echo "SEM-ROTA c$N (.rota-verificacao-c$N.json sem mode legível)"
+      falha=1
+    elif [ "$modo" = child ] && [ -z "$pre" ]; then
+      echo "rota ok c$N (mode=child, rota fixa — brutos_pre_rota não se aplica)"
+    elif [ "$modo" = inline ] && [ -z "$pre" ]; then
+      echo "SEM-ROTA c$N (.rota-verificacao-c$N.json mode=inline sem brutos_pre_rota legível)"
       falha=1
     elif [ "$modo" = child ] && [ "$pre" -le 2 ] && [ "$N" -ge 3 ]; then
       echo "VIOLACAO-INVERSA c$N (mode=child com $pre brutos pré-rota num ciclo >=3 — filho despachado sem gatilho)"

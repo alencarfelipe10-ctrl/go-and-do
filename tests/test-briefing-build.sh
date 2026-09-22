@@ -305,6 +305,30 @@ RUN "$PD" 24.3 2 >/dev/null 2>&1; rc=$?
 echo '{"commit":"","artefatos":[{"path":"x","blob":"y"}]}' > "$PD/.intent/.releitura-c1.json"
 RUN "$PD" 24.3 2 >/dev/null 2>&1; rc=$?
 [ "$rc" = 4 ] && ok "ciclo .vazio com releitura não-vazia → exit 4" || erro "esperado 4, veio $rc"
+
+echo "== FM-F4RLR-10INT — passada 'b' da releitura grava .json próprio; briefing lê o mais recente"
+OK1='{"v":2,"ciclo":1,"commit":"","artefatos":[],"contradiz":[],"prescreve_mecanismo":[],"omissoes_novas":[],"cardinalidade":[],"consistencia":"não_disponível","ok":true}'
+FALHOU1='{"v":2,"ciclo":1,"commit":"","artefatos":[],"contradiz":[],"prescreve_mecanismo":[],"omissoes_novas":[],"cardinalidade":[],"consistencia":"não_disponível","ok":false}'
+printf '%s' "$FALHOU1" > "$PD/.intent/.releitura-c1.json"
+rm -f "$PD/.intent/.releitura-c1b.json"
+RUN "$PD" 24.3 2 >/dev/null 2>&1; rc=$?
+[ "$rc" = 4 ] && ok "só o normal, com ok:false → exit 4 (baseline antes do 'b')" || erro "esperado 4, veio $rc"
+printf '%s' "$OK1" > "$PD/.intent/.releitura-c1b.json"
+saida=$(RUN "$PD" 24.3 2 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "com .releitura-c1b.json presente (ok:true) o gate passa MESMO com o .releitura-c1.json normal reprovado (ok:false) — o 'b' é o mais recente e vence" \
+  || erro "esperado 0 (deveria ler o 'b'), veio $rc" "$saida"
+rm -f "$PD/.intent/.releitura-c1b.json"
+printf '%s' "$OK1" > "$PD/.intent/.releitura-c1.json"
+RUN "$PD" 24.3 2 >/dev/null 2>&1; rc=$?
+[ "$rc" = 0 ] && ok "sem 'b', o gate cai de volta no .releitura-c1.json normal (ok:true) e passa" \
+  || erro "esperado 0 (fallback pro normal), veio $rc"
+FALHOU1B='{"v":2,"ciclo":1,"commit":"","artefatos":[],"contradiz":[],"prescreve_mecanismo":[],"omissoes_novas":[],"cardinalidade":[],"consistencia":"não_disponível","ok":false}'
+printf '%s' "$FALHOU1B" > "$PD/.intent/.releitura-c1b.json"
+printf '%s' "$OK1" > "$PD/.intent/.releitura-c1c.json"
+saida=$(RUN "$PD" 24.3 2 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "com c1b (ok:false) E c1c (ok:true) presentes, o gate lê a letra MAIS ALTA (c1c) — F24.5 teve 5 rodadas" \
+  || erro "esperado 0 (deveria ler c1c, a mais recente), veio $rc" "$saida"
+rm -f "$PD/.intent/.releitura-c1b.json" "$PD/.intent/.releitura-c1c.json"
 limpa
 
 echo "== E2xR1 — ROADMAP pré-sujo: releitura vale contra o COMMIT, worktree contra o pós-commit"

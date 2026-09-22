@@ -26,11 +26,23 @@
 # Régua da skill: verificação vira script; julgamento fica no modelo.
 
 set -u
-. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null && trap 'gad_autoregistro "spot-check-ponteiros.sh" "$?"' EXIT || true
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null || true
 DOC="${1:?uso: spot-check-ponteiros.sh <arquivo.md> [root ...]}"
 shift
 ROOTS=("$@")
-[ ${#ROOTS[@]} -eq 0 ] && ROOTS=("$(pwd)")
+# FM-F4RLR-12INT: sem root explícito, resolver a partir da RAIZ DO REPO (git
+# rev-parse --show-toplevel a partir do próprio documento), não do cwd de quem chamou —
+# o cwd de um agente varia (5 agentes perderam turno com MISSING-FILE falso por isso).
+# cwd continua no fim da lista como fallback (compat com documento fora de repo git).
+if [ ${#ROOTS[@]} -eq 0 ]; then
+  GR="$(cd "$(dirname -- "$DOC")" && git rev-parse --show-toplevel 2>/dev/null || true)"
+  PWD_ATUAL="$(pwd)"
+  if [ -n "$GR" ] && [ "$GR" != "$PWD_ATUAL" ]; then
+    ROOTS=("$GR" "$PWD_ATUAL")
+  else
+    ROOTS=("${GR:-$PWD_ATUAL}")
+  fi
+fi
 
 [ -f "$DOC" ] || { echo "ERRO: arquivo não encontrado: $DOC" >&2; exit 2; }
 for r in "${ROOTS[@]}"; do
@@ -38,7 +50,10 @@ for r in "${ROOTS[@]}"; do
 done
 
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/spot-check-XXXXXX") || exit 2
-trap 'rm -rf "$TMP"' EXIT
+# B1/§6.1: um único trap EXIT — o segundo `trap` em bash SUBSTITUI o primeiro, então o
+# auto-registro (que estava na linha acima) nunca rodava. Captura o rc ANTES do rm, senão
+# o auto-registro gravaria o exit do próprio `rm -rf`, não o do script.
+trap 'rc=$?; rm -rf "$TMP"; type gad_autoregistro >/dev/null 2>&1 && gad_autoregistro "spot-check-ponteiros.sh" "$rc"; true' EXIT
 
 # Extração + normalização (python3 stdlib): uma referência por linha, na ordem do documento.
 python3 - "$DOC" > "$TMP/refs" <<'PY'

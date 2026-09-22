@@ -67,6 +67,11 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
      estado meio-escrito; leitor concorrente lê a versão anterior inteira ou a nova
      inteira".
    Se a emenda só reformulou prosa explicativa (não-normativa) fora de AC, não acuse.
+   **Mesmo item, gatilho novo (FJ-06INT):** toda frase que a emenda acrescentou também entra
+   aqui — não só como prescrição de mecanismo — quando ela é **impossível de cumprir** (exige
+   algo que o código citado não permite) ou **contradiz** o `arquivo:linha` que ela mesma
+   cita. Confira contra o repositório, não contra a sua leitura da intenção; o item vai no
+   mesmo array, com o `trecho` sendo a frase nova e o `path`/`linha` o que ela contradiz.
    <!-- H4, plano 1 P-06 — o AC-10 da 24.4 («nos TRÊS pontos») é o caso desta régua -->
    <!-- H6 + H8, plano 2 P-05 (C2) -->
    **Ciclo 0 — o texto original também.** Aplique a mesma régua ao bloco `<decisions>` do
@@ -139,14 +144,14 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
    ```bash
    cd "<project_root>"
    IN="<phase_dir>/.intent"
-   cat > "$IN/.releitura-c<C>.json.tmp" <<'JSON'
+   cat > "$IN/.releitura-<RODADA>.json.tmp" <<'JSON'
    {"v": 2, "ciclo": <C>, "commit": "<commit>",
     "artefatos": [{"path": "<caminho>", "blob": "<blob>"}, ...],
     "contradiz": [...], "prescreve_mecanismo": [...], "omissoes_novas": [...],
     "cardinalidade": [...], "unicidade": [...], "consistencia": ..., "ok": true|false,
     "observacao": "..."}
    JSON
-   mv -f "$IN/.releitura-c<C>.json.tmp" "$IN/.releitura-c<C>.json"
+   mv -f "$IN/.releitura-<RODADA>.json.tmp" "$IN/.releitura-<RODADA>.json"
    touch "$IN/.releitura-<RODADA>.done"
    ```
 
@@ -165,12 +170,18 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
      frente de JSON meio-escrito é fabricação de evidência.
    - **`<RODADA>` é o rótulo que o despacho te passou**, não o número do ciclo: `c0` na primeira
      rodada do ciclo 0, `c0b` na correção pós-releitura, `c0c` na seguinte, e assim por diante
-     (`c1`, `c1b`, …). O **`.json` continua com o nome fixo do ciclo** (`.releitura-c<C>.json`,
-     sobrescrito in-place) — é por ele que o gate do `briefing-build.sh` compara. O `.done` é que
-     ganha o nome da rodada: sem isso, o marcador da rodada anterior satisfaz a espera da seguinte e
-     o coordenador abre a rodada nova sobre premissa falsa (F24.5: 5 rodadas de releitura no ciclo 0,
-     `c0c` lançado 51 s antes de o `c0b` acabar).
-   - Despacho sem `<RODADA>` declarado → use o próprio ciclo (`c<C>`), que é o comportamento antigo.
+     (`c1`, `c1b`, …). O **`.json` leva o nome da própria rodada** (`.releitura-<RODADA>.json`,
+     igual ao `.done`): a primeira rodada do ciclo (`c<C>`) grava `.releitura-c<C>.json` — o
+     nome fixo de sempre —, e CADA rodada de correção pós-releitura (`c<C>b`, `c<C>c`, …)
+     grava um arquivo PRÓPRIO — `.releitura-c<C>b.json`, `.releitura-c<C>c.json`, … —, sem
+     sobrescrever o da rodada anterior do mesmo ciclo. O `.done` já ganhava o nome da rodada
+     por este mesmo motivo: sem isso, o marcador da rodada anterior satisfaz a espera da
+     seguinte e o coordenador abre a rodada nova sobre premissa falsa (F24.5: 5 rodadas de
+     releitura no ciclo 0, `c0c` lançado 51 s antes de o `c0b` acabar — a mesma fase em que a
+     rodada MAIS RECENTE, não a primeira, importa). O gate do `briefing-build.sh` lê, para
+     cada ciclo, a rodada de letra mais alta que existir — senão a primeira (`.releitura-c<C>.json`).
+   - Despacho sem `<RODADA>` declarado → use o próprio ciclo (`c<C>`), que é o comportamento antigo
+     (grava `.releitura-c<C>.json`, igual a sempre).
    - **Veredito dos itens que você devolveu (J5b).** Todo item que você devolve (`contradiz`,
      `prescreve_mecanismo`, `omissoes_novas`, `cardinalidade`, `unicidade`, par em `consistencia`)
      vira uma correção que quem te despachou vai promover no mesmo turno — e o fiscal da etapa exige
@@ -192,15 +203,20 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
    - Você **não** decide destino nem promove nada: continua valendo o item 5 do
      `intent-verifica.md`. O que muda é que o veredito do que você achou não passa mais pela mão de
      quem você está auditando.
-   - **Ciclo 0:** você grava **só** `.releitura-c0.json` + `.releitura-c0.done`. O
-     `.ciclo0.json` (sinos, correções, releitura) é escrito pelo **coordenador**, não por
-     você — e o campo `.ciclo0.json`.`releitura` dele é o objeto **inteiro** do
-     `.releitura-c0.json` que você gravou (com o `v: 2` e o veredito), por isso você
-     devolve o mesmo objeto no retorno: é o que ele copia, sem recalcular.
-   - **Correção pós-releitura (`c<C>b`):** quem te despachou corrige no mesmo turno, gera
-     **novo commit** e te despacha **de novo**. A segunda releitura **sobrescreve**
-     `.releitura-c<C>.json` — o gate compara pelo nome fixo do ciclo. Invariante: `commit` e
-     conjunto de `path` sempre idênticos ao `.correcoes-c<C>.aplicado` vigente.
+   - **Ciclo 0, primeira rodada:** você grava **só** `.releitura-c0.json` + `.releitura-c0.done`.
+     O `.ciclo0.json` (sinos, correções, releitura) é escrito pelo **coordenador**, não por
+     você — e o campo `.ciclo0.json`.`releitura` dele é o objeto **inteiro** do arquivo da
+     **rodada mais recente que você gravou** (com o `v: 2` e o veredito), por isso você
+     devolve o mesmo objeto no retorno: é o que ele copia, sem recalcular. Numa fase com
+     `c0b`/`c0c`/…, o coordenador copia do arquivo da ÚLTIMA rodada (`.releitura-c0c.json`,
+     não `.releitura-c0.json`) — copiar o da primeira rodada reintroduziria o veredito velho
+     (possivelmente `ok: false`) que a rodada seguinte já corrigiu.
+   - **Correção pós-releitura (`c<C>b`, `c<C>c`, …):** quem te despachou corrige no mesmo
+     turno, gera **novo commit** e te despacha **de novo**. Cada releitura seguinte grava um
+     arquivo **próprio** (`.releitura-c<C>b.json`, `.releitura-c<C>c.json`, …) — **não
+     sobrescreve** o da rodada anterior do mesmo ciclo. O briefing do ciclo seguinte lê a
+     rodada mais recente do ciclo (a de letra mais alta, senão a primeira). Invariante:
+     `commit` e conjunto de `path` sempre idênticos ao `.correcoes-c<C>.aplicado` vigente.
 
 ## Retorno (obrigatório, sem prosa antes ou depois)
 

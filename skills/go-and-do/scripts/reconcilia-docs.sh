@@ -212,10 +212,14 @@ fi
 
 # ── 2. ROADMAP.md (antes do STATE: o progresso conta os [x]) ────────────────
 if [ -f "$ROADMAP" ]; then
-  if grep -qE "^- \[ \] \*\*Phase ${FASE}:" "$ROADMAP"; then
-    ed "s/^- \[ \] \*\*Phase ${FASE}:\(.*\*\*\)/- [x] **Phase ${FASE}:\1 (completed ${HOJE}${PRTXT})/" "$ROADMAP"
+  # FM-01EXE (F4 RLR): o número da fase casa pelo `fase_rx` do gsd-shim — "4" acha
+  # `Phase 4:` e `Phase 04:`, e nunca a `Phase 4.1:` (o `:` do fim já ancorava, o
+  # zero à esquerda é que ficava de fora e virava «linha não encontrada»).
+  FRX="$(fase_rx "$FASE" || printf '%s' "$FASE")"
+  if grep -qE "^- \[ \] \*\*Phase ${FRX}:" "$ROADMAP"; then
+    ed "s/^- \[ \] \*\*Phase \(${FRX}\):\(.*\*\*\)/- [x] **Phase \1:\2 (completed ${HOJE}${PRTXT})/" "$ROADMAP"
     acao "ROADMAP.md: Phase $FASE marcada [x] (completed $HOJE)"
-  elif grep -qE "^- \[x\] \*\*Phase ${FASE}:" "$ROADMAP"; then
+  elif grep -qE "^- \[x\] \*\*Phase ${FRX}:" "$ROADMAP"; then
     :
   else
     pend "ROADMAP.md: linha '- [ ] **Phase $FASE:' não encontrada (formato diferente?)"

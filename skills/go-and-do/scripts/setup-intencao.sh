@@ -70,6 +70,8 @@
 
 set -euo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
+# B1: auto-registro do próprio resultado no run-log (no-op sem rodada ativa/--r6 barato).
+trap 'gad_autoregistro "setup-intencao.sh" "$?"' EXIT
 
 # ── modo --r6: só a extração do ROADMAP, sem tocar disco (o confere-etapa.sh 1 usa) ──
 SO_R6=0
@@ -125,7 +127,11 @@ linhas = open(roadmap, encoding="utf-8", errors="replace").read().split("\n")
 # Entrada de detalhe da fase: heading em INGLÊS `### Phase <NN>` (o parser do GSD e o
 # nosso leem o mesmo heading; "Fase" em pt-BR quebra os dois). O lookahead impede que
 # a fase 24 case com a entrada da 24.3.
-rx_ini = re.compile(r'^#{2,4}\s+Phase\s+' + re.escape(nn) + r'(?![\w.])', re.I)
+# FM-03INT (F4 RLR): a MESMA regra de numero do `fase_rx` do gsd-shim — `Phase 04` e
+# `Phase 4` sao a mesma entrada; o lookahead impede que a 4 case com a 4.1 ou a 14.
+_num = re.sub(r'^0+([0-9])', r'\1', nn.split('-')[-1])
+rx_ini = re.compile(r'^#{2,4}\s+Phase\s+0*' + re.escape(_num).replace('\\.', '\\.0*')
+                    + r'(?![\w.])', re.I)
 rx_head = re.compile(r'^#{1,4}\s')
 ini = None
 for i, l in enumerate(linhas):
@@ -195,12 +201,20 @@ else:
     saida["motivo"] = "REQUIREMENTS.md ausente — todo id citado conta como ausente"
 
 print(json.dumps(saida, ensure_ascii=False))
+# FM-03INT: sem Goal na entrada do ROADMAP a intencao arranca cega — a etapa inteira
+# se apoia nele. Saida != 0 para que o chamador pare aqui em vez de seguir com null.
+if not saida["goal_roadmap"]:
+    print("ERRO: entrada `### Phase %s` do ROADMAP sem **Goal:** — a intencao nao arranca sem ele" % nn,
+          file=sys.stderr)
+    raise SystemExit(4)
 PY
 }
 
 if [ "$SO_R6" = 1 ]; then
-  r6_json
-  exit 0
+  # FM-03INT (F4 RLR): o rc do bloco R6 e PROPAGADO — `exit 0` fixo engolia o exit 4 de
+  # «entrada do ROADMAP sem **Goal:**» e o chamador seguia com goal_roadmap null. O JSON
+  # ja saiu no stdout antes do exit, entao quem captura `$(...)` continua recebendo tudo.
+  r6_json; exit $?
 fi
 
 mkdir -p "$PD/.intent"
@@ -210,8 +224,10 @@ ESTADO=""
 [ -f "$IR" ] && ESTADO=$(grep -m1 '^intent_review:' "$IR" | sed 's/^intent_review: *//' | tr -d ' \r' || true)
 
 # ── higiene idempotente da flag de chain ─────────────────────────────────────
+# Item 4 (F4 RLR, pergunta 3 do relatório A): `aprovado_com_ressalva` é etapa 1 concluída,
+# igual a done/skipped — sem isto uma fase fechada com ressalva reabre a etapa 1 ao retomar.
 CHAIN=nao_aplicavel
-if [ -f "$CTX_F" ] && [ "$ESTADO" != "done" ] && [ "$ESTADO" != "skipped" ]; then
+if [ -f "$CTX_F" ] && [ "$ESTADO" != "done" ] && [ "$ESTADO" != "skipped" ] && [ "$ESTADO" != "aprovado_com_ressalva" ]; then
   ROOT="$(gad_project_root "$PD")"
   if (cd "$ROOT" && gsd_run query config-set workflow._auto_chain_active false >/dev/null 2>&1); then
     CHAIN=zerada
@@ -222,7 +238,7 @@ fi
 
 # ── entrada fina pelo disco ──────────────────────────────────────────────────
 if [ "$COM_RESPOSTA" = 1 ]; then          ENTRADA=incorporar_resposta
-elif [ "$ESTADO" = done ] || [ "$ESTADO" = skipped ]; then ENTRADA=ja_pronto
+elif [ "$ESTADO" = done ] || [ "$ESTADO" = skipped ] || [ "$ESTADO" = aprovado_com_ressalva ]; then ENTRADA=ja_pronto
 elif [ "$ESTADO" = needs_decision ]; then ENTRADA=reapresentar_pergunta
 elif [ "$ESTADO" = blocked ]; then        ENTRADA=revisao
 elif [ ! -f "$SPEC_F" ]; then             ENTRADA=spec

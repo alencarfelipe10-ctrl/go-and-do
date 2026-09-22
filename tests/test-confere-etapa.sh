@@ -515,6 +515,141 @@ eq "linha acrescentada depois do recibo → VEREDITO-ALTERADO reprova a etapa 1"
    "$(assert_de "$J" j5_origem_c1)" "FALHA"
 casa "…com a mensagem literal" "$J" 'VEREDITO-ALTERADO c1'
 
+echo "── FM-05INT (metade fiscal): SPEC/CONTEXT mudou depois do último selo ──"
+IFS='|' read -r R PD <<<"$(monta selo 99)"
+printf 'spec v1\n' > "$PD/99-SPEC.md"
+BLOB_V1=$(git -C "$R" hash-object -- "${PD#"$R"/}/99-SPEC.md")
+REL="${PD#"$R"/}/99-SPEC.md"
+cat > "$PD/.intent/.correcoes-c1.aplicado" <<EOF
+{"v":1,"ciclo":"1","ids":["c1-01"],"correcoes":[{"id":"c1-01","hash":"$BLOB_V1"}],
+ "commit":"deadbeef","caminhos":["$REL"],"hash_ausente":[],
+ "blobs":[{"path":"$REL","blob_commit":"$BLOB_V1","blob_worktree":"$BLOB_V1"}]}
+EOF
+J=$(confere "$R" 99)
+eq "selo intacto → sem spec_context_sem_selo" "$(assert_de "$J" spec_context_sem_selo)" "<ausente>"
+printf 'spec v1\nlinha acrescentada por fora do selo\n' > "$PD/99-SPEC.md"
+J=$(confere "$R" 99)
+eq "SPEC editado depois do selo → AVISO" "$(assert_de "$J" spec_context_sem_selo)" "AVISO"
+casa "…nomeia o arquivo e os dois blobs" "$J" '99-SPEC\.md: selado'
+
+echo "── FJ-02INT (metade script): aprovado_com_ressalva exige ressalva_dividas vinculada (decisão do dono, rodada 4) ──"
+IFS='|' read -r R PD <<<"$(monta ressalva 99)"
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: aprovado_com_ressalva
+---
+
+## Dívidas registradas
+
+| id | alegação | evidência | dono | destino |
+|----|----------|-----------|------|---------|
+EOF
+J=$(confere "$R" 99)
+eq "ressalva sem \`ressalva_dividas:\` → FALHA" "$(assert_de "$J" intent_ressalva_sem_divida)" "FALHA"
+casa "…diz «sem \`ressalva_dividas:\`»" "$J" 'ressalva_dividas'
+
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: aprovado_com_ressalva
+ressalva_dividas: [c1-04]
+---
+
+## Dívidas registradas
+
+| id | alegação | evidência | dono | destino |
+|----|----------|-----------|------|---------|
+| c1-04 | d | ev | Amplify | plan-phase |
+EOF
+J=$(confere "$R" 99)
+eq "ressalva_dividas aponta id fora do deferred-items.md → FALHA" "$(assert_de "$J" intent_ressalva_sem_divida)" "FALHA"
+casa "…nomeia c1-04" "$J" 'c1-04'
+printf -- '- c1-04 — dívida\n' > "$PD/deferred-items.md"
+J=$(confere "$R" 99)
+eq "ressalva_dividas na seção e no deferred-items.md → ok" "$(assert_de "$J" intent_ressalva_sem_divida)" "ok"
+
+# Caso DISCRIMINANTE da decisão do dono (§3.1 do relatorio-F4-RLR-A.md): a seção tem MAIS
+# de uma dívida, e SÓ a apontada por ressalva_dividas precisa estar no deferred-items.md —
+# o resto da seção (c1-06, c1-10, sem destino nenhum) NÃO cobra este assert (fica visível
+# só como AVISO em cardinalidade_etapa_1/FM-09INT).
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: aprovado_com_ressalva
+ressalva_dividas: [c1-04]
+---
+
+## Dívidas registradas
+
+| id | alegação | evidência | dono | destino |
+|----|----------|-----------|------|---------|
+| c1-04 | d | ev | Amplify | plan-phase |
+| c1-06 | outra dívida, de outro ciclo | ev | Amplify | — |
+| c1-10 | outra ainda | ev | RL | — |
+EOF
+J=$(confere "$R" 99)
+eq "3 dívidas na seção, só c1-04 (a da ressalva) no deferred-items.md → ok, mesmo com c1-06/c1-10 soltas" \
+  "$(assert_de "$J" intent_ressalva_sem_divida)" "ok"
+
+# Negativo: ressalva_dividas aponta um id que nem sequer existe na «## Dívidas registradas».
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: aprovado_com_ressalva
+ressalva_dividas: [c9-99]
+---
+
+## Dívidas registradas
+
+| id | alegação | evidência | dono | destino |
+|----|----------|-----------|------|---------|
+| c1-04 | d | ev | Amplify | plan-phase |
+EOF
+J=$(confere "$R" 99)
+eq "ressalva_dividas aponta id AUSENTE da seção → FALHA" "$(assert_de "$J" intent_ressalva_sem_divida)" "FALHA"
+casa "…nomeia c9-99 e diz fora da seção" "$J" 'c9-99\(fora-da'
+
+IFS='|' read -r R PD <<<"$(monta semressalva 99)"
+printf 'intent_review: done\n' > "$PD/99-INTENT-REVIEW.md"
+J=$(confere "$R" 99)
+eq "sem aprovado_com_ressalva → assert calado" "$(assert_de "$J" intent_ressalva_sem_divida)" "<ausente>"
+
+echo "── FM-09INT: fiação do confere-cardinalidade.sh dentro do fiscal da etapa 1 ──"
+IFS='|' read -r R PD <<<"$(monta card 99)"
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: done
+achados_confirmados: 3
+achados_descartados: 0
+achados_dispensados: 0
+---
+
+## Tabela de achados
+
+| id | alegação | fontes | veredito | destino |
+|----|----------|--------|----------|---------|
+| c1-01 | a | codex | confirmado (A-produto) | correção |
+EOF
+J=$(confere "$R" 99)
+eq "cabeçalho 3 × tabela 1 → cardinalidade_etapa_1 vira AVISO" "$(assert_de "$J" cardinalidade_etapa_1)" "AVISO"
+casa "…o detalhe nomeia CARDINALIDADE confirmados" "$J" 'CARDINALIDADE confirmados'
+eq "…e o EXTRAI carrega o medido da cardinalidade" "$(printf '%s' "$J" | jq -r '.extrai.cardinalidade.medido.cabecalho.confirmados')" "3"
+
+IFS='|' read -r R PD <<<"$(monta card2 99)"
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: done
+achados_confirmados: 1
+achados_descartados: 0
+achados_dispensados: 0
+---
+
+## Tabela de achados
+
+| id | alegação | fontes | veredito | destino |
+|----|----------|--------|----------|---------|
+| c1-01 | a | codex | confirmado (A-produto) | correção |
+EOF
+J=$(confere "$R" 99)
+eq "cabeçalho e tabela batendo → sem cardinalidade_etapa_1" "$(assert_de "$J" cardinalidade_etapa_1)" "<ausente>"
+
 echo "── 46(j)/46(r): o fiscal deixa recibo (.fence-N.ok) ──"
 # a bancada reprova de propósito (SPEC/CONTEXT ausentes) → serve para o ramo fail
 IFS='|' read -r R PD <<<"$(monta fence 99)"
@@ -556,6 +691,232 @@ else
   falha "bancada do ramo pass não passou na cancela da etapa 0" \
     "$(bash "$C" 0 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1 | jq -r '[.asserts[]|select(.resultado=="FALHA")|.id]|join(",")')"
 fi
+
+
+# ══════════════════════════════════════════ F4 RLR — regras gerais do fiscal
+# FM-07INT/FM-04PLAN/FM-07GAT (incidente tardio) · FM-06INT (pasta suja) ·
+# FM-04GAT (maior iteração + all_fixed com skipped) · FM-02ENC (local à frente).
+echo "── F4 RLR: incidente tardio, pasta suja, review de maior iteração ──"
+
+rl_linha() { # <evento> <etapa> <ts> [detalhe]
+  printf '{"evento":"%s","etapa":"%s","ts":%s,"detalhe":"%s"}\n' "$1" "$2" "$3" "${4:-}"
+}
+
+# — incidente POSTERIOR ao `end` da própria etapa reprova
+IFS='|' read -r R PD <<<"$(monta tardio 99)"
+RL="$PD/99-RUN-LOG.jsonl"
+{ rl_linha incidente "1 intencao" 1000 "na hora"
+  rl_linha end       "1 intencao" 2000
+  rl_linha incidente "1 intencao" 2500 "escrito no fecho, de memoria"; } > "$RL"
+J="$(confere "$R" 99)"
+# DECISÃO DO DONO (21/09): AVISO nesta release, dura na seguinte — medido em modo seco,
+# o assert reprova quase toda etapa das 3 fases reais porque a prática de escrever
+# incidente no fecho é real e ainda não passou por uma fase com os prompts novos.
+eq "incidente depois do end da etapa → AVISO (dura na release seguinte)" "$(assert_de "$J" incidente_tardio)" "AVISO"
+casa "o aviso diz quantos segundos depois" "$J" '\+500s do end'
+
+# — incidente de OUTRA etapa não reprova esta (recorte medido em 21/09)
+IFS='|' read -r R PD <<<"$(monta tardio_outra 99)"
+RL="$PD/99-RUN-LOG.jsonl"
+{ rl_linha end       "3 construcao" 2000
+  rl_linha incidente "3 construcao" 2500 "tardio, mas da etapa 3"
+  rl_linha incidente "1 intencao"   1000 "na hora"; } > "$RL"
+J="$(confere "$R" 99)"
+eq "tardio de outra etapa não reprova a etapa 1" "$(assert_de "$J" incidente_tardio)" "<ausente>"
+
+# — rajada: >= 3 incidentes no mesmo segundo
+IFS='|' read -r R PD <<<"$(monta rajada 99)"
+RL="$PD/99-RUN-LOG.jsonl"
+{ rl_linha incidente "1 intencao" 1500 a; rl_linha incidente "1 intencao" 1500 b
+  rl_linha incidente "1 intencao" 1500 c; } > "$RL"
+J="$(confere "$R" 99)"
+# A rajada foi rebaixada junto: o assert é um só e o dono nomeou o assert.
+eq "3 incidentes no mesmo segundo → AVISO" "$(assert_de "$J" incidente_tardio)" "AVISO"
+casa "o aviso nomeia a rajada" "$J" 'incidentes no mesmo segundo'
+
+# — run-log sadio não acusa nada
+IFS='|' read -r R PD <<<"$(monta sadio 99)"
+RL="$PD/99-RUN-LOG.jsonl"
+{ rl_linha incidente "1 intencao" 1000 a; rl_linha incidente "1 intencao" 1200 b
+  rl_linha end "1 intencao" 2000; } > "$RL"
+J="$(confere "$R" 99)"
+eq "run-log sadio → sem incidente_tardio" "$(assert_de "$J" incidente_tardio)" "<ausente>"
+
+# — FM-06INT: arquivo da pasta da fase fora de commit reprova; temporário não
+IFS='|' read -r R PD <<<"$(monta suja 99)"
+( cd "$R" && git add -A >/dev/null 2>&1 && git -c user.name=t -c user.email=t@t.io \
+    -c commit.gpgsign=false commit -qm base >/dev/null 2>&1 )
+echo "parecer que ninguem commitou" > "$PD/99-parecer-codex.md"
+J="$(confere "$R" 99)"
+# AVISO, não FALHA: o workflow roda o fiscal ANTES do commita-artefatos.sh — como falha
+# dura a etapa 5 entraria em impasse. Contradição levada ao dono (regra 6 do plano).
+eq "arquivo novo na pasta da fase → AVISO" "$(assert_de "$J" pasta_da_fase_suja)" "AVISO"
+casa "o aviso manda rodar o commita-artefatos" "$J" 'commita-artefatos\.sh'
+rm -f "$PD/99-parecer-codex.md"
+echo x > "$PD/.intent/rascunho.tmp"; echo y > "$PD/saida.log"
+J="$(confere "$R" 99)"
+eq "só temporários (.tmp/.log) → sem aviso de pasta suja" "$(assert_de "$J" pasta_da_fase_suja)" "<ausente>"
+rm -f "$PD/.intent/rascunho.tmp" "$PD/saida.log"
+
+# — FM-06INT, DECISÃO DO DONO (21/09): falha dura SÓ para a evidência dura, e o que a
+#   própria etapa produz é isento. `.intent/` e `pareceres/` são produzidos pela etapa 1.
+echo "selo do ciclo 1" > "$PD/.intent/.correcoes-c1.aplicado"
+J="$(confere "$R" 99)"
+eq "etapa 1: .intent/ fora de commit é ISENTO (é ela quem produz) → só AVISO" \
+   "$(assert_de "$J" evidencia_fora_do_git)" "<ausente>"
+eq "…e aparece no aviso de pasta suja" "$(assert_de "$J" pasta_da_fase_suja)" "AVISO"
+J2="$(bash "$C" 3 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 3: .intent/ fora de commit → FALHA dura (evidencia_fora_do_git)" \
+   "$(assert_de "$J2" evidencia_fora_do_git)" "FALHA"
+casa "a falha dura nomeia o modo evidencia do commita-artefatos" "$J2" 'evidencia'
+rm -f "$PD/.intent/.correcoes-c1.aplicado"
+
+# — atestado: o `.fence-N.ok` da PRÓPRIA etapa é isento; o de outra etapa é duro
+echo ok > "$PD/.fence-1.ok"
+J="$(confere "$R" 99)"
+eq "atestado da própria etapa (.fence-1.ok na etapa 1) → isento" \
+   "$(assert_de "$J" evidencia_fora_do_git)" "<ausente>"
+J2="$(bash "$C" 3 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "atestado de OUTRA etapa fora de commit → FALHA dura" \
+   "$(assert_de "$J2" evidencia_fora_do_git)" "FALHA"
+rm -f "$PD/.fence-1.ok"
+
+# — FM-01GAT: recibo do 4.1 vencido por commit de CÓDIGO posterior ao head aprovado
+IFS='|' read -r R PD <<<"$(monta recibo 99)"
+gitq() { git -C "$R" -c user.name=t -c user.email=t@t.io -c commit.gpgsign=false "$@" >/dev/null 2>&1; }
+mkdir -p "$R/src"; echo v1 > "$R/src/fluxo.py"; gitq add -A; gitq commit -qm base
+H=$(git -C "$R" rev-parse HEAD)
+printf '{"v":1,"etapa":"4.1","fase":"99","head":"%s"}\n' "$H" > "$PD/.fence-4.1.ok"
+J="$(bash "$C" 4-secure --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "recibo do 4.1 com o head atual → não reprova" "$(assert_de "$J" recibo_4_1_vencido)" "<ausente>"
+echo v2 > "$R/src/fluxo.py"; gitq add -A; gitq commit -qm "fix(WR-14): conserto depois do gate"
+J="$(bash "$C" 4-secure --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "commit de código depois do recibo → FALHA (o gate reabre)" \
+   "$(assert_de "$J" recibo_4_1_vencido)" "FALHA"
+casa "a falha nomeia o novo fiscal + novo end + novo recibo" "$J" 'novo fiscal'
+# artefato da rodada NÃO vence o recibo: recibo vencido é código que mudou
+gitq checkout -- . ; echo v2 > "$R/src/fluxo.py"; gitq add -A; gitq commit -qm x
+H2=$(git -C "$R" rev-parse HEAD)
+printf '{"v":1,"etapa":"4.1","fase":"99","head":"%s"}\n' "$H2" > "$PD/.fence-4.1.ok"
+echo nota > "$PD/99-NOTA.md"; gitq add -A; gitq commit -qm "docs: artefato da rodada"
+J="$(bash "$C" 4-secure --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "commit só em .planning/ não vence o recibo" "$(assert_de "$J" recibo_4_1_vencido)" "<ausente>"
+eq "o 4.1 não julga o próprio recibo" \
+   "$(assert_de "$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)" recibo_4_1_vencido)" "<ausente>"
+
+# — FM-04GAT: o 4.1 lê o arquivo de MAIOR iteração e reprova all_fixed com skipped
+IFS='|' read -r R PD <<<"$(monta review 99)"
+printf 'status: issues_found\ncritical: 2\nskipped: 0\n' > "$PD/99-REVIEW.md"
+printf 'status: issues_found\ncritical: 1\nskipped: 0\n' > "$PD/99-REVIEW.iter3.md"
+printf 'status: all_fixed\ncritical: 0\nskipped: 4\n'    > "$PD/99-REVIEW-FIX.iter4.md"
+JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "leu o arquivo de maior iteração" \
+  "$(printf '%s' "$JR" | jq -r '.extrai.review_maior_iteracao.arquivo')" "99-REVIEW-FIX.iter4.md"
+eq "as contagens que a camada 0 lê vêm da maior iteração (não do REVIEW.md)" \
+  "$(printf '%s' "$JR" | jq -r '.extrai.status')" "status: all_fixed"
+eq "all_fixed com skipped > 0 → FALHA" "$(assert_de "$JR" all_fixed_com_skipped)" "FALHA"
+printf 'status: all_fixed\ncritical: 0\nskipped: 0\n' > "$PD/99-REVIEW-FIX.iter4.md"
+JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "all_fixed com skipped 0 → sem falha" "$(assert_de "$JR" all_fixed_com_skipped)" "<ausente>"
+printf 'sem cabecalho nenhum\n' > "$PD/99-REVIEW-FIX.iter4.md"
+JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "formato não reconhecido falha ALTO" "$(assert_de "$JR" review_formato)" "FALHA"
+
+# ══════════════════════════════════════════ F4 RLR — FJ-01ENC (etapa 6)
+# Os dois resumos da F4 RLR disseram que as rodadas «fecharam os avisos restantes» com
+# WR-09 aberto. O fiscal da etapa 6 agora cobra ID por ID, da MESMA lista que o 4.1 lê.
+echo "── F4 RLR: ID aberto do code review tem de aparecer no resumo (FJ-01ENC) ──"
+monta_res() { # <nome> <texto do resumo> → raiz do projeto de bancada
+  local root="$BASE/$1" pd
+  mkdir -p "$root/.planning/phases/96-bancada"; git init -q "$root" >/dev/null 2>&1
+  printf -- '---\ncurrent_phase: 96\nstatus: between_phases\n---\n' > "$root/.planning/STATE.md"
+  pd="$root/.planning/phases/96-bancada"
+  cat > "$pd/96-REVIEW-FIX.iter2.md" <<'MD'
+---
+iteration: 2
+status: all_fixed
+---
+## Fechados
+### WR-01 — consertado
+## Deixados ABERTOS e declarados
+- **WR-09** (processo) — fora deste conserto.
+MD
+  printf '%s\n' "$2" > "$pd/96-RESUMO-EXECUTIVO.md"
+  printf '%s' "$root"
+}
+J="$(confere6 "$(monta_res resumo_sem 'As rodadas fecharam os avisos restantes.')")"
+eq "resumo que não cita o ID aberto → FALHA" "$(assert_de "$J" resumo_sem_id_aberto)" "FALHA"
+casa "…e o assert nomeia o ID que falta" "$J" 'WR-09'
+J="$(confere6 "$(monta_res resumo_com 'Segue aberto: WR-09 (processo), sem conserto sem reescrever histórico.')")"
+eq "resumo que cita WR-09 → sem acusação" "$(assert_de "$J" resumo_sem_id_aberto)" "<ausente>"
+J="$(confere6 "$(monta_state s6semresumo between_phases)")"
+eq "fase sem resumo ainda escrito → assert calado" "$(assert_de "$J" resumo_sem_id_aberto)" "<ausente>"
+
+echo "── FJ-02INT (metade etapa 6): dívida LIGADA à ressalva tem de aparecer no resumo (decisão do dono, rodada 4) ──"
+monta_ressalva() { # <nome> <texto do resumo> → raiz do projeto de bancada
+  local root="$BASE/$1" pd
+  mkdir -p "$root/.planning/phases/96-bancada"; git init -q "$root" >/dev/null 2>&1
+  printf -- '---\ncurrent_phase: 96\nstatus: between_phases\n---\n' > "$root/.planning/STATE.md"
+  pd="$root/.planning/phases/96-bancada"
+  cat > "$pd/96-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: aprovado_com_ressalva
+ressalva_dividas: [c1-09]
+---
+
+## Dívidas registradas
+
+| id | alegação | evidência | dono | destino |
+|----|----------|-----------|------|---------|
+| c1-09 | achado | ev | Amplify | plan-phase |
+| c1-11 | outra dívida, de outro ciclo, sem relação com a ressalva | ev | RL | — |
+EOF
+  printf '%s\n' "$2" > "$pd/96-RESUMO-EXECUTIVO.md"
+  printf '%s' "$root"
+}
+J="$(confere6 "$(monta_ressalva ressalva_sem 'Fase concluída sem pendências.')")"
+eq "resumo sem citar a dívida da ressalva → FALHA" "$(assert_de "$J" resumo_sem_id_aberto)" "FALHA"
+casa "…nomeia c1-09" "$J" 'c1-09'
+J="$(confere6 "$(monta_ressalva ressalva_com 'Fechada com ressalva: c1-09 segue pendente, aceite do dono no fim da fase.')")"
+eq "resumo que cita a dívida da ressalva → sem acusação, mesmo sem citar c1-11 (fora do vínculo)" "$(assert_de "$J" resumo_sem_id_aberto)" "<ausente>"
+
+# ═══════════════ item 3 (F4 RLR, rodada 3): veredito=handback do `end` id 6 ═══════════════
+# Teste de INTEGRAÇÃO da função real gad_veredito_end (lib/veredito-end.sh), a mesma que
+# confere-etapa.sh chama para o `end` id 6 — sourceada aqui direto (sem simular), contra
+# uma bancada real de `.planning/.gad/last-pre-despacho.json`. O R2 tentou montar uma
+# bancada de PASS real da etapa 6 inteira (STATE.md, resumo, worktrees, git_remote) e não
+# terminou por tempo; fatorar a derivação numa função pura testável isoladamente é mais
+# barato e cobre o mesmo código de produção — decisão de desenho, registrada no relatório.
+echo "── item 3: gad_veredito_end (FM-04UAT, veredito=handback do end id 6) ──"
+. "$RAIZ/skills/go-and-do/scripts/lib/veredito-end.sh"
+
+monta_pd6() { # <nome> <json do last-pre-despacho.json ou "" p/ nenhum arquivo> → ecoa root
+  local root="$BASE/$1"
+  mkdir -p "$root/.planning/.gad"
+  [ -n "${2:-}" ] && printf '%s' "$2" > "$root/.planning/.gad/last-pre-despacho.json"
+  printf '%s' "$root"
+}
+
+R="$(monta_pd6 ve1 '{"etapa":"6","rota":"handback"}')"
+eq "etapa 6 + rota=handback (campo plano) → handback" "$(gad_veredito_end "$R" "6 encerramento")" "handback"
+
+R="$(monta_pd6 ve2 '{"etapa":"6","paralelismo":{"rota":"handback"}}')"
+eq "etapa 6 + paralelismo.rota=handback (campo aninhado) → handback" "$(gad_veredito_end "$R" "6")" "handback"
+
+R="$(monta_pd6 ve3 '{"etapa":"6","rota":"ship"}')"
+eq "etapa 6 + rota=ship → pass" "$(gad_veredito_end "$R" "6 encerramento")" "pass"
+
+R="$(monta_pd6 ve4 '{"etapa":"6","rota":"pausa"}')"
+eq "etapa 6 + rota=pausa → pass (só handback vira handback)" "$(gad_veredito_end "$R" "6")" "pass"
+
+R="$(monta_pd6 ve5 '')"
+eq "etapa 6 sem last-pre-despacho.json nenhum → pass" "$(gad_veredito_end "$R" "6")" "pass"
+
+R="$(monta_pd6 ve6 '{"etapa":"5","rota":"handback"}')"
+eq "espelho de OUTRA etapa (5, stale) → pass, não herda o handback" "$(gad_veredito_end "$R" "6")" "pass"
+
+R="$(monta_pd6 ve7 '{"etapa":"6","rota":"handback"}')"
+eq "etapa != 6 (mesmo com espelho de handback) → pass, não se aplica" "$(gad_veredito_end "$R" "1 intencao")" "pass"
 
 echo "--------------------------------------------------"
 echo "test-confere-etapa.sh: $OK ok / $FALHAS falha(s)"

@@ -62,6 +62,7 @@
 set -euo pipefail
 shopt -s nullglob
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
+. "$(dirname -- "${BASH_SOURCE[0]}")/lib/veredito-end.sh"
 
 ETAPA="${1:-}"; shift || true
 [ -n "$ETAPA" ] || { echo "uso: confere-etapa.sh <etapa> [--fase N] [--projeto DIR] [--dry-run] [--fix-cycle] [--reuat]" >&2; exit 2; }
@@ -70,7 +71,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --fase)    FASE="${2:-}"; shift 2 ;;
     --projeto) PROJ="${2:-}"; shift 2 ;;
-    --dry-run) DRY=1; shift ;;
+    --dry-run) DRY=1; export GAD_DRY_RUN=1; shift ;;
     --sem-telemetria) SEMTEL=1; shift ;;
     --fix-cycle) FIXCYCLE=1; shift ;;
     --reuat) REUAT=1; shift ;;
@@ -78,6 +79,50 @@ while [ $# -gt 0 ]; do
     *) echo "flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
+
+# ── B1 (F4 RLR, FM-08INT+FM-07EXE+FM-05UAT): o fiscal grava o PRÓPRIO evento `script`
+# a cada execução, com o exit REAL — inclusive quando falha/repassa. Antes, só os dois
+# sites de escrita manual abaixo (pos-fail e fail) geravam o evento; um pass comum não
+# gravava nada. Um único `trap EXIT` cobre os três casos (pass comum, pos-fail, fail) e
+# qualquer saída antecipada (uso, manifest ausente). `rc` é capturado ANTES de qualquer
+# outro comando no trap — "$?" sozinho no corpo do trap pegaria o exit do PRÓPRIO teste
+# `[ ... ]`, não o do script (mesma lição do `trap` do spot-check-ponteiros.sh, B1 R2).
+# --sem-telemetria (46 j/r): contrato documentado "NÃO grava evento nenhum no run-log" —
+# a guarda abaixo respeita isso; --dry-run já sai de graça via GAD_DRY_RUN (gad_autoregistro
+# e o `gad_runlog` direto abaixo escrevem em $PHASE_DIR/$NN, que só existe fora do dry-run
+# porque DRY guarda toda a lógica de escrita mais abaixo — não há caminho de escrita real
+# sob --dry-run mesmo sem essa guarda; a guarda por GAD_DRY_RUN é só para o `gad_autoregistro`
+# de fallback nos exits antecipados).
+_gad_ce_resumo() { # linha "etapa modo veredito baldes" — sempre resolvível, mesmo cedo
+  local etapa="${RUNLOG_ETAPA:-$ETAPA}" modo="" n extra=""
+  [ "$ETAPA" = pausa ] && modo="pausa"
+  [ "${POSPAUSA:-0}" = 1 ] && modo="${modo:+$modo,}pos-pausa"
+  [ "${FIXCYCLE:-0}" = 1 ] && modo="${modo:+$modo,}fixcycle"
+  [ "${REUAT:-0}" = 1 ] && modo="${modo:+$modo,}reuat"
+  [ -n "$modo" ] || modo="normal"
+  n=$(jq 'length' <<<"${RES:-[]}" 2>/dev/null) || n=0
+  if [ "${VEREDITO:-}" = fail ] && [ -n "${resumo:-}" ]; then extra=" falhas: $resumo"; fi
+  if [ "${POS_FAIL:-0}" = 1 ]; then extra="$extra pass pós-fail (lock removido)"; fi
+  printf 'etapa=%s modo=%s veredito=%s baldes=%s%s' "$etapa" "$modo" "${VEREDITO:-${ver:-erro}}" "$n" "$extra"
+}
+_gad_ce_grava_script() { # <rc> <resumo>
+  # --dry-run: nenhuma escrita, nem por este caminho direto — gad_runlog não olha
+  # GAD_DRY_RUN sozinho (só gad_autoregistro/gad_json_out olham); a guarda é daqui.
+  [ "${GAD_DRY_RUN:-0}" = 1 ] && return 0
+  if [ -n "${PHASE_DIR:-}" ] && [ -n "${NN:-}" ] && [ -n "${RUNLOG_ETAPA:-}" ]; then
+    # sites com fase/etapa já resolvidos (via --fase/--projeto OU ponteiro): grava direto,
+    # sem depender do ponteiro `.gad-rodada-ativa.json` (o gad_autoregistro exige `.nn` +
+    # `.phase_dir` NELE — bancadas que passam --fase sem ponteiro completo, como
+    # test-confere-etapa.sh, ficariam mudas se dependessem só dele).
+    gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
+      --kv script=confere-etapa.sh --kv exit="$1" --kv resumo="$2"
+  else
+    # exit antecipado (uso, manifest ausente, fase não resolvida): sem PHASE_DIR/NN não
+    # há onde escrever direto — só resta o ponteiro de rodada ativa, via gad_autoregistro.
+    gad_autoregistro "confere-etapa.sh" "$1" "$2"
+  fi
+}
+trap 'rc=$?; [ "${SEMTEL:-0}" = 1 ] || _gad_ce_grava_script "$rc" "$(_gad_ce_resumo)"' EXIT
 
 if [ "$ETAPA" != "pausa" ]; then
   MANIFEST="$GAD_SCRIPTS_DIR/manifests/etapa-$ETAPA.json"
@@ -325,6 +370,32 @@ if [ "$ETAPA" = "5" ]; then
       RES=$(jq -c --arg d "padrão de segredo no artefato/evidência: $(head -c 60 <<<"$VAZOU")…" \
         '. + [{id:"segredo_no_artefato", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
+    # ── F4 RLR · FM-01UAT · FJ-01UAT · FJ-02UAT: o que o `pass` conduzido tem de ter ──
+    # Um leitor só do NN-UAT.md (uat-fiscal.py) — dois parsers do mesmo arquivo é como o
+    # fiscal do 4.1 acabou dando veredito da iteração errada (FM-04GAT).
+    UATF=$(python3 "$GAD_SCRIPTS_DIR/uat-fiscal.py" "$UAT" "$PHASE_DIR" 2>/dev/null || echo '{}')
+    jq -e . >/dev/null 2>&1 <<<"$UATF" || UATF='{}'
+    n_sev=$(jq '(.pass_sem_evidencia//[])|length' <<<"$UATF")
+    n_slc=$(jq '(.logic_sem_comando//[])|length' <<<"$UATF")
+    n_ssd=$(jq '(.pass_sem_sondagem//[])|length' <<<"$UATF")
+    if [ "${n_sev:-0}" -gt 0 ]; then
+      RES=$(jq -c --arg d "AVISO: $n_sev cenário(s) conduzido(s) em pass sem arquivo de evidência (exceção declarável na nota: «ação sem saída»): $(jq -r '.pass_sem_evidencia|join(" · ")' <<<"$UATF" | cut -c1-300)" \
+        '. + [{id:"uat_pass_sem_evidencia", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+    fi
+    if [ "${n_slc:-0}" -gt 0 ]; then
+      RES=$(jq -c --arg d "AVISO: $n_slc cenário(s) type: logic em pass cuja evidência não tem nenhuma linha '\$ ' — pass por leitura de código: $(jq -r '.logic_sem_comando|join(" · ")' <<<"$UATF" | cut -c1-300)" \
+        '. + [{id:"uat_logic_sem_comando", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+    fi
+    if [ "${n_ssd:-0}" -gt 0 ]; then
+      # AVISO NESTA RELEASE (decisão do dono, 21/09 — mesmo tratamento do `incidente_tardio`):
+      # volta a FALHA dura depois de UMA fase real rodar com o `uat-playbook.md` novo (C5),
+      # que é quem ensina a escotilha. A saída de escape é declarada no próprio cenário —
+      # «🔍 não se aplica: <motivo>» —, não é o fiscal que dispensa.
+      RES=$(jq -c --arg d "AVISO: $n_ssd cenário(s) conduzido(s) em pass sem linha 🔍 (sondagem adversarial) — devolva ao condutor; aceita «🔍 não se aplica: <motivo>»: $(jq -r '.pass_sem_sondagem|join(" · ")' <<<"$UATF" | cut -c1-300)" \
+        '. + [{id:"uat_pass_sem_sondagem", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+    fi
+    EXTRAI=$(jq -c --argjson u "$UATF" '. + {uat_fiscal: ($u|del(.summary_novo))}' <<<"$EXTRAI")
+
     # 5.C: promoção dos marcadores — escritor único; modelo reporta, ESTE script promove
     if [ "$FALHAS" = 0 ] && [ "$DRY" = 0 ]; then
       grep -q '^pre_uat: generated' "$UAT" && sed -i 's/^pre_uat: generated/pre_uat: executed/' "$UAT"
@@ -335,9 +406,16 @@ if [ "$ETAPA" = "5" ]; then
       if [ "$REUAT" = 1 ] && ! grep -q '^pre_uat_reuat:' "$UAT"; then
         sed -i '/^pre_uat: executed/a pre_uat_reuat: done' "$UAT"
       fi
-      if [ "$n_issue" = 0 ] && [ "$n_pend" = 0 ] && [ "$n_pass" -gt 0 ]; then
-        grep -q '^status: testing' "$UAT" && sed -i 's/^status: testing/status: complete/' "$UAT"
-      fi
+      # FM-02UAT: o bloco `## Summary` é RECALCULADO e escrito por este script, o
+      # `status` é promovido e o bloco `## Current Test` (rascunho do condutor) some —
+      # TUDO ANTES do commit e do recibo. Medido na F4 RLR: no commit que o recibo do
+      # fiscal aponta o cabeçalho ainda dizia `testing` e o resumo dizia 33/20/13 com 29
+      # `pass` no corpo; o resumo só foi corrigido 6,5 min depois, já no encerramento.
+      # O próprio uat-fiscal.py promove o status (mesma condição de antes, mais
+      # `blocked`), é idempotente e não toca o arquivo se o conteúdo não muda.
+      ESCRITO=$(python3 "$GAD_SCRIPTS_DIR/uat-fiscal.py" "$UAT" "$PHASE_DIR" --escrever 2>/dev/null || echo '{}')
+      EXTRAI=$(jq -c --argjson e "$(jq -c '{escrito:(.escrito//[]), summary:(.summary_novo//"")}' <<<"${ESCRITO:-\{\}}" 2>/dev/null || echo '{}')" \
+        '. + {uat_reconciliado: $e}' <<<"$EXTRAI")
     fi
   fi
 fi
@@ -835,8 +913,19 @@ for w, ids in waves.items():
                                capture_output=True, text=True, timeout=20)
             for f in s.stdout.splitlines():
                 f = f.strip()
-                if f and not f.startswith(".planning/") and not f.endswith("-SUMMARY.md"):
-                    arqs.add(f)
+                # FM-11EXE: a isenção era larga demais («todo .planning/, todo
+                # *-SUMMARY.md») e escondia colisão real entre dois planos da mesma onda
+                # em artefato de planejamento. Agora ignora SÓ o que o modo worktree do
+                # GSD manda todo plano tocar — o REQUIREMENTS.md — e o SUMMARY do
+                # PRÓPRIO plano. O SUMMARY de OUTRO plano volta a contar.
+                if not f:
+                    continue
+                if f.endswith("REQUIREMENTS.md") or f.endswith("/STATE.md") or f.endswith("state.json"):
+                    continue
+                base = f.rsplit("/", 1)[-1]
+                if base.endswith("-SUMMARY.md") and base.startswith(pid):
+                    continue
+                arqs.add(f)
         tocados[pid] = arqs
 out = []
 for w, ids in waves.items():
@@ -1012,6 +1101,137 @@ if [ "$ETAPA" = "1" ]; then
     fi
   fi
 
+  # ── FM-09INT: os mesmos números entre cabeçalho, tabela, vereditos e dívidas ──
+  # Medido na F4 RLR (04-INTENT-REVIEW.md, --dry-run, somente-leitura): cabeçalho diz 12
+  # confirmados × tabela tem 24 × vereditos no disco têm 30; 3 dispensados no cabeçalho ×
+  # 5 nos arquivos de veredito; 5 dívidas na seção × só 2 no deferred-items.md
+  # (c1-10/I-01/I-02 ficam de fora). AVISO, não falha: o
+  # plano diz «acusa» e um parser de cardinalidade que travasse a etapa cobraria caro por
+  # um artefato que o coordenador ainda pode emendar. Vai ao briefing pelo `extrai`.
+  CCARD="$GAD_SCRIPTS_DIR/confere-cardinalidade.sh"
+  if [ -f "$CCARD" ]; then
+    cardrc=0; cardout=$(bash "$CCARD" "$PHASE_DIR" "$NN" --json 2>/dev/null) || cardrc=$?
+    jq -e . >/dev/null 2>&1 <<<"$cardout" || cardout='{"avisos":[],"medido":{}}'
+    n_card=$(jq '(.avisos//[])|length' <<<"$cardout")
+    if [ "${n_card:-0}" -gt 0 ]; then
+      RES=$(jq -c --arg d "AVISO: $n_card divergência(s) de cardinalidade na etapa 1 — $(jq -r '(.avisos//[])|join(" · ")' <<<"$cardout" | cut -c1-400)" \
+        '. + [{id:"cardinalidade_etapa_1", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+    fi
+    EXTRAI=$(jq -c --argjson c "$cardout" '. + {cardinalidade: $c}' <<<"$EXTRAI")
+  fi
+
+  # ── FJ-02INT (metade script): «aprovado_com_ressalva» exige dívida nomeada ──
+  # Regra 5 do plano: «aprovado com ressalva» só vale na etapa 1 — aqui é onde intent_review
+  # é lido, então é aqui que o veto mora. O manifesto (etapa-1.json) já aceita o rótulo no
+  # `intent_review_fechada`; este bloco cobra a contrapartida.
+  #
+  # DECISÃO DO DONO (rodada 4, F4 RLR): a 1ª versão cobrava a seção INTEIRA de dívidas —
+  # medido contra as 3 fases reais (RLR F3/F4, inspired F24.5), isso reprovaria mesmo com a
+  # dívida da ressalva corretamente registrada, porque a seção carrega dívidas de outros
+  # ciclos que nunca foram para o deferred-items.md. Trocado por: cada ressalva do veredito
+  # precisa de UMA dívida nomeada com destino, ligada a ela — o resto da seção não é
+  # cobrado aqui (mas segue visível: `cardinalidade_etapa_1`/FM-09INT acima continua
+  # acusando DIVIDA-SEM-REGISTRO para toda a seção, como AVISO).
+  #
+  # O vínculo é o frontmatter `ressalva_dividas: [id, ...]` do INTENT-REVIEW — uma lista
+  # (uma fase pode ter mais de uma ressalva). Sem essa chave (ou lista vazia) com o rótulo
+  # `aprovado_com_ressalva` presente, a ressalva é bilhete em branco: mesma FALHA de antes,
+  # só que agora aponta a ausência do VÍNCULO, não da seção inteira. `prompts/intent.md`
+  # ainda não ensina o coordenador a escrever essa chave — FJ-02INT metade prompt, fora
+  # desta lane (relatorio-F4-RLR-C.md não tem "ressalva"; pendência declarada no relatório).
+  # Reaproveita o `medido.dividas` que o confere-cardinalidade.sh (FM-09INT, acima) já
+  # extraiu — não é um 2º parser do mesmo INTENT-REVIEW.md.
+  IR_ARQ="$PHASE_DIR/$NN-INTENT-REVIEW.md"
+  if [ -f "$IR_ARQ" ] && grep -qE '^intent_review: aprovado_com_ressalva' "$IR_ARQ"; then
+    IR_RESSALVA_LINHA=$(grep -E '^ressalva_dividas:' "$IR_ARQ" | head -1 || true)
+    IR_RESSALVA_IDS=""
+    if [ -n "$IR_RESSALVA_LINHA" ]; then
+      IR_RESSALVA_IDS=$(printf '%s\n' "$IR_RESSALVA_LINHA" \
+        | sed -E 's/^ressalva_dividas:[[:space:]]*\[//; s/\][[:space:]]*$//' \
+        | tr ',' '\n' | sed -E 's/^[[:space:]"'"'"']+//; s/[[:space:]"'"'"']+$//' \
+        | grep -v '^$' || true)
+    fi
+    if [ -z "$IR_RESSALVA_IDS" ]; then
+      RES=$(jq -c '. + [{id:"intent_ressalva_sem_divida", resultado:"FALHA", detalhe:"intent_review: aprovado_com_ressalva sem `ressalva_dividas:` (frontmatter, lista de ids) apontando a dívida QUE SUSTENTA a ressalva — a ressalva não pode ficar sem nome (o resto da «## Dívidas registradas» não é cobrado aqui)"}]' <<<"$RES")
+      FALHAS=$((FALHAS+1))
+    else
+      NA_SECAO_LISTA=$(jq -r '(.medido.dividas.na_secao//[])[]' <<<"${cardout:-{\}}" 2>/dev/null || true)
+      NO_DEFERRED_LISTA=$(jq -r '(.medido.dividas.no_deferred//[])[]' <<<"${cardout:-{\}}" 2>/dev/null || true)
+      IR_PROBLEMAS=""
+      for _id in $IR_RESSALVA_IDS; do
+        if ! grep -qxF "$_id" <<<"$NA_SECAO_LISTA"; then
+          IR_PROBLEMAS="$IR_PROBLEMAS $_id(fora-da-«##-Dívidas-registradas»)"
+        elif ! grep -qxF "$_id" <<<"$NO_DEFERRED_LISTA"; then
+          IR_PROBLEMAS="$IR_PROBLEMAS $_id(ausente-do-deferred-items.md)"
+        fi
+      done
+      if [ -n "$IR_PROBLEMAS" ]; then
+        RES=$(jq -c --arg d "intent_review: aprovado_com_ressalva com \`ressalva_dividas:\` apontando id(s) problemático(s):$IR_PROBLEMAS — a dívida da ressalva tem de estar na seção E no deferred-items.md" \
+          '. + [{id:"intent_ressalva_sem_divida", resultado:"FALHA", detalhe:$d}]' <<<"$RES")
+        FALHAS=$((FALHAS+1))
+      else
+        RES=$(jq -c --arg ids "$(printf '%s' "$IR_RESSALVA_IDS" | tr '\n' ' ')" \
+          '. + [{id:"intent_ressalva_sem_divida", resultado:"ok", detalhe:("ressalva_dividas vinculada(s), na seção e registrada(s) no deferred-items.md: " + $ids)}]' <<<"$RES")
+      fi
+    fi
+  fi
+
+  # ── FM-05INT (metade fiscal): diff em SPEC/CONTEXT sem selo ──
+  # Achado F4 RLR: 4 linhas entraram no 04-SPEC.md por fora do correcoes-commit.sh (dentro de
+  # um commit de artefatos, sem id nem selo). O `.correcoes-c<C>.aplicado` de cada ciclo grava
+  # `blobs[].blob_commit` — o blob do arquivo COMO FICOU depois daquele selo. Pega, por path
+  # (só NN-SPEC.md/NN-CONTEXT.md), o `blob_commit` do ciclo MAIS ALTO que menciona aquele path
+  # e compara com o blob do arquivo agora no worktree (`git hash-object`, não `git log`: um
+  # squash-merge da PR reescreve o histórico e apaga os commits que a evidência original citava
+  # — medido no rl-representation real, onde o commit 53dbda6 da auditoria não existe mais).
+  # Diferente = alguém escreveu no arquivo depois do último selo. AVISO (não falha: o plano diz
+  # «acusar», e o mesmo veto da FM-09INT vale aqui — travar a etapa por um artefato que o
+  # coordenador ainda pode emendar custaria caro).
+  # LIMITE MEDIDO: só cobre a janela DEPOIS do último selo. Rodado hoje contra a F4 RLR real
+  # (que tem a evidência do 53dbda6), este assert dá `[]` — não há regressão a mostrar porque
+  # não foi medida a ordem exata do 53dbda6 frente aos selos c2/c3/c4, só o fato de que uma
+  # escrita anterior a um selo posterior fica com o mesmo blob_commit do estado atual e por
+  # isso é invisível a este mecanismo, que só compara "selo mais recente" × "worktree agora".
+  # Cobrir
+  # a janela INTER-ciclo pediria encadear `c<N>.aplicado.blobs[].blob_commit` contra
+  # `c<N+1>.base.json.alvos[].blob_pre` — e no rl-representation real o `.correcoes-c1.base.json`
+  # em disco tem `head_pre` de DEPOIS do ciclo 4 (o próprio re-selo que a FM-05INT/A1 endereça),
+  # então essa cadeia não fecha nos dados existentes hoje. Fica como próximo passo declarado,
+  # não como bug: ver relatório.
+  # (A 2ª metade do achado — "re-emissão de veredito sem escritor registrado" — já é o que o
+  # J5/`confere-ciclo.sh --origem-vereditos` mede pelo sha256 do `.vereditos-c<C>.origem.json`
+  # contra o `escritores[]`: um bloco abaixo, sem duplicar aqui.)
+  declare -A SELO_BLOB=()
+  for ap in "$PHASE_DIR/.intent/".correcoes-c*.aplicado; do
+    [ -f "$ap" ] || continue
+    c_ap=$(basename "$ap" | sed -n 's/^\.correcoes-c\([0-9][0-9]*\)b\?\.aplicado$/\1/p')
+    [ -n "$c_ap" ] || c_ap=0
+    while IFS=$'\t' read -r bp bc; do
+      [ -n "$bp" ] || continue
+      case "$bp" in
+        */"$NN"-SPEC.md|*/"$NN"-CONTEXT.md) ;;
+        *) continue ;;
+      esac
+      prev="${SELO_BLOB[$bp]:-}"
+      c_prev="${prev%%:*}"
+      if [ -z "$prev" ] || [ "${c_ap:-0}" -ge "${c_prev:-0}" ] 2>/dev/null; then
+        SELO_BLOB["$bp"]="$c_ap:$bc"
+      fi
+    done < <(jq -r '(.blobs//[])[] | "\(.path)\t\(.blob_commit)"' "$ap" 2>/dev/null)
+  done
+  SEM_SELO=()
+  for bp in "${!SELO_BLOB[@]}"; do
+    bc="${SELO_BLOB[$bp]#*:}"
+    fp="$ROOT/$bp"
+    [ -f "$fp" ] || continue
+    atual=$(git -C "$ROOT" hash-object -- "$bp" 2>/dev/null) || continue
+    [ "$atual" = "$bc" ] || SEM_SELO+=("$(basename "$bp"): selado $bc, agora $atual")
+  done
+  if [ "${#SEM_SELO[@]}" -gt 0 ]; then
+    d="SPEC/CONTEXT.md mudou depois do último selo do correcoes-commit.sh — ${SEM_SELO[*]}"
+    RES=$(jq -c --arg d "${d:0:400}" '. + [{id:"spec_context_sem_selo", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+  fi
+
   # ── J5 (45k, F24.5): proveniência do veredito. O R5 acima já pega correção promovida SEM
   # linha de veredito; o que ele não vê é a linha de veredito escrita pelo próprio coordenador
   # depois que o verificador saiu (24.5: 3 linhas às 12:12, verificador fechado às 11:15).
@@ -1058,7 +1278,11 @@ if [ "$ETAPA" = "1" ]; then
   # E no NN-INTENT-REVIEW.md: a limpeza 1.5 apaga os sinos no fecho (assert
   # `limpeza_intent`, min/max 0) e a política diz que o conteúdo sobrevive no
   # INTENT-REVIEW — sem esta 2ª fonte a escapatória seria insatisfazível nesta cancela.
-  R6=$( { bash "$SETUP_I" --r6 "$PHASE_DIR" "$NN" 2>/dev/null || echo '{}'; } | tail -1 )
+  # FM-03INT (F4 RLR): o `--r6` passou a sair != 0 quando a entrada do ROADMAP nao tem
+  # **Goal:** — mas o JSON ja foi impresso. Um `|| echo '{}'` aqui APAGARIA a extracao
+  # inteira e o fiscal perderia o R6 no exato caso em que ele mais importa.
+  R6=$( bash "$SETUP_I" --r6 "$PHASE_DIR" "$NN" 2>/dev/null | tail -1 )
+  [ -n "$R6" ] || R6='{}'
   jq -e . >/dev/null 2>&1 <<<"$R6" || R6='{}'
   SINO_FONTES=("$PHASE_DIR/$NN-INTENT-REVIEW.md")
   for sf in "$PHASE_DIR/.intent/".sinos-*.txt; do [ -f "$sf" ] && SINO_FONTES+=("$sf"); done
@@ -1177,6 +1401,290 @@ if [ "$ETAPA" = "1" ]; then
           r2_status: $st, r2_avisos: $av}' <<<"$EXTRAI")
 fi
 
+# ════════════════════════════════════════════════════════════════════════════
+# REGRAS GERAIS DA AUDITORIA F4 RLR — valem para TODA etapa
+# ════════════════════════════════════════════════════════════════════════════
+
+# ── FM-07INT · FM-04PLAN · FM-07GAT: incidente tardio ────────────────────────
+# «Incidente na hora» virou frase em todos os prompts de etapa; aqui está a cancela
+# que a torna imponível. Dois sintomas, os dois medidos na F4 RLR:
+#   (1) incidente rotulado com a etapa Y e horário POSTERIOR ao `end` de Y — foi
+#       escrito depois, de memória, no fecho;
+#   (2) >= 3 incidentes no MESMO segundo — rajada digitada de uma vez.
+# Só olha os `end` que JÁ existem: o `end` da etapa corrente é gravado logo abaixo,
+# por este mesmo script, e ainda não está no arquivo.
+RLI="$PHASE_DIR/$NN-RUN-LOG.jsonl"
+if [ -f "$RLI" ]; then
+  TARDIOS=$(python3 - "$RLI" "$RUNLOG_ETAPA" 2>/dev/null <<'PYTARDIO'
+import json, sys, collections
+from datetime import datetime
+
+def ts(v):
+    if v is None: return None
+    if isinstance(v, (int, float)): return float(v)
+    t = str(v).replace("Z", "+00:00")
+    try: return datetime.fromisoformat(t).timestamp()
+    except Exception: return None
+
+# O fiscal de uma etapa julga SÓ os incidentes DELA (medido em 21/09: sem este recorte a
+# regra reprovava as 8 etapas das 3 fases reais por incidentes de outras etapas — «nenhuma
+# regra nova pode reprovar etapa antiga sem motivo real»).
+alvo = (sys.argv[2] if len(sys.argv) > 2 else "").strip()
+def da_etapa(et):
+    if not alvo:
+        return True
+    a = alvo.split()[0] if alvo.split() else alvo
+    b = (et or "").split()[0] if (et or "").split() else (et or "")
+    return a == b
+
+ends, eventos = {}, []
+for linha in open(sys.argv[1], encoding="utf-8", errors="replace"):
+    linha = linha.strip()
+    if not linha: continue
+    try: e = json.loads(linha)
+    except Exception: continue
+    t = ts(e.get("ts") or e.get("timestamp") or e.get("hora"))
+    et = str(e.get("etapa") or "")
+    if e.get("evento") == "end" and t is not None and et:
+        # `substitui`: um `end` re-emitido aposenta o anterior — fica o mais recente
+        ends[et] = max(ends.get(et, 0.0), t)
+    if e.get("evento") == "incidente" and da_etapa(et):
+        eventos.append((t, et, (e.get("detalhe") or e.get("kv", {}).get("detalhe") or "")[:70]))
+
+tardios, rajadas = [], []
+for t, et, det in eventos:
+    fim = ends.get(et)
+    if t is not None and fim is not None and t > fim + 1:
+        tardios.append("%s (+%ds do end)" % (det or et, int(t - fim)))
+
+por_segundo = collections.Counter(int(t) for t, _, _ in eventos if t is not None)
+for seg, n in por_segundo.items():
+    if n >= 3:
+        rajadas.append("%d incidentes no mesmo segundo (%d)" % (n, seg))
+
+print(json.dumps({"tardios": tardios, "rajadas": rajadas}, ensure_ascii=False))
+PYTARDIO
+) || TARDIOS=""
+  jq -e . >/dev/null 2>&1 <<<"$TARDIOS" || TARDIOS='{"tardios":[],"rajadas":[]}'
+  n_tard=$(jq '.tardios|length' <<<"$TARDIOS"); n_raj=$(jq '.rajadas|length' <<<"$TARDIOS")
+  if [ "${n_tard:-0}" -gt 0 ] || [ "${n_raj:-0}" -gt 0 ]; then
+    # AVISO nesta release, por DECISÃO DO DONO (21/09): medido em modo seco, o assert
+    # reprova quase toda etapa das 3 fases reais (RLR F3/F4, inspired F24.5) — não por
+    # artefato da regra, mas porque a prática de escrever incidente no fecho é real e
+    # ainda não passou por uma fase com os prompts novos («incidente na hora», C1–C4).
+    # Fica DURA na release seguinte, depois de uma fase real com esses prompts.
+    # As duas metades (posterior ao `end` e rajada no mesmo segundo) foram rebaixadas
+    # juntas: o assert é um só e o dono nomeou o assert.
+    RES=$(jq -c --arg d "AVISO: incidente escrito fora da hora do fato: $(jq -r '(.tardios + .rajadas)|join(" · ")' <<<"$TARDIOS" | cut -c1-400)" \
+      '. + [{id:"incidente_tardio", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+  fi
+  EXTRAI=$(jq -c --argjson t "$TARDIOS" '. + {incidente_tardio: $t}' <<<"$EXTRAI")
+fi
+
+# ── FM-06INT: a pasta da fase não pode terminar a etapa com git status sujo ───
+# 160 arquivos do `.intent/` da F4 ficaram fora de qualquer commit: eles são a
+# evidência da consultoria e sumiriam numa limpeza. A lista de temporários aceitos foi
+# medida contra as pastas reais (RLR F3/F4, inspired F24.5), não chutada.
+# A etapa 0 é a ABERTURA da rodada: a pasta da fase está justamente nascendo, e cobrar
+# árvore limpa ali seria cobrar o fim no começo. A regra vale das etapas 1 em diante.
+if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  SUJOS=$( { git -C "$ROOT" status --porcelain --untracked-files=all -- "$PHASE_DIR" 2>/dev/null \
+    | sed 's/^...//' \
+    | grep -vE '(^|/)\.(gad|gad-[a-z-]*|correcoes-c[0-9a-z]*\.(tmp|pre-[0-9]+\.patch))' \
+    | grep -vE '\.(tmp|swp|err|log|pyc)$|(^|/)__pycache__/|(^|/)\.DS_Store$' \
+    | head -40; } || true )
+  if [ -n "$SUJOS" ]; then
+    n_sujos=$( { printf '%s\n' "$SUJOS" | grep -c . || true; } )
+    # ── DECISÃO DO DONO (21/09), sobre a contradição medida pelo executor 1 ───────
+    # O `workflow.md` roda o fiscal ANTES do `commita-artefatos.sh`, então cobrar árvore
+    # limpa de TUDO deixaria a etapa em impasse (o `NN-UAT.md` que o próprio fiscal
+    # escreve sujaria a etapa 5; o run-log é reescrito por toda etapa antes de qualquer
+    # fiscal). O dono decidiu, sem inverter a ordem do workflow:
+    #   • FALHA DURA só para a EVIDÊNCIA DURA — `.intent/`, `pareceres/` e os atestados
+    #     (`.fence-*.ok`) —, que é o alvo real da FM-06INT (160 arquivos fora do git na
+    #     F4, incluindo os selos dos ciclos 2/3/4 e os vereditos);
+    #   • ISENTO o que a PRÓPRIA etapa produz: a etapa 1 é quem produz `.intent/` e
+    #     `pareceres/` (e ainda não os commitou quando o fiscal dela roda), e a etapa N é
+    #     quem produz o seu `.fence-N.ok` (gravado adiante, neste mesmo script);
+    #   • AVISO para todo o resto (`NN-UAT.md`, SUMMARY, run-log, …).
+    # Quem commita a evidência dura é `commita-artefatos.sh … evidencia` — uma fonte só.
+    DURA=""; RESTO=""
+    while IFS= read -r arq; do
+      [ -n "$arq" ] || continue
+      case "$arq" in
+        *"/.intent/"*|*"/pareceres/"*)
+          # produzidos pela etapa 1 → isentos NELA, duros das etapas 2 em diante
+          if [ "${ETAPA%% *}" = "1" ]; then RESTO="$RESTO $arq"; else DURA="$DURA $arq"; fi ;;
+        *"/.fence-"*".ok")
+          # o atestado da PRÓPRIA etapa é escrito adiante; os das etapas anteriores não
+          if [ "$arq" = "${arq%/.fence-${ETAPA%% *}.ok}" ]; then DURA="$DURA $arq"
+          else RESTO="$RESTO $arq"; fi ;;
+        *) RESTO="$RESTO $arq" ;;
+      esac
+    done <<<"$SUJOS"
+    if [ -n "$DURA" ]; then
+      n_dura=$( { printf '%s\n' $DURA | grep -c . || true; } )
+      RES=$(jq -c --arg d "evidência da fase fora de commit na etapa $ETAPA — $n_dura arquivo(s) de .intent/, pareceres/ ou atestado (rode: commita-artefatos.sh <fase> <NN> evidencia): $(printf '%s ' $DURA | cut -c1-350)" \
+        '. + [{id:"evidencia_fora_do_git", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+    if [ -n "$RESTO" ]; then
+      n_resto=$( { printf '%s\n' $RESTO | grep -c . || true; } )
+      RES=$(jq -c --arg d "AVISO: pasta da fase com $n_resto arquivo(s) fora de commit na etapa $ETAPA (rode commita-artefatos.sh antes de fechar): $(printf '%s ' $RESTO | cut -c1-350)" \
+        '. + [{id:"pasta_da_fase_suja", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+    fi
+    EXTRAI=$(jq -c --argjson n "${n_sujos:-0}" --arg du "$(printf '%s ' $DURA)" \
+      '. + {pasta_suja: {total:$n, evidencia_dura:($du|ltrimstr(" ")|rtrimstr(" "))}}' <<<"$EXTRAI")
+  fi
+fi
+
+# ── FM-01GAT: recibo do 4.1 vencido por commit de código posterior ───────────
+# Um recibo fiscal existe para dizer «o que foi aprovado é ISTO». Medido na F4 RLR: o
+# `.fence-4.1.ok` apontava para o commit das 20:40 e, das 21:19 às 21:22, o fixer
+# commitou WR-14, IN-11 e IN-10 em `fluxo.py`, `posse.py` e `tasks.py` — sem novo `end`,
+# sem novo recibo e sem revisor. O gate reabre: novo fiscal → novo `end` → novo recibo
+# (e, para warning/critical, re-review estreitado pelo mesmo mecanismo do 4.1b).
+# Vale das etapas POSTERIORES ao 4.1 (4.1b/4.4/4.5, 5 e 6) — a própria 4.1 escreve o
+# recibo adiante, neste mesmo script.
+# O rótulo do run-log é a chave (o argumento `4-code-review` vira `4.1 code-review`).
+case "${RUNLOG_ETAPA%% *}" in
+  0|1|1.5|2|2.5|3|4.1|4.1b) ;;
+  *)
+    # FM-02GAT: `.fence-4.1b.ok` (re-review, workflow.md §4.1) não herda o recibo do
+    # 4.1 — é o mais recente dos dois que vale (o 4.1b substitui o 4.1 quando existe).
+    F41="$PHASE_DIR/.fence-4.1.ok"
+    F41B="$PHASE_DIR/.fence-4.1b.ok"
+    if [ -f "$F41B" ] && { [ ! -f "$F41" ] || [ "$F41B" -nt "$F41" ]; }; then
+      F41="$F41B"
+    fi
+    if [ -f "$F41" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+      H41=$(jq -r '.head // ""' "$F41" 2>/dev/null || echo "")
+      if [ -n "$H41" ] && git -C "$ROOT" cat-file -e "$H41^{commit}" 2>/dev/null; then
+        # `:!.planning` tira os artefatos da rodada: recibo vencido é CÓDIGO que mudou.
+        DEPOIS=$( { git -C "$ROOT" log --format='%h %s' "$H41..HEAD" -- . ':!.planning' 2>/dev/null \
+                    | head -5; } || true )
+        if [ -n "$DEPOIS" ]; then
+          n_dep=$( { printf '%s\n' "$DEPOIS" | grep -c . || true; } )
+          RES=$(jq -c --arg d "recibo do 4.1 vencido: $n_dep commit(s) de código depois do head aprovado ($H41) — o gate reabre (novo fiscal 4.1 → novo end → novo recibo; warning/critical pedem re-review estreitado, mecanismo do 4.1b): $(printf '%s · ' $DEPOIS | cut -c1-300)" \
+            '. + [{id:"recibo_4_1_vencido", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+          EXTRAI=$(jq -c --arg h "$H41" --argjson n "$n_dep" \
+            '. + {recibo_4_1: {head:$h, commits_depois:$n}}' <<<"$EXTRAI")
+        fi
+      fi
+    fi ;;
+esac
+
+# ── FM-02ENC (fiscal): o local não pode terminar a fase à frente do remoto ────
+# AVISO, não falha: há projeto que proíbe push direto e fecha por PR. O que não pode
+# é o fecho passar em silêncio com commits que ninguém mais tem.
+if [ "$ETAPA" = "6" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+  BR=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  case "$BR" in
+    master|main)
+      UP=$(git -C "$ROOT" rev-parse --abbrev-ref "$BR@{upstream}" 2>/dev/null || echo "")
+      if [ -n "$UP" ]; then
+        AF=$(git -C "$ROOT" rev-list --count "$UP..$BR" 2>/dev/null || echo 0)
+        if [ "${AF:-0}" -gt 0 ]; then
+          RES=$(jq -c --arg d "AVISO: $BR está $AF commit(s) à frente de $UP — o fecho da fase não foi empurrado (6.5: push explícito, ou banner com a pendência se o projeto proíbe push direto)" \
+            '. + [{id:"local_a_frente_do_remoto", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+          EXTRAI=$(jq -c --argjson n "$AF" --arg b "$BR" --arg u "$UP" \
+            '. + {local_a_frente: {ramo:$b, upstream:$u, commits:$n}}' <<<"$EXTRAI")
+        fi
+      fi ;;
+  esac
+fi
+
+# ── FJ-01ENC (fiscal): todo ID aberto da radiografia aparece no resumo ───────
+# Os DOIS resumos da F4 RLR narraram as rodadas em prosa e disseram que elas «fecharam os
+# avisos restantes»; o code review fechou com WR-09 aberto e 16 Info. A régua do resumo
+# manda citar o ID de cada achado ABERTO — aqui ela vira medição. A lista sai do MESMO
+# leitor do fiscal do 4.1 (lib/review-maior.py): não há segundo parser.
+if [ "$ETAPA" = "6" ]; then
+  RSM="$PHASE_DIR/$NN-RESUMO-EXECUTIVO.md"
+  if [ -f "$RSM" ]; then
+    RVE=$(python3 "$GAD_SCRIPTS_DIR/lib/review-maior.py" "$PHASE_DIR" "$NN" 2>/dev/null) || RVE=""
+    jq -e . >/dev/null 2>&1 <<<"$RVE" || RVE='{}'
+    ABERTOS=$( { jq -r '(.abertos//[])[]' <<<"$RVE" 2>/dev/null || true; } )
+    # FJ-02INT (metade etapa 6): a fase fechada com `intent_review: aprovado_com_ressalva`
+    # tem a(s) dívida(s) QUE A SUSTENTAM como aceite pendente — a régua é a MESMA do WR-09
+    # acima («todo ID aberto aparece no resumo»). DECISÃO DO DONO (rodada 4, mesma da etapa
+    # 1, `intent_ressalva_sem_divida` acima): só a(s) dívida(s) LIGADA(S) à ressalva
+    # (frontmatter `ressalva_dividas: [...]`) entram nesta cobrança — não a seção inteira
+    # (`medido.dividas.na_secao`), que carrega dívidas de outros ciclos sem relação com a
+    # ressalva. Um `FALTAM` só, um assert só — não duplica o resumo_sem_id_aberto.
+    IR_ARQ6="$PHASE_DIR/$NN-INTENT-REVIEW.md"
+    if [ -f "$IR_ARQ6" ] && grep -qE '^intent_review: aprovado_com_ressalva' "$IR_ARQ6"; then
+      RESSALVA_LINHA6=$(grep -E '^ressalva_dividas:' "$IR_ARQ6" | head -1 || true)
+      RESSALVA_IDS=""
+      if [ -n "$RESSALVA_LINHA6" ]; then
+        RESSALVA_IDS=$(printf '%s\n' "$RESSALVA_LINHA6" \
+          | sed -E 's/^ressalva_dividas:[[:space:]]*\[//; s/\][[:space:]]*$//' \
+          | tr ',' '\n' | sed -E 's/^[[:space:]"'"'"']+//; s/[[:space:]"'"'"']+$//' \
+          | grep -v '^$' || true)
+      fi
+      ABERTOS="$ABERTOS $RESSALVA_IDS"
+    fi
+    FALTAM=""
+    for id in $ABERTOS; do
+      [ -n "$id" ] || continue
+      grep -qF "$id" "$RSM" || FALTAM="$FALTAM $id"
+    done
+    if [ -n "$FALTAM" ]; then
+      n_falta=$( { printf '%s\n' $FALTAM | grep -c . || true; } )
+      RES=$(jq -c --arg d "$n_falta ID(s) aberto(s) do $(jq -r '.arquivo // "code review"' <<<"$RVE") ausente(s) do resumo executivo:$FALTAM — a régua manda citar cada achado ABERTO (número ruim é o que este documento existe para mostrar); o bloco do numeros-da-fase.sh já traz a lista pronta" \
+        '. + [{id:"resumo_sem_id_aberto", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      EXTRAI=$(jq -c --arg f "${FALTAM# }" '. + {resumo_ids_abertos_ausentes: $f}' <<<"$EXTRAI")
+    fi
+  fi
+fi
+
+# ── FM-04GAT: o 4.1 lê as contagens do arquivo de MAIOR iteração ─────────────
+# A F4 RLR tinha 04-REVIEW.md, .iter2, .iter3, .iter4, 04-REVIEW-FIX.md e
+# 04-REVIEW-FIX.iter4.md — o fiscal lia o `04-REVIEW.md` (a 1ª iteração) e dava o
+# veredito da rodada errada. Ordem: REVIEW-FIX mais recente > REVIEW.iterN mais alto >
+# REVIEW.md. E `status: all_fixed` com `skipped > 0` reprova: nada fica de fora sem ser
+# nomeado. Formato não reconhecido FALHA ALTO — leitor cego é pior que leitor ausente.
+if [ "$ETAPA" = "4-code-review" ]; then
+  # Leitor fatorado para `lib/review-maior.py` (21/09) — o `numeros-da-fase.sh` (FJ-01ENC)
+  # lê o MESMO arquivo pela MESMA regra. Não escreva um segundo parser.
+  REVMAX=$(python3 "$GAD_SCRIPTS_DIR/lib/review-maior.py" "$PHASE_DIR" "$NN" 2>/dev/null) || REVMAX=""
+  jq -e . >/dev/null 2>&1 <<<"$REVMAX" || REVMAX='{"arquivo":null,"formato_nao_reconhecido":true}'
+  rv_arq=$(jq -r '.arquivo // ""' <<<"$REVMAX")
+  if [ -n "$rv_arq" ]; then
+    if [ "$(jq -r '.formato_nao_reconhecido // false' <<<"$REVMAX")" = true ]; then
+      RES=$(jq -c --arg d "$rv_arq: formato não reconhecido (nenhum \`status:\` no cabeçalho) — o leitor de contagens falha alto em vez de devolver zeros" \
+        '. + [{id:"review_formato", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+    rv_st=$(jq -r '.status // ""' <<<"$REVMAX"); rv_sk=$(jq -r '.skipped // 0' <<<"$REVMAX")
+    if [ "$rv_st" = all_fixed ] && [ "${rv_sk:-0}" != 0 ] && [ "${rv_sk:-0}" != null ]; then
+      RES=$(jq -c --arg d "$rv_arq declara \`status: all_fixed\` com skipped: $rv_sk — achado pulado não é achado consertado; nomeie cada um" \
+        '. + [{id:"all_fixed_com_skipped", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+  fi
+  EXTRAI=$(jq -c --argjson r "$REVMAX" '. + {review_maior_iteracao: $r}' <<<"$EXTRAI")
+  # O manifest extrai `status`/`critical`/`warning`/`total` do `NN-REVIEW.md` — a PRIMEIRA
+  # iteracao. Era esse o numero que a camada 0 lia para rotear (medido na F4 RLR: o
+  # manifest dizia `issues_found · critical: 2` enquanto o iter4 ja dizia `all_fixed`).
+  # Sobrescrevemos com o arquivo de maior iteracao, MANTENDO o formato de string do
+  # manifest (`"status: all_fixed"`, com o rotulo) — quem parseia nao muda.
+  if [ -n "$rv_arq" ]; then
+    for campo in status critical warning total skipped; do
+      v=$(jq -r --arg k "$campo" '.[$k] // empty' <<<"$REVMAX")
+      if [ -z "$v" ]; then
+        # ausente no arquivo de maior iteração → null DECLARADO. Deixar o valor do
+        # NN-REVIEW.md aqui daria provenância MISTA (status do iter4, critical da 1ª
+        # rodada) — pior que errado, porque parece coerente.
+        EXTRAI=$(jq -c --arg k "$campo" '. + {($k): null}' <<<"$EXTRAI"); continue
+      fi
+      case "$campo" in
+        status) fmt="status: $v" ;;
+        *)      fmt="  $campo: $v" ;;
+      esac
+      EXTRAI=$(jq -c --arg k "$campo" --arg v "$fmt" '. + {($k): $v}' <<<"$EXTRAI")
+    done
+    EXTRAI=$(jq -c --arg a "$rv_arq" '. + {review_fonte: $a}' <<<"$EXTRAI")
+  fi
+fi
+
 # ── veredito + eventos + medição ─────────────────────────────────────────────
 if [ "$FALHAS" = 0 ]; then VEREDITO=pass; else VEREDITO=fail; fi
 # dente do gate (auditorias F21-ox/F24-pausa/F24-fecho — 3ª ocorrência de "guarda cega
@@ -1193,11 +1701,12 @@ if [ "$DRY" = 0 ]; then
   if [ "$VEREDITO" = pass ]; then
     POS_FAIL=0
     if [ "$SEMTEL" = 0 ] && [ -f "$LOCK" ]; then
-      POS_FAIL=1; rm -f "$LOCK"
       # v2.1.9: o pass que destrava um fail também fica no run-log como evento `script`
-      # (F24.3 4.4: só a reprovação aparecia; a re-cancela verde só existia no transcript)
-      gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
-        --kv script=confere-etapa.sh --kv exit=0 --kv resumo="pass pós-fail (lock removido)"
+      # (F24.3 4.4: só a reprovação aparecia; a re-cancela verde só existia no transcript).
+      # B1 (F4 RLR): a escrita saiu daqui — o `trap EXIT` no topo do arquivo grava o
+      # evento `script` uma vez, no fim, com o exit real; `POS_FAIL=1` só alimenta o
+      # resumo dele (_gad_ce_resumo) e o `--kv pos_gate_fail=true` do `end` abaixo.
+      POS_FAIL=1; rm -f "$LOCK"
     fi
     HEAD_NOW=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "")
     jq -cn --arg e "${RUNLOG_ETAPA%% *}" --arg f "$NN" --arg h "$HEAD_NOW" \
@@ -1228,15 +1737,24 @@ if [ "$DRY" = 0 ]; then
       MEDICAO='{"status":"sem_medicao","reason":"sem sessão ou sem checkpoint da etapa no run-log"}'
     fi
     POSFLAG=(); [ "$POS_FAIL" = 1 ] && POSFLAG=(--kv pos_gate_fail=true)
+    # FM-04UAT (lado script, pendência do relatório B §6): a etapa 6 que PAROU sem ship
+    # (rota 6.4-HB) grava veredito=handback, não pass, no PRÓPRIO `end` id 6 — não só no
+    # `stop`/etapa "handback" que já existia. A rota (pausa/handback/ship) foi decidida no
+    # DESPACHO da etapa 6 por `pre-despacho.sh 6` (6.1) e sobrevive no espelho
+    # last-pre-despacho.json (mesmo etapa 6, ninguém mais rodou pre-despacho.sh no meio) —
+    # lido aqui em vez de recalculado, para não ter 2º lugar que decide a rota. Fatorado
+    # em lib/veredito-end.sh (F4 RLR, item 3 da rodada 3) — permite teste de integração
+    # sem montar uma bancada de PASS real da etapa 6 inteira.
+    VEREDITO_END=$(gad_veredito_end "$ROOT" "$RUNLOG_ETAPA")
     if [ "$SEMTEL" = 1 ]; then
       :
     elif [ "$(jq -r '.status' <<<"$MEDICAO")" = ok ]; then
       gad_runlog "$PHASE_DIR" "$NN" end "$RUNLOG_ETAPA" \
         --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens + (.total.cache_creation_1h_tokens // 0)' <<<"$MEDICAO")" \
         --custo "$(jq -r '.total.custo_usd // 0' <<<"$MEDICAO")" \
-        --kv veredito=pass ${POSFLAG[@]+"${POSFLAG[@]}"}
+        --kv veredito="$VEREDITO_END" ${POSFLAG[@]+"${POSFLAG[@]}"}
     else
-      gad_runlog "$PHASE_DIR" "$NN" end "$RUNLOG_ETAPA" --kv veredito=pass \
+      gad_runlog "$PHASE_DIR" "$NN" end "$RUNLOG_ETAPA" --kv veredito="$VEREDITO_END" \
         --kv medicao="$(jq -r '.reason // "indisponivel"' <<<"$MEDICAO")" \
         ${POSFLAG[@]+"${POSFLAG[@]}"}
     fi
@@ -1246,8 +1764,8 @@ if [ "$DRY" = 0 ]; then
     if [ "$SEMTEL" = 0 ]; then
       printf '{"etapa":"%s","ts":"%s","resumo":"falhas: %s"}\n' \
         "${RUNLOG_ETAPA%% *}" "$(date -Is)" "$resumo" > "$LOCK"
-      gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
-        --kv script=confere-etapa.sh --kv exit=1 --kv resumo="falhas: $resumo"
+      # B1 (F4 RLR): idem — o `trap EXIT` grava o evento `script` (exit=1, resumo com
+      # "falhas: $resumo" via _gad_ce_resumo, que lê a variável `resumo` acima).
     fi
   fi
 fi

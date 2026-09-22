@@ -13,7 +13,13 @@
 #            extensão (.err/.log/.jsonl/.tmp/…) nunca entram. Teto de segurança: mais
 #            de 20 arquivos na seleção → RECUSA, nada é adicionado, exit 1 (C4 —
 #            é melhor falhar visível do que arrastar centenas de arquivos em silêncio).
-#   runlog — NN-RUN-LOG.jsonl + NN-DECISOES.md (fecho da rodada, 6.5)
+#   runlog — NN-RUN-LOG.jsonl + NN-DECISOES.md (fecho da rodada, 6.5) + evidência dura
+#   evidencia — só a evidência dura (FM-06INT): .intent/, pareceres/, atestados
+#            (.fence-*.ok), NN-RUN-LOG.jsonl, deferred-items.md e NN-DECISOES.md.
+#            Medido na F4 RLR: 160 arquivos da pasta da fase — os selos dos ciclos 2/3/4,
+#            os vereditos, os espelhos dos pareceres e os próprios atestados do fiscal —
+#            nunca foram commitados; o run-log commitado tinha 49 linhas e o do disco 171.
+#            Temporários (.tmp/.err/.log/.pyc/__pycache__/.tmp-parecer-*) nunca entram.
 #
 # Best-effort: sem git/nada staged → exit 0 com aviso (commit falhou não para fase).
 # Exceção: o teto de segurança do uat-evidencia/ (acima) é falha DURA — exit 1.
@@ -22,11 +28,48 @@ set -euo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
 
 PD="${1:-}"; NN="${2:-}"; MODO="${3:-}"
-[ -n "$PD" ] && [ -n "$NN" ] || { echo "uso: commita-artefatos.sh <phase_dir> <NN> <uat|runlog>" >&2; exit 2; }
+[ -n "$PD" ] && [ -n "$NN" ] || { echo "uso: commita-artefatos.sh <phase_dir> <NN> <uat|runlog|intencao|evidencia>" >&2; exit 2; }
 ROOT="$(gad_project_root "$PD")"
 cd "$ROOT"
 
 STATUS=ok
+
+# ── FM-06INT: a evidência dura da fase ────────────────────────────────────────
+# Uma fonte só para «o que a rodada tem obrigação de commitar». O fiscal
+# (confere-etapa.sh, assert `pasta_da_fase_suja`) reprova exatamente este conjunto
+# quando ele fica fora do git; tudo o mais ali é AVISO. Seleção sempre EXPLÍCITA —
+# nunca `git add` de diretório do .planning inteiro.
+gad_evidencia_dura() {
+  local pd="$1" nn="$2" escopo="${3:-tudo}" f
+  local -a ARQ=() DIRS=("$pd/.intent")
+  # `sem_pareceres`: no modo `intencao` a seleção de pareceres/ já é explícita (só
+  # `NN-parecer-*.md`) e um teste protege que o parecer da CONVERGÊNCIA
+  # (`NN-planrev-parecer-*`) não entre no commit da intenção — ele é da etapa 2 e
+  # entra no `evidencia`/`runlog` do fecho.
+  [ "$escopo" = sem_pareceres ] || DIRS+=("$pd/pareceres")
+  # .intent/ e pareceres/ inteiros, menos os temporários (medidos: .tmp-parecer-<lane>.md
+  # some sozinho — FM-11INT — e .err/.log são ruído de execução, não evidência).
+  local d
+  for d in "${DIRS[@]}"; do
+    [ -d "$d" ] || continue
+    while IFS= read -r -d '' f; do ARQ+=("$f"); done < <(
+      find "$d" -type f \
+        ! -name '.tmp-parecer-*' ! -name '*.tmp' ! -name '*.err' ! -name '*.log' \
+        ! -name '*.pyc' ! -path '*/__pycache__/*' -print0 2>/dev/null)
+  done
+  # Atestados do fiscal + run-log + dívidas + decisões (caminhos explícitos).
+  while IFS= read -r -d '' f; do ARQ+=("$f"); done < <(
+    find "$pd" -maxdepth 1 -type f -name '.fence-*.ok' -print0 2>/dev/null)
+  for f in "$pd/$nn-RUN-LOG.jsonl" "$pd/deferred-items.md" "$pd/$nn-DECISOES.md" \
+           "$ROOT/.planning/deferred-items.md"; do
+    [ -f "$f" ] && ARQ+=("$f")
+  done
+  [ ${#ARQ[@]} -gt 0 ] || return 0
+  # -f: o .gitignore do projeto costuma barrar dotdir; a evidência da fase é
+  # deliberada e não pode sumir por causa de uma regra genérica.
+  git add -f -- "${ARQ[@]}" 2>/dev/null || true
+}
+
 case "$MODO" in
   uat)
     # Teto ANTES de qualquer git add: se recusar, o índice tem que sair vazio
@@ -55,7 +98,11 @@ case "$MODO" in
     # 46(p): o state.json do GSD muda durante a rodada e ficava modificado fora do commit
     # (árvore suja no preflight do ship, F24.5). Caminho explícito, nunca `git add .planning`.
     [ -f "$ROOT/.planning/state.json" ] && git add "$ROOT/.planning/state.json" 2>/dev/null || true
-    MSG="docs(fase $NN): run-log, decisões e state da rodada" ;;
+    gad_evidencia_dura "$PD" "$NN"
+    MSG="docs(fase $NN): run-log, decisões e evidência da rodada" ;;
+  evidencia)
+    gad_evidencia_dura "$PD" "$NN"
+    MSG="docs(fase $NN): evidência da rodada (intent, pareceres, atestados, run-log)" ;;
   intencao)
     # M6 (F24.5): `git commit --only` recusa arquivo NOVO (pareceres do 1º ciclo). `git add`
     # com pathspec explícito aceita novo e rastreado, e continua sem tocar no resto do
@@ -69,8 +116,9 @@ case "$MODO" in
         -name "$NN-parecer-*.md" ! -name '.*' -print0 2>/dev/null)
     fi
     [ ${#PAR[@]} -gt 0 ] && { git add -- "${PAR[@]}" 2>/dev/null || true; }
+    gad_evidencia_dura "$PD" "$NN" sem_pareceres
     MSG="docs(fase $NN): consultoria especializada de intenção" ;;
-  *) echo "modo desconhecido: $MODO (uat|runlog|intencao)" >&2; exit 2 ;;
+  *) echo "modo desconhecido: $MODO (uat|runlog|intencao|evidencia)" >&2; exit 2 ;;
 esac
 if git diff --cached --quiet 2>/dev/null; then
   STATUS=nada_a_commitar

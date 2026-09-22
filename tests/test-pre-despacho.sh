@@ -159,6 +159,44 @@ roda "$R"
 eq "bloqueio fora do dry-run → exit 4"            "$RC" "4"
 casa "…evento script exit=4 paralelismo=bloqueio no run-log" "$(tail -n1 "$PD/99-RUN-LOG.jsonl")" '"evento":"script".*"exit":4.*"paralelismo":"bloqueio"'
 
+# ── A4 (auditoria F4 RLR): etapa 6 — FM-01ENC · FJ-04ENC · MGTm-01ENC · FM-03ENC ──
+IFS='|' read -r R PD <<<"$(monta enc6 1)"
+cat > "$PD/99-SECURITY.md" <<'SEC'
+---
+status: secured
+threats_open: 0
+asvs_level: 2
+---
+
+## Accepted Risks Log
+
+| Risk ID | Threat Ref | Rationale | Disposition |
+|---|---|---|---|
+| R-99-SC | T-99-SC | Nenhum pacote novo na fase | accept |
+SEC
+printf 'result: pass
+' > "$PD/99-UAT.md"
+printf '{"seq":1,"evento":"incidente","etapa":"5 uat","detalhe":"sleep barrado pela guarda"}
+{"seq":2,"evento":"incidente","etapa":"6 encerramento","detalhe":"outro atrito"}
+' > "$PD/99-RUN-LOG.jsonl"
+J6=$(cd "$R" && CLAUDE_CODE_SESSION_ID= bash "$P" 6 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)
+printf '%s' "$J6" | jq -e . >/dev/null 2>&1   && ok "FM-03ENC: o stdout da etapa 6 é JSON válido (nada de prosa)"   || bad "FM-03ENC: stdout da etapa 6 não é JSON" "$J6"
+casa "FM-01ENC: risco aceito sai da tabela Accepted Risks Log, não do cabeçalho"      "$(jq -c '.transparencia.riscos_aceitos' <<<"$J6")" 'R-99-SC'
+eq "FM-01ENC: e a lista não sai vazia"    "$(jq '.transparencia.riscos_aceitos|length' <<<"$J6")" "1"
+eq "FJ-04ENC: os DOIS incidentes entram na 6ª lista da transparência"    "$(jq '.transparencia.incidentes|length' <<<"$J6")" "2"
+eq "MGTm-01ENC: sem NN-VERIFICATION.md commitado, verification_stale é false declarado"    "$(jq -c '.verification_stale.stale' <<<"$J6")" "false"
+# SECURITY que fala em risco aceito e extrator vazio = leitor quebrado, não «nenhum»
+printf -- '---
+status: secured
+---
+
+## Accepted Risks Log
+
+(tabela perdida na formatação)
+' > "$PD/99-SECURITY.md"
+J6=$(cd "$R" && bash "$P" 6 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)
+eq "FM-01ENC: lista vazia com SECURITY falando em risco aceito → suspeita declarada"    "$(jq -c '.transparencia.riscos_aceitos_lista_vazia_suspeita' <<<"$J6")" "true"
+
 echo "--------------------------------------------------"
 echo "test-pre-despacho.sh: $OK ok / $FALHAS falha(s)"
 [ "$FALHAS" -eq 0 ]

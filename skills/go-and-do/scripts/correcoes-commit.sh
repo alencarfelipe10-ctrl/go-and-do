@@ -22,7 +22,7 @@
 #         staged / unmerged / intent-to-add no índice real (`pre_dirty` é do worktree,
 #         não do índice — um alvo staged tornaria a promoção ambígua).
 #
-#   correcoes-commit.sh <phase_dir> <C> --ids "<id[:caminho]>[,...]" \
+#   correcoes-commit.sh <phase_dir> <C> --ids "<id[:caminho]>[,...]" [--adiados "<id>,..."] \
 #       --artefatos <SPEC> <CONTEXT> <INTENT-REVIEW> [--docs <ROADMAP> <REQUIREMENTS>]
 #       → fecha o ciclo: monta a árvore candidata, VALIDA, e só então promove.
 #       O `--ids` aceita DUAS formas (C1, conserto de 01/09/2026):
@@ -32,7 +32,15 @@
 #           o coordenador monta a flag; era por isso que ele saía vazio em 100% das
 #           entradas). Use esta forma quando o ciclo tocou MAIS DE UM arquivo, para
 #           dizer qual correção mexeu em qual. Um valor que não bate com nenhum caminho
-#           comitado é ignorado em silêncio e a entrada cai na forma só-ids.
+#           comitado é RECUSA desde a F4 RLR (FM-05INT): era ignorado em silêncio e foi
+#           assim que 18 ids do ciclo 1 saíram selados contra o arquivo errado.
+#
+#   TRAVA DE IDS (FM-04INT + FJ-05INT, F4 RLR) — antes de tocar o repositório, o fecho
+#   confere `--ids`/`--adiados` contra `.intent/.vereditos-c<C>.txt`: id inexistente e id
+#   DISPENSADO (`confirmado_irrelevante`) são recusados, e todo `confirmado` tem de sair
+#   do ciclo corrigido (`--ids`) ou adiado (`--adiados`). Ids da releitura do mesmo ciclo
+#   (`c<C>b-NN`) são aceitos por desenho. Ciclo sem arquivo de vereditos (o c0) → trava
+#   inativa, declarada no stderr. Nenhuma recusa grava `.correcoes-c<C>.vazio` (FJ-04INT).
 #
 #   correcoes-commit.sh <phase_dir> <C> --vazio
 #       → o ciclo não teve correção: grava `.intent/.correcoes-c<C>.vazio` (o marcador
@@ -57,8 +65,9 @@
 #
 # Grava `.intent/.correcoes-c<C>.aplicado` (atômico, tmp + mv), SEMPRE no mesmo nome —
 # uma correção pós-releitura (`c<C>b`) sobrescreve IN-PLACE com o commit e os hashes
-# novos, e a nova releitura sobrescreve `.releitura-c<C>.json`; o briefing-build.sh lê
-# só o nome fixo, então não há ciclo "b" pendurado no gate:
+# novos. A releitura seguinte (FM-F4RLR-10INT) já NÃO sobrescreve mais o `.releitura-c<C>.json`
+# — grava `.releitura-c<C>b.json`, arquivo próprio; o `briefing-build.sh` (`caminho_releitura`)
+# lê a rodada mais recente do ciclo, não mais um nome fixo só:
 #   {v:1, ciclo, ids, correcoes:[{id,hash}], commit, caminhos:[...],
 #    hash_ausente:[...], blobs:[{path, blob_commit, blob_worktree}], mensagem}
 # — insumo do `--mudancas`, do R1 (releitura) e do T3.
@@ -91,16 +100,17 @@ set -uo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
 
 PD="${1:-}"; C="${2:-}"
-[ -n "$PD" ] && [ -n "$C" ] || { echo "uso: correcoes-commit.sh <phase_dir> <C> --inicio|--ids ...|--vazio [--artefatos ...] [--docs ...]" >&2; exit 2; }
+[ -n "$PD" ] && [ -n "$C" ] || { echo "uso: correcoes-commit.sh <phase_dir> <C> --inicio|--ids ...|--vazio [--adiados ...] [--artefatos ...] [--docs ...]" >&2; exit 2; }
 shift 2
 [ -d "$PD" ] || { echo "ERRO: phase_dir inexistente: $PD" >&2; exit 2; }
 
-MODO=fim; IDS=""; NN=""; ART=(); DOCS=()
+MODO=fim; IDS=""; ADIADOS=""; NN=""; ART=(); DOCS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --inicio) MODO=inicio; shift ;;
     --vazio)  MODO=vazio;  shift ;;
     --ids)    IDS="${2:-}"; shift 2 ;;
+    --adiados) ADIADOS="${2:-}"; shift 2 ;;
     --nn)     NN="${2:-}";  shift 2 ;;
     --artefatos) shift; while [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; do ART+=("$1"); shift; done ;;
     --docs)      shift; while [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; do DOCS+=("$1"); shift; done ;;
@@ -176,6 +186,17 @@ recusa_indice || exit 3
 # ─────────────────────────── modo --inicio ──────────────────────────────────
 if [ "$MODO" = inicio ]; then
   HEADP=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null) || { echo "ERRO: repo sem HEAD" >&2; exit 3; }
+  # FM-05INT (F4 RLR): `.base.json` já existente com o MESMO head_pre é o estado
+  # pré-ciclo verdadeiro — um segundo `--inicio` no mesmo HEAD (re-selo) regravaria
+  # `blob_pre` com o arquivo JÁ EMENDADO e o delta do ciclo sumiria. Preserva-se.
+  # HEAD diferente = passada nova de verdade (a `c<C>b` roda depois do commit do ciclo):
+  # aí o estado pré-passada é outro e a base é refeita.
+  if [ -f "$BASE" ] && [ "$(jq -r '.head_pre // empty' "$BASE" 2>/dev/null)" = "$HEADP" ]; then
+    echo "nota: $BASE já existe no mesmo HEAD — base pré-ciclo preservada (re-selo não sobrescreve)" >&2
+    gad_json_out correcoes-commit "$(jq -cn --arg c "$C" --arg b "$BASE" --arg h "$HEADP" \
+      '{ciclo:$c, modo:"inicio", base:$b, head_pre:$h, preservada:true}')"
+    exit 0
+  fi
   ENTRADAS=()
   i=0
   for r in "${REL[@]}"; do
@@ -211,6 +232,81 @@ fi
 # ─────────────────────────── modo fim (o commit) ────────────────────────────
 [ -f "$BASE" ] || { echo "RECUSA: $BASE ausente — rode --inicio ANTES do ciclo (sem o estado pré-ciclo não dá para separar o delta do usuário do delta do ciclo)" >&2; exit 3; }
 [ -n "$IDS" ] || { echo "ERRO: --ids obrigatório no fecho do ciclo" >&2; exit 2; }
+
+# ── trava de ids (FM-04INT + FJ-05INT + FJ-04INT, auditoria F4 RLR) ──────────
+# A reconciliação (confere-reconciliacao.sh) só acusa DEPOIS do commit: id inventado,
+# achado dispensado promovido e confirmado sem destino já estavam no repositório quando
+# o gate falava. As três travas abaixo conferem o MESMO que ele, e recusam ANTES de o
+# script tocar o repositório — nada fica pela metade e nenhum marcador `.vazio` nasce de
+# um aborto por erro (a recusa sai aqui, muito antes do fallback de ciclo sem alteração).
+# Fonte dos vereditos: `.intent/.vereditos-c<C>.txt`, `id | classe | veredito | categoria`
+# (mesma leitura do confere-reconciliacao.sh). Ciclo sem arquivo de vereditos (o c0, que
+# não passa pela consultoria) → trava inativa, declarada no stderr, nunca silenciosa.
+VERED="$IN/.vereditos-c$C.txt"
+if [ -f "$VERED" ]; then
+  declare -A VER_DE=()
+  VALIDOS=()
+  while IFS= read -r linha; do
+    case "$linha" in ''|'#'*) continue ;; esac
+    _id=$(printf '%s' "$linha"  | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$1); print $1}')
+    _ver=$(printf '%s' "$linha" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/,"",$3); print $3}')
+    [ -n "$_id" ] || continue
+    VER_DE["$_id"]="$_ver"
+    case "$_ver" in confirmado_irrelevante) ;; *) VALIDOS+=("$_id") ;; esac
+  done < "$VERED"
+
+  # lista plana dos ids informados (sem o `:caminho`) e dos adiados
+  lista_ids() { printf '%s' "${1:-}" | tr ',' '\n' | sed 's/:.*$//; s/^[ \t]*//; s/[ \t]*$//' | grep -v '^$' || true; }
+  IDS_PLANOS=$(lista_ids "$IDS")
+  ADI_PLANOS=$(lista_ids "$ADIADOS")
+
+  # (1) id inexistente · (2) id dispensado — as duas conferências sobre --ids e --adiados
+  for _lote in ids adiados; do
+    case "$_lote" in ids) _conj="$IDS_PLANOS" ;; *) _conj="$ADI_PLANOS" ;; esac
+    while IFS= read -r cid; do
+      [ -n "$cid" ] || continue
+      # correção nascida da RELEITURA do mesmo ciclo (`c<C>b-NN`): id legítimo que não
+      # existe no arquivo de vereditos por desenho — a releitura roda depois dele.
+      case "$cid" in
+        c"$C"b-*) continue ;;
+      esac
+      _v="${VER_DE[$cid]:-}"
+      if [ -z "$_v" ]; then
+        echo "RECUSA: id '$cid' (--$_lote) não existe nos vereditos do ciclo $C ($VERED)." >&2
+        echo "        ids válidos: ${VALIDOS[*]:-<nenhum>}" >&2
+        echo "        (correção de releitura do mesmo ciclo usa a forma c${C}b-NN)" >&2
+        exit 3
+      fi
+      # No lote `--adiados` o dispensado e tolerado: dispensa JA E divida por definicao,
+      # e recusar ali so custaria um turno do coordenador. A porta fechada e a promocao.
+      if [ "$_v" = confirmado_irrelevante ] && [ "$_lote" = adiados ]; then continue; fi
+      if [ "$_v" = confirmado_irrelevante ]; then
+        echo "RECUSA: id '$cid' foi DISPENSADO pelo verificador (confirmado_irrelevante) — dispensa não se promove." >&2
+        echo "        o destino dele é uma linha de dívida (planejamento, code-review ou dono); se você discorda," >&2
+        echo "        marque a linha como «contestada» com o motivo, mas não a promova no ciclo." >&2
+        exit 3
+      fi
+    done <<EOF_IDS
+$_conj
+EOF_IDS
+  done
+
+  # (3) achado confirmado sem destino: nem corrigido (--ids) nem adiado (--adiados)
+  SEM_DESTINO=()
+  for _id in "${!VER_DE[@]}"; do
+    [ "${VER_DE[$_id]}" = confirmado ] || continue
+    printf '%s\n' "$IDS_PLANOS" | grep -qxF "$_id" && continue
+    printf '%s\n' "$ADI_PLANOS" | grep -qxF "$_id" && continue
+    SEM_DESTINO+=("$_id")
+  done
+  if [ ${#SEM_DESTINO[@]} -gt 0 ]; then
+    echo "RECUSA: ${#SEM_DESTINO[@]} achado(s) CONFIRMADO(s) sem destino no ciclo $C: $(printf '%s ' "${SEM_DESTINO[@]}")" >&2
+    echo "        todo confirmado sai do ciclo corrigido (--ids) ou adiado (--adiados «id,...»)." >&2
+    exit 3
+  fi
+else
+  echo "nota: ciclo $C sem $VERED — trava de ids inativa (ciclo sem consultoria especializada)" >&2
+fi
 
 HEADP_GRAV=$(jq -r '.head_pre' "$BASE")
 HEADP=$(git -C "$ROOT" rev-parse HEAD)
@@ -295,7 +391,47 @@ if [ ${#COMITADOS[@]} -eq 0 ]; then
   exec "$0" "$PD" "$C" --vazio
 fi
 
-MSG="docs(fase $NN): correções do ciclo $C — $IDS"
+# ── FM-05INT: caminho declarado tem de estar no diff ────────────────────────
+# `--ids "id:<caminho>"` com caminho que o ciclo não comitou era ignorado EM SILÊNCIO e
+# a entrada caía na regra do caminho único — foi assim que 18 ids do ciclo 1 saíram
+# selados contra o arquivo errado. Agora é recusa, antes de qualquer promoção.
+DECL_FORA=()
+IFS=',' read -r -a _TOK_CHECK <<< "$IDS"
+for tok in ${_TOK_CHECK[@]+"${_TOK_CHECK[@]}"}; do
+  case "$tok" in *:*) ;; *) continue ;; esac
+  _cid="${tok%%:*}"; _decl="${tok#*:}"
+  [ -n "$_decl" ] || continue
+  _dn="$_decl"
+  if [ -e "$_decl" ]; then
+    _dn=$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$_decl" "$ROOT" 2>/dev/null) || _dn="$_decl"
+  fi
+  case " ${COMITADOS[*]} " in *" $_dn "*) continue ;; esac
+  DECL_FORA+=("$_cid:$_decl")
+done
+if [ ${#DECL_FORA[@]} -gt 0 ]; then
+  falhar "caminho declarado ausente do diff do ciclo $C: ${DECL_FORA[*]} — comitados: ${COMITADOS[*]}"
+fi
+
+# ── MGTm-01INT: deriva documental conferida por script, antes do commit ─────
+# Ponteiro decisão→critério, contagem por extenso × lista e carimbo «revalidada no
+# ciclo N». SÓ ACUSA: a reescrita automática espera uma fase real sem ruído, e um
+# parser de contagem que errasse bloquearia o ciclo inteiro. A lista sai no stderr e
+# o número entra no JSON de saída, para o coordenador decidir em 1 turno.
+REVALIDA_N=0; REVALIDA_TXT=""
+if [ -f "$GAD_SCRIPTS_DIR/revalida-documentos.sh" ]; then
+  REVALIDA_TXT=$(bash "$GAD_SCRIPTS_DIR/revalida-documentos.sh" "$PD" "$C" 2>/dev/null) || true
+  [ -z "$REVALIDA_TXT" ] || {
+    REVALIDA_N=$(printf '%s\n' "$REVALIDA_TXT" | grep -c .)
+    echo "AVISO revalida-documentos ($REVALIDA_N): deriva documental no ciclo $C —" >&2
+    printf '%s\n' "$REVALIDA_TXT" | sed 's/^/  /' >&2
+  }
+fi
+
+# Mensagem do commit a partir da LISTA DE ARQUIVOS DO DIFF (não da lista de ids que o
+# coordenador digitou): 7 commits da F4 traziam mensagem divergente do que tocavam.
+# O DECISIONS-INDEX entra porque ele é, de fato, parte do que o commit muda.
+MSG="docs(fase $NN): correções do ciclo $C — $(printf '%s, ' "${COMITADOS[@]}" | sed 's/, $//')"
+MSG="$MSG"$'\n\n'"ids: $IDS${ADIADOS:+$'\n'adiados: $ADIADOS}"
 TREE=$(GIT_INDEX_FILE="$IDX" git -C "$ROOT" write-tree) || falhar "write-tree falhou"
 CAND=$(git -C "$ROOT" commit-tree "$TREE" -p "$HEADP" -m "$MSG") || falhar "commit-tree falhou"
 
@@ -398,4 +534,5 @@ rm -f "$IN/.correcoes-c$C.vazio"
 
 gad_autoregistro "correcoes-commit.sh" 0 "c$C commit $CAND (${#COMITADOS[@]} caminhos)" || true
 gad_json_out correcoes-commit "$(jq -cn --arg c "$C" --arg commit "$CAND" --arg a "$APL" \
-  --argjson cam "$CAM_JSON" '{ciclo:$c, modo:"fim", commit:$commit, caminhos:$cam, aplicado:$a}')"
+  --argjson cam "$CAM_JSON" --argjson rev "$REVALIDA_N" \
+  '{ciclo:$c, modo:"fim", commit:$commit, caminhos:$cam, aplicado:$a, revalida_avisos:$rev}')"

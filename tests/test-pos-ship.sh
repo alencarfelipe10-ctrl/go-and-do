@@ -75,6 +75,43 @@ python3 "$S" gate "$R" 04 >/dev/null; eq "a própria fase → exit 0" "$?" 0
 sed -i '0,/^observado_em:$/s//observado_em: 2026-09-25 — API real devolve id em 100% dos itens/' "$PD/04-POS-SHIP.md"
 python3 "$S" gate "$R" 5 >/dev/null; eq "observado → fase 5 libera" "$?" 0
 
+echo "── FM-F4RLR-07UAT: campo pos_ship indentado é malformação, não recusado silencioso"
+PD3="$R/.planning/phases/06-z"; mkdir -p "$PD3"
+{ printf -- '---\nstatus: testing\n---\n\n## Tests\n\n'
+  printf '### 1. cenário 1\ntype: api\nresult: blocked\n  pos_ship: candidato\nprova_mecanica: tests/test_leitura.py\nbloqueia_proxima: sim\nverificavel_em: Fase 7\n\n'
+  printf '## Summary\n'
+} > "$PD3/06-UAT.md"
+OUT=$(python3 "$S" move "$PD3" 06 "$R"); RC=$?
+eq "indentado → exit 1" "$RC" 1
+eq "indentado → malformados 1" "$(jq -r '.malformados|length' <<<"$OUT")" 1
+eq "indentado → motivo" "$(jq -r '.malformados[0].motivo' <<<"$OUT")" "campo pos_ship indentado (coluna 0 exigida)"
+eq "06-UAT.md intocado" "$(grep -c '^### ' "$PD3/06-UAT.md")" 1
+eq "06-POS-SHIP.md não nasce" "$([ -f "$PD3/06-POS-SHIP.md" ] && echo sim || echo nao)" nao
+
+echo "── FM-F4RLR-07UAT: sonda (prova_mecanica) de todo ausente é malformação"
+PD4="$R/.planning/phases/07-w"; mkdir -p "$PD4"
+{ printf -- '---\nstatus: testing\n---\n\n## Tests\n\n'
+  printf '### 1. cenário 1\ntype: api\nresult: blocked\npos_ship: candidato\nbloqueia_proxima: sim\nverificavel_em: Fase 8\n\n'
+  printf '## Summary\n'
+} > "$PD4/07-UAT.md"
+OUT=$(python3 "$S" move "$PD4" 07 "$R"); RC=$?
+eq "sonda ausente → exit 1" "$RC" 1
+eq "sonda ausente → motivo" "$(jq -r '.malformados[0].motivo' <<<"$OUT")" "sonda (prova_mecanica) ausente"
+
+echo "── FJ-F4RLR-06UAT: conferir nunca escreve, mesmo veredito de malformação do move"
+OUT=$(python3 "$S" conferir "$PD3" 06 "$R"); RC=$?
+eq "conferir indentado → exit 1" "$RC" 1
+eq "conferir não cria POS-SHIP" "$([ -f "$PD3/06-POS-SHIP.md" ] && echo sim || echo nao)" nao
+OUT=$(python3 "$S" conferir "$PD" 04 "$R"); RC=$?
+eq "conferir em fase já sem malformado → exit 0" "$RC" 0
+eq "conferir malformados vazio" "$(jq -c .malformados <<<"$OUT")" "[]"
+OUT=$(python3 "$S" --conferir "$PD" 04 "$R"); RC=$?
+eq "alias --conferir (contrato literal do regras-comuns) funciona igual" "$RC" 0
+BEFORE=$(md5sum "$PD/04-UAT.md")
+python3 "$S" conferir "$PD" 04 "$R" >/dev/null
+AFTER=$(md5sum "$PD/04-UAT.md")
+eq "conferir não mexe no UAT.md" "$BEFORE" "$AFTER"
+
 echo "── uso inválido"
 python3 "$S" >/dev/null 2>&1; eq "exit 2" "$?" 2
 

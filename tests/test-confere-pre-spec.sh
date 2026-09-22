@@ -54,6 +54,23 @@ roda "marca citando PS inexistente → ID-INEXISTENTE" 1 'ID-INEXISTENTE .*PS-99
 roda "AC e MUST NOT só com ponteiro → 2× AC-POR-PONTEIRO (S4)" 1 'AC-POR-PONTEIRO=2' -- "$F/ruim-SPEC.md" "$F/ok-PRE-SPEC.md"
 roda "'campo aditivo opcional default None' sem None/default no PS → EXTENSAO-SUSPEITA" 1 \
      'EXTENSAO-SUSPEITA .*default, None' -- "$F/ruim-SPEC.md" "$F/ok-PRE-SPEC.md"
+
+echo "-- FJ-F4RLR-07INT — ponteiro de linha não é extensão de conteúdo"
+TMPD=$(mktemp -d "${TMPDIR:-/tmp}/test-pre-spec-ptr-XXXXXX")
+{ printf '# Fase 99 — SPEC (fixture ponteiro)\n\n## Goal\n\n'
+  printf 'Corrigir a atribuição de receita mantendo o grão responsável-mês (ver §5, linhas 12-14 e scripts/x.py:120). [pre-spec:PS-01, R2]\n\n'
+  printf '## Limitações declaradas\n\n- PS-01: o relatório passa a saber mais que o razão — aceito nesta fase.\n'
+} > "$TMPD/ptr-SPEC.md"
+nao_casa "§5, linhas 12-14 e scripts/x.py:120 citados numa linha marcada → SEM EXTENSAO-SUSPEITA" \
+     'EXTENSAO-SUSPEITA' -- "$TMPD/ptr-SPEC.md" "$F/ok-PRE-SPEC.md"
+{ printf '# Fase 99 — SPEC (fixture ponteiro + extensão real)\n\n## Goal\n\n'
+  printf 'Corrigir a atribuição de receita (ver linhas 12-14) processando 42 lotes por hora. [pre-spec:PS-01, R2]\n\n'
+  printf '## Limitações declaradas\n\n- PS-01: o relatório passa a saber mais que o razão — aceito nesta fase.\n'
+} > "$TMPD/ptr-mix-SPEC.md"
+roda "ponteiro de linha some, mas '42 lotes' (número novo de verdade) ainda acende EXTENSAO-SUSPEITA" 0 \
+     'EXTENSAO-SUSPEITA .*42' -- "$TMPD/ptr-mix-SPEC.md" "$F/ok-PRE-SPEC.md"
+rm -rf "$TMPD"
+
 roda "PS com ressalva e SPEC sem 'Limitações declaradas' → RESSALVA-SEM-LIMITACAO (R7)" 1 \
      'RESSALVA-SEM-LIMITACAO .*PS-01' -- "$F/ressalva-SPEC.md" "$F/ok-PRE-SPEC.md"
 nao_casa "SPEC com a limitação declarada citando PS-01 → sem RESSALVA-SEM-LIMITACAO" \

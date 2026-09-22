@@ -330,7 +330,10 @@ runs the `base-check` and measures the waves of ≥2 incomplete plans.
   `pergunta_ao_dono`, which already carries the real `base-check` message — or, when `motivo`
   starts with `plan_gate_ausente_ou_reprovado:`, the choice «replanejar (volta à etapa 2) ou
   aceitar o despacho sabendo que a onda pode serializar». Do not diagnose on your own nor
-  apply an antidote by hand: the script measures instead of presuming.
+  apply an antidote by hand: the script measures instead of presuming. **Owner accepts the
+  blocked dispatch** → record the stage-3 checkpoint (`run-log.sh checkpoint "3 construcao"`)
+  BEFORE dispatching, not after — a dispatch accepted this way is still an etapa-3 dispatch and
+  needs its window open for the run-log to attribute it correctly (FM-02EXE).
   **Exception — `acao_mecanica: true`** (`motivo` starts with `precondicao_worktree_obsoleta:`):
   no question. Fix the listed PLAN.md yourself exactly as `pergunta_ao_dono` says (drop
   `isolation: none`, rewrite the precondition to the worktree-fixtures sentence), commit, re-run
@@ -401,10 +404,14 @@ the exact action (never treat it as `human_needed`). Otherwise, the VERIFICATION
   disobeyed the instruction and saved the phase). Dispatch `Agent(subagent_type="gsd-verifier")`
   directly, synchronous, handing: `phase_dir`, `NN`, the plan ids, and **the test scope** — the
   modules touched since the previous VERIFICATION
-  (`git diff --name-only <sha-da-verificação>..HEAD -- src tests`), never the full suite. The
-  dispatch carries, verbatim: «Rode apenas os testes dos módulos listados. A suíte completa é
-  gate de fase e já rodou — não a relance.» The project's own testing rule comes first when it
-  exists (`CLAUDE.md`; the inspired's says, in writing, to run only the touched module).
+  (`git diff --name-only <sha-da-verificação>..HEAD -- src tests`), plus the FULL suite's
+  measured numbers (rc, duration) from the stage-3 run. The dispatch carries, verbatim, the
+  same sentence `prompts/execute.md` uses for the same handoff: «Entrego os números medidos da
+  suíte completa e o escopo de módulos tocados. A suíte completa já é gate desta etapa; relançar
+  é decisão sua, com justificativa.» (FJ-01EXE — resolves the contradiction between this stage
+  and the host prompt, which used to forbid the verifier from ever relaunching). The project's
+  own testing rule comes first when it exists (`CLAUDE.md`; the inspired's says, in writing, to
+  run only the touched module).
   F24.5: an unscoped dispatch ran the fast suite whole for 30+ min with 4 GB of swap, and the
   full suite took 56 min 50 s against a measured band of 17–35 min. Still absent after the
   re-verification → Sub-rotina D.
@@ -456,7 +463,21 @@ the user «the parallelism may not have happened» with the clocks of all nine e
   `calcula-files.sh` (4.C).
 - On return: `confere-etapa.sh 4-code-review` (extracts `status`/`critical`/`warning`/
   `total`). Always continues; remaining `critical` → strong 🔔. Keep `uat_humano` (input of
-  5.3). `needs_decision` → question + continuation. `blocked` → `stop`, stop.
+  5.3). `blocked` → `stop`, stop.
+- **`needs_decision`** → question + continuation via Sub-rotina I — including a finding the
+  reviewer tagged "não aplicar sem o dono": it returns `needs_decision`, never `done` with the
+  finding silently skipped (FJ-01GAT). Ask, apply the fix INSIDE this gate once answered, and
+  only then let the fiscal → `end` → recibo sequence close.
+- **Gate 4.1b is its own re-dispatch of 4.1, not a footnote of it** (FM-02GAT): open a
+  checkpoint labeled **"4.1b re-review"**, run `pre-despacho.sh 4-code-review` and
+  `confere-etapa.sh 4-code-review` exactly like 4.1, and stamp its own `.fence-4.1b.ok`. It
+  does not inherit 4.1's fence.
+- **The host never fixes a 4.1b finding itself** (FJ-04GAT): it goes to `gsd-code-fixer` with a
+  scope EQUAL to the finding's own scope. Widening that scope, or changing observable behavior
+  beyond what the finding names, is a question to the owner, not a host judgment call. Every
+  fix from the 4.1b fixer forces a re-review — it is not exempt from the loop it triggered.
+  Fixer briefing: run the finding's own suite before returning, and list, per commit, "what
+  else reads or writes this state" — the re-review starts from that list (MGTk-01GAT).
 
 ### 4.2 — UI review · only with `--ui` → conduct by `workflow-ui.md`.
 
@@ -474,6 +495,13 @@ the user «the parallelism may not have happened» with the clocks of all nine e
 ### 4.5 — Validate phase (via subagent)
 - `pre-despacho.sh 4-validate` → `ok`? Dispatch with `prompts/validate.md`. ⏸️ Gaps →
   `needs_decision` (Fix all recommended). On return: `confere-etapa.sh 4-validate`. Continue.
+  When gate 4.1b exists (secure or a late commit reopened it), dispatch 4.5 in PARALLEL with
+  4.1b instead of after it — validate only reads the map and runs the suite; if 4.1b fixes
+  something, re-run 4.5's suite alone afterward, not the whole validate (MGTm-01GAT).
+
+**Every gate host reports incidents at the moment they happen** (same contract as C1/C3),
+via `run-log.sh "<phase_dir>" "<NN>" incidente "<etapa>" --kv origem=… --kv detalhe=…` — before whatever else the
+host was about to do (FM-07GAT).
 
 </stage>
 
@@ -497,7 +525,12 @@ test and whose question only production can answer leaves `NN-UAT.md` for `NN-PO
 (the subagent is idempotent per scenario) · `executed` + `issue` without
 `pre_uat_fix_cycle: done` → 5.5 · with the marker → Sub-rotina D (never a 2nd cycle) ·
 `executed` without open `issue`, with basket 3 and without `pre_uat_reuat: done` → 5.6 ·
-otherwise → Etapa 6.
+otherwise → Etapa 6. Resuming a phase whose etapa 6 previously closed with a `handback` stop:
+just enter through `pre-despacho.sh 5` as usual — its checkpoint is the first etapa `5 …`
+checkpoint after the hand-back, and `run-log.sh` links it automatically (`retomada_de_seq`,
+`retomada_de_sessao`, pointing at the hand-back's `stop` line — FM-F4RLR-04UAT); nothing here
+calls that link, it is mechanical. Measurement tools then sum the two etapa-5 windows instead
+of treating either as orphaned.
 
 **5.3 — Generate `NN-UAT.md` (via SUBAGENT).** `pre-despacho.sh 5`. Dispatch an `Agent`
 (`model: sonnet`, synchronous) to reuse the verify-work derivation:
@@ -548,7 +581,10 @@ otherwise → Etapa 6.
 3. Fence: `confere-etapa.sh 5` — reconciles baskets/probes/evidence from disk, lints the
    gap-YAML, runs the native `uat-passed` predicate, scans for SECRETS (gitleaks-style
    patterns, never generic PII) and, on pass, promotes `pre_uat: executed` (single writer —
-   5.C/5.E). Exit 1 → back to the SAME subagent. Do not ingest `NN-UAT.md`.
+   5.C/5.E). Exit 1 → back to the SAME subagent. Do not ingest `NN-UAT.md`. **Fence passed →
+   commit now** (`commita-artefatos.sh <phase_dir> <NN> uat`, FM-03UAT): whatever exit stage 5
+   takes next (5.5, 5.6, straight to Etapa 6), the UAT result the subagent just wrote is
+   already durable, instead of riding on whichever later step happens to commit next.
 
 > Cardinal rule of the playbook: never `pass` on the ambiguous — uncertainty → basket 3 (the
 > real basket 3 is a login/2FA wall).
@@ -572,16 +608,23 @@ leaves basket 3 without open `issue`. Order matters: re-run first, triage what i
    credential/surface → re-dispatch 5.4 restricted to the basket-3 scenarios, with the
    `[Superfície do projeto: …]` clause. Fence: `confere-etapa.sh 5 --reuat` (stamps
    `pre_uat_reuat: done`, single writer). No `uat_superficie` → skip the re-run, still stamp.
-2. Any scenario carrying `pos_ship: candidato` → dispatch the skeptic (`Agent`,
+2. Before dispatching the skeptic: `scripts/pos-ship.py --conferir <phase_dir> <NN>
+   <project_root>` — read-only format check of the `pos_ship: candidato` blocks (FJ-06UAT).
+   Exit 1 (JSON `malformados` non-empty — an indented `pos_ship:` marker, or a genuine
+   `candidato` block missing `prova_mecanica`/`bloqueia_proxima`/`verificavel_em`) → return to
+   the conductor now with that list; do not spend the skeptic's window on a malformed
+   candidate. Exit 0 → proceed to step 3.
+3. Any scenario carrying `pos_ship: candidato` → dispatch the skeptic (`Agent`,
    `model: sonnet`, synchronous) with `prompts/uat-pos-ship.md`; it writes
    `.pos-ship-vereditos.json`. Whoever classifies never judges.
-3. `scripts/pos-ship.py move <phase_dir> <NN> <project_root>` — moves only what passes its six
+4. `scripts/pos-ship.py move <phase_dir> <NN> <project_root>` — moves only what passes its six
    conditions; a refused candidate stays in `NN-UAT.md` as basket 3 and keeps blocking the
    ship. Then `confere-etapa.sh 5` again (it may now promote `status: complete`) and
    `commita-artefatos.sh`.
 - The re-run produced a new `issue` → 5.5 (the fix cycle is still unspent; its re-UAT uses the
-  same project surface). Basket 3 empty → Etapa 6 by the ship route. Still there → Etapa 6
-  hand-back. Never a 2nd 5.6.
+  same project surface). Basket 3 empty → Etapa 6 by the ship route. Still there → **commit the
+  UAT result before leaving this stage** (`commita-artefatos.sh <phase_dir> <NN> uat`, the same
+  single writer as 6.3b) and go to Etapa 6 hand-back. Never a 2nd 5.6.
 
 </stage>
 
@@ -592,7 +635,16 @@ Two terminal routes: ship (happy path) and hand-back (returns without shipping).
 **6.1 — Route the outcome (mechanical).** `pre-despacho.sh 6` and obey `rota`: `pausa`
 (basket 2 left) → Sub-rotina D · `handback` (basket 3 or `--no-ship`) → 6.4-HB · `ship` →
 6.4-SHIP. The JSON brings `git_remote` (trigger of route B), `uat_passed_raw` (the MEASURED
-native predicate — paste it into the ship briefing) and `transparencia` (5 extracted lists). You do not decide the route; you read the verdict.
+native predicate — paste it into the ship briefing) and `transparencia` (6 extracted lists:
+basket 4 · basket 3 · `transparencia:` of the INTENT-REVIEW · run-log skips ·
+`riscos_aceitos` · `incidentes` — the 6th, FJ-04ENC, is every `incidente` event of the current
+session). You do not decide the route; you read the verdict. `verification_stale.stale: true` (code
+committed after the last commit that touched `NN-VERIFICATION.md`) → **re-verify BEFORE
+dispatching the close**, same rigor as the fresh check; do not let the ship's own preflight
+discover it 12 minutes in — the digest is the same, only the order moves earlier. The `handback`
+route's closing `stop` carries etapa `handback` (6.5) — that is today's vocabulary for "this
+run of etapa 6 did not finish, it returned control"; it is a stop, not a finished etapa 6, and
+the next 5.1's checkpoint links the resumed window (5.1).
 
 **6.2 — Compose "🔔 O que precisa de você agora" + transparency.** Gather what deserves
 attention even though the run continued: review Criticals (+ `uat_humano`), UI pillars 1–2 /
@@ -602,7 +654,8 @@ plan they stayed in (`must_haves.desejaveis` of the PLAN.md × `## Desejáveis p
 VERIFICATION.md). A leftover is closing information, not a replan pending. The transparency
 lists already came EXTRACTED in 6.1 (basket 4 · basket 3 · `transparencia:` of the
 INTENT-REVIEW · run-log skips · `riscos_aceitos` from secure — a risk acceptance is the
-owner's signature: they REVIEW it in the resumo, they do not discover it in the code). Your job is to write the prose.
+owner's signature: they REVIEW it in the resumo, they do not discover it in the code — ·
+`incidentes`, the 6th list, FJ-04ENC). Your job is to write the prose.
 
 **6.3 — Executive summary (final mode).** Sub-rotina F with `modo: final`, the outcome and
 the 6.2 lists. F writes the transparency block at the TOP. Idempotent. Commit as per F.
@@ -648,7 +701,10 @@ does). Reconcile the body with the post-close state (promotion `human_needed` �
 amend the old mention or append a note). The amendment obeys the state-of-the-world rule
 (`prompts/resumo.md`): real lookup, source+date, or omit. Commit (best-effort). Idempotent:
 section already filled → do not rewrite. The amendment reports the ship's RETURN, never an
-expectation.
+expectation. Reconcile in the body, pointed edits only (never regenerate the resumo for this):
+(1) fold into the incidents block whatever the close's return brought; (2) any decision the
+close reverted (e.g. "did not re-verify") gets a note next to the original mention; (3) the
+friction count is updated to match.
 
 **6.4-HB — Hand-back (no ship).** Banner in the standard frame — title
 `GO-AND-DO · Fase NN — pronta para o seu UAT`, fields `Balde 3` (how many) and `Resumo`
@@ -657,7 +713,10 @@ expectation.
 2. `/gsd-add-tests N` — broad suite.
 3. `/close-phase N` after the clean UAT *(or re-run `/go-and-do N` without `--no-ship`)*.
 
-**6.5 — Reconciliation + self-check + final banner.** On the ship route, BEFORE the fence:
+**6.5 — Reconciliation + self-check + final banner.** After reconciliation and the receipt, publish
+the close's own commits (`git push`) as an explicit step — or, when the project forbids direct
+push to master, say so in the banner as a pending item with the exact command. The stage-6
+fence warns (never fails) when local ends ahead of the remote. On the ship route, BEFORE the fence:
 `reconcilia-docs.sh --pr "#N <url>" [--proxima M]` (needed because route B does not run
 gsd-ship and route A only touches 2 fields — STATE.md/ROADMAP/REVIEWS would stay stale). Exit 3 (`FORMATO-INESPERADO`) → stop before the fence: the STATE.md
 `status` is in a form neither script can judge (typically a sentence where the token
@@ -1019,7 +1078,10 @@ Hard gate — stop and wait for the user when ANY holds:
    production. (The sanctioned rail — green phase up to the PR merge after a clean UAT, 6.D,
    including the automatic merge of the route-B clean room (`ship.py --merge`; owner's
    decision 27/08: they do not review PRs, they trust the stages) — is the default and does not
-   ask. What the route owes is the NOTICE: resumo/banner says "mergeado".)
+   ask. What the route owes is the NOTICE: resumo/banner says "mergeado".) An option that edits
+   `src/` **inside the triage of 4.4 or 4.5** (secure/validate reaching past their own gate into
+   production code) is never routine — hard gate, recommendation up front, ask (FJ-06GAT); in
+   the 23h–07h silence window it takes the graceful pause below, same as any other hard gate.
 4. No recommendation — without real conviction, the confession of uncertainty goes up in any
    category.
 5. Existing fail-closed — open threat, persistent basket 2, basket 3, gaps, `blocked`, context

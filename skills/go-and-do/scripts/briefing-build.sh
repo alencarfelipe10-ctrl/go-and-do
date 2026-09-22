@@ -77,7 +77,7 @@ AVISOS=()
 # correção → commit → releitura, com os blobs conferidos contra o commit E contra o
 # worktree atual (edição depois da releitura invalida a releitura).
 GATE_JSON=$(GAD_PD="$PD" GAD_C="$C" GAD_ROOT="$ROOT" python3 - <<'PY'
-import json, os, re, subprocess, sys
+import glob, json, os, re, subprocess, sys
 
 PD   = os.environ["GAD_PD"]
 C    = os.environ["GAD_C"]
@@ -100,6 +100,19 @@ def carrega(p, rotulo):
             return json.load(fh)
     except Exception as e:
         die("%s ilegível (%s): %s" % (rotulo, p, e))
+
+
+def caminho_releitura(IN, ciclo):
+    """FM-F4RLR-10INT: cada rodada de correção pós-releitura (`c<ciclo>b`, `c<ciclo>c`, …)
+    grava um `.json` PRÓPRIO — `.releitura-c<ciclo><letra>.json` —, sem sobrescrever o da
+    rodada anterior do mesmo ciclo (mesma convenção do `.releitura-<rodada>.done`, que já
+    globava `c0*.done`). O briefing do ciclo seguinte lê a rodada MAIS RECENTE do ciclo:
+    a de letra mais alta quando existir (F24.5 teve 5 rodadas no ciclo 0, até `c0e`),
+    senão a normal (`.releitura-c<ciclo>.json`, primeira rodada)."""
+    letradas = sorted(glob.glob(os.path.join(IN, ".releitura-c%s[a-z].json" % ciclo)))
+    if letradas:
+        return letradas[-1]
+    return os.path.join(IN, ".releitura-c%s.json" % ciclo)
 
 def exige_chaves(d, chaves, rotulo):
     if not isinstance(d, dict):
@@ -335,9 +348,10 @@ if str(C) == "1":
 
         # 45(h): o `.done` passou a carregar o rótulo da rodada (`c0`, `c0b`, `c0c`…). O gate
         # exige que EXISTA um marcador da família do ciclo 0; qual rodada fechou por último é
-        # decidido pelo `.releitura-c0.json`, que continua com nome fixo.
-        import glob as _glob
-        if not _glob.glob(os.path.join(IN, ".releitura-c0*.done")):
+        # decidido pelo `.ciclo0.json`.`releitura` que o coordenador copiou do `.json` da
+        # rodada vigente (FM-F4RLR-10INT: `.releitura-c0.json` na 1ª rodada,
+        # `.releitura-c0b.json` na correção pós-releitura — ver `caminho_releitura`).
+        if not glob.glob(os.path.join(IN, ".releitura-c0*.done")):
             die("`.intent/.releitura-c0*.done` ausente (R1: a releitura do ciclo 0 não fechou)")
 
         info["ciclo0_vazio"] = not cors
@@ -372,9 +386,9 @@ else:
                        if isinstance(c, dict) and not str(c.get("hash", "")).strip()]
         valida_hashes(aplicado, sem_hash_ap,
                       "`.correcoes-c%d.aplicado`.correcoes" % prev, info["avisos"])
-    rel = carrega(os.path.join(IN, ".releitura-c%d.json" % prev),
-                  "`.intent/.releitura-c%d.json` (R1)" % prev)
-    paths = valida_releitura(rel, aplicado, tem_vaz, "`.releitura-c%d.json`" % prev,
+    rel_path = caminho_releitura(IN, prev)
+    rel = carrega(rel_path, "`%s` (R1)" % os.path.basename(rel_path))
+    paths = valida_releitura(rel, aplicado, tem_vaz, "`%s`" % os.path.basename(rel_path),
                              "c%d" % prev)
     info["ciclo_anterior"] = prev
     info["correcoes_vazio"] = tem_vaz

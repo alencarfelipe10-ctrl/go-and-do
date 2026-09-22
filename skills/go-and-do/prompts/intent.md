@@ -67,7 +67,10 @@ Regras do despacho, iguais para todos:
   **Uma rodada, um marcador.** A releitura grava `.releitura-<rodada>.done`, com o rótulo da rodada
   (`c0`, `c0b`, `c0c`, `c1`, `c1b`, …), nunca só o número do ciclo — passe o rótulo no despacho, em
   `rodada: <rótulo>`. Marcador de rodada anterior nunca satisfaz a espera da seguinte, e o `.json`
-  (`.releitura-c<C>.json`) continua com o nome fixo do ciclo, sobrescrito in-place. Para
+  leva o nome da própria rodada (`.releitura-<rodada>.json`, igual ao `.done`): cada rodada
+  de correção pós-releitura (`c<C>b`, `c<C>c`, …) grava seu próprio arquivo, sem sobrescrever
+  o da rodada anterior — o briefing do ciclo seguinte lê a rodada de letra mais alta quando
+  existir, senão a normal (`.releitura-c<C>.json`, 1ª rodada). Para
   redespacho de uma MESMA rodada (o filho morreu, você relança o `c0b`), apague o marcador antes do
   `Agent` (`rm -f <marcador>`). F24.5: 5 rodadas de releitura no c0 porque o `.done` era um só.
 - **NUNCA passe `model` nem `effort` no `Agent` de um `gad-*`** (E7): a def pina os dois e
@@ -275,6 +278,12 @@ piso fail-closed: instalado-mas-falho em runtime é falha, não ausência (os DO
 ciclo completo → `<blocked_path>`). Prepare `mkdir -p "<phase_dir>/pareceres"` (pareceres
 são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
 
+**Incidente se grava na hora (FM-07INT).** Todo desvio entra no run-log NO TURNO em que
+acontece — `run-log.sh "<phase_dir>" "<NN>" incidente "1 intencao" --kv origem=… --kv
+detalhe=…` —, nunca junto no fecho do ciclo. O fiscal reprova (nesta versão, AVISO) lote de
+incidentes gravados depois do `end` da etapa, ou vários no mesmo segundo: os dois são sinal de
+que o registro foi feito de memória, no fim, e não no ato.
+
 1. **Leia a intenção UMA vez** (`NN-SPEC.md` + `NN-CONTEXT.md`). Do ciclo 2 em diante não
    releia os artefatos inteiros: o "o que mudou" vem da sua triagem + `git diff`; trecho
    pontual = `sed -n 'X,Yp'`.
@@ -333,10 +342,12 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    `{"v":1, "sinos":[{"id":"c0-01","origem":"spec|discuss","disposicao":"corrigido|
    descartado|aberto","correcao_id":"c0-01"}], "correcoes":[{"id":"c0-01","hash":"<copiado
    verbatim de .correcoes-c0.aplicado>"}],
-   "releitura":<o objeto INTEIRO do .releitura-c0.json, com "v":2 e o veredito>}`
-   Copie o objeto de releitura inteiro (`jq .` sobre `.intent/.releitura-c0.json`), não só
-   `commit` e `artefatos`: o gate do c1 lê o `v: 2` e o `ok` de lá, e um recorte perderia o
-   veredito. O `hash` vem do disco: `jq -r '.correcoes[] | .id + " " + .hash'` sobre
+   "releitura":<o objeto INTEIRO da rodada mais recente do ciclo 0, com "v":2 e o veredito>}`
+   Copie o objeto de releitura inteiro (`jq .` sobre o `.intent/.releitura-c0<letra>.json`
+   da ÚLTIMA rodada — `.releitura-c0.json` se não houve correção pós-releitura, senão o de
+   letra mais alta, ex.: `.releitura-c0c.json`), não só `commit` e `artefatos`: o gate do c1
+   lê o `v: 2` e o `ok` de lá, e copiar o arquivo da primeira rodada reintroduziria um
+   veredito `ok: false` já corrigido. O `hash` vem do disco: `jq -r '.correcoes[] | .id + " " + .hash'` sobre
    `.intent/.correcoes-c0.aplicado`, copiado caractere a caractere. Desde o conserto C1 ele
    carrega um blob sha real (ou string vazia, quando o `.aplicado` listou o id em
    `hash_ausente[]`), e o gate do briefing c1 compara os dois lados — valor divergente sai
@@ -380,15 +391,16 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    (`pareceres/NN-parecer-<lane>-c<C>.md`) são aliases promovidos pelo run vencedor — são
    eles que o passo 7 commita.
 
-   **Antes do despacho, grave a rota.** A rota é decidida pelo ciclo e pelo volume pré-rota do
-   passo 5 (a): ciclos 1–2, ou 3+ com 3+ brutos → `child`; ciclos 3+ com ≤ 2 brutos → `inline`.
+   **Antes do despacho, grave a rota.** A rota é fixa em `child` (FJ-F4RLR-03INT: 18/18 ciclos
+   medidos em 5 fases saíram `child` — a rota não pode depender de um número de brutos que só
+   existe DEPOIS do despacho). `brutos_pre_rota` está aposentado como critério: não grave o
+   campo.
    ```bash
-   printf '{"run_id":"<run_id>","mode":"child","brutos_pre_rota":<n>}\n' \
+   printf '{"run_id":"<run_id>","mode":"child"}\n' \
      > "<phase_dir>/.intent/.rota-verificacao-c<C>.json"
    ```
    Gravar depois do despacho é escrever a regra sabendo o resultado: na F24.5 as duas rotas foram
-   gravadas 3 min DEPOIS de o verificador fechar. O passo 5 (b) segue valendo como a régua;
-   aqui é só a ordem.
+   gravadas 3 min DEPOIS de o verificador fechar. Aqui é só a ordem: antes, sempre.
 
    **No MESMO turno**, despache **`gad-verificador`** com `prompts/intent-verifica.md`,
    passando o `run_id`, `<phase_dir>/.intent` (dos `.status-c<C>-<lane>.json`), o run-dir
@@ -420,7 +432,7 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    qualquer ciclo completo → `<blocked_path>`. Exceção única: com ≥1 ciclo já completo
    (parecer recebido, verificado e aplicado), registre `intent_review: done` com a ressalva
    `ciclo_final_nao_rodou` no frontmatter + `sinos`.
-5. **Verificação — rota decidida pelo volume MEDIDO, nos dois sentidos.**
+5. **Verificação — contagem MEDIDA, rota fixa `child`.**
 
    **(a) Contagem conservadora, PRÉ-rota** (sem `--vereditos` — ainda não existem):
    ```bash
@@ -450,19 +462,15 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    zero achados — não devolva. Sem esta devolução a linha nova fica órfã e o zero vira
    convergência por prosa.
 
-   **(b) A regra da rota, nos dois sentidos — e declare a escolhida ANTES de verificar**
-   (o marcador `.verificador-c<C>.done` não distingue as rotas: a inline também o grava).
-   O `mode` do arquivo é a rota que você VAI usar; escrever `child` "por segurança" num c3
-   com 2 brutos é violação, igual a verificar 10 inline.
-   - **Ciclos 1–2, ou 3+ com 3+ brutos → `child`.** A rota já está gravada (passo 4); confira
-     que o `mode` dela é o que a régua manda e corrija se divergir, registrando `incidentes`.
-     Siga com o filho já despachado.
-   - **Ciclos 3+ com ≤2 brutos → `inline` OBRIGATÓRIO.** Grave o mesmo arquivo com
-     `"mode":"inline"` e verifique você mesmo, pelo protocolo do `intent-verifica.md`
-     (categoria revalidada pela regra de desempate, `.vereditos-c<C>.txt`, `vereditos-dirigidos.json`
-     no run-dir e `.verificador-c<C>.done`), registrando `verificacao_inline_c<C>` em
-     `transparencia:`.
-   O `confere-rotas.sh` reprova as DUAS violações (`VIOLACAO` e `VIOLACAO-INVERSA`, exit 1).
+   **(b) A rota é `child`, sempre (FJ-F4RLR-03INT).** Não há mais decisão a tomar aqui: o
+   filho já foi despachado no passo 4, junto com as lanes, antes de o volume de brutos deste
+   ciclo existir — decidir "inline" depois da contagem seria escrever a regra sabendo o
+   resultado, e o `.verificador-c<C>.done` não distingue as rotas para desfazer. Confira só
+   que `mode` no `.rota-verificacao-c<C>.json` é `child` e siga com o filho já despachado;
+   `mode` divergente é incidente (registre em `incidentes`), nunca conserto silencioso.
+   `confere-rotas.sh` ainda sabe ler `mode:"inline"` (exceção de script, não deste
+   workflow) — mas você nunca grava `inline`: a rota fixa `child` não tem mais exceção
+   por volume.
 
    **(c) Contagem FINAL, depois da verificação** — a mesma linha do (a) **mais** os
    vereditos dirigidos, sobrescrevendo a tabela:
@@ -502,13 +510,25 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
      verificador (a linha `vinculo_goal: nenhum — …` dele) e o destino (`plan-phase`,
      `code-review`, `deferred` ou `dono`), e entrada em `<phase_dir>/deferred-items.md`
      quando a categoria for `A-produto` ou `B-viabilidade`. Dispensa não é descarte: o achado
-     sai da conta do ciclo, não do registro. Promover um dispensado a `confirmado` é seu
-     direito — escreva o porquê na mesma linha.
+     sai da conta do ciclo, não do registro. **Você não promove um achado dispensado
+     (FJ-05INT) — a porta está fechada, sem exceção dentro do ciclo.** Se discordar da
+     dispensa, marque a linha como **`contestada`** e escreva o motivo em uma frase: quem
+     decide é quem recebe a dívida no destino registrado, não você. (A garantia de verdade
+     fica no script: a trava de ids da FM-04 recusa um id dispensado passado ao
+     `correcoes-commit.sh`.)
    Bug de código que o consultor achou lendo o repositório é sempre registrado, mesmo sem
    vínculo com esta fase: entrada em `deferred-items.md`, que a verificação de trabalho e a
    auditoria forense do GSD leem, e linha em `## Dívidas registradas`.
    Os `nao_sustentado`/`ja_coberto` entram na tabela do INTENT-REVIEW com o
    porquê/ponteiro do filho — destino registrado, não filtro silencioso.
+
+   **A menor emenda que fecha o achado, nunca mais (FJ-06INT).** O padrão dos consertos que
+   geram erro novo é escrever MAIS do que o achado pedia — uma frase absoluta a mais, um
+   mecanismo a mais. Corrija em termos de **comportamento**, sem prescrever *como*; é isso
+   que a releitura do 5b passa a auditar (ver `prompts/intent-releitura.md`, "frase
+   impossível/contradiz o código"). **Limite declarado:** nesta versão a releitura do 5b
+   roda depois do commit da correção, não antes — mover a pergunta para antes do commit
+   exige o script `correcoes-commit.sh` aceitar uma parada intermediária, fora desta lane.
 
    **O que a correção escreve: INVARIANTE, nunca mecanismo (R1a).** Um AC é `MUST NOT` +
    modo de falha observável. Anti-exemplos, na forma:
@@ -526,12 +546,15 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    onde mora a frase errada — é dela que a `/audit-gad` mede original × derivado. Sem ela o
    achado sai `não_medido`; não chute nem invente âncora.
 
-   **Um id, um papel.** Dentro de um ciclo, um `c<C>-NN` nomeia um achado **ou** uma correção,
-   nunca os dois. Correção que nasce de leitura sua (não de achado) continua a série do ciclo, a
+   **Um id, um papel (FJ-01INT: a correção HERDA o id do achado).** Dentro de um ciclo, um
+   `c<C>-NN` nomeia um achado **ou** uma correção, nunca os dois — e a correção de um achado
+   CONFIRMADO usa o mesmo id dele: «a correção do achado c1-04 chama-se c1-04». Correção que
+   nasce de leitura sua (não de achado) continua a série do ciclo, a
    partir do último id usado — não recomeça do `-01`. Motivo: o `confere-reconciliacao.sh` cruza id
    de veredito com id aplicado, e o mesmo id nos dois papéis casa a linha errada (F24.5: `c2-01`
    era um achado descartado e uma correção aplicada, e a tabela do INTENT-REVIEW teve de
-   desambiguar com `(achado)` à mão).
+   desambiguar com `(achado)` à mão). A garantia de verdade é o script (FM-04): id inventado ou
+   achado confirmado sem destino é recusado — este parágrafo só evita o turno perdido de recusa.
 
    **As correções do ciclo: um script, um turno.**
    1. ANTES de editar qualquer artefato:
@@ -578,7 +601,7 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
      `confere-reconciliacao.sh "<phase_dir>" <C>` e passe as linhas `D-NN-DESATUALIZADA
      c<C> …` (informativas; uma por decisão, com o id) — a releitura as trata como
      `omissoes_novas`. <!-- plano 2, P-06 (C3) — fiacao-P2-P06-releitura.md -->
-   Ele grava `.intent/.releitura-c<C>.json` (objeto inteiro, `v: 2`, com o veredito) +
+   Ele grava `.intent/.releitura-<rodada>.json` (objeto inteiro, `v: 2`, com o veredito) +
    `.releitura-<rodada>.done` — encerre o turno; a notificação te acorda; então leia o `.json`.
    Devolveu item (`contradiz`, `prescreve_mecanismo`,
    `omissoes_novas`, `cardinalidade`, `unicidade` ou par em `consistencia`) → corrija **no
@@ -605,7 +628,11 @@ são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
    simultaneamente satisfazíveis. Esses são os freios COMPLETOS — seu juízo de "o consultor
    não teria mais o que achar" não encerra o loop.
 7. **Escreva o `<phase_dir>/NN-INTENT-REVIEW.md`** com frontmatter:
-   `intent_review: done` · `revisores_efetivos: [...]` · `codex_model_evidencia:` /
+   `intent_review: done` (ou `intent_review: aprovado_com_ressalva` quando a etapa fecha
+   com uma limitação nomeada — aí é obrigatório `ressalva_dividas: [id, ...]` apontando a(s)
+   dívida(s) da «## Dívidas registradas» que sustentam a ressalva, cada uma também no
+   `deferred-items.md`; o fiscal recusa ressalva sem esse vínculo. Exemplo:
+   `intent_review: aprovado_com_ressalva` + `ressalva_dividas: [c2-03]`) · `revisores_efetivos: [...]` · `codex_model_evidencia:` /
    `agy_model_evidencia:` · `ciclos: N` · `motivo_encerramento:` (decisão do
    decide-ciclo, verbatim) · `achados_confirmados: N` · `achados_descartados: N` ·
    `achados_dispensados: N` (os `confirmado_irrelevante`, somados dos `dispensados` do
@@ -753,6 +780,11 @@ Você não fala com o usuário — o orquestrador fala. O caminho:
 Responda **apenas** com um dos três blocos abaixo, preenchido — sem prosa antes ou
 depois (o retorno é parseado como dado de roteamento; conteúdo verboso vive no disco;
 tokens não se reportam — a medição é mecânica, do transcript, pela camada 0).
+
+**Números do bloco `done` saem do script, não da sua memória (FJ-10INT).** `ciclos`,
+`achados_confirmados`, `achados_descartados` e `achados_dispensados` são colados da ÚLTIMA
+linha de saída do `confere-reconciliacao.sh`/`decide-ciclo.sh` (a mesma que fechou o último
+ciclo) — nunca redigidos por você a partir do que lembra da rodada.
 
 ```
 estado: done

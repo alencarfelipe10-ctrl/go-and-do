@@ -69,12 +69,52 @@ gad_project_root() {
 # Fase N no disco sem passar pelo SDK (barato; o retrato completo continua sendo do
 # init.phase-op). N é STRING OPACA (PC-9: "1.5"/"2.5"/"999.3" jamais viram int); a
 # variante com zero à esquerda cobre nomes tipo RLR-01-fundacao sem aritmética.
+# ── número da fase num lugar só (FM-01EXE, auditoria F4 RLR de 21/09/2026) ────
+# Cada script tinha o seu jeito de casar o número da fase, e o casamento era por
+# PEDAÇO: um glob `*-4-*` ou um `grep "Phase 4"` alcançava a 04.1. Agora há uma função:
+#   fase_norm "4" · "04" · "RLR-04" · "RLR-4" → "4"        (e "04.1" → "4.1")
+#   fase_num_do_nome "RLR-04.1-fundacao"      → "4.1"      (número do NOME da pasta)
+#   fase_rx "4"                                → "0*4"      (regex do número EXATO)
+#   fase_casa "04" "4"                         → exit 0
+# O número é STRING OPACA (PC-9): "1.5" nunca vira float; só os zeros à esquerda de
+# cada segmento saem, e o prefixo de projeto (`RLR-`, `INS-`) é descartado.
+fase_norm() { # <fase> → número canônico; exit 1 (e nada no stdout) se não houver número
+  local s="${1:-}" seg out=""
+  s="${s##*/}"
+  s="$(printf '%s' "$s" | sed -E 's/^([A-Za-z]+-)+//')"          # tira RLR-, INS-, …
+  s="$(printf '%s' "$s" | grep -oE '^[0-9]+(\.[0-9]+)*' || true)" # só o número da frente
+  [ -n "$s" ] || return 1
+  local IFS=.
+  for seg in $s; do
+    seg="$(printf '%s' "$seg" | sed -E 's/^0+([0-9])/\1/')"
+    out="${out:+$out.}$seg"
+  done
+  printf '%s' "$out"
+}
+
+fase_num_do_nome() { fase_norm "${1:-}"; }
+
+# Regex (ERE/PCRE, sem âncora) que casa o número da fase em qualquer grafia com zero
+# à esquerda, e SÓ ele: quem usa fecha com `(?![0-9.])` / `[^0-9.]` à direita.
+fase_rx() { # <fase> → "4" → "0*4" · "4.1" → "0*4\.0*1"
+  local n; n="$(fase_norm "${1:-}")" || return 1
+  printf '%s' "$n" | sed -E 's/\./\\./g; s/([0-9]+)/0*\1/g'
+}
+
+# Dois números de fase designam a MESMA fase? (exit 0 = sim)
+fase_casa() { [ "$(fase_norm "${1:-}" || echo _a)" = "$(fase_norm "${2:-}" || echo _b)" ]; }
+
+# Fase N no disco sem passar pelo SDK (barato; o retrato completo continua sendo do
+# init.phase-op). O casamento é pelo número NORMALIZADO do nome da pasta — nunca por
+# pedaço de string: com as fases 4, 04.1 e 14 no mesmo projeto, `4` acha só a 4.
 gad_phase_dir() {
-  local root="$1" n="$2" d pad
-  case "$n" in [0-9]) pad="0$n" ;; *) pad="$n" ;; esac
-  for d in "$root/.planning/phases/$n"-*   "$root/.planning/phases/$pad"-* \
-           "$root/.planning/phases/"*"-$n"-* "$root/.planning/phases/"*"-$pad"-*; do
-    [ -d "$d" ] && { echo "$d"; return 0; }
+  local root="$1" n="$2" d base num alvo
+  alvo="$(fase_norm "$n")" || return 1
+  for d in "$root/.planning/phases/"*; do
+    [ -d "$d" ] || continue
+    base="$(basename "$d")"
+    num="$(fase_norm "$base")" || continue
+    [ "$num" = "$alvo" ] && { echo "$d"; return 0; }
   done
   return 1
 }
@@ -85,7 +125,12 @@ gad_json_out() {
   [ -n "$compact" ] || {
     echo "ERRO: gad_json_out recebeu JSON inválido ou vazio ($slug)" >&2; return 1; }
   root="$(gad_project_root)"
-  if [ -d "$root/.planning" ]; then
+  # GAD_DRY_RUN=1 (F4 RLR, pré-requisito da «prova extra» do A3): o espelho é a ÚNICA
+  # escrita que o `--dry-run` dos gates ainda fazia — medimos 10 arquivos sujos no
+  # rl-representation ao rodar o fiscal em modo seco contra a F4. Uma cancela não muta
+  # estado para julgar (a própria linha 383 do confere-etapa.sh já dizia isso do
+  # reconcilia-docs.sh). Com a variável ligada, só o stdout sai.
+  if [ "${GAD_DRY_RUN:-0}" != 1 ] && [ -d "$root/.planning" ]; then
     mkdir -p "$root/.planning/.gad"
     printf '%s\n' "$compact" > "$root/.planning/.gad/last-$slug.json"
   fi
@@ -112,15 +157,30 @@ gad_runlog() {
 # rodar DENTRO de uma rodada ativa (descoberta pelo ponteiro PC-3; sem rodada = no-op).
 # Uso típico: trap 'gad_autoregistro "<nome>.sh" "$?"' EXIT
 gad_autoregistro() { # <nome> <exit> [resumo]
-  local root p nn pd rl et
+  local root p nn pd rl et sess8
+  # GAD_DRY_RUN=1: nenhuma prova seca escreve run-log (mesma regra do gad_json_out acima) —
+  # sem isto, `confere-etapa.sh 1 --dry-run` (que chama `setup-intencao.sh --r6`, documentado
+  # como "SEM efeito colateral") passaria a gravar um evento `script` mesmo em modo seco.
+  [ "${GAD_DRY_RUN:-0}" = 1 ] && return 0
   root="$(gad_project_root)" || return 0
   p="$root/.planning/.gad-rodada-ativa.json"
   [ -f "$p" ] || return 0
   nn=$(jq -r '.nn // empty' "$p" 2>/dev/null); pd=$(jq -r '.phase_dir // empty' "$p" 2>/dev/null)
   rl=$(jq -r '.runlog // empty' "$p" 2>/dev/null)
   [ -n "$nn" ] && [ -n "$pd" ] || return 0
-  et=$(grep '"evento":"checkpoint"' "$rl" 2>/dev/null | tail -n1 \
-       | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p'); : "${et:=0 abertura}"
+  # Mesma causa do FM-04ENC (gad-lifecycle.sh, bloco B2): o último checkpoint do ARQUIVO
+  # pode ser de uma sessão já encerrada — filtra pelo checkpoint DESTA sessão (mesmo corte
+  # de 8 caracteres que o run-log.sh grava em "sessao"). Sem CLAUDE_CODE_SESSION_ID (script
+  # rodado fora do CC), cai no comportamento antigo — não há sessão para filtrar por.
+  sess8="${CLAUDE_CODE_SESSION_ID:0:8}"
+  if [ -n "$sess8" ]; then
+    et=$(grep "\"sessao\":\"$sess8\"" "$rl" 2>/dev/null | grep '"evento":"checkpoint"' | tail -n1 \
+         | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
+  else
+    et=$(grep '"evento":"checkpoint"' "$rl" 2>/dev/null | tail -n1 \
+         | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
+  fi
+  : "${et:=0 abertura}"
   gad_runlog "$pd" "$nn" script "$et" \
     --kv script="$1" --kv exit="${2:-0}" ${3:+--kv resumo="$3"} >/dev/null
   return 0

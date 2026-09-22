@@ -21,9 +21,9 @@
       "id": "intent_review_fechada",
       "tipo": "grep",
       "arquivo": "{fase}/{nn}-INTENT-REVIEW.md",
-      "regex": "^intent_review: (done|skipped)",
+      "regex": "^intent_review: (done|skipped|aprovado_com_ressalva)",
       "min": 1,
-      "desc": "consultoria especializada fechada (needs_decision/blocked NÃO concluem)"
+      "desc": "consultoria especializada fechada (needs_decision/blocked NÃO concluem; aprovado_com_ressalva = FJ-F4RLR-02INT, só etapa 1, exige dívida nomeada — ver assert intent_ressalva_sem_divida)"
     },
     {
       "id": "chain_flag_zerada",

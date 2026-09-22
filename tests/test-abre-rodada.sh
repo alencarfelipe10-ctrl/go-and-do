@@ -302,5 +302,16 @@ rm -f "$ROOT/.planning/.gad/last-abre-rodada-dry.json" "$ESPELHO_REAL"
 unset GAD_ROADMAP_FIXTURE
 
 echo
+# ══════════════════════════ caso 18 (F4 RLR item 4): aprovado_com_ressalva fecha a etapa 1
+echo "── caso 18 (F4 RLR item 4): intent_review aprovado_com_ressalva → etapa_1 pula ──"
+printf 'intent_review: aprovado_com_ressalva\n' > "$ROOT/.planning/phases/RLR-02-identidade/02-INTENT-REVIEW.md"
+fixture c18 "{\"phase_found\":true,\"phase_number\":\"RLR-02\",\"phase_name\":\"identidade\",
+  \"phase_dir\":\"$ROOT/.planning/phases/RLR-02-identidade\",\"expected_phase_dir\":null,
+  \"padded_phase\":\"02\",\"planning_exists\":true,\"has_context\":true,\"has_plans\":false,
+  \"has_research\":false,\"has_reviews\":false,\"has_verification\":false,\"plan_count\":0}"
+roda 2
+eq "etapa_1 pula com aprovado_com_ressalva (não reabre)" "$(campo "$J" .etapa_1)" "pular"
+rm -f "$ROOT/.planning/phases/RLR-02-identidade/02-INTENT-REVIEW.md"
+
 echo "abre-rodada: $OK ok · $FALHAS falhas"
 [ "$FALHAS" -eq 0 ]

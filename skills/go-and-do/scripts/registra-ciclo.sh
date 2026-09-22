@@ -136,6 +136,21 @@ SEM_CITACAO=()
       echo "  - ⚠️ [reviewed-without-source-citations] — revisou o texto colado, não o repositório: achados deste parecer são CORROBORAÇÃO, não sustentam ciclo novo sozinhos"
     fi
     jq -r '.sinos[]? | "  - 🔔 " + .' "$J"
+    # FM-F4RLR-05CONV: toda «## Seção» que o parecer cita entre CRASE precisa existir
+    # como título de verdade em algum .md vivo da fase — barato, mesma família da
+    # conferência de ponteiros. Só avisa (🔔), não reprova o ciclo.
+    if [ -s "$P" ]; then
+      SECOES_CITADAS=$(grep -oE '`##[[:space:]]+[^`]{2,80}`' "$P" 2>/dev/null \
+        | sed -E 's/^`//; s/`$//' | sort -u || true)
+      if [ -n "$SECOES_CITADAS" ]; then
+        while IFS= read -r sec; do
+          [ -n "$sec" ] || continue
+          if ! grep -qFx "$sec" "$PD"/*.md 2>/dev/null; then
+            echo "  - 🔔 ${lane} cita \`$sec\` mas nenhum .md da fase tem esse título"
+          fi
+        done <<<"$SECOES_CITADAS"
+      fi
+    fi
   done
   if [ ${#PARECERES[@]} -eq 0 ]; then
     echo "- brutos na tabela do ciclo: **SEM MEDIÇÃO** (nenhum parecer legível — guarda não conta o que não leu)"

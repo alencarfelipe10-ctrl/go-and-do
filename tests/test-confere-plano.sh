@@ -109,6 +109,10 @@ commit "$R" 'feat(7-010): outro plano' src/outro.py
 roda "$R"
 eq "codigos = [SEM-COMMIT], commits=0" "$(campo '"\(.codigos[0])/\(.commits)"')" "SEM-COMMIT/0"
 eq "e o arquivo da fase antiga não vira FORA-DA-LISTA" "$(campo '.fora_da_lista|length')" "0"
+echo "-- FM-F4RLR-08EXE: SEM-COMMIT lista os commits de escopo parecido (mesma fase, tag diferente)"
+eq "achou o feat(7-010) como escopo parecido" "$(campo '.sem_commit_escopo_parecido|length')" "1"
+eq "…e cita o plano errado na mensagem" "$(campo '.sem_commit_escopo_parecido[0]' | grep -c '7-010')" "1"
+eq "…mas NÃO conta feat(01) — prefixo de fase diferente" "$(campo '.sem_commit_escopo_parecido[0]' | grep -c 'feat(01)')" "0"
 
 echo "== (f) files_modified vazio → LISTA-VAZIA (caso 24-02)"
 R=$(repo f); plano "$R" 'files_modified: []'

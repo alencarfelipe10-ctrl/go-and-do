@@ -48,3 +48,12 @@ segunda linha com a outra promessa da fase.
 
 **Goal:** Entrada sem a linha `**Requirements**` — também `phase_without_req_id`.
 **Depends on:** Phase 99
+
+### Phase 094: Entrada com zero a esquerda no numero (F4 RLR, FM-03INT)
+
+**Goal:** A entrada existe escrita como `Phase 094`; quem pergunta por `94` tem de acha-la.
+**Requirements**: BANC-01
+
+### Phase 93: Entrada SEM Goal (F4 RLR, FM-03INT)
+
+**Requirements**: BANC-01

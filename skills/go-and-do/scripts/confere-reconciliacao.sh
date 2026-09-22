@@ -33,16 +33,18 @@
 #   confirmado_irrelevante + presente    → DISPENSADO-APLICADO — classe declarada, NÃO
 #     bloqueante («nada se descarta»: o coordenador pode corrigir um achado dispensado)
 #
-# RELEITURA-ABERTA (R9, plano 3): com --ordem, no último ciclo, `.releitura-c<C>.json` com
-#   `v: 2` e `ok: false` é uma releitura que reprovou sem correção `c<C>b` — bloqueante
-#   (o briefing do ciclo seguinte pegaria isso, mas o último ciclo não abre briefing).
-#   Sem `v` → aviso legado (formato anterior ao R9, veredito não conferível).
+# RELEITURA-ABERTA (R9, plano 3): com --ordem, no último ciclo, a releitura MAIS RECENTE do
+#   ciclo (FM-F4RLR-10INT: `.releitura-c<C><letra>.json` se houve correção pós-releitura,
+#   senão `.releitura-c<C>.json`) com `v: 2` e `ok: false` é uma releitura que reprovou sem
+#   correção seguinte — bloqueante (o briefing do ciclo seguinte pegaria isso, mas o último
+#   ciclo não abre briefing). Sem `v` → aviso legado (formato anterior ao R9, veredito não
+#   conferível).
 #
 # --ordem (A5b): a ordem releitura→commit só é travada na ABERTURA do ciclo seguinte
 # (briefing-build.sh, gate E2c/R1). O furo é na SAÍDA: a rota `para-custo-marginal` aplica
 # o lote C/D/E final sem re-submeter aos revisores e vai direto ao passo 7 — como não há
-# ciclo novo, nenhum gate olha. Com --ordem comparamos, no último ciclo, o mtime do
-# `.releitura-c<C>.json` com a data do commit registrado em `.correcoes-c<C>.aplicado`.
+# ciclo novo, nenhum gate olha. Com --ordem comparamos, no último ciclo, o mtime da releitura
+# mais recente do ciclo com a data do commit registrado em `.correcoes-c<C>.aplicado`.
 # Correção promovida DEPOIS da releitura = correção que ninguém releu → ORDEM-VIOLADA.
 #
 # D-NN-DESATUALIZADA (C3, plano 2 / 05/09/2026) — mexeu no SPEC, tem de olhar o CONTEXT.
@@ -369,8 +371,11 @@ if [ "$ORDEM" = 1 ]; then
   # com releitura e correção — é lá que a ordem pode quebrar sem ninguém ver.
   C="$CICLO"
   if [ -z "$C" ]; then
+    # FM-F4RLR-10INT: o nome do arquivo agora pode carregar a letra da rodada
+    # (`.releitura-c<N>b.json`, `.releitura-c<N>c.json`, …) — o número do CICLO continua
+    # sendo só os dígitos logo após o `c`; a letra fica de fora da extração aqui.
     C=$(ls "$IN"/.releitura-c*.json 2>/dev/null \
-      | sed -n 's/.*\.releitura-c\([0-9][0-9]*\)\.json$/\1/p' | sort -n | tail -1)
+      | sed -n 's/.*\.releitura-c\([0-9][0-9]*\)[a-z]*\.json$/\1/p' | sort -n | tail -1)
   fi
   [ -n "$C" ] || C="$ultimo_ciclo"
   if [ -z "$C" ]; then
@@ -378,7 +383,12 @@ if [ "$ORDEM" = 1 ]; then
       | sed -n 's/.*\.correcoes-c\([0-9][0-9]*\)\.aplicado$/\1/p' | sort -n | tail -1)
   fi
   [ -n "$C" ] || { echo "ordem: n/a (nenhum ciclo com releitura ou correção em $IN)"; exit "$falha"; }
-  R="$IN/.releitura-c$C.json"
+  # FM-F4RLR-10INT: lê a rodada MAIS RECENTE do ciclo — a de letra mais alta
+  # (.releitura-c<C>b.json, .releitura-c<C>c.json, …) quando existir, senão a normal
+  # (.releitura-c<C>.json, 1ª rodada) — mesmo resolvedor do briefing-build.sh
+  # (caminho_releitura), sem duplicar a lógica num 2º parser python.
+  R=$(ls "$IN"/.releitura-c"$C"[a-z].json 2>/dev/null | sort | tail -1)
+  [ -n "$R" ] || R="$IN/.releitura-c$C.json"
   A="$IN/.correcoes-c$C.aplicado"
   # R9 (plano 3): o último ciclo não abre briefing, logo ninguém lê o veredito da releitura
   # dele. Aqui é o único gate que olha esse arquivo na saída.
@@ -394,12 +404,12 @@ if [ "$ORDEM" = 1 ]; then
     if [ -z "$rel_v" ]; then
       echo "aviso: releitura c$C em formato legado (v ausente) — veredito não conferível"
     elif [ "$rel_ok" = false ]; then
-      echo "RELEITURA-ABERTA c$C — .releitura-c$C.json declara ok: false e nenhuma correção c${C}b fechou a emenda (último ciclo: nenhum briefing seguinte vai cobrar)"
+      echo "RELEITURA-ABERTA c$C — $(basename "$R") declara ok: false e nenhuma correção pós-releitura fechou a emenda (último ciclo: nenhum briefing seguinte vai cobrar)"
       falha=1
     fi
   fi
   if [ ! -f "$R" ]; then
-    echo "ordem: n/a (sem .releitura-c$C.json — a ausência de releitura é problema de outro gate)"
+    echo "ordem: n/a (sem $(basename "$R") — a ausência de releitura é problema de outro gate)"
   elif [ ! -f "$A" ]; then
     echo "ordem: n/a (ciclo $C sem correção promovida)"
   else

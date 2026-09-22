@@ -117,8 +117,12 @@ if [ -s "$OUT" ]; then
   MT=$(stat -c %Y "$OUT" 2>/dev/null || echo 0); [ "$MT" -ge "$T0" ] && FRESCO=true
 fi
 EVID=""
-[ -f "$LOG" ] && EVID=$(grep -E 'printmode.go:120|model_config_manager.go:311' "$LOG" 2>/dev/null \
-  | grep -i "Propagating selected model" | head -1 | head -c 300 || true)
+# FM-F4RLR-11INT: o pré-filtro por número de linha do arquivo-fonte (printmode.go:120 |
+# model_config_manager.go:311) nunca bate — medido contra espelho real (rl-representation,
+# RLR-04, 20/09): a linha real é `model_config_manager.go:327`. Número de linha de código
+# de terceiro é frágil; grep direto do texto da mensagem, sem pré-filtro por arquivo:linha.
+[ -f "$LOG" ] && EVID=$(grep -i "Propagating selected model" "$LOG" 2>/dev/null \
+  | head -1 | head -c 300 || true)
 DEGRADADO=false
 if [ -n "$EVID" ] && ! grep -qi "$MODELO_ESPERADO" <<<"$EVID"; then
   DEGRADADO=true   # fallback silencioso de modelo (3 ocorrências provadas) = revisor falho
