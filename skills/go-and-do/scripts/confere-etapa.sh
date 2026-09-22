@@ -1056,6 +1056,25 @@ if [ "$ETAPA" = "1" ]; then
     fi
   fi
 
+  # ── FM-09INT: os mesmos números entre cabeçalho, tabela, vereditos e dívidas ──
+  # Medido na F4 RLR (04-INTENT-REVIEW.md, --dry-run, somente-leitura): cabeçalho diz 12
+  # confirmados × tabela tem 24 × vereditos no disco têm 30; 3 dispensados no cabeçalho ×
+  # 5 nos arquivos de veredito; 5 dívidas na seção × só 2 no deferred-items.md
+  # (c1-10/I-01/I-02 ficam de fora). AVISO, não falha: o
+  # plano diz «acusa» e um parser de cardinalidade que travasse a etapa cobraria caro por
+  # um artefato que o coordenador ainda pode emendar. Vai ao briefing pelo `extrai`.
+  CCARD="$GAD_SCRIPTS_DIR/confere-cardinalidade.sh"
+  if [ -f "$CCARD" ]; then
+    cardrc=0; cardout=$(bash "$CCARD" "$PHASE_DIR" "$NN" --json 2>/dev/null) || cardrc=$?
+    jq -e . >/dev/null 2>&1 <<<"$cardout" || cardout='{"avisos":[],"medido":{}}'
+    n_card=$(jq '(.avisos//[])|length' <<<"$cardout")
+    if [ "${n_card:-0}" -gt 0 ]; then
+      RES=$(jq -c --arg d "AVISO: $n_card divergência(s) de cardinalidade na etapa 1 — $(jq -r '(.avisos//[])|join(" · ")' <<<"$cardout" | cut -c1-400)" \
+        '. + [{id:"cardinalidade_etapa_1", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+    fi
+    EXTRAI=$(jq -c --argjson c "$cardout" '. + {cardinalidade: $c}' <<<"$EXTRAI")
+  fi
+
   # ── J5 (45k, F24.5): proveniência do veredito. O R5 acima já pega correção promovida SEM
   # linha de veredito; o que ele não vê é a linha de veredito escrita pelo próprio coordenador
   # depois que o verificador saiu (24.5: 3 linhas às 12:12, verificador fechado às 11:15).

@@ -515,6 +515,45 @@ eq "linha acrescentada depois do recibo → VEREDITO-ALTERADO reprova a etapa 1"
    "$(assert_de "$J" j5_origem_c1)" "FALHA"
 casa "…com a mensagem literal" "$J" 'VEREDITO-ALTERADO c1'
 
+echo "── FM-09INT: fiação do confere-cardinalidade.sh dentro do fiscal da etapa 1 ──"
+IFS='|' read -r R PD <<<"$(monta card 99)"
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: done
+achados_confirmados: 3
+achados_descartados: 0
+achados_dispensados: 0
+---
+
+## Tabela de achados
+
+| id | alegação | fontes | veredito | destino |
+|----|----------|--------|----------|---------|
+| c1-01 | a | codex | confirmado (A-produto) | correção |
+EOF
+J=$(confere "$R" 99)
+eq "cabeçalho 3 × tabela 1 → cardinalidade_etapa_1 vira AVISO" "$(assert_de "$J" cardinalidade_etapa_1)" "AVISO"
+casa "…o detalhe nomeia CARDINALIDADE confirmados" "$J" 'CARDINALIDADE confirmados'
+eq "…e o EXTRAI carrega o medido da cardinalidade" "$(printf '%s' "$J" | jq -r '.extrai.cardinalidade.medido.cabecalho.confirmados')" "3"
+
+IFS='|' read -r R PD <<<"$(monta card2 99)"
+cat > "$PD/99-INTENT-REVIEW.md" <<'EOF'
+---
+intent_review: done
+achados_confirmados: 1
+achados_descartados: 0
+achados_dispensados: 0
+---
+
+## Tabela de achados
+
+| id | alegação | fontes | veredito | destino |
+|----|----------|--------|----------|---------|
+| c1-01 | a | codex | confirmado (A-produto) | correção |
+EOF
+J=$(confere "$R" 99)
+eq "cabeçalho e tabela batendo → sem cardinalidade_etapa_1" "$(assert_de "$J" cardinalidade_etapa_1)" "<ausente>"
+
 echo "── 46(j)/46(r): o fiscal deixa recibo (.fence-N.ok) ──"
 # a bancada reprova de propósito (SPEC/CONTEXT ausentes) → serve para o ramo fail
 IFS='|' read -r R PD <<<"$(monta fence 99)"
