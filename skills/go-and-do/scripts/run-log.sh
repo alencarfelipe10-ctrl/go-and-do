@@ -87,9 +87,15 @@ if [ "$1" = "--selftest" ]; then
   bash "$SELF" "$D" 99 checkpoint "1 intencao" 300000 75 "" 400000 >/dev/null
   grep -q '"tokens":300000,"pct":75,"limit":400000' "$F" && ok "checkpoint com medição" || bad "checkpoint com medição"
 
-  out=$(bash "$SELF" "$D" 99 checkpoint "2 planejamento" 310000 77 "" 400000)
-  echo "$out" | grep -q "janela-fechada-automaticamente" && grep -q '"auto_fechado":true' "$F" \
+  ERRF=$(mktemp)
+  out=$(bash "$SELF" "$D" 99 checkpoint "2 planejamento" 310000 77 "" 400000 2>"$ERRF")
+  # FM-03ENC: o aviso é PROSA — stdout é do JSON de quem chama (o pre-despacho.sh morreu
+  # com erro de JSON em 20/09 por causa desta linha).
+  echo "$out" | grep -q "janela-fechada" && bad "FM-03ENC: aviso vazou para o stdout" \
+    || ok "FM-03ENC: aviso de janela fechada sai só no stderr"
+  grep -q '"auto_fechado":true' "$F" \
     && ok "auto-fechamento de janela aberta" || bad "auto-fechamento de janela aberta"
+  rm -f "$ERRF"
 
   out=$(bash "$SELF" "$D" 99 end "2 planejamento" "" "" 123456 "" 9999 2>/dev/null)
   echo "$out" | grep -q "tokens_camada2 morreu" && grep -q '"subagent_tokens":123456' "$F" \
@@ -481,7 +487,12 @@ fi
         _linha_auto="$_linha_auto}"
         printf '%s\n' "$_linha_auto" >> "$f"
         espelha "$dir" "$nn" "$_linha_auto"
-        echo "janela-fechada-automaticamente: etapa \"$prev_etapa\" estava sem end/skip — end sintético gravado COM medição do mede-tokens.py quando disponível; NÃO grave um 'end corretivo' com número do harness (contexto ≠ custo)"
+        # FM-03ENC: STDERR. Este aviso saía no STDOUT e ia parar no meio do JSON do
+        # pre-despacho.sh — medido em 20/09: o leitor da camada 0 morreu com erro de
+        # JSON, chamou de novo e o efeito colateral ficou no run-log (um `end` sintético
+        # da etapa 6 sete segundos depois do checkpoint). Prosa é stderr; o fato vira
+        # campo `janela_fechada_automaticamente` no JSON de quem chama.
+        echo >&2 "janela-fechada-automaticamente: etapa \"$prev_etapa\" estava sem end/skip — end sintético gravado COM medição do mede-tokens.py quando disponível; NÃO grave um 'end corretivo' com número do harness (contexto ≠ custo)"
         seq=$((seq+1))
       fi
     fi

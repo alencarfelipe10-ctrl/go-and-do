@@ -293,14 +293,89 @@ if [ "$ETAPA" = "6" ]; then
         "$PHASE_DIR/$NN-INTENT-REVIEW.md" 2>/dev/null || true; } | head -8 | jq -R . | jq -cs .)
   sk=$({ grep '"evento":"skip"' "$PHASE_DIR/$NN-RUN-LOG.jsonl" 2>/dev/null || true; } \
        | { jq -c '.etapa' 2>/dev/null || true; } | head -8 | jq -cs .)
-  ra=$({ awk '/^riscos_aceitos:/{f=1;next} f&&/^[a-z_]+:/{f=0} f&&/^ *- /{print}' \
-       "$PHASE_DIR/$NN-SECURITY.md" 2>/dev/null || true; } | head -8 | jq -R . | jq -cs .)
+  # FM-01ENC: o campo `riscos_aceitos:` do cabeçalho NÃO EXISTE — o cabeçalho do
+  # NN-SECURITY.md só tem status/threats_open/asvs_level. O risco aceito mora na tabela
+  # «Accepted Risks Log», no corpo. Medido na F4 RLR: a lista saía vazia, o briefing
+  # dizia «riscos aceitos: nenhum» e o resumo saiu sem a seção, afirmando «todas fechadas».
+  SECF="$PHASE_DIR/$NN-SECURITY.md"
+  ra=$(python3 - "$SECF" 2>/dev/null <<'PYRISCO'
+import json, re, sys
+try:
+    txt = open(sys.argv[1], encoding="utf-8", errors="replace").read()
+except OSError:
+    print("[]"); raise SystemExit(0)
+achados = []
+# (1) cabeçalho legado `riscos_aceitos:` — se existir, continua valendo
+m = re.search(r"^riscos_aceitos:\s*$((?:\n[ \t]+-[ \t]+.+)+)", txt, re.M)
+if m:
+    achados += [l.strip(" -\t") for l in m.group(1).strip().splitlines()]
+# (2) tabela «Accepted Risks Log» — o formato real
+m = re.search(r"^#+ *Accepted Risks Log[^\n]*$(.*?)(?=^#+ |\Z)", txt, re.M | re.S)
+if m:
+    for linha in m.group(1).splitlines():
+        linha = linha.strip()
+        if not linha.startswith("|") or re.match(r"^\|[\s:|-]+\|$", linha):
+            continue
+        cels = [c.strip() for c in linha.strip("|").split("|")]
+        if not cels or not cels[0] or re.match(r"^(risk|risco|id|\*\*)", cels[0], re.I):
+            continue
+        achados.append(" — ".join(c for c in cels[:3] if c))
+# (3) linhas com disposição `accept` fora da tabela
+for linha in txt.splitlines():
+    if re.search(r"\b(disposition|disposicao|disposição)\s*[:|]?\s*\|?\s*accept\b", linha, re.I):
+        achados.append(linha.strip().strip("|").strip())
+vistos, saida = set(), []
+for a in achados:
+    if a and a not in vistos:
+        vistos.add(a); saida.append(a[:200])
+print(json.dumps(saida[:8], ensure_ascii=False))
+PYRISCO
+) || ra='[]'
+  jq -e . >/dev/null 2>&1 <<<"$ra" || ra='[]'
+  # 2ª metade da FM-01ENC: SECURITY que fala em risco aceito + lista vazia = leitor
+  # quebrado, não «nenhum risco aceito». Falha visível (stderr) em vez de silêncio.
+  RA_VAZIA=false
+  if [ "$(jq 'length' <<<"$ra")" = 0 ] && [ -f "$SECF" ] \
+     && grep -qiE 'accepted risks|disposition[^|]*accept' "$SECF" 2>/dev/null; then
+    RA_VAZIA=true
+    echo >&2 "ERRO (FM-01ENC): o $NN-SECURITY.md fala em risco aceito e o extrator devolveu lista VAZIA — não escreva «riscos aceitos: nenhum»; leia a tabela à mão"
+  fi
+  # FJ-04ENC: 6ª lista da transparência — TODOS os eventos `incidente` da sessão
+  # corrente. Medido: a camada 0 repassou 5 dos 6 e o resumo publicou «cinco atritos».
+  SESS8="${CLAUDE_CODE_SESSION_ID:0:8}"
+  inc=$({ grep '"evento":"incidente"' "$PHASE_DIR/$NN-RUN-LOG.jsonl" 2>/dev/null || true; } \
+        | { if [ -n "$SESS8" ]; then grep -F "\"sessao\":\"$SESS8\"" || true; else cat; fi; } \
+        | { jq -c '{seq:.seq, etapa:.etapa, detalhe:(((.detalhe // .kv.detalhe // "")|tostring)[0:160])}' 2>/dev/null || true; } \
+        | jq -cs . 2>/dev/null || echo '[]')
+  jq -e . >/dev/null 2>&1 <<<"$inc" || inc='[]'
+  # FM-03ENC: o aviso do run-log.sh agora sai no stderr (prosa nunca no stdout); o FATO
+  # vira campo do JSON, lido do próprio arquivo.
+  JFA=false
+  grep -q '"auto_fechado":true' "$PHASE_DIR/$NN-RUN-LOG.jsonl" 2>/dev/null && JFA=true
+  # MGTm-01ENC: `verification_stale` — a verificação da etapa 3 foi feita contra um
+  # HEAD que o código já não tem. Mesma comparação do preflight do ship, sem modelo:
+  # commit de código depois do último commit que tocou o NN-VERIFICATION.md.
+  VST=false; VSTN=0
+  VERF="$PHASE_DIR/$NN-VERIFICATION.md"
+  if [ -f "$VERF" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    HV=$(git -C "$ROOT" log -1 --format=%H -- "$VERF" 2>/dev/null || true)
+    if [ -n "$HV" ]; then
+      VSTN=$( { git -C "$ROOT" rev-list --count "$HV..HEAD" -- . ':!.planning' 2>/dev/null || echo 0; } )
+      [ "${VSTN:-0}" -gt 0 ] && VST=true
+    fi
+  fi
   extras=$(jq -cn --argjson prev "$extras" --arg rota "$ROTA" --arg up "$UPRAW" \
     --argjson p "${n_pass:-0}" --argjson i "${n_issue:-0}" --argjson pe "${n_pend:-0}" --argjson a "${n_assumed:-0}" \
     --argjson b4 "$b4" --argjson b3 "$b3" --argjson itr "$itr" --argjson sk "$sk" --argjson ra "$ra" \
+    --argjson inc "$inc" --argjson rav "$RA_VAZIA" --argjson jfa "$JFA" \
+    --argjson vst "$VST" --argjson vstn "${VSTN:-0}" \
     '$prev + {rota:$rota, baldes:{pass:$p, issue:$i, pending:$pe, assumed:$a},
       uat_passed_raw:$up,
-      transparencia:{balde_4:$b4, balde_3:$b3, intent_review:$itr, skips_runlog:$sk, riscos_aceitos:$ra}}')
+      janela_fechada_automaticamente:$jfa,
+      verification_stale:{stale:$vst, commits_depois:$vstn},
+      transparencia:{balde_4:$b4, balde_3:$b3, intent_review:$itr, skips_runlog:$sk,
+                     riscos_aceitos:$ra, riscos_aceitos_lista_vazia_suspeita:$rav,
+                     incidentes:$inc}}')
 fi
 
 # ── política de limite (2.C) ─────────────────────────────────────────────────
