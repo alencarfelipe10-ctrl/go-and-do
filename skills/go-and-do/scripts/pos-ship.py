@@ -23,13 +23,29 @@ NN-UAT.md como balde 3 e continua bloqueando o ship.
      verificador cético (prompts/uat-pos-ship.md) — quem classifica não é quem julga.
 
 Subcomandos (saída = JSON de 1 linha):
-  move  <phase_dir> <NN> <project_root>   move os candidatos válidos; exit 0 sempre que rodou
-  lista <phase_dir> <NN>                  itens do NN-POS-SHIP.md (para o resumo/banner)
-  gate  <project_root> <fase>             Etapa 0: itens `bloqueia_proxima: sim` ainda não
-                                          observados em OUTRAS fases → exit 1. Isenta a fase
-                                          nomeada no `verificavel_em` do item (é nela que o
-                                          item se observa).
-Exit: 0 ok · 1 gate reprovou · 2 uso inválido.
+  move     <phase_dir> <NN> <project_root>   move os candidatos válidos; exit 0 sempre que rodou
+                                             sem candidato malformado (ver abaixo)
+  conferir <phase_dir> <NN> <project_root>   FJ-F4RLR-06UAT: mesma checagem de formato do `move`,
+                                             mas NUNCA escreve nada — roda antes do cético
+                                             (workflow.md 5.6 passo 2). Exit 1 = há candidato
+                                             malformado; o condutor devolve antes de despachar.
+  lista    <phase_dir> <NN>                  itens do NN-POS-SHIP.md (para o resumo/banner)
+  gate     <project_root> <fase>             Etapa 0: itens `bloqueia_proxima: sim` ainda não
+                                             observados em OUTRAS fases → exit 1. Isenta a fase
+                                             nomeada no `verificavel_em` do item (é nela que o
+                                             item se observa).
+
+FM-F4RLR-07UAT: se «pos_ship: candidato» aparece N vezes no NN-UAT.md e o script só
+reconhece < N como candidato bem formado, `move`/`conferir` saem com exit 1 e o JSON traz
+`malformados` (cenário + motivo) em vez de mover em silêncio o que dá para mover. Dois
+jeitos de um marcador escapar do reconhecimento: (a) o campo `pos_ship:` está indentado —
+a mesma régua do predicado nativo só lê coluna 0, então o marcador vira invisível; (b) o
+candidato foi reconhecido mas uma «sonda» obrigatória (prova_mecanica/bloqueia_proxima/
+verificavel_em) está de todo ausente (string vazia), não apenas com valor inválido — valor
+presente e inválido (ex.: `bloqueia_proxima: talvez`) ou prova que não existe no repo
+continuam no fluxo normal de `recusados` (exit 0), pois isso é a mecânica de elegibilidade
+funcionando, não malformação.
+Exit: 0 ok · 1 gate reprovou / há candidato malformado · 2 uso inválido.
 """
 
 import json
@@ -40,6 +56,7 @@ from pathlib import Path
 
 RE_TITULO = re.compile(r"^###\s*(\d+)\.\s*(.+)$")
 RE_FASE = re.compile(r"[Ff]ase\s+([0-9]+(?:\.[0-9]+)?)")
+RE_MARCADOR_INDENTADO = re.compile(r"^([ \t]+)pos_ship:\s*candidato\s*$")
 RESULT_ELEGIVEL = {"blocked", "[pending]", "pending"}
 
 
@@ -68,7 +85,7 @@ def _blocos(texto: str) -> tuple[list[str], list[dict], list[str]]:
     for i, linha in enumerate(linhas):
         m = RE_TITULO.match(linha)
         if m:
-            atual = {"n": int(m.group(1)), "titulo": m.group(2).strip(), "linhas": [linha]}
+            atual = {"n": int(m.group(1)), "titulo": m.group(2).strip(), "linhas": [linha], "inicio": i}
             blocos.append(atual)
         elif atual is not None and linha.startswith("## "):
             rodape = linhas[i:]
@@ -95,6 +112,33 @@ def _vereditos(phase_dir: Path) -> dict[int, str]:
     return saida
 
 
+def _malformados(texto: str, blocos: list[dict]) -> list[dict]:
+    """FM-F4RLR-07UAT: candidatos que o parser não reconhece de jeito nenhum."""
+    linhas = texto.split("\n")
+    achados: list[dict] = []
+    for i, linha in enumerate(linhas):
+        m = RE_MARCADOR_INDENTADO.match(linha)
+        if not m:
+            continue
+        dono = None
+        for b in blocos:
+            fim = b["inicio"] + len(b["linhas"])
+            if b["inicio"] <= i < fim:
+                dono = b
+                break
+        cenario = dono["n"] if dono else f"linha {i + 1}"
+        achados.append({"cenario": cenario, "motivo": "campo pos_ship indentado (coluna 0 exigida)"})
+    for b in blocos:
+        if _campo(b["linhas"], "pos_ship") != "candidato":
+            continue
+        for campo, rotulo in (("prova_mecanica", "sonda (prova_mecanica) ausente"),
+                               ("bloqueia_proxima", "bloqueia_proxima ausente"),
+                               ("verificavel_em", "verificavel_em ausente")):
+            if not _campo(b["linhas"], campo):
+                achados.append({"cenario": b["n"], "motivo": rotulo})
+    return achados
+
+
 def _recusa(bloco: dict, vereditos: dict[int, str], raiz: Path) -> str | None:
     """Motivo pelo qual o candidato NÃO pode sair do balde 3; None = pode."""
     ls = bloco["linhas"]
@@ -119,7 +163,14 @@ def cmd_move(phase_dir: Path, nn: str, raiz: Path) -> int:
     if not uat.is_file():
         print(json.dumps({"movidos": [], "recusados": [], "motivo": "sem UAT.md"}))
         return 0
-    prefacio, blocos, rodape = _blocos(uat.read_text(encoding="utf-8"))
+    texto = uat.read_text(encoding="utf-8")
+    prefacio, blocos, rodape = _blocos(texto)
+    malformados = _malformados(texto, blocos)
+    if malformados:
+        print(json.dumps({"malformados": malformados,
+                          "motivo": "candidato(s) pos_ship malformado(s); nada foi movido"},
+                         ensure_ascii=False))
+        return 1
     vereditos = _vereditos(phase_dir)
     ficam, movidos, recusados = [], [], []
     for b in blocos:
@@ -163,6 +214,22 @@ def cmd_move(phase_dir: Path, nn: str, raiz: Path) -> int:
         "recusados": recusados,
         "restam_no_uat": len(ficam),
     }, ensure_ascii=False))
+    return 0
+
+
+def cmd_conferir(phase_dir: Path, nn: str, raiz: Path) -> int:
+    """FJ-F4RLR-06UAT: mesma checagem de `move`, nunca escreve — para rodar antes do cético."""
+    uat = phase_dir / f"{nn}-UAT.md"
+    if not uat.is_file():
+        print(json.dumps({"malformados": [], "motivo": "sem UAT.md"}))
+        return 0
+    texto = uat.read_text(encoding="utf-8")
+    _, blocos, _ = _blocos(texto)
+    malformados = _malformados(texto, blocos)
+    if malformados:
+        print(json.dumps({"malformados": malformados}, ensure_ascii=False))
+        return 1
+    print(json.dumps({"malformados": []}))
     return 0
 
 
@@ -223,13 +290,16 @@ def main(argv: list[str]) -> int:
     try:
         if argv[1] == "move" and len(argv) == 5:
             return cmd_move(Path(argv[2]), argv[3], Path(argv[4]))
+        if argv[1] == "conferir" and len(argv) == 5:
+            return cmd_conferir(Path(argv[2]), argv[3], Path(argv[4]))
         if argv[1] == "lista" and len(argv) == 4:
             return cmd_lista(Path(argv[2]), argv[3])
         if argv[1] == "gate" and len(argv) == 4:
             return cmd_gate(Path(argv[2]), argv[3])
     except IndexError:
         pass
-    print("uso: pos-ship.py move <phase_dir> <NN> <root> | lista <phase_dir> <NN> | gate <root> <fase>",
+    print("uso: pos-ship.py move <phase_dir> <NN> <root> | conferir <phase_dir> <NN> <root> "
+          "| lista <phase_dir> <NN> | gate <root> <fase>",
           file=sys.stderr)
     return 2
 
