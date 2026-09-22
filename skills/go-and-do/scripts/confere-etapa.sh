@@ -1248,8 +1248,15 @@ PYTARDIO
   jq -e . >/dev/null 2>&1 <<<"$TARDIOS" || TARDIOS='{"tardios":[],"rajadas":[]}'
   n_tard=$(jq '.tardios|length' <<<"$TARDIOS"); n_raj=$(jq '.rajadas|length' <<<"$TARDIOS")
   if [ "${n_tard:-0}" -gt 0 ] || [ "${n_raj:-0}" -gt 0 ]; then
-    RES=$(jq -c --arg d "incidente escrito fora da hora do fato: $(jq -r '(.tardios + .rajadas)|join(" · ")' <<<"$TARDIOS" | cut -c1-400)" \
-      '. + [{id:"incidente_tardio", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    # AVISO nesta release, por DECISÃO DO DONO (21/09): medido em modo seco, o assert
+    # reprova quase toda etapa das 3 fases reais (RLR F3/F4, inspired F24.5) — não por
+    # artefato da regra, mas porque a prática de escrever incidente no fecho é real e
+    # ainda não passou por uma fase com os prompts novos («incidente na hora», C1–C4).
+    # Fica DURA na release seguinte, depois de uma fase real com esses prompts.
+    # As duas metades (posterior ao `end` e rajada no mesmo segundo) foram rebaixadas
+    # juntas: o assert é um só e o dono nomeou o assert.
+    RES=$(jq -c --arg d "AVISO: incidente escrito fora da hora do fato: $(jq -r '(.tardios + .rajadas)|join(" · ")' <<<"$TARDIOS" | cut -c1-400)" \
+      '. + [{id:"incidente_tardio", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
   fi
   EXTRAI=$(jq -c --argjson t "$TARDIOS" '. + {incidente_tardio: $t}' <<<"$EXTRAI")
 fi
@@ -1268,14 +1275,45 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     | head -40; } || true )
   if [ -n "$SUJOS" ]; then
     n_sujos=$( { printf '%s\n' "$SUJOS" | grep -c . || true; } )
-    # AVISO, nao FALHA — e o plano manda PARAR e PERGUNTAR num caso assim (regra 6):
-    # a FM-06INT quer arvore limpa ao fim da etapa, mas o workflow.md roda o fiscal
-    # ANTES do commita-artefatos.sh (5.x linha 580, 6.3b linha 611). Como FALHA dura, o
-    # `NN-UAT.md` recem-escrito pelo proprio fiscal deixaria a etapa 5 em impasse: nao
-    # passa sem commit, nao commita sem passar. A lista sai igual; quem decide se isso
-    # vira gate duro (e em que ponto da ordem) e o dono.
-    RES=$(jq -c --arg d "AVISO: pasta da fase com $n_sujos arquivo(s) fora de commit na etapa $ETAPA (rode commita-artefatos.sh antes de fechar): $(printf '%s ' $SUJOS | cut -c1-350)" \
-      '. + [{id:"pasta_da_fase_suja", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+    # ── DECISÃO DO DONO (21/09), sobre a contradição medida pelo executor 1 ───────
+    # O `workflow.md` roda o fiscal ANTES do `commita-artefatos.sh`, então cobrar árvore
+    # limpa de TUDO deixaria a etapa em impasse (o `NN-UAT.md` que o próprio fiscal
+    # escreve sujaria a etapa 5; o run-log é reescrito por toda etapa antes de qualquer
+    # fiscal). O dono decidiu, sem inverter a ordem do workflow:
+    #   • FALHA DURA só para a EVIDÊNCIA DURA — `.intent/`, `pareceres/` e os atestados
+    #     (`.fence-*.ok`) —, que é o alvo real da FM-06INT (160 arquivos fora do git na
+    #     F4, incluindo os selos dos ciclos 2/3/4 e os vereditos);
+    #   • ISENTO o que a PRÓPRIA etapa produz: a etapa 1 é quem produz `.intent/` e
+    #     `pareceres/` (e ainda não os commitou quando o fiscal dela roda), e a etapa N é
+    #     quem produz o seu `.fence-N.ok` (gravado adiante, neste mesmo script);
+    #   • AVISO para todo o resto (`NN-UAT.md`, SUMMARY, run-log, …).
+    # Quem commita a evidência dura é `commita-artefatos.sh … evidencia` — uma fonte só.
+    DURA=""; RESTO=""
+    while IFS= read -r arq; do
+      [ -n "$arq" ] || continue
+      case "$arq" in
+        *"/.intent/"*|*"/pareceres/"*)
+          # produzidos pela etapa 1 → isentos NELA, duros das etapas 2 em diante
+          if [ "${ETAPA%% *}" = "1" ]; then RESTO="$RESTO $arq"; else DURA="$DURA $arq"; fi ;;
+        *"/.fence-"*".ok")
+          # o atestado da PRÓPRIA etapa é escrito adiante; os das etapas anteriores não
+          if [ "$arq" = "${arq%/.fence-${ETAPA%% *}.ok}" ]; then DURA="$DURA $arq"
+          else RESTO="$RESTO $arq"; fi ;;
+        *) RESTO="$RESTO $arq" ;;
+      esac
+    done <<<"$SUJOS"
+    if [ -n "$DURA" ]; then
+      n_dura=$( { printf '%s\n' $DURA | grep -c . || true; } )
+      RES=$(jq -c --arg d "evidência da fase fora de commit na etapa $ETAPA — $n_dura arquivo(s) de .intent/, pareceres/ ou atestado (rode: commita-artefatos.sh <fase> <NN> evidencia): $(printf '%s ' $DURA | cut -c1-350)" \
+        '. + [{id:"evidencia_fora_do_git", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
+    if [ -n "$RESTO" ]; then
+      n_resto=$( { printf '%s\n' $RESTO | grep -c . || true; } )
+      RES=$(jq -c --arg d "AVISO: pasta da fase com $n_resto arquivo(s) fora de commit na etapa $ETAPA (rode commita-artefatos.sh antes de fechar): $(printf '%s ' $RESTO | cut -c1-350)" \
+        '. + [{id:"pasta_da_fase_suja", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
+    fi
+    EXTRAI=$(jq -c --argjson n "${n_sujos:-0}" --arg du "$(printf '%s ' $DURA)" \
+      '. + {pasta_suja: {total:$n, evidencia_dura:($du|ltrimstr(" ")|rtrimstr(" "))}}' <<<"$EXTRAI")
   fi
 fi
 

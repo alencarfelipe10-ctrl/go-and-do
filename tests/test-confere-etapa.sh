@@ -574,8 +574,11 @@ RL="$PD/99-RUN-LOG.jsonl"
   rl_linha end       "1 intencao" 2000
   rl_linha incidente "1 intencao" 2500 "escrito no fecho, de memoria"; } > "$RL"
 J="$(confere "$R" 99)"
-eq "incidente depois do end da etapa → FALHA" "$(assert_de "$J" incidente_tardio)" "FALHA"
-casa "a falha diz quantos segundos depois" "$J" '\+500s do end'
+# DECISÃO DO DONO (21/09): AVISO nesta release, dura na seguinte — medido em modo seco,
+# o assert reprova quase toda etapa das 3 fases reais porque a prática de escrever
+# incidente no fecho é real e ainda não passou por uma fase com os prompts novos.
+eq "incidente depois do end da etapa → AVISO (dura na release seguinte)" "$(assert_de "$J" incidente_tardio)" "AVISO"
+casa "o aviso diz quantos segundos depois" "$J" '\+500s do end'
 
 # — incidente de OUTRA etapa não reprova esta (recorte medido em 21/09)
 IFS='|' read -r R PD <<<"$(monta tardio_outra 99)"
@@ -592,8 +595,9 @@ RL="$PD/99-RUN-LOG.jsonl"
 { rl_linha incidente "1 intencao" 1500 a; rl_linha incidente "1 intencao" 1500 b
   rl_linha incidente "1 intencao" 1500 c; } > "$RL"
 J="$(confere "$R" 99)"
-eq "3 incidentes no mesmo segundo → FALHA" "$(assert_de "$J" incidente_tardio)" "FALHA"
-casa "a falha nomeia a rajada" "$J" 'incidentes no mesmo segundo'
+# A rajada foi rebaixada junto: o assert é um só e o dono nomeou o assert.
+eq "3 incidentes no mesmo segundo → AVISO" "$(assert_de "$J" incidente_tardio)" "AVISO"
+casa "o aviso nomeia a rajada" "$J" 'incidentes no mesmo segundo'
 
 # — run-log sadio não acusa nada
 IFS='|' read -r R PD <<<"$(monta sadio 99)"
@@ -612,11 +616,35 @@ J="$(confere "$R" 99)"
 # AVISO, não FALHA: o workflow roda o fiscal ANTES do commita-artefatos.sh — como falha
 # dura a etapa 5 entraria em impasse. Contradição levada ao dono (regra 6 do plano).
 eq "arquivo novo na pasta da fase → AVISO" "$(assert_de "$J" pasta_da_fase_suja)" "AVISO"
-casa "a falha manda rodar o commita-artefatos" "$J" 'commita-artefatos\.sh'
+casa "o aviso manda rodar o commita-artefatos" "$J" 'commita-artefatos\.sh'
 rm -f "$PD/99-parecer-codex.md"
 echo x > "$PD/.intent/rascunho.tmp"; echo y > "$PD/saida.log"
 J="$(confere "$R" 99)"
 eq "só temporários (.tmp/.log) → sem aviso de pasta suja" "$(assert_de "$J" pasta_da_fase_suja)" "<ausente>"
+rm -f "$PD/.intent/rascunho.tmp" "$PD/saida.log"
+
+# — FM-06INT, DECISÃO DO DONO (21/09): falha dura SÓ para a evidência dura, e o que a
+#   própria etapa produz é isento. `.intent/` e `pareceres/` são produzidos pela etapa 1.
+echo "selo do ciclo 1" > "$PD/.intent/.correcoes-c1.aplicado"
+J="$(confere "$R" 99)"
+eq "etapa 1: .intent/ fora de commit é ISENTO (é ela quem produz) → só AVISO" \
+   "$(assert_de "$J" evidencia_fora_do_git)" "<ausente>"
+eq "…e aparece no aviso de pasta suja" "$(assert_de "$J" pasta_da_fase_suja)" "AVISO"
+J2="$(bash "$C" 3 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 3: .intent/ fora de commit → FALHA dura (evidencia_fora_do_git)" \
+   "$(assert_de "$J2" evidencia_fora_do_git)" "FALHA"
+casa "a falha dura nomeia o modo evidencia do commita-artefatos" "$J2" 'evidencia'
+rm -f "$PD/.intent/.correcoes-c1.aplicado"
+
+# — atestado: o `.fence-N.ok` da PRÓPRIA etapa é isento; o de outra etapa é duro
+echo ok > "$PD/.fence-1.ok"
+J="$(confere "$R" 99)"
+eq "atestado da própria etapa (.fence-1.ok na etapa 1) → isento" \
+   "$(assert_de "$J" evidencia_fora_do_git)" "<ausente>"
+J2="$(bash "$C" 3 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "atestado de OUTRA etapa fora de commit → FALHA dura" \
+   "$(assert_de "$J2" evidencia_fora_do_git)" "FALHA"
+rm -f "$PD/.fence-1.ok"
 
 # — FM-04GAT: o 4.1 lê o arquivo de MAIOR iteração e reprova all_fixed com skipped
 IFS='|' read -r R PD <<<"$(monta review 99)"

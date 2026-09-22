@@ -122,6 +122,35 @@ saida=$(cd "$D" && bash "$SCRIPT" "$D/fase" 99 intencao 2>&1); rc=$?
 git -C "$D" show --stat --format= HEAD | grep -q '99-SPEC.md' \
   && ok "commit leva só os artefatos existentes" || erro "SPEC não entrou" "$saida"
 
+echo "== F4RLR.A3 — modo evidencia leva a evidência dura e deixa o temporário de fora (FM-06INT)"
+D="$TMP/evid"; repo_de_mentira "$D"
+mkdir -p "$D/fase/.intent/runs/c1" "$D/fase/pareceres" "$D/.planning"
+echo selo   > "$D/fase/.intent/.correcoes-c1.aplicado"
+echo verd   > "$D/fase/.intent/.vereditos-c1.txt"
+echo esp    > "$D/fase/.intent/runs/c1/espelho-agy.json"
+echo ruido  > "$D/fase/.intent/agy.log"
+echo tmp    > "$D/fase/.intent/.tmp-parecer-agy.md"
+echo par    > "$D/fase/pareceres/99-planrev-parecer-codex-c1.md"
+echo ok     > "$D/fase/.fence-4.1.ok"
+echo '{}'   > "$D/fase/99-RUN-LOG.jsonl"
+echo div    > "$D/fase/deferred-items.md"
+echo dec    > "$D/fase/99-DECISOES.md"
+saida=$(cd "$D" && bash "$SCRIPT" "$D/fase" 99 evidencia 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "modo evidencia: exit 0" || erro "esperado exit 0, veio $rc" "$saida"
+vivos=$(git -C "$D" ls-files)
+faltou=""
+for esperado_f in \
+  'fase/.intent/.correcoes-c1.aplicado' 'fase/.intent/.vereditos-c1.txt' \
+  'fase/.intent/runs/c1/espelho-agy.json' 'fase/pareceres/99-planrev-parecer-codex-c1.md' \
+  'fase/.fence-4.1.ok' 'fase/99-RUN-LOG.jsonl' 'fase/deferred-items.md' 'fase/99-DECISOES.md'; do
+  printf '%s\n' "$vivos" | grep -qxF "$esperado_f" || faltou="$faltou $esperado_f"
+done
+[ -z "$faltou" ] && ok "selos, vereditos, espelhos, atestado, run-log, dívidas e decisões entraram" \
+  || erro "evidência dura ficou fora do commit" "faltou:$faltou"
+printf '%s\n' "$vivos" | grep -q 'tmp-parecer\|agy\.log' \
+  && erro "temporário (.tmp-parecer-*/.log) entrou na evidência" "$vivos" \
+  || ok "temporários (.tmp-parecer-*, .log) ficaram de fora"
+
 echo "== modo desconhecido segue reprovando"
 saida=$(cd "$D" && bash "$SCRIPT" "$D/fase" 99 xpto 2>&1); rc=$?
 [ "$rc" = 2 ] && printf '%s' "$saida" | grep -q 'uat|runlog|intencao' \
