@@ -2,6 +2,23 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.8.2] - 2026-09-22
+
+Migração dos hospedeiros para o Opus 5.5, lançado em 22/09/2026. Segundo a Anthropic, o 5.5 em
+effort medium iguala ou supera o Opus 5 em high, e a leitura de cache cai de US$ 0,50 para
+US$ 0,20 por milhão — a fatia que os hospedeiros mais pagam enquanto esperam os filhos.
+
+**⚠️ Exige sessão nova:** as defs dos agentes só são relidas na abertura da sessão do Claude Code.
+
+- **Os 7 hospedeiros `gad-*`** (`contratos`, `discuss`, `execute`, `gates`, `intent`, `plan`,
+  `spec`) saem de `claude-opus-5` para `claude-opus-5-5`. `gad-discuss` e `gad-spec` descem de
+  effort high para medium; os demais já eram medium. Cabeçalhos de `prompts/intent.md`,
+  `contratos.md` e `plan.md` atualizados.
+- **`scripts/precos.json`:** entrada própria `claude-opus-5-5` (US$ 4 / 20; escrita de cache
+  US$ 5 em 5 min e US$ 8 em 1 h; leitura US$ 0,20 = 0,05× o input). Sem ela, o casamento por
+  prefixo cairia em `claude-opus` e o ledger inflaria o custo do 5.5. Fast mode não é medido.
+  Conferido na página oficial de preços em 22/09/2026.
+
 ## [2.8.1] - 2026-09-22
 
 Bloco D da auditoria F4 rl-representation, liberado pela bancada do cache (bloco G, respondida
