@@ -242,6 +242,14 @@ eq "artefato mudou desde a geração → nao_medido" \
 casa "motivo declara a divergência de hash" \
    "$(campo "$J" '.t3[]|select(.artefato=="SPEC")|.motivo')" 'mudou desde a geração'
 
+# ══════ F4 RLR item 4: aprovado_com_ressalva fecha a etapa 1 (não reabre ao retomar)
+echo "── item 4: intent_review aprovado_com_ressalva ──"
+R="$(monta_proj p_ressalva)"; PD="$(monta_fase "$R" 99)"
+printf 'intent_review: aprovado_com_ressalva\n' > "$PD/99-INTENT-REVIEW.md"
+J="$(roda "$PD" 99)"
+eq "entrada: ja_pronto com aprovado_com_ressalva (não reabre a etapa 1)" \
+   "$(campo "$J" .entrada)" "ja_pronto"
+
 echo "--------------------------------------------------"
 echo "test-setup-intencao.sh: $OK ok / $FALHAS falha(s)"
 [ "$FALHAS" -eq 0 ]
