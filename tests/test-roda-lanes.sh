@@ -94,6 +94,29 @@ caso "espelho malformado + parecer íntegro" 'ESPELHO=MALFORMED|NONCE=sim' true 
 caso "parecer sem nonce, com conteúdo"     'NONCE=nao' true false true sem_prova_leitura
 caso "token do briefing devolvido"         'NONCE=sim' true true true ok
 
+# FM-F4RLR-11INT: evidencia PRESENTE e vazia (agy sem linha de modelo no log) → modelo_ok
+# false mesmo com degradado=false; evidencia AUSENTE (caso codex) não afirma nada.
+PD="$(monta_fase)"; CFG="$PD/cfg"; cfg "$CFG" codex "NONCE=sim" "EVIDENCIA_FIELD=sim" "EVIDENCIA="
+J="$(lanca "$PD" "$CFG")"; ST="$(jq -r '.status_paths[0]' <<<"$J")"; espera "$ST" 30
+eq "evidencia presente e vazia → modelo_ok=false" "$(campo "$ST" .modelo_ok)" false
+eq "evidencia presente e vazia → independent=false" "$(campo "$ST" .independent)" false
+
+PD="$(monta_fase)"; CFG="$PD/cfg"; cfg "$CFG" codex "NONCE=sim" "EVIDENCIA_FIELD=sim" 'EVIDENCIA="Propagating selected model override label=sonnet"'
+J="$(lanca "$PD" "$CFG")"; ST="$(jq -r '.status_paths[0]' <<<"$J")"; espera "$ST" 30
+eq "evidencia presente e não-vazia → modelo_ok=true" "$(campo "$ST" .modelo_ok)" true
+
+PD="$(monta_fase)"; CFG="$PD/cfg"; cfg "$CFG" codex "NONCE=sim"
+J="$(lanca "$PD" "$CFG")"; ST="$(jq -r '.status_paths[0]' <<<"$J")"; espera "$ST" 30
+eq "evidencia ausente (codex) → modelo_ok=true (não se afirma por omissão)" "$(campo "$ST" .modelo_ok)" true
+
+# FM-F4RLR-03CONV: o `parecer` do espelho aponta pro caminho DEFINITIVO, não pro tmp
+PD="$(monta_fase)"; CFG="$PD/cfg"; cfg "$CFG" codex "NONCE=sim"
+J="$(lanca "$PD" "$CFG")"; ST="$(jq -r '.status_paths[0]' <<<"$J")"; espera "$ST" 30
+ESPPATH="$(jq -r '.espelho' "$ST")"; PARPATH="$(jq -r '.parecer' "$ST")"
+APONTADO="$(jq -r '.parecer' "$ESPPATH" 2>/dev/null)"
+eq "espelho.parecer aponta pro caminho definitivo (não pro .tmp-)" "$APONTADO" "$PARPATH"
+eq "o caminho apontado existe de fato" "$([ -f "$APONTADO" ] && echo sim || echo nao)" sim
+
 # timeout do filho sem parecer válido: o dublê espera um marcador que NUNCA é criado
 PD="$(monta_fase)"; CFG="$PD/cfg"; cfg "$CFG" codex "WAIT_FOR=$PD/.nunca" "PARECER="
 J="$(GAD_LANE_TIMEOUT=1 lanca "$PD" "$CFG")"; ST="$(jq -r '.status_paths[0]' <<<"$J")"

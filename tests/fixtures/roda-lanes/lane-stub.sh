@@ -2,7 +2,9 @@
 # lane-stub.sh — dublê de `roda-<lane>.sh` para a bancada do roda-lanes.sh (E4).
 # Nunca chama Codex/agy de verdade. O comportamento vem de $STUB_CFG/<lane>.env
 # (sourced), com as chaves: SLEEP, RC, PARECER, ESPELHO, NONCE(sim|nao), NUL(sim|nao),
-# SUICIDA(sim|nao), NOLOG(sim|nao), FRESCO, DEGRADADO, STARTED, WAIT_FOR, CORPO.
+# SUICIDA(sim|nao), NOLOG(sim|nao), FRESCO, DEGRADADO, STARTED, WAIT_FOR, CORPO,
+# EVIDENCIA_FIELD(sim|nao) + EVIDENCIA (só entra no espelho se EVIDENCIA_FIELD=sim —
+# campo ausente ≠ campo presente-e-vazio, bancada da FM-F4RLR-11INT/03CONV).
 # Ausência de arquivo .env = parecer válido trivial.
 # Barreiras de arquivo (P15): STARTED=<arquivo> é criado assim que o dublê começa;
 # WAIT_FOR=<arquivo> segura o dublê até o arquivo existir (o teste cria quando quiser
@@ -20,6 +22,7 @@ while [ $# -gt 0 ]; do case "$1" in
 esac; done
 SLEEP=0; RC=0; PARECER="Parecer de bancada da lane $LANE."; ESPELHO="auto"
 NONCE=nao; NUL=nao; SUICIDA=nao; NOLOG=nao; STARTED=""; WAIT_FOR=""; CORPO=""
+EVIDENCIA_FIELD=nao; EVIDENCIA=""
 [ -n "${STUB_CFG:-}" ] && [ -f "$STUB_CFG/$LANE.env" ] && . "$STUB_CFG/$LANE.env"
 [ -n "$STARTED" ] && : > "$STARTED"
 if [ -n "$WAIT_FOR" ]; then while [ ! -e "$WAIT_FOR" ]; do sleep 0.05; done; fi
@@ -43,10 +46,12 @@ fi
 case "$ESPELHO" in
   NONE) : ;;
   MALFORMED) [ -n "$ESP" ] && printf '{ isto nao e json\n' > "$ESP" ;;
-  auto) [ -n "$ESP" ] && jq -cn --arg p "$OUT" --arg pl "$PROVA_OK" \
+  auto) [ -n "$ESP" ] && jq -cn --arg p "$OUT" --arg pl "$PROVA_OK" --arg ev "$EVIDENCIA" \
           --argjson v "$([ -s "$OUT" ] && echo false || echo true)" \
           --argjson f "${FRESCO:-true}" --argjson d "${DEGRADADO:-false}" \
-          '{parecer:$p, vazio:$v, fresco:$f, degradado:$d, prova_leitura:$pl, sinos:[]}' > "$ESP" ;;
+          --argjson tem_ev "$([ "$EVIDENCIA_FIELD" = sim ] && echo true || echo false)" \
+          '{parecer:$p, vazio:$v, fresco:$f, degradado:$d, prova_leitura:$pl, sinos:[]}
+           + (if $tem_ev then {evidencia:$ev} else {} end)' > "$ESP" ;;
   *) [ -n "$ESP" ] && printf '%s\n' "$ESPELHO" > "$ESP" ;;
 esac
 exit "$RC"

@@ -171,8 +171,18 @@ if [ "${1:-}" = "--supervisiona" ]; then
   [ -e "$TMP_P" ] && mv -f "$TMP_P" "$PARECER"
   [ -e "$TMP_E" ] && mv -f "$TMP_E" "$ESPELHO"
 
+  # FM-F4RLR-03CONV: o campo `parecer` do próprio espelho nasce apontando para o caminho
+  # TEMPORÁRIO ($TMP_P), que o passo (3) acabou de apagar com o `mv`. Corrigir para o
+  # caminho definitivo assim que ele existe — antes disso o espelho mente sobre onde o
+  # parecer mora (e um consumidor que confiasse nele acharia arquivo inexistente).
+  if [ -s "$ESPELHO" ] && jq -e 'has("parecer")' "$ESPELHO" >/dev/null 2>&1; then
+    jq --arg p "$PARECER" '.parecer = $p' "$ESPELHO" > "$ESPELHO.tmp2" 2>/dev/null \
+      && mv -f "$ESPELHO.tmp2" "$ESPELHO"
+  fi
+
   # ── (2) valida o espelho e lê os predicados dele ────────────────────────────
   MIRROR_VALID=false; ESP_VAZIO=""; ESP_FRESCO=""; ESP_DEGRADADO=""; ESP_PROVA=""; ESP_AUSENTE=""
+  ESP_TEM_EVIDENCIA=false; ESP_EVIDENCIA=""; ESP_PARECER_APONTADO=""
   if [ -s "$ESPELHO" ] && jq -e . "$ESPELHO" >/dev/null 2>&1; then
     ESP_AUSENTE="$(jq -r '.revisor_ausente // empty' "$ESPELHO" 2>/dev/null)"
     if [ -n "$ESP_AUSENTE" ]; then
@@ -183,6 +193,16 @@ if [ "${1:-}" = "--supervisiona" ]; then
       ESP_FRESCO="$(jq -r 'if has("fresco") then (.fresco|tostring) else "" end' "$ESPELHO")"
       ESP_DEGRADADO="$(jq -r 'if has("degradado") then (.degradado|tostring) else "" end' "$ESPELHO")"
       ESP_PROVA="$(jq -r '.prova_leitura // empty' "$ESPELHO")"
+      # FM-F4RLR-11INT/03CONV: `evidencia` só existe no espelho do agy. Campo AUSENTE
+      # (ex.: codex) não afirma nada sobre modelo; campo PRESENTE e vazio é falta real
+      # de evidência no log — modelo_ok não pode ficar `true` por omissão nesse caso.
+      ESP_TEM_EVIDENCIA="$(jq -r 'has("evidencia")' "$ESPELHO")"
+      ESP_EVIDENCIA="$(jq -r '.evidencia // empty' "$ESPELHO")"
+      # validação do espelho: o `parecer` que ele aponta precisa existir de fato.
+      ESP_PARECER_APONTADO="$(jq -r '.parecer // empty' "$ESPELHO")"
+      if [ -n "$ESP_PARECER_APONTADO" ] && [ ! -f "$ESP_PARECER_APONTADO" ]; then
+        MIRROR_VALID=false
+      fi
     fi
   fi
 
@@ -223,6 +243,9 @@ if [ "${1:-}" = "--supervisiona" ]; then
 
   MODELO_OK=true
   [ "$ESP_DEGRADADO" = true ] && MODELO_OK=false
+  # FM-F4RLR-11INT: campo `evidencia` presente e vazio (agy sem linha de modelo no log) →
+  # não se afirma modelo_ok por omissão, mesmo com degradado=false.
+  [ "$ESP_TEM_EVIDENCIA" = true ] && [ -z "$ESP_EVIDENCIA" ] && MODELO_OK=false
   # Sem espelho válido não há evidência de modelo — não se afirma independência.
   [ "$MIRROR_VALID" = false ] && MODELO_OK=false
 
