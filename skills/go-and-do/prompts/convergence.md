@@ -154,6 +154,13 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    Na F24.5 o host concluiu, só pela leitura do parecer, que o Antigravity citava 3
    caminhos inexistentes; os três existiam, e o briefing do ciclo 2 já tinha saído com a
    frase errada. Um `ls` bastava.
+3c. **Restrição atribuída ao dono exige o bloco `DECISAO-DO-DONO` citado (FJ-01CONV).**
+   Você só escreve "ordem do dono"/"decisão do dono" no briefing ou no `NN-REVIEWS.md` quando
+   ela vier com o bloco `DECISAO-DO-DONO` literal (canal + ts + pergunta + resposta_verbatim)
+   ao seu alcance. Sem esse bloco, a restrição é sua — do hospedeiro —, e você a apresenta como
+   tal (não terceirize um julgamento seu para o dono). Um plano-checker que receba dessa forma
+   duas rotas em aberto devolve as duas como decisão a subir, não como fato consumado (caso
+   real: iter-4.yaml W-04-1 fechou sob a premissa falsa de que já havia decisão do dono).
 4. **Critério de materialidade (julgamento seu — não recicle por tooling):** achado que
    não toca requisito, critério de aceite, segurança ou código de produção (tooling de
    smoke, encanamento de teste) não sustenta ciclo novo de replan+re-review. Rota: fix
@@ -212,6 +219,9 @@ harness" deveria escrever (F24.3: 40 min de espera vazia).
 ciclo anterior já incorporados no replan E verificados (plan-checker `VERIFICATION
 PASSED`), sem achado novo sustentável → isso É convergência (`convergiu` + sino do
 ciclo estagnado); senão → `escalou`.
+
+**Incidente se grava na hora, antes do `end` (FM-04PLAN).** O lote de incidentes tem de
+estar no run-log ANTES do evento que fecha a etapa — mesmo conserto do `prompts/plan.md`.
 </environment>
 
 <return_contract>

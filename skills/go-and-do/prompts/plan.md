@@ -79,6 +79,12 @@ run-log como `skip` **com o motivo no campo próprio** (10º argumento posiciona
 `run-log.sh`, não embutido na etapa):
 `run-log.sh <phase_dir> <NN> skip "2 planejamento (pattern-mapper)" "" "" "" "" "" "<motivo>"`.
 
+**0. A rodada termina antes do merge (FJ-01PLAN).** Passe ao planner, como restrição, o fato
+que hoje só a sessão principal conhece: esta rodada nunca chega ao merge dentro dela mesma.
+Tarefa que exige deploy em produção, janela real de horário, ou dado que só existe depois do
+merge não cabe nesta fase — vira fase de continuidade. Sinal de alerta (aviso, não bloqueio): o
+plano descreve uma pré-condição do tipo "em produção" ou "após o deploy".
+
 **3. Granularidade (2.G).** Matriz dependência×tamanho → `--granularity`:
 trabalho sequencial/pequeno → `coarse` (menos planos = menos despachos; nada perde —
 não paralelizaria mesmo) · fase grande e paralelizável → `standard`/`fine` (o
@@ -128,7 +134,13 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    Não devolva `done` com o script em `falha`: o `pre-despacho.sh 3` bloqueia e o custo volta
    para a camada 0. A premissa nasce do planner ler «arquivo gitignored» e concluir «sem
    worktree»; na F24.5 atravessou planner, 2 checkers, plan-gate e 4 pareceres.
-5. Devolva pelo `<return_contract>`. Falha de ponta a ponta → `blocked` com motivo.
+5. **Replan que move ou remove um plano (FM-03PLAN):** rode
+   `varre-mencoes.sh "<phase_dir>" "<id-do-plano-removido>"` e liste o que sobrou nos arquivos
+   vivos da fase — o planner corrige as menções órfãs, ou você registra em `sinos:` o que ficou.
+   **Ponteiros de linha (FJ-02PLAN):** depois do planner terminar, rode
+   `confere-ponteiros-plano.sh "<phase_dir>"` e devolva a lista dele ao planner (o script só
+   avisa — quem decide trocar `linhas X-Y` por símbolo é o planner, não você).
+6. Devolva pelo `<return_contract>`. Falha de ponta a ponta → `blocked` com motivo.
 </mission>
 
 <environment>
@@ -156,6 +168,10 @@ arquivo que "o harness" deveria criar (F24.3: 40 min de espera vazia).
 Depois decida pelo disco: artefato existe → siga; não existe → falha do passo.
 Saída vazia com exit 0 também é falha. E devolva sempre o bloco do contrato — prosa de
 espera no lugar do bloco é retorno inválido.
+
+**Incidente se grava na hora, antes do `end` (FM-04PLAN).** Todo desvio entra no run-log no
+turno em que acontece — o lote de incidentes tem de estar gravado ANTES do evento que fecha a
+etapa, senão a janela fechada não contém o que aconteceu nela de verdade.
 </environment>
 
 <return_contract>
