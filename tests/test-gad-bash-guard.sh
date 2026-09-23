@@ -273,5 +273,35 @@ r=$(chama "$RS --esperar --tag f24; nohup x &" true)
 r=$(chama "$RS --esperar --tag f24; sed -i s/a/b/ \$HOME/.claude/skills/go-and-do/scripts/confere-plano.sh" true)
 [ "$r" = deny ] && ok "bg + escrita no instrumento → o P-11 sobrevive à exceção do 47e" || bad "instrumento sob a exceção" "$r"
 
+echo "── 48(f) S-4: nega \`find /\` com caminho raiz; permite sub-caminho e caminho do projeto"
+for c in 'find /' 'find / ' 'find /  -maxdepth 3' 'find /*' 'find / -maxdepth 3 -type f' \
+         'echo x; find / -name y'; do
+  r=$(chama "$c"); [ "$r" = deny ] && ok "deny: $(printf '%q' "$c")" || bad "deny esperado: $(printf '%q' "$c")" "$r"
+done
+for c in 'find .' 'find /home/alencar/Projetos-Vox-AI/go-and-do' 'find /tmp/x -name y' \
+         'find /home' 'find /var/log' "grep -n 'find /' script.sh" 'echo "find /"'; do
+  r=$(chama "$c"); [ "$r" = allow ] && ok "allow: $(printf '%q' "$c")" || bad "allow esperado: $(printf '%q' "$c")" "$r"
+done
+resp=$(printf '{"session_id":"%s","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Bash","agent_type":"gsd-executor","agent_id":"a0","tool_input":{"command":"find / -maxdepth 3"}}' "$SESS" "$PROJ" | bash "$HOOK" 2>/dev/null)
+printf '%s' "$resp" | grep -q 'find <caminho absoluto do projeto>' \
+  && ok "razão do find / sugere caminho absoluto do projeto" || bad "razão do find /" "$resp"
+
+echo "── 48(m) S-12: mensagem do git_por_subprocess nomeia a rota alternativa"
+antes=$(n_inc)
+chama "uv run python -c \"import subprocess; subprocess.run(['git','add','-A'])\"" >/dev/null
+depois=$(n_inc)
+[ "$depois" = $((antes+1)) ] && ok "git por subprocess grava 1 incidente (inalterado)" || bad "contagem de incidente" "$antes → $depois"
+tail -n1 "$RL" | grep -q 'use `git` direto, nao via subprocess.run/Popen/os.system/sh -c' \
+  && ok "detalhe do incidente nomeia a rota alternativa (git direto, não subprocess/os.system/sh -c)" \
+  || bad "detalhe sem a rota alternativa" "$(tail -n1 "$RL")"
+tail -n1 "$RL" | grep -q '"motivo":"git_por_subprocess"' \
+  && ok "motivo continua git_por_subprocess (regex de detecção inalterada)" || bad "motivo mudou" "$(tail -n1 "$RL")"
+
+echo "── item 3 da lane: roda-lanes.sh --esperar em foreground passa pelo guard"
+r=$(chama '$HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh <dir> <NN> <C> --esperar codex')
+[ "$r" = allow ] && ok "allow: roda-lanes.sh --esperar (sem sleep/& no comando)" || bad "roda-lanes --esperar" "$r"
+r=$(chama 'bash $HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh /pd 24 1 --esperar codex')
+[ "$r" = allow ] && ok "allow: bash roda-lanes.sh --esperar (variante com args concretos)" || bad "roda-lanes --esperar (concreto)" "$r"
+
 echo; echo "resultado: $ok ok, $falhas falha(s)"
 [ "$falhas" -eq 0 ]
