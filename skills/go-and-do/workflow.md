@@ -305,8 +305,11 @@ classify the checkpoint:
 - `pre-despacho.sh 2.5` and obey `despacho`: `pular` (marker present) → Etapa 3 ·
   `skip_config` → declared degradation (`itens_nao_rodados`) and continue ·
   `bloqueio_sem_revisor` (exit 4 — PC-6: NO external reviewer installed, the phase does NOT
-  continue) → ⏸️ relay `pergunta_ao_dono` and stop · `ok` → dispatch (one absent = continue
-  with the other; the `revisores` field says which).
+  continue) → ⏸️ relay `pergunta_ao_dono` and stop ·
+  `bloqueio_plano_nao_resolvido` (exit 4 — S-11, tarefa 48l: some `NN-PLAN.md` still has
+  `autonomous: false`, so 2.4b did not finish) → go back to 2.4b for the plans listed in
+  `motivo`, never dispatch 2.5 with a plan still waiting on the owner · `ok` → dispatch (one
+  absent = continue with the other; the `revisores` field says which).
 - Dispatch the agent `gad-plan` (own def: Opus 5.5 medium, cache 1 h — EST-02, same wait
   profile as the 4.x gates) with `prompts/convergence.md`: it hosts
   `gsd-plan-review-convergence --codex --agy-revisor --max-cycles 3` (lanes via
@@ -768,7 +771,7 @@ opening the fence. Obey the exit code:
 - exit 3 — `stop`: context ceiling. The script already wrote the event, removed the pointer
   and returned the ready handoff → Sub-rotina D with reason `contexto em NNk`.
 - exit 4 — `bloqueio_sem_revisor` (2.5 only) or `bloqueio_paralelismo` (3 only): relay
-  `pergunta_ao_dono` and ⏸️ stop.
+  `pergunta_ao_dono` and ⏸️ stop. `bloqueio_plano_nao_resolvido` (2.5 only): back to 2.4b.
 - `status=unknown` in the JSON → continue, but state the `reason=` in one line (deliberate
   fail-open of MEASUREMENT — resumability covers it).
 
