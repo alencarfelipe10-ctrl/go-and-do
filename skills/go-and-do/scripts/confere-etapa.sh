@@ -326,6 +326,50 @@ while IFS= read -r x; do
   esac
 done < <(jq -c '.extrai[]?' "$MANIFEST")
 
+# ── etapa 2 (S-10, tarefa 48k): reconciliação mínima do corpo dos PLAN.md × contador
+# do plan shape gate §13a-bis (`.gad/last-plan-gate.json`, já extraído acima em `plan_gate`
+# pelo extrator genérico `json`). O §13a-bis roda DENTRO do plan-phase do fork (conta na
+# hora de gerar os planos); aqui é só a RECONCILIAÇÃO — reconta os `*-PLAN.md` que
+# sobraram no disco (planos, ondas distintas, largura da onda mais larga) e acusa
+# divergência como SINO (aviso — nunca reprova a etapa: um plano poderia ter sido
+# ajustado à mão depois do gate rodar, e não é este script que decide replanejar).
+# Sem `plan_gate` no EXTRAI (fase sem gate rodado — já vira `incidente` acima) não há o
+# que reconciliar: pulado, não pulado por decisão, é ausência de insumo.
+if [ "$ETAPA" = "2" ]; then
+  PG_VAL=$(jq -c '.plan_gate // null' <<<"$EXTRAI")
+  if [ "$PG_VAL" != null ] && [ "$(jq -r 'has("planos") and has("ondas") and has("largura_max")' <<<"$PG_VAL" 2>/dev/null)" = true ]; then
+    pg_planos=$(jq -r '.planos // 0' <<<"$PG_VAL")
+    pg_ondas=$(jq -r '.ondas // 0' <<<"$PG_VAL")
+    pg_largura=$(jq -r '.largura_max // 0' <<<"$PG_VAL")
+    corpo_planos=0
+    declare -A ONDAS_CORPO=()
+    for f in "$PHASE_DIR"/*-PLAN.md; do
+      [ -f "$f" ] || continue
+      corpo_planos=$((corpo_planos+1))
+      w=$(awk 'NR==1 && $0!="---"{exit 1} NR>1 && $0=="---"{exit 0} NR>1{print}' "$f" 2>/dev/null \
+          | sed -n 's/^wave:[[:space:]]*//p' | head -1 | tr -d '"'"'"' \r')
+      [ -n "$w" ] && ONDAS_CORPO["$w"]=$(( ${ONDAS_CORPO["$w"]:-0} + 1 ))
+    done
+    corpo_ondas=${#ONDAS_CORPO[@]}
+    corpo_largura=0
+    for w in "${!ONDAS_CORPO[@]}"; do
+      [ "${ONDAS_CORPO[$w]}" -gt "$corpo_largura" ] && corpo_largura=${ONDAS_CORPO[$w]}
+    done
+    DIVERG=""
+    [ "$corpo_planos" -ne "$pg_planos" ] && DIVERG="${DIVERG:+$DIVERG; }planos: corpo=$corpo_planos × §13a-bis=$pg_planos"
+    [ "$corpo_ondas" -ne "$pg_ondas" ] && DIVERG="${DIVERG:+$DIVERG; }ondas: corpo=$corpo_ondas × §13a-bis=$pg_ondas"
+    [ "$corpo_largura" -ne "$pg_largura" ] && DIVERG="${DIVERG:+$DIVERG; }largura_max: corpo=$corpo_largura × §13a-bis=$pg_largura"
+    if [ -n "$DIVERG" ]; then
+      RES=$(jq -c --arg d "S-10 (tarefa 48k): corpo dos PLAN.md diverge do contador do §13a-bis — $DIVERG (planos podem ter sido ajustados após o gate rodar)" \
+        '. + [{id:"plan_gate_reconciliacao", resultado:"aviso", detalhe:$d}]' <<<"$RES")
+    else
+      RES=$(jq -c \
+        '. + [{id:"plan_gate_reconciliacao", resultado:"ok", detalhe:"corpo dos PLAN.md bate com o contador do §13a-bis (planos/ondas/largura_max)"}]' \
+        <<<"$RES")
+    fi
+  fi
+fi
+
 # ── etapa 5 (UAT): pacote de mecanização 5.E — reconciliação, evidência, gaps,
 # predicado nativo, segredos; marcadores promovidos SÓ por este script (5.C) ──
 if [ "$ETAPA" = "5" ]; then

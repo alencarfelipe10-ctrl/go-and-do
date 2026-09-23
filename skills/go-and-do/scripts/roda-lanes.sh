@@ -14,6 +14,23 @@
 #                    custa um ciclo de revisor).
 #      roda-lanes.sh --supervisiona <lane> <run_dir> <phase_dir> <NN> <C> <briefing> <prova>
 #                    ^ modo INTERNO (o lançador se re-invoca); não chame à mão.
+#      roda-lanes.sh <phase_dir> <NN> <C> --esperar [<lane>] [--familia intencao|convergencia]
+#                    ^ E4/48(c): bloqueia (loop `until … sleep`, sancionado) até o(s)
+#                    `.status-c<C>-<lane>.json` do ciclo ATUAL existirem e terem o MESMO
+#                    `run_id` do ponteiro `.run-atual-c<C>` — um status de RUN ANTERIOR do
+#                    mesmo ciclo (sobreposição) não conta como pronto (mesma checagem que o
+#                    passo 0 do intent-verifica.md faz à mão). Sem `<lane>`, espera as lanes
+#                    do PRÓPRIO run atual (lidas de `runs/c<C>/<run_id>/supervisor-*.out`,
+#                    que nascem no lançamento — nunca `GAD_LANES_LANES`/"codex agy" fixo: uma
+#                    devolução P15 `--reformata codex` troca o run-atual para um que só tem
+#                    codex, e esperar as duas de sempre travaria 590 s pelo agy de um run que
+#                    não existe); com `<lane>` (codex|agy), espera só aquela — permite ao
+#                    verificador processar o parecer do Codex
+#                    enquanto ainda espera o agy (o overlap documentado no passo 0). Teto
+#                    `GAD_ESPERAR_TIMEOUT` (default e MÁXIMO 590 — a tool Bash mata em 600 s);
+#                    passo `GAD_ESPERAR_PASSO` (default 15 s). Imprime 1 linha JSON no fim.
+#                    Exit: 0 = pronto · 124 = timeout · 2 = uso errado (ponteiro do ciclo
+#                    ausente, ou argumento faltando).
 #
 # O que resolve: hoje `roda-codex.sh`/`roda-agy.sh` gravam em caminhos canônicos fixos
 # (`pareceres/NN-parecer-<lane>-c<C>.md`, `.roda-<lane>-c<C>.json`, `.log`, `.err`), então
@@ -115,6 +132,74 @@ lane_unlock() { rm -rf "${1:-}" 2>/dev/null || true; }
 # ═══════════════════════════════════════════════════════════════════════════════
 fam_base()   { case "$1" in convergencia) printf '%s/.convergencia' "$2" ;; *) printf '%s/.intent' "$2" ;; esac; }
 fam_prefixo(){ case "$1" in convergencia) printf 'planrev-' ;; *) printf '' ;; esac; }
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Modo ESPERAR (E4/48c) — espera sancionada do run ATUAL do ciclo, por lane ou por todas.
+# ═══════════════════════════════════════════════════════════════════════════════
+if [ "${4:-}" = "--esperar" ]; then
+  PD="${1:-}"; NN="${2:-}"; C="${3:-}"
+  shift 4
+  LANE_ESP=""; FAMILIA_ESP="intencao"
+  if [ $# -gt 0 ] && [ "${1#--}" = "$1" ]; then LANE_ESP="$1"; shift; fi
+  while [ $# -gt 0 ]; do case "$1" in
+    --familia) FAMILIA_ESP="${2:-}"; shift 2 ;;
+    *) echo "uso: roda-lanes.sh <phase_dir> <NN> <C> --esperar [<lane>] [--familia intencao|convergencia]" >&2; exit 2 ;;
+  esac; done
+  case "$FAMILIA_ESP" in intencao|convergencia) : ;; *)
+    echo "uso: --familia deve ser intencao|convergencia (recebido: '$FAMILIA_ESP')" >&2; exit 2 ;;
+  esac
+  [ -n "$PD" ] && [ -n "$NN" ] && [ -n "$C" ] \
+    || { echo "uso: roda-lanes.sh <phase_dir> <NN> <C> --esperar [<lane>] [--familia intencao|convergencia]" >&2; exit 2; }
+
+  INTENT_ESP="$(fam_base "$FAMILIA_ESP" "$PD")"
+  PONTEIRO_ESP="$INTENT_ESP/.run-atual-c$C"
+  [ -f "$PONTEIRO_ESP" ] \
+    || { echo "ERRO: nenhuma rodada de lanes lançada para o ciclo $C (ponteiro ausente: $PONTEIRO_ESP) — chame o lançador antes de esperar" >&2; exit 2; }
+  RUN_ATUAL="$(cat "$PONTEIRO_ESP" 2>/dev/null || true)"
+  [ -n "$RUN_ATUAL" ] || { echo "ERRO: ponteiro de ciclo vazio ($PONTEIRO_ESP)" >&2; exit 2; }
+
+  # Sem `<lane>`: deriva do PRÓPRIO run — não de GAD_LANES_LANES/"codex agy" fixo. Uma
+  # devolução (P15, `--reformata codex`) troca o `.run-atual-c<C>` para um run que só tem
+  # o codex; esperar as duas de sempre ficaria preso 590 s esperando o agy de um run que
+  # nunca existiu. `supervisor-<lane>.out` nasce por `nohup … >>arquivo` no MOMENTO do
+  # lançamento (antes de qualquer status) — é o inventário real e imediato do run.
+  RUN_DIR_ESP="$INTENT_ESP/runs/c$C/$RUN_ATUAL"
+  LANES_ESP="$LANE_ESP"
+  if [ -z "$LANES_ESP" ] && [ -d "$RUN_DIR_ESP" ]; then
+    for sf in "$RUN_DIR_ESP"/supervisor-*.out; do
+      [ -f "$sf" ] || continue
+      b=$(basename -- "$sf"); b=${b#supervisor-}; b=${b%.out}
+      LANES_ESP="${LANES_ESP:+$LANES_ESP }$b"
+    done
+  fi
+  LANES_ESP="${LANES_ESP:-${GAD_LANES_LANES:-codex agy}}"
+  TETO="${GAD_ESPERAR_TIMEOUT:-590}"
+  case "$TETO" in ''|*[!0-9]*) TETO=590 ;; esac
+  [ "$TETO" -gt 590 ] && TETO=590
+  PASSO="${GAD_ESPERAR_PASSO:-15}"
+  case "$PASSO" in ''|*[!0-9]*) PASSO=15 ;; esac
+
+  T0=$(date +%s)
+  for LN in $LANES_ESP; do
+    ALIAS_STATUS="$INTENT_ESP/.status-c$C-$LN.json"
+    # run_id tem de casar com o ponteiro ATUAL: um status de run anterior do mesmo ciclo
+    # (sobreposição, ver cabeçalho do lançador) não conta como pronto.
+    until [ -s "$ALIAS_STATUS" ] && [ "$(jq -r '.run_id // empty' "$ALIAS_STATUS" 2>/dev/null)" = "$RUN_ATUAL" ]; do
+      NOW=$(date +%s)
+      if [ $((NOW - T0)) -ge "$TETO" ]; then
+        jq -cn --arg lane "$LN" --arg run "$RUN_ATUAL" --argjson el "$((NOW - T0))" \
+          '{esperado:false, lane:$lane, run_id:$run, motivo:"timeout", elapsed_s:$el}'
+        exit 124
+      fi
+      sleep "$PASSO"
+    done
+  done
+  NOW=$(date +%s)
+  jq -cn --arg run "$RUN_ATUAL" --argjson el "$((NOW - T0))" \
+    --argjson lanes "$(printf '%s\n' $LANES_ESP | jq -R . | jq -cs .)" \
+    '{esperado:true, run_id:$run, lanes:$lanes, elapsed_s:$el}'
+  exit 0
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Modo SUPERVISOR (interno)

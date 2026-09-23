@@ -88,6 +88,31 @@ eq  "exit 0"                      "$EXIT" "0"
 eq  "usa o phase_dir do SDK"      "$(campo "$J" .rodada.phase_dir)" "$ROOT/.planning/phases/RLR-02-identidade"
 nao_casa "nada de -nova na saída" "$J" '\-nova'
 
+# ═══════════ caso 1b (48(l)/S-11): plano autonomous:false sem resolução → continuar-2.4b
+echo "── caso 1b (48(l)/S-11): plano autonomous:false sem resolução → etapa_2 = continuar-2.4b ──"
+PD1B="$ROOT/.planning/phases/RLR-02-identidade"
+printf -- '---\nphase: "RLR-02"\nplan: 01\nautonomous: false\n---\n\n# Plano\n' > "$PD1B/02-01-PLAN.md"
+fixture c1b "{\"phase_found\":true,\"phase_number\":\"RLR-02\",\"phase_name\":\"identidade\",
+  \"phase_dir\":\"$PD1B\",\"expected_phase_dir\":null,
+  \"padded_phase\":\"02\",\"planning_exists\":true,\"has_context\":true,\"has_plans\":true,
+  \"has_research\":false,\"has_reviews\":false,\"has_verification\":false,\"plan_count\":1}"
+roda 2
+eq "plano autonomous:false pendente → etapa_2=continuar-2.4b" "$(campo "$J" .etapa_2)" "continuar-2.4b"
+eq "nao_autonomos_pendentes lista o plano 01" "$(campo "$J" '.nao_autonomos_pendentes|join(",")')" "01"
+sed -i 's/autonomous: false/autonomous: true/' "$PD1B/02-01-PLAN.md"
+roda 2
+eq "resolvido (autonomous:true) → etapa_2 volta a pular" "$(campo "$J" .etapa_2)" "pular"
+eq "nao_autonomos_pendentes vazio quando resolvido" "$(campo "$J" '.nao_autonomos_pendentes|length')" "0"
+echo "── caso 1c (48(l)/S-11): fase já verificada nunca reabre 2.4b ──"
+sed -i 's/autonomous: true/autonomous: false/' "$PD1B/02-01-PLAN.md"
+fixture c1c "{\"phase_found\":true,\"phase_number\":\"RLR-02\",\"phase_name\":\"identidade\",
+  \"phase_dir\":\"$PD1B\",\"expected_phase_dir\":null,
+  \"padded_phase\":\"02\",\"planning_exists\":true,\"has_context\":true,\"has_plans\":true,
+  \"has_research\":false,\"has_reviews\":false,\"has_verification\":true,\"plan_count\":1}"
+roda 2
+eq "has_verification:true → etapa_2 pula mesmo com autonomous:false no disco" "$(campo "$J" .etapa_2)" "pular"
+rm -f "$PD1B/02-01-PLAN.md"
+
 # ═══════════════════════ caso 2: fase no ROADMAP sem pasta → expected_phase_dir
 echo "── caso 2: phase_dir vazio + expected_phase_dir (o bug do \$NN-nova) ──"
 fixture c2 "{\"phase_found\":true,\"phase_number\":\"3\",\"phase_name\":\"Deploy\",
