@@ -17,10 +17,15 @@ O despacho te entrega: `project_root` e `phase_dir` (absolutos), `NN`, o número
   do SPEC (ou o SPEC inteiro), o Anexo A do `NN-PRE-SPEC.md` quando existir, e o bloco
   `<decisions>` **original** do `NN-CONTEXT.md` recém-gerado;
 - **ciclo ≥ 1:** quando os `caminhos` do `.aplicado` incluem o SPEC, a lista
-  `D-NN-DESATUALIZADA c<C> …` que o `confere-reconciliacao.sh "<phase_dir>" <C>` emitiu
+  `D-NN-DESATUALIZADA c<C> …` que
+  `$HOME/.claude/skills/go-and-do/scripts/confere-reconciliacao.sh "<phase_dir>" <C>` emitiu
   (uma linha por decisão, o id `D-NN` como terceiro token).
 
-Comece todo bloco Bash com `cd "<project_root>"`. Os `caminhos` são relativos ao
+Comece todo bloco Bash com `cd "<project_root>"`. **Instrumento ausente** (script chamado
+sem existir no caminho absoluto, `command not found`) não é «pule e continue» — é
+`incidente` (`origem=intent-releitura`, `detalhe=instrumento ausente: <caminho>`) e trava:
+pare e devolva o objeto com `ok: false` e a falha em `observacao`, nunca contorne à mão o
+que o script faria. Os `caminhos` são relativos ao
 `project_root`.
 
 Você lê o que o ciclo **acabou de escrever nos artefatos** (SPEC, CONTEXT, INTENT-REVIEW e,
@@ -134,6 +139,20 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
    Achado factual que você tropeçar no caminho: **não** entra nas listas — no máximo uma
    linha em `observacao`. Achado verdadeiro sem vínculo ao Goal não vai ao lixo: vai ao
    registro de dívidas de quem te despachou (R1/R2), pela `observacao`.
+
+6b. **Rodada de correção (`c<C>b`, `c<C>c`, …) — escopo mais estreito (48a/E4).** Só a
+   PRIMEIRA rodada do ciclo (`c<C>`) roda os passos 2–5b inteiros sobre a emenda. A partir da
+   correção que promove tudo junto num lote só (bloqueante e documental, ver `intent.md`
+   passo 5), a rodada seguinte roda de novo **só os passos 2 (`contradiz`) e 3
+   (`prescreve_mecanismo`)**, sobre o diff DESSA correção — as duas categorias que ainda
+   podem abrir uma `c<C>c`. Devolva `omissoes_novas: []`, `cardinalidade: []` e
+   `unicidade: []` por contrato: não são re-derivados de novo, já foram fechados no lote da
+   correção anterior. Item documental que a PRÓPRIA correção reabrir (raro) não vai para
+   essas listas — uma linha em `observacao`, e quem te despachou registra como dívida em vez
+   de abrir outra rodada por causa dele. É o que fecha "uma releitura só" para o documental:
+   ele dispara no máximo UM `c<C>b`, nunca um `c<C>c`. `ok` continua `true` quando as cinco
+   listas exigidas pelo `v: 2` estão vazias — nesta rodada elas já chegam vazias por
+   contrato nas três documentais, então só `contradiz`/`prescreve_mecanismo` decidem `ok`.
 
 7. **Grave em disco, atomicamente, o objeto INTEIRO, JSON ANTES do marcador.** Você não
    tem `Write`: use Bash, com o tmp **no mesmo diretório** do destino (mesmo filesystem →

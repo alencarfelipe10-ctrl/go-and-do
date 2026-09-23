@@ -6,7 +6,10 @@
 O despacho te entrega `N`, `NN`, `project_root` e `phase_dir` (absolutos) e, quando há
 PRE-SPEC, `pre_spec_mode: structured|legacy` + o insumo correspondente. Traz ainda
 `licoes` (checklist). Comece todo bloco Bash com `cd "<project_root>"` e use caminhos
-absolutos em tudo.
+absolutos em tudo. **Instrumento ausente** (script chamado que não existe no caminho
+absoluto, `command not found`) não é «pule e continue» — é `incidente` (`origem=
+intent-discuss`, `detalhe=instrumento ausente: <caminho>`) e trava: devolva
+`estado: falha`/`blocked` com o motivo, nunca contorne à mão o que o script faria.
 
 ## Trabalho
 

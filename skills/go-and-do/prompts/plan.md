@@ -21,7 +21,10 @@ args-base (`N --tdd`; num fechamento de gaps a camada 0 manda `N --gaps` — nes
 PULE o `<julgamento>`: gaps re-planejam sobre pesquisa existente). Numa continuação,
 entrega a resposta do usuário. Comece todo bloco Bash com `cd "<project_root>"`.
 Precisa do SDK? `. $HOME/.claude/skills/go-and-do/scripts/lib/gsd-shim.sh` define
-`gsd_run`.
+`gsd_run`. **Instrumento ausente** (script chamado que não existe no caminho absoluto,
+`command not found`) não é «pule e continue» — é `incidente` (`origem=plan`,
+`detalhe=instrumento ausente: <caminho>`) e trava: devolva `estado: blocked` com o motivo,
+nunca contorne à mão o que o script faria.
 </inputs>
 
 <chegada>
@@ -102,6 +105,14 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    por `--reviews`), acrescente ao prompt do despacho a linha literal: «Não commite nada.
    O host commita ao fim do passo.» Na F24.5 os dois commitaram por conta própria, fora
    do fluxo, e o host perdeu o controle do que estava staged.
+   **Contrato do guard (48m/S-12) — as mesmas 3 linhas literais, sempre, no mesmo despacho:**
+   ```
+   O `gad-bash-guard.sh` nega `sleep N` cru, `&`/`setsid` e git por `subprocess`.
+   Para esperar: `until [ -e <arquivo> ]; do sleep 15; done`, ou `roda-suite.sh --esperar`/`roda-lanes.sh --esperar`.
+   Para commit: `git` direto — nunca `subprocess.run/Popen/os.system/sh -c`.
+   ```
+   Filho do GSD que roda Bash sem saber disso reinventa o waiter errado ou tenta contornar o
+   guard por engano — as 3 linhas custam nada e evitam os dois.
    **Fixture gitignored (achado F24.5, tarefa 44):** no mesmo despacho do `gsd-planner`,
    acrescente também a linha literal: «Arquivo gitignored que o worktree não vê
    (`initial-data/`, `other-files/` etc.) se resolve por `.planning/worktree-fixtures.txt` +
@@ -109,11 +120,23 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    dizendo que o plano roda sem worktree.» Sem essa linha o planner conclui sozinho, do
    "arquivo gitignored", a premissa stale — hoje só pega DEPOIS de escrita, pelo
    `confere-precondicoes.sh` do passo 4 abaixo.
+   **SPEC/CONTEXT grande demais para uma leitura só (48j/S-9):** quando o `pre-despacho.sh 2`
+   acusar `extras.sino_tamanho` (SPEC/CONTEXT acima do teto — `GAD_TETO_BRIEFING_KB`, default
+   60 KB — alarme, nunca muro), acrescente ao mesmo despacho do `gsd-phase-researcher`/
+   `gsd-planner` a linha literal: «`NN-SPEC.md`/`NN-CONTEXT.md` passa do teto de leitura —
+   leia em fatias (`sed -n` por faixa de linha) e confira a ÚLTIMA linha do arquivo contra o
+   tamanho declarado antes de dar por lido; leitura truncada pelo teto da tool é
+   indistinguível de leitura completa sem essa checagem.»
    Paradas herdadas são legítimas — decision-coverage gate,
    plan shape gate (§13a-bis: sobreposição de arquivos na onda, `files_modified` vazio,
    cadeia quase-serial), requirements-coverage gap, source-audit, phase-split
    recomendado, revision-loop stall: decisões de escopo/dimensionamento do usuário → `<environment>` (devolva
-   `needs_decision` mastigado).
+   `needs_decision` mastigado). **Lista fechada (48k/S-10): só estas.** Dono do RESEARCH
+   pós-pesquisa (o que fazer quando a pesquisa não resolve uma dúvida que o planner levanta)
+   é você — resolver por conta própria uma dessas paradas, em vez de levar ao usuário, é
+   incidente (`origem=plan pesquisa-pos`), mesmo já corrigido. O sino
+   `plan_gate_reconciliacao` (`confere-etapa.sh 2`, aviso — recontagem de `*-PLAN.md` no
+   disco × `plan_gate` do §13a-bis) é seu para relatar em `sinos:`, não para silenciar.
 3. **Trilha do plan-checker (2.B).** A cada retorno do checker dentro do comando,
    persista o bloco YAML de issues em `<phase_dir>/.plan-checker/iter-<i>.yaml`
    (crie a pasta; inclua status + contagem de blockers/warnings + iteração). Sem a
@@ -130,6 +153,13 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    Fidelidade acima de otimismo: comando terminou sem
    erro mas `has_plans` falso → devolva `done` com `veredito: sem_plano`, nunca
    sucesso vazio.
+   **`nao_autonomos` que você relatar não morre nesta rodada (48l/S-11).** Plano com
+   `autonomous: false` cuja pendência não vira `autonomous: true` no frontmatter (a marca de
+   resolução do 2.4b, `workflow.md`) fica pendente entre rodadas: a próxima abertura
+   (`abre-rodada.sh`) força a retomada em `continuar-2.4b` em vez de pular para a execução, e
+   o `pre-despacho.sh` recusa o gate 2.5 (`despacho: bloqueio_plano_nao_resolvido`, exit 4,
+   listando os planos) enquanto ele não virar. Não é seu papel resolver — é da camada 0 no
+   2.4b — só relatar `nao_autonomos` com fidelidade é o que faz a trava funcionar.
    **Precondições obsoletas (45l, F24.5):** no mesmo bloco, rode
    `bash $HOME/.claude/skills/go-and-do/scripts/confere-precondicoes.sh "<phase_dir>" "<project_root>"`.
    `veredito: falha` → **corrija você mesmo, agora, antes de devolver**: em cada PLAN.md listado em
@@ -141,12 +171,22 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    Não devolva `done` com o script em `falha`: o `pre-despacho.sh 3` bloqueia e o custo volta
    para a camada 0. A premissa nasce do planner ler «arquivo gitignored» e concluir «sem
    worktree»; na F24.5 atravessou planner, 2 checkers, plan-gate e 4 pareceres.
+   **Precondição declarada = precondição medida (48i/S-8).** `<precondition>` ou
+   `user_setup:` que um PLAN.md declara (`.env`, secret do GitHub, servidor MCP,
+   arquivo de credencial) não é prosa que você confere de olho: o `confere-user-setup.sh`
+   (novo) já roda no gate 2.5 (`pre-despacho.sh`, `extras.user_setup`, informativo — não
+   bloqueia sozinho) conferindo só EXISTÊNCIA, nunca valor. Você não precisa chamá-lo aqui;
+   só não declare uma precondição vaga demais para ele reconhecer (nome da env var, nome do
+   secret, ou menção explícita a "mcp" quando for servidor MCP) — é o que o conferente
+   procura.
 5. **Replan que move ou remove um plano (FM-03PLAN):** rode
-   `varre-mencoes.sh "<phase_dir>" "<id-do-plano-removido>"` e liste o que sobrou nos arquivos
-   vivos da fase — o planner corrige as menções órfãs, ou você registra em `sinos:` o que ficou.
+   `$HOME/.claude/skills/go-and-do/scripts/varre-mencoes.sh "<phase_dir>" "<id-do-plano-removido>"`
+   e liste o que sobrou nos arquivos vivos da fase — o planner corrige as menções órfãs, ou
+   você registra em `sinos:` o que ficou.
    **Ponteiros de linha (FJ-02PLAN):** depois do planner terminar, rode
-   `confere-ponteiros-plano.sh "<phase_dir>"` e devolva a lista dele ao planner (o script só
-   avisa — quem decide trocar `linhas X-Y` por símbolo é o planner, não você).
+   `$HOME/.claude/skills/go-and-do/scripts/confere-ponteiros-plano.sh "<phase_dir>"` e devolva
+   a lista dele ao planner (o script só avisa — quem decide trocar `linhas X-Y` por símbolo é
+   o planner, não você).
 6. Devolva pelo `<return_contract>`. Falha de ponta a ponta → `blocked` com motivo.
 </mission>
 
