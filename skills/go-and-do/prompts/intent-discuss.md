@@ -111,6 +111,22 @@ absolutos em tudo.
    dos achados sai `não_medido` — o coordenador não a reconstrói depois. Na onda 2 o
    `discuss-finalize.sh` assume esta gravação; até lá é sua.
 
+## Armadilha stale: worktree × arquivo gitignored (tarefa 44)
+
+Se `<project_root>/.planning/worktree-fixtures.txt` existir, a pergunta "este arquivo é
+gitignored, o worktree isolado não vai enxergá-lo" **já está resolvida** desde 27/07
+(`e031313a`): o passo 0 do `execute.md` copia cada caminho declarado nele para dentro do
+worktree antes de a tarefa começar. Não é gray area — é fato. Se o SPEC/RESEARCH
+reapresentar essa questão como se estivesse aberta, ou a opção recomendada de uma decisão
+levar a `isolation: none` no PLAN.md ou a uma precondition dizendo que o plano "roda SEM
+worktree", **não adote a opção como está**: aponte no CONTEXT que a resposta é
+`.planning/worktree-fixtures.txt` + passo 0 do `execute.md`, grave a decisão como tal
+(nunca com a premissa stale) e conte-a em `.sinos-discuss.txt` com o prefixo
+`armadilha_worktree_stale: <D-NN> — reescrita para apontar o fixtures`. Tratar o fato
+resolvido como decisão nova duplica trabalho que o `confere-precondicoes.sh` (etapa 2) e o
+`pre-despacho.sh` (etapa 3) já cobram depois — e na F24.5 a premissa stale atravessou
+planner, 2 checkers, plan-gate e 4 pareceres antes de alguém notar.
+
 ## Critério que não fecha
 
 Medição sua contra os dados reais que mostre um critério do SPEC insatisfazível ou já

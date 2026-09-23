@@ -102,6 +102,13 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    por `--reviews`), acrescente ao prompt do despacho a linha literal: «Não commite nada.
    O host commita ao fim do passo.» Na F24.5 os dois commitaram por conta própria, fora
    do fluxo, e o host perdeu o controle do que estava staged.
+   **Fixture gitignored (achado F24.5, tarefa 44):** no mesmo despacho do `gsd-planner`,
+   acrescente também a linha literal: «Arquivo gitignored que o worktree não vê
+   (`initial-data/`, `other-files/` etc.) se resolve por `.planning/worktree-fixtures.txt` +
+   passo 0 do `execute.md` — nunca declare `isolation: none` nem escreva precondition
+   dizendo que o plano roda sem worktree.» Sem essa linha o planner conclui sozinho, do
+   "arquivo gitignored", a premissa stale — hoje só pega DEPOIS de escrita, pelo
+   `confere-precondicoes.sh` do passo 4 abaixo.
    Paradas herdadas são legítimas — decision-coverage gate,
    plan shape gate (§13a-bis: sobreposição de arquivos na onda, `files_modified` vazio,
    cadeia quase-serial), requirements-coverage gap, source-audit, phase-split

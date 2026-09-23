@@ -174,6 +174,56 @@ for f in ${FORA[@]+"${FORA[@]}"}; do
   [ "$d" = 1 ] || FORA_NAO_DECL+=("$f")
 done
 
+# ── ISOLATION-NONE (tarefa 44, achado F24.5 09/09) — informativo ──────────────
+# `isolation: none` no frontmatter é premissa stale quando o projeto já resolve fixture
+# gitignored por dentro do worktree (`.planning/worktree-fixtures.txt`, copiado pelo passo 0
+# do execute.md desde 27/07, e031313a). O confere-precondicoes.sh já REPROVA isso no
+# pré-despacho, antes de a onda rodar; aqui, no fecho da etapa 3, é uma segunda fiscalização
+# (o plano já chegou ao commit com a premissa — pré-despacho pulado, ou PLAN.md editado
+# depois dele). Sino, não reprovação: mesmo padrão advisory do plan-gate.py do fork
+# (ARQUIVO-HUB, LARGURA-MAXIMA-1) — o dado já chegou tarde demais para bloquear a etapa 3
+# sem custo, e cabe ao dono decidir se o host serializou de fato.
+# Junto do sino, a razão EFETIVA: quantas ondas rodariam se o host honrasse a prosa "sem
+# worktree" e serializasse a onda inteira. Toda onda de N>1 planos com pelo menos um
+# isolation:none vira N ondas seriais (caso real F24.5: 5 ondas declaradas, ondas 2 e 5 de
+# 2 planos cada afetadas → 7 ondas efetivas, razão 0,78 — invisível à razão declarada).
+if [ -s "$ROOT/.planning/worktree-fixtures.txt" ] \
+   && awk 'NR==1 && $0!="---"{exit 1} NR>1 && $0=="---"{exit 0} NR>1{print}' "$PLAN_F" 2>/dev/null \
+      | grep -qiE '^isolation:[[:space:]]*none[[:space:]]*$'; then
+  declare -A _ONDA_N=() _ONDA_ISO=()
+  N_PLANOS_FASE=0
+  for f in "$PHASE_DIR"/*-PLAN.md; do
+    [ -f "$f" ] || continue
+    N_PLANOS_FASE=$((N_PLANOS_FASE+1))
+    w=$(awk '
+      NR==1 && $0=="---" { fm=1; next }
+      fm && $0=="---" { exit }
+      fm && $0 ~ "^wave:" { s=$0; sub("^wave:[ \t]*", "", s); gsub(/^["'\'']|["'\'']$/, "", s); sub(/[ \t]+#.*$/, "", s); print s; exit }
+    ' "$f")
+    [ -n "$w" ] || continue
+    _ONDA_N["$w"]=$(( ${_ONDA_N["$w"]:-0} + 1 ))
+    if awk 'NR==1 && $0!="---"{exit 1} NR>1 && $0=="---"{exit 0} NR>1{print}' "$f" 2>/dev/null \
+       | grep -qiE '^isolation:[[:space:]]*none[[:space:]]*$'; then
+      _ONDA_ISO["$w"]=1
+    fi
+  done
+  N_ONDAS_DECL=${#_ONDA_N[@]}
+  N_ONDAS_EFET=$N_ONDAS_DECL
+  for w in "${!_ONDA_N[@]}"; do
+    cnt=${_ONDA_N["$w"]}
+    if [ "${_ONDA_ISO[$w]:-0}" = 1 ] && [ "$cnt" -gt 1 ]; then
+      N_ONDAS_EFET=$((N_ONDAS_EFET + cnt - 1))
+    fi
+  done
+  if [ "$N_PLANOS_FASE" -gt 0 ] && [ "$N_ONDAS_DECL" -gt 0 ]; then
+    RAZAO_DECL=$(LC_NUMERIC=C awk -v a="$N_ONDAS_DECL" -v b="$N_PLANOS_FASE" 'BEGIN{printf "%.2f", a/b}')
+    RAZAO_EFET=$(LC_NUMERIC=C awk -v a="$N_ONDAS_EFET" -v b="$N_PLANOS_FASE" 'BEGIN{printf "%.2f", a/b}')
+    INFORMATIVOS+=("ISOLATION-NONE ($PLAN declara isolation: none com worktree-fixtures.txt presente; ondas declaradas $N_ONDAS_DECL/$N_PLANOS_FASE=$RAZAO_DECL, efetivas se a prosa for honrada $N_ONDAS_EFET/$N_PLANOS_FASE=$RAZAO_EFET)")
+  else
+    INFORMATIVOS+=("ISOLATION-NONE ($PLAN declara isolation: none com worktree-fixtures.txt presente; sem wave: no frontmatter dos planos da fase para calcular a razão efetiva)")
+  fi
+fi
+
 # ── veredito ──────────────────────────────────────────────────────────────────
 CODIGOS=()
 [ ${#PERMITIDOS[@]} -gt 0 ] || CODIGOS+=("LISTA-VAZIA")
