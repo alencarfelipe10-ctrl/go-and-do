@@ -188,10 +188,13 @@ AGN="${AG%% *}"   # nome puro do agente/alvo (o AG do SendMessage pode vir com s
 # tem checkpoint aberto" é de fato um bug a corrigir — o retorno usa o checkpoint real.
 case "$AGN" in
   gad-intent)  ET_TIPO="1 intencao" ;;
-  gad-plan)    ET_TIPO="2 planejamento" ;;
+  # gad-plan passou a hospedar a etapa 2 E a 2.5 (convergência) na v2.9.0: não há etapa
+  # única a corrigir — igual ao gad-gates, fica com o checkpoint real (senão um despacho
+  # legítimo com checkpoint "2.5 convergencia" seria reescrito para "2 planejamento",
+  # corrompendo a medição do host da 2.5).
   gad-execute) ET_TIPO="3 construcao" ;;
-  # gad-gates serve a etapa 4 (4.1/4.1b/4.4/4.5) E a rota A do close (6): não há etapa única
-  # a corrigir — fica com o checkpoint real, como qualquer agente sem mapa.
+  # gad-gates serve a etapa 4 (4.1/4.1b/4.4/4.5) E a rota A do close (6); gad-plan serve a
+  # 2 e a 2.5: nenhum dos dois tem etapa única a corrigir — não há mapa aqui.
   *)           ET_TIPO="" ;;
 esac
 ET_CORRIGIDA=0
@@ -420,9 +423,26 @@ fi
 
 # ET (etapa da janela aberta) já foi calculada antes dos gates.
 
+# FM-05UAT (dedup do "único terminou"): o SubagentStop pode disparar mais de uma vez para
+# o MESMO agente — quando o filho é "acordado" de novo por SendMessage (retomada) depois de
+# um stop de turno que o CC emite sem o agente estar de fato morto (PROVADO 10/09: filho
+# aninhado que encerra o turno com filho vivo é acordado pela task-notification). Duas
+# linhas `fim_real:true` para o mesmo `agent_id` contam a MESMA finalização em dobro na
+# auditoria (confere-etapa.sh 3, que fecha despacho só com fim_real:true). Chave = agent_id
+# (vem direto do payload do SubagentStop, estável entre disparos do MESMO agente — tool_use_id
+# e seq mudam a cada chamada). Só o PRIMEIRO fim_real:true de um agent_id vale; os seguintes
+# viram fim_real:false + duplicado_de:<seq da linha original>.
+DUP_SEQ=""
+if [ "$FIM_REAL" = 1 ] && [ -n "$AGID" ] && [ -f "$RL" ]; then
+  DUP_SEQ=$(grep -F "\"agent_id\":\"$AGID\"" "$RL" 2>/dev/null \
+    | grep -F '"evento":"retorno"' | grep -F '"fim_real":true' | tail -n1 \
+    | sed -n 's/.*"seq":\([0-9]*\).*/\1/p')
+  [ -n "$DUP_SEQ" ] && FIM_REAL=0
+fi
+
 # fim_real: false no retorno do PostToolUse (retorno da CHAMADA, que é imediata com Agent
-# assíncrono); true no SubagentStop. Quem mede paralelismo (confere-etapa.sh 3) só fecha
-# despacho com fim_real:true.
+# assíncrono); true no SubagentStop (exceto o duplicado acima, rebaixado). Quem mede
+# paralelismo (confere-etapa.sh 3) só fecha despacho com fim_real:true.
 FR_KV=""
 if [ "$TIPO" = retorno ]; then
   if [ "$FIM_REAL" = 1 ]; then FR_KV="--kv fim_real=true"; else FR_KV="--kv fim_real=false"; fi
@@ -435,6 +455,7 @@ bash "$RUNLOG_SH" "$PD" "$NN" "$TIPO" "$ET" \
   $([ "$RETOMADA" = 1 ] && echo '--kv retomada=true') \
   $([ "$HERDADO" = 1 ] && echo '--kv modelo_herdado=true') \
   $([ "$ET_CORRIGIDA" = 1 ] && printf -- '--kv etapa_corrigida=true --kv etapa_checkpoint=%s' "$(printf '%s' "$ET_ANTERIOR" | tr ' ' '_')") \
-  ${DESC:+--kv descricao="$DESC"} ${ISOL:+--kv isolation="$ISOL"} >/dev/null 2>&1
+  ${DESC:+--kv descricao="$DESC"} ${ISOL:+--kv isolation="$ISOL"} \
+  ${DUP_SEQ:+--kv duplicado_de="$DUP_SEQ"} >/dev/null 2>&1
 
 exit 0
