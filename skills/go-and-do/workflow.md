@@ -78,7 +78,7 @@ gate (`pre-despacho.sh`) before it.
 | 1 | intent: spec + discuss + specialist consultancy | 🔒 ⏭️ agent `gad-intent` + `prompts/intent.md` |
 | 1.5 | design contracts | 🎌 `setup-contratos.sh` → agent `gad-contratos` + `prompts/contratos.md` |
 | 2 | planning | 🔒 ⏭️ agent `gad-plan` + `prompts/plan.md`; 2.4b resolves `autonomous: false` |
-| 2.5 | plan convergence | 🔒 ⏭️ subagent + `prompts/convergence.md` (PC-6 fail-closed) |
+| 2.5 | plan convergence | 🔒 ⏭️ agent `gad-plan` + `prompts/convergence.md` (PC-6 fail-closed) |
 | 3 | build | 🔒 3.2 parallelism authority → `gad-execute` + `prompts/execute.md` → 3.4 crossroads → 3.5 gaps 1× |
 | 4 | quality gates | 🔒 ⏭️ per gate: code-review · 🎌 ui-review · 🎌 eval-review · secure (only blocking gate) · validate |
 | 5 | automated interactive UAT | resume by `NN-UAT.md` state; generate → run (Sonnet + `uat-playbook.md`) → 1 fix cycle |
@@ -307,7 +307,8 @@ classify the checkpoint:
   `bloqueio_sem_revisor` (exit 4 — PC-6: NO external reviewer installed, the phase does NOT
   continue) → ⏸️ relay `pergunta_ao_dono` and stop · `ok` → dispatch (one absent = continue
   with the other; the `revisores` field says which).
-- Dispatch via Sub-rotina H with `prompts/convergence.md`: the subagent hosts
+- Dispatch the agent `gad-plan` (own def: Opus 5.5 medium, cache 1 h — EST-02, same wait
+  profile as the 4.x gates) with `prompts/convergence.md`: it hosts
   `gsd-plan-review-convergence --codex --agy-revisor --max-cycles 3` (lanes via
   `roda-codex.sh`/`roda-agy.sh`), registers cycles (`registra-ciclo.sh`) and writes the marker
   (`grava-convergence.sh`).
@@ -975,8 +976,8 @@ layer-0 window is the scarcest resource.
 
 Dispatch. A stage whose block says to dispatch runs in a `general-purpose` subagent (inherited
 model, unless the block pins one). Stages with a def of their own (`gad-intent`, `gad-contratos`,
-`gad-plan`, `gad-execute`, and `gad-gates` for 4.1/4.1b/4.4/4.5 and the close's route A) are
-dispatched by that `subagent_type`, never as `general-purpose`, and
+`gad-plan` for 2 and 2.5, `gad-execute`, and `gad-gates` for 4.1/4.1b/4.4/4.5 and the close's
+route A) are dispatched by that `subagent_type`, never as `general-purpose`, and
 never with `model`/`effort` in the call. Always synchronous: explicit `run_in_background: false` —
 a background dispatch breaks the flow (the notification does not resume the script). The
 dispatch prompt is minimal; the instructions live in `prompts/<etapa>.md`, which the SUBAGENT
