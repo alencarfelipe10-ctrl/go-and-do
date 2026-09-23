@@ -60,6 +60,100 @@ remoto_sem_head() { # <root> — origin apontando para um bare sem HEAD resolví
   git -C "$1" symbolic-ref -d refs/remotes/origin/HEAD >/dev/null 2>&1 || true
 }
 
+monta25() { # <nome> <autonomo:true|false> [<autonomo2>] → root|phase_dir (etapa 2.5)
+  local root="$BASE/$1" pd
+  mkdir -p "$root/.planning/phases"
+  git init -q "$root" >/dev/null 2>&1
+  git -C "$root" -c user.name=t -c user.email=t@t commit -q --allow-empty -m base >/dev/null 2>&1
+  printf '{}\n' > "$root/.planning/config.json"
+  pd="$root/.planning/phases/99-bancada"; mkdir -p "$pd"
+  printf -- '---\nphase: "99"\nplan: 01\ntype: execute\nwave: 1\nautonomous: %s\n---\n\n# Plano\n' "$2" > "$pd/99-01-PLAN.md"
+  if [ -n "${3:-}" ]; then
+    printf -- '---\nphase: "99"\nplan: 02\ntype: execute\nwave: 1\nautonomous: %s\n---\n\n# Plano\n' "$3" > "$pd/99-02-PLAN.md"
+  fi
+  jq -cn --arg pd "$pd" --arg rl "$pd/99-RUN-LOG.jsonl" \
+    '{session_id:"bancada", fase:"99", nn:"99", phase_dir:$pd, runlog:$rl, args:{ui:false,ai:false,no_ship:false,vault:false,obs:""}}' \
+    > "$root/.planning/.gad-rodada-ativa.json"
+  printf '%s|%s' "$root" "$pd"
+}
+roda25() { # <root> [flags] → J (última linha) e RC
+  local root="$1"; shift
+  J=$(cd "$root" && bash "$P" 2.5 --projeto "$root" "$@" 2>/dev/null | tail -1); RC=${PIPESTATUS[0]}
+  RC=$(cd "$root" && bash "$P" 2.5 --projeto "$root" "$@" >/dev/null 2>&1; echo $?)
+}
+
+echo "── S-11 (tarefa 48l): pre-despacho.sh 2.5 trava com plano autonomous:false ──"
+IFS='|' read -r R PD <<<"$(monta25 s11_bloqueia false)"
+roda25 "$R" --dry-run
+eq "autonomous:false pendente → exit 4"             "$RC" "4"
+eq "…despacho bloqueio_plano_nao_resolvido"          "$(jq -r .despacho <<<"$J")" "bloqueio_plano_nao_resolvido"
+casa "…motivo cita o plano 01"                       "$(jq -r .motivo <<<"$J")" '\b01\b'
+casa "…pergunta ao dono orienta o 2.4b"              "$(jq -r .pergunta_ao_dono <<<"$J")" 'autonomous: true'
+
+IFS='|' read -r R PD <<<"$(monta25 s11_lista_dois false false)"
+roda25 "$R" --dry-run
+casa "dois planos pendentes → motivo lista os dois"  "$(jq -r .motivo <<<"$J")" '01,02'
+
+IFS='|' read -r R PD <<<"$(monta25 s11_ok true)"
+roda25 "$R" --dry-run
+D25=$(jq -r .despacho <<<"$J")
+if [ "$D25" != "bloqueio_plano_nao_resolvido" ]; then ok "todos autonomous:true → não bloqueia por 2.4b (despacho=$D25)"
+else falha "todos autonomous:true → não bloqueia por 2.4b" "despacho=$D25"; fi
+
+IFS='|' read -r R PD <<<"$(monta25 s11_runlog false)"
+roda25 "$R"
+casa "…fora do dry-run grava o evento script exit=4 no run-log" "$(tail -n1 "$PD/99-RUN-LOG.jsonl")" '"evento":"script".*"exit":4'
+
+echo "── S-8 (tarefa 48i): confere-user-setup.sh acoplado ao gate 2.5 (informativo) ──"
+IFS='|' read -r R PD <<<"$(monta25 s8_sem_setup true)"
+roda25 "$R" --dry-run
+eq "sem user_setup declarado → extras.user_setup.veredito nao_se_aplica" \
+  "$(jq -r '.user_setup.veredito' <<<"$J")" "nao_se_aplica"
+
+IFS='|' read -r R PD <<<"$(monta25 s8_pendente true)"
+sed -i '/^autonomous: true$/i user_setup:\n  - service: stripe\n    env_vars:\n      - name: STRIPE_SECRET_KEY' "$PD/99-01-PLAN.md"
+roda25 "$R" --dry-run
+eq "user_setup pendente (sem .env) → extras.user_setup.veredito falha, mas despacho segue ok" \
+  "$(jq -r '.user_setup.veredito' <<<"$J")" "falha"
+eq "…e o despacho da 2.5 NÃO é bloqueado por isso (informativo)" "$(jq -r .despacho <<<"$J")" "ok"
+
+echo "── S-9 (tarefa 48j): sino de tamanho no pre-despacho.sh 2 (SPEC/CONTEXT grandes) ──"
+roda2() { # <root> [flags] → J (última linha) e RC (etapa 2, reusa monta25)
+  local root="$1"; shift
+  J=$(cd "$root" && bash "$P" 2 --projeto "$root" "$@" 2>/dev/null | tail -1); RC=${PIPESTATUS[0]}
+  RC=$(cd "$root" && bash "$P" 2 --projeto "$root" "$@" >/dev/null 2>&1; echo $?)
+}
+IFS='|' read -r R PD <<<"$(monta25 s9_pequeno true)"
+printf 'SPEC pequena\n' > "$PD/99-SPEC.md"
+roda2 "$R" --dry-run
+eq "SPEC pequena → sem sino_tamanho" "$(jq -r 'has("sino_tamanho")' <<<"$J")" "false"
+
+IFS='|' read -r R PD <<<"$(monta25 s9_spec_grande true)"
+python3 -c "open('$PD/99-SPEC.md','w').write('x'*70000)"
+roda2 "$R" --dry-run
+eq "exit 0 (alarme, não muro)" "$RC" "0"
+eq "despacho continua ok" "$(jq -r .despacho <<<"$J")" "ok"
+casa "sino_tamanho nomeia o arquivo e o teto de 60 KB" "$(jq -r .sino_tamanho <<<"$J")" '99-SPEC\.md.*~69 KB.*teto de leitura \(60 KB\)'
+
+IFS='|' read -r R PD <<<"$(monta25 s9_context_grande true)"
+python3 -c "open('$PD/99-CONTEXT.md','w').write('y'*65000)"
+roda2 "$R" --dry-run
+casa "CONTEXT grande também soa o sino" "$(jq -r .sino_tamanho <<<"$J")" '99-CONTEXT\.md'
+
+IFS='|' read -r R PD <<<"$(monta25 s9_teto_custom true)"
+printf 'SPEC de 20000 bytes\n' > "$PD/99-SPEC.md"
+python3 -c "open('$PD/99-SPEC.md','a').write('z'*20000)"
+roda2 "$R" --dry-run
+eq "abaixo do teto default → sem sino" "$(jq -r 'has("sino_tamanho")' <<<"$J")" "false"
+J=$(cd "$R" && GAD_TETO_BRIEFING_KB=10 bash "$P" 2 --projeto "$R" --dry-run 2>/dev/null | tail -1)
+casa "GAD_TETO_BRIEFING_KB=10 aperta o teto → o mesmo arquivo agora soa o sino" "$(jq -r .sino_tamanho <<<"$J")" '99-SPEC\.md.*teto de leitura \(10 KB\)'
+
+IFS='|' read -r R PD <<<"$(monta25 s9_ambos_grandes true)"
+python3 -c "open('$PD/99-SPEC.md','w').write('x'*70000)"
+python3 -c "open('$PD/99-CONTEXT.md','w').write('y'*70000)"
+roda2 "$R" --dry-run
+casa "os dois grandes → sino nomeia os dois, separados por ; " "$(jq -r .sino_tamanho <<<"$J")" '99-SPEC\.md.*; .*99-CONTEXT\.md'
+
 echo "── config nega o paralelismo ──"
 IFS='|' read -r R PD <<<"$(monta cfg_uw 2)"
 cfg "$R" '.workflow.use_worktrees=false'

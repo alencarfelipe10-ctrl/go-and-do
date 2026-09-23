@@ -224,6 +224,43 @@ printf -- '# Summary\n' > "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"
 roda "$R"
 eq "sem CONTEXT → n/a (o filtro de informational precisa dele)" "$(campo '.decisoes.estado')" "n/a"
 
+echo "== (p) tarefa 44: ISOLATION-NONE + razão efetiva — sem worktree-fixtures.txt → nada"
+plano_onda() { # <root> <id> <wave> <isolation-line|-> → escreve 7-<id>-PLAN.md em 7-bancada
+  local r="$1" id="$2" w="$3" iso="$4"
+  { printf -- '---\nphase: "7"\nplan: "%s"\nwave: %s\n' "$id" "$w"
+    [ "$iso" != - ] && printf '%s\n' "$iso"
+    printf 'files_modified:\n  - src/%s.py\nautonomous: true\n---\n<task type="auto">a</task>\n' "$id"
+  } > "$r/.planning/phases/7-bancada/7-$id-PLAN.md"
+}
+roda_id() { # <root> <plan_id> → variante de roda() para plano != 7-01
+  saida=$(bash "$SCRIPT" "$1/.planning/phases/7-bancada" "$2" 2>/dev/null); rc=$?
+  saida=$(printf '%s' "$saida" | tail -1)
+}
+R=$(repo p)
+plano_onda "$R" 01 1 -
+plano_onda "$R" 02 2 'isolation: none'
+plano_onda "$R" 03 2 'isolation: none'
+plano_onda "$R" 04 2 -
+git -C "$R" add -A; git -C "$R" commit -qm 'docs(7): planos da onda'
+commit "$R" 'feat(7-02): t1' src/02.py
+roda_id "$R" 7-02
+eq "sem worktree-fixtures.txt → sem ISOLATION-NONE" \
+   "$(campo '[.informativos[]|select(startswith("ISOLATION-NONE"))]|length')" "0"
+
+echo "== (p2) … com worktree-fixtures.txt e 2 planos isolation:none numa onda de 3 (04 sem isolation) → sino + razão efetiva"
+printf 'initial-data/\n' > "$R/.planning/worktree-fixtures.txt"
+roda_id "$R" 7-02
+eq "veredito ok (informativo não reprova)"     "$(campo .veredito)" "ok"
+eq "sino ISOLATION-NONE presente"              "$(campo '[.informativos[]|select(startswith("ISOLATION-NONE"))]|length')" "1"
+eq "razão declarada 2/4=0.50, efetiva 4/4=1.00 (onda 2 de 3 planos vira 3 ondas)" \
+   "$(campo '[.informativos[]|select(startswith("ISOLATION-NONE"))][0]')" \
+   "ISOLATION-NONE (7-02 declara isolation: none com worktree-fixtures.txt presente; ondas declaradas 2/4=0.50, efetivas se a prosa for honrada 4/4=1.00)"
+
+echo "== (p3) … o plano da mesma onda SEM isolation:none não dispara o sino"
+roda_id "$R" 7-04
+eq "7-04 não declara isolation: none → sem ISOLATION-NONE" \
+   "$(campo '[.informativos[]|select(startswith("ISOLATION-NONE"))]|length')" "0"
+
 echo "== (h) uso inválido → exit 2"
 "$SCRIPT" >/dev/null 2>&1; eq "sem argumentos" "$?" "2"
 "$SCRIPT" "$TMP/a/.planning/phases/7-bancada" 7-99 >/dev/null 2>&1; eq "PLAN inexistente" "$?" "2"

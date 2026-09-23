@@ -101,6 +101,11 @@ WAITER = re.compile(r"\(\s*[^()]*;\s*touch\s+\S+\s*\)\s*&\s*$")
 SLEEP_CRU = re.compile(r"(^|[;&|(\s{])sleep\s+[0-9]")
 UNTIL = re.compile(r"(^|[;&|(\s{])(until|while)\s")
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1")
+# 48(f) S-4: `find /` a partir da raiz varre o sistema inteiro (bancada de 15/09: A1 rodou
+# `find / -maxdepth 3`). Casa `find /`, `find /  -maxdepth …`, `find /*`; NÃO casa
+# `find /home/...`, `find /tmp/...`, `find .` — o caractere logo após a barra não pode ser
+# de caminho (letra/dígito/`.`/`-`/`/`), senão é sub-caminho legítimo.
+FIND_RAIZ = re.compile(r"(^|[;&|(\s{])find\s+/(?![\w./-])")
 
 # ── 45o: escrita no instrumento sob julgamento ────────────────────────────────────────
 PROTEGIDO = re.compile(
@@ -261,6 +266,8 @@ def motivo_texto(cmd, nivel=0):
         return f"`{p}` como palavra de comando"
     if SLEEP_CRU.search(texto) and not UNTIL.search(texto):
         return "`sleep` cru (espera chutada; só o waiter `until [ -s arquivo ]; do sleep 15; done` é sancionado)"
+    if FIND_RAIZ.search(texto):
+        return "`find /` com caminho raiz (varre o sistema inteiro)"
     fundos = BG.findall(texto)
     if fundos and not (len(fundos) == 1 and WAITER.search(texto.rstrip())):
         return "`&` de fundo"
@@ -367,7 +374,9 @@ def main():
     motivo = decide(cmd, ti.get("run_in_background"))
     if git_por_subprocess(cmd):
         det = re.sub(r"\s+", " ", cmd).strip()[:120]
-        registra(pont, agente, f"git por subprocess — contorno de guarda (45n): {det}",
+        registra(pont, agente,
+                 "git por subprocess (45n): use `git` direto, nao via "
+                 f"subprocess.run/Popen/os.system/sh -c | cmd: {det}",
                  "git_por_subprocess")
     if not motivo:
         return
@@ -378,6 +387,11 @@ def main():
                  "a saida literal e a linha suspeita, commite e devolva ao dono pelo gate. "
                  "O dono edita com a rodada fechada. Nao ha excecao e nao ha caminho "
                  "alternativo: a fase fecha, o ponteiro some, a edicao acontece.")
+    elif motivo.startswith("`find /`"):
+        razao = (f"[gad-bash-guard] comando negado ({motivo}): varrer a partir da raiz do "
+                 "sistema e lento e pode travar a sessao. Use um caminho absoluto do "
+                 "projeto, por exemplo `find <caminho absoluto do projeto>` (com "
+                 "`-maxdepth` se precisar), nunca `find /`.")
     else:
         razao = (f"[gad-bash-guard] comando negado ({motivo}): dentro de uma rodada da go-and-do "
                  "um subagente não recebe aviso de trabalho em segundo plano, e processo desprendido "

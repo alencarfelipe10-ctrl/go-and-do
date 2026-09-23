@@ -6,7 +6,10 @@
 O despacho te entrega `N`, `NN`, `project_root` e `phase_dir` (absolutos) e, quando há
 PRE-SPEC, `pre_spec_mode: structured|legacy` + o insumo correspondente. Traz ainda
 `licoes` (checklist). Comece todo bloco Bash com `cd "<project_root>"` e use caminhos
-absolutos em tudo.
+absolutos em tudo. **Instrumento ausente** (script chamado que não existe no caminho
+absoluto, `command not found`) não é «pule e continue» — é `incidente` (`origem=
+intent-discuss`, `detalhe=instrumento ausente: <caminho>`) e trava: devolva
+`estado: falha`/`blocked` com o motivo, nunca contorne à mão o que o script faria.
 
 ## Trabalho
 
@@ -110,6 +113,22 @@ absolutos em tudo.
    O rótulo do arquivo é `CONTEXT` (não o nome do artefato). Sem essa base a proveniência
    dos achados sai `não_medido` — o coordenador não a reconstrói depois. Na onda 2 o
    `discuss-finalize.sh` assume esta gravação; até lá é sua.
+
+## Armadilha stale: worktree × arquivo gitignored (tarefa 44)
+
+Se `<project_root>/.planning/worktree-fixtures.txt` existir, a pergunta "este arquivo é
+gitignored, o worktree isolado não vai enxergá-lo" **já está resolvida** desde 27/07
+(`e031313a`): o passo 0 do `execute.md` copia cada caminho declarado nele para dentro do
+worktree antes de a tarefa começar. Não é gray area — é fato. Se o SPEC/RESEARCH
+reapresentar essa questão como se estivesse aberta, ou a opção recomendada de uma decisão
+levar a `isolation: none` no PLAN.md ou a uma precondition dizendo que o plano "roda SEM
+worktree", **não adote a opção como está**: aponte no CONTEXT que a resposta é
+`.planning/worktree-fixtures.txt` + passo 0 do `execute.md`, grave a decisão como tal
+(nunca com a premissa stale) e conte-a em `.sinos-discuss.txt` com o prefixo
+`armadilha_worktree_stale: <D-NN> — reescrita para apontar o fixtures`. Tratar o fato
+resolvido como decisão nova duplica trabalho que o `confere-precondicoes.sh` (etapa 2) e o
+`pre-despacho.sh` (etapa 3) já cobram depois — e na F24.5 a premissa stale atravessou
+planner, 2 checkers, plan-gate e 4 pareceres antes de alguém notar.
 
 ## Critério que não fecha
 

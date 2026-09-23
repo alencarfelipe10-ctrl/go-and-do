@@ -359,6 +359,81 @@ RC=0; bash "$LANES" "$PD" 01 1 "$PD/.intent/briefing-c1.md" \
   --prova "$PD/.intent/.prova-leitura-c1.txt" --familia lixo >/dev/null 2>&1 || RC=$?
 eq "--familia inválida → exit 2 (uso)" "$RC" 2
 
+echo "── 48(c)/E4: roda-lanes.sh --esperar ──"
+
+# marcador (status com run_id do ciclo) já existe → retorna 0 na hora
+PD="$(monta_fase)"; CFG="$PD/cfg"; cfg "$CFG" codex "NONCE=sim"
+J="$(lanca "$PD" "$CFG")"; ST="$(jq -r '.status_paths[0]' <<<"$J")"; espera "$ST" 30
+T0=$(date +%s%N)
+JE=$(bash "$LANES" "$PD" 01 1 --esperar codex); RC=$?
+T1=$(date +%s%N); MS=$(( (T1 - T0) / 1000000 ))
+eq "--esperar com marcador pronto → exit 0" "$RC" 0
+eq "…devolve esperado:true" "$(jq -r .esperado <<<"$JE")" true
+eq "…run_id igual ao do ponteiro do ciclo" "$(jq -r .run_id <<<"$JE")" "$(jq -r .run_id <<<"$J")"
+if [ "$MS" -lt 3000 ]; then ok "--esperar com marcador pronto retorna quase na hora (${MS} ms)"
+else falha "--esperar com marcador pronto retorna rápido" "levou ${MS} ms"; fi
+
+# marcador ausente (lane travada em WAIT_FOR) + teto curto via env → 124
+PD="$(monta_fase)"; CFG="$PD/cfg"; cfg "$CFG" codex "WAIT_FOR=$PD/.nunca-espera"
+lanca "$PD" "$CFG" >/dev/null
+RC=0; JE=$(GAD_ESPERAR_TIMEOUT=2 GAD_ESPERAR_PASSO=1 bash "$LANES" "$PD" 01 1 --esperar codex) || RC=$?
+eq "--esperar sem marcador + teto curto → exit 124" "$RC" 124
+eq "…devolve esperado:false, motivo timeout" "$(jq -r '.esperado, .motivo' <<<"$JE" | tr '\n' ',')" "false,timeout,"
+
+# discriminador: run_id do STATUS tem de casar com o ponteiro ATUAL — um status de run
+# ANTERIOR do mesmo ciclo (sobreposição) não pode fazer o --esperar voltar 0 por engano.
+PD="$(monta_fase)"; CA="$PD/cfgA"; CB="$PD/cfgB"
+cfg "$CA" codex "NONCE=sim"
+JA="$(lanca "$PD" "$CA")"; STA="$(jq -r '.status_paths[0]' <<<"$JA")"; espera "$STA" 30
+espera_morrer "$(jq -r '.pids[0]' <<<"$JA")" 30
+RUN_A="$(jq -r .run_id <<<"$JA")"
+espera "$PD/.intent/.status-c1-codex.json" 30
+eq "alias do status começa com o run_id de A" "$(campo "$PD/.intent/.status-c1-codex.json" .run_id)" "$RUN_A"
+cfg "$CB" codex "WAIT_FOR=$PD/.libera-esperar-b"
+JB="$(lanca "$PD" "$CB")"; RUN_B="$(jq -r .run_id <<<"$JB")"
+RC=0; JE=$(GAD_ESPERAR_TIMEOUT=2 GAD_ESPERAR_PASSO=1 bash "$LANES" "$PD" 01 1 --esperar codex) || RC=$?
+eq "run B em curso (status ainda é o de A) → --esperar NÃO volta 0 pelo alias velho" "$RC" 124
+eq "…o timeout reporta o run_id de B (o que se espera), não o de A" "$(jq -r .run_id <<<"$JE")" "$RUN_B"
+: > "$PD/.libera-esperar-b"
+espera "$PD/.intent/runs/c1/$RUN_B/status-codex.json" 30
+RC=0; JE=$(GAD_ESPERAR_TIMEOUT=10 GAD_ESPERAR_PASSO=1 bash "$LANES" "$PD" 01 1 --esperar codex) || RC=$?
+eq "B liberado → --esperar fecha com o run_id de B" "$RC" 0
+eq "…run_id devolvido é o de B" "$(jq -r .run_id <<<"$JE")" "$RUN_B"
+
+# uso: ponteiro do ciclo ausente (nenhum lançamento) → exit 2
+PD="$(monta_fase)"
+RC=0; bash "$LANES" "$PD" 01 1 --esperar codex >/dev/null 2>&1 || RC=$?
+eq "--esperar sem lançamento prévio (ponteiro ausente) → exit 2" "$RC" 2
+
+# uso: --familia inválida também vale no modo --esperar
+PD="$(monta_fase)"
+RC=0; bash "$LANES" "$PD" 01 1 --esperar codex --familia lixo >/dev/null 2>&1 || RC=$?
+eq "--esperar --familia inválida → exit 2 (uso)" "$RC" 2
+
+# sem <lane>: espera as duas de GAD_LANES_LANES/--lanes de sempre (codex + agy)
+PD="$(monta_fase)"; CFG="$PD/cfg"; cfg "$CFG" codex "NONCE=sim"; cfg "$CFG" agy "NONCE=sim"
+lanca "$PD" "$CFG" "codex agy" >/dev/null
+RC=0; JE=$(bash "$LANES" "$PD" 01 1 --esperar) || RC=$?
+eq "--esperar sem <lane> (as duas prontas) → exit 0" "$RC" 0
+eq "…lista as duas lanes" "$(jq -r '.lanes|sort|join(",")' <<<"$JE")" "agy,codex"
+
+# P15/48c: devolução por --reformata troca o run-atual para um que só tem UMA lane — o
+# --esperar sem <lane> tem de derivar do PRÓPRIO run (supervisor-*.out), não travar 590 s
+# esperando a lane que aquele run nunca lançou.
+PD="$(monta_fase)"; CFG="$PD/cfg"; cfg "$CFG" codex "NONCE=sim"; cfg "$CFG" agy "NONCE=sim"
+J="$(lanca "$PD" "$CFG" "codex agy")"
+for i in 0 1; do espera "$(jq -r ".status_paths[$i]" <<<"$J")" 30; done
+J2="$(roda_lane "$PD" "$CFG" --reformata codex)"
+RUN_REFORMATA="$(jq -r .run_id <<<"$J2")"
+T0=$(date +%s%N)
+RC=0; JE=$(GAD_ESPERAR_TIMEOUT=8 GAD_ESPERAR_PASSO=1 bash "$LANES" "$PD" 01 1 --esperar) || RC=$?
+T1=$(date +%s%N); MS=$(( (T1 - T0) / 1000000 ))
+eq "após --reformata codex, --esperar sem <lane> → exit 0 (não trava pelo agy do run antigo)" "$RC" 0
+eq "…run_id é o da devolução" "$(jq -r .run_id <<<"$JE")" "$RUN_REFORMATA"
+eq "…lanes = só codex (as do run atual, lidas do supervisor-*.out)" "$(jq -c .lanes <<<"$JE")" '["codex"]'
+if [ "$MS" -lt 8000 ]; then ok "…e não esperou os 8 s de teto (voltou em ${MS} ms)"
+else falha "não devia esperar o teto inteiro" "levou ${MS} ms"; fi
+
 echo
 TOTAL=$((OK + FALHAS))
 printf '%s testes, %s verdes, %s vermelhos\n' "$TOTAL" "$OK" "$FALHAS"

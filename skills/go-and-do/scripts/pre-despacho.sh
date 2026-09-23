@@ -22,13 +22,19 @@
 #                          serializar uma onda de >=2 planos, ou os args trazem
 #                          `--interactive`. O campo `motivo` diz a chave e o valor; suba
 #                          AskUserQuestion com a `message` real do base-check. (exit 4)
+#   bloqueio_plano_nao_resolvido — só etapa 2.5 (S-11, tarefa 48l): há `NN-PLAN.md` com
+#                          `autonomous: false` sem resolução (2.4b não virou o frontmatter
+#                          para `autonomous: true`). `motivo` lista os planos. (exit 4)
 #   Contexto `unknown` — falha ABERTA declarada: `despacho: ok` com `contexto.reason`
 #   preenchido; anuncie "gate não mediu, confiando na retomabilidade" e siga (freio que
 #   falha fechado por defeito de MEDIÇÃO pararia rodadas saudáveis).
 #
 # Campos informativos: `janela_silencio` (23h–07h local — hard gate vira pausa graciosa,
 # S.I) · `revisores` (2.5: presença individual; UM ausente = segue com o outro, disclosed)
-# · `git_remote` (6: gatilho da rota B de ship, 6.E — julgamento fica na camada 0).
+# · `git_remote` (6: gatilho da rota B de ship, 6.E — julgamento fica na camada 0) ·
+# `sino_tamanho` (só etapa 2, S-9/48j: SPEC/CONTEXT > GAD_TETO_BRIEFING_KB KB, default 60 —
+# alarme, não muro) · `user_setup` (só etapa 2.5, S-8/48i: espelho do
+# confere-user-setup.sh — informativo, nunca bloqueia sozinho).
 #
 # Escritor único (T.2): este script grava o CHECKPOINT da etapa (fotografia do contexto +
 # abertura da janela; kv despacho=autorizado). O ciclo de vida fino de cada Agent() é do
@@ -134,6 +140,37 @@ if [ -n "$CFG_KEY" ]; then
       '{etapa:$e, despacho:"skip_config", motivo:("config " + $k + " = false — degradação declarada, siga sem despachar")}')"
     exit 0
   fi
+fi
+# S-11 (auditoria 48, tarefa 48l): a etapa 2.5 (convergência) não pode despachar enquanto
+# houver `NN-PLAN.md` com `autonomous: false` sem resolução — 2.4b resolve ISSO virando o
+# frontmatter para `autonomous: true` (workflow.md, ~284-298); sem essa marca, convergir ou
+# executar um plano com checkpoint pendente é o mesmo furo que a retomada manual de 15/09
+# cobriu à mão. Hardcoded em `$ETAPA` (não no manifest — a etapa-2.5.json não é arquivo
+# desta lane); ver relatório para a lane de prompts decidir se migra para `pre.nao_autonomos`.
+if [ "$ETAPA" = "2.5" ]; then
+  NA_LIST=""
+  for f in "$PHASE_DIR"/*-PLAN.md; do
+    [ -f "$f" ] || continue
+    grep -qE '^autonomous:[[:space:]]*false[[:space:]]*$' "$f" 2>/dev/null || continue
+    b=$(basename -- "$f"); b="${b#$NN-}"; NA_LIST="${NA_LIST:+$NA_LIST,}${b%-PLAN.md}"
+  done
+  if [ -n "$NA_LIST" ]; then
+    resumo="bloqueio_plano_nao_resolvido: plano(s) $NA_LIST com autonomous: false (2.4b não resolveu)"
+    [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
+      --kv script=pre-despacho.sh --kv exit=4 --kv resumo="$resumo"
+    gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" --arg l "$NA_LIST" \
+      '{etapa:$e, despacho:"bloqueio_plano_nao_resolvido",
+        motivo:("plano(s) " + $l + " ainda com autonomous: false — 2.4b não resolveu"),
+        pergunta_ao_dono:("Há plano(s) com autonomous: false sem resolução (2.4b não concluído): " + $l + ". Volte à etapa 2, resolva o checkpoint (pergunta ao dono, NN-ACAO-HUMANA.md, ou defira para o UAT) e vire o plano para autonomous: true antes de convergir.")}')"
+    exit 4
+  fi
+  # S-8 (tarefa 48i): confere-user-setup.sh acoplado ao MESMO gate — 2.4b é onde o
+  # checkpoint de setup humano deveria ter sido resolvido (workflow.md, 2.4b(d): precondition
+  # checável agora e falsa vira NN-ACAO-HUMANA.md ANTES daqui). Informativo — nunca bloqueia
+  # sozinho (2.4b(d): "não checável agora → deixa, o executor confere em runtime").
+  US_OUT=$(bash "$GAD_SCRIPTS_DIR/confere-user-setup.sh" "$PHASE_DIR" "$ROOT" 2>/dev/null) || true
+  jq -e . >/dev/null 2>&1 <<<"$US_OUT" || US_OUT='{"veredito":"nao_se_aplica","itens":[],"pendentes":[]}'
+  extras=$(jq -cn --argjson prev "$extras" --argjson us "$US_OUT" '$prev + {user_setup: $us}')
 fi
 if [ "$(jq -r '.pre.revisores // false' "$MANIFEST")" = "true" ]; then
   cx=false; ag=false
@@ -267,6 +304,29 @@ if [ "$(jq -r '.pre.paralelismo // false' "$MANIFEST")" = "true" ]; then
       --kv detalhe="nenhuma onda com 2+ planos — a fase inteira roda em série"
   fi
   extras=$(jq -cn --argjson prev "$extras" --argjson par "$PAR" '$prev + {paralelismo: $par}')
+fi
+
+# ── etapa 2 (S-9, tarefa 48j): sino de tamanho — SPEC/CONTEXT grandes demais para o filho
+# ler de uma vez sem fatiar. Alarme, não muro (mesmo padrão do `sino_esquecimento` acima):
+# nunca bloqueia o despacho, só avisa; teto default 60 KB, configurável por
+# GAD_TETO_BRIEFING_KB (a regra permanente do projeto — teto de tamanho é alarme, não muro).
+if [ "$ETAPA" = "2" ]; then
+  TETO_KB="${GAD_TETO_BRIEFING_KB:-60}"
+  case "$TETO_KB" in ''|*[!0-9]*) TETO_KB=60 ;; esac
+  TETO_BYTES=$((TETO_KB * 1024))
+  GRANDES=""
+  for arq in "$PHASE_DIR/$NN-SPEC.md" "$PHASE_DIR/$NN-CONTEXT.md"; do
+    [ -f "$arq" ] || continue
+    tam=$(wc -c < "$arq" 2>/dev/null | tr -d ' ') || tam=0
+    [ -n "$tam" ] || tam=0
+    [ "$tam" -gt "$TETO_BYTES" ] || continue
+    kb=$(( (tam + 1023) / 1024 ))
+    GRANDES="${GRANDES:+$GRANDES; }$(basename -- "$arq") (~${kb} KB)"
+  done
+  if [ -n "$GRANDES" ]; then
+    extras=$(jq -cn --argjson prev "$extras" --arg g "$GRANDES" --argjson t "$TETO_KB" \
+      '$prev + {sino_tamanho: ($g + " passa do teto de leitura (" + ($t|tostring) + " KB) — leia em fatias e confira a última linha contra o tamanho declarado. Esquecimento de recorte?")}')
+  fi
 fi
 
 # ── etapa 6: roteamento por baldes (6.1) + transparência mecânica (6.2) ──────

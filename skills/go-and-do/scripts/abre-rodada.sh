@@ -20,7 +20,11 @@
 #      status=stop → exit 3 com instrução de retomar fresh)
 #   5. decisões de retomada mecânicas: `etapa_1` = pular|despachar|continuar_pergunta
 #      (retrato × frontmatter do NN-INTENT-REVIEW.md — por EXISTÊNCIA de artefato,
-#      agnóstico à versão que o criou, PC-2) · `etapa_2` = pular|despachar (2.A)
+#      agnóstico à versão que o criou, PC-2) · `etapa_2` = pular|despachar|continuar-2.4b
+#      (2.A; `continuar-2.4b` — S-11, tarefa 48l — quando há `NN-PLAN.md` com
+#      `autonomous: false` e a fase ainda não tem `has_verification`: a marca de
+#      resolução é o próprio frontmatter virar `autonomous: true`, `nao_autonomos_pendentes`
+#      no JSON lista os planos)
 #   6. detecção de vault (5.E-h): fase com UI (--ui ou UI-SPEC), sem --vault e com UAT
 #      ainda não executado, com termos de login no ROADMAP/SPEC/CONTEXT/PRE-SPEC →
 #      `vault_alerta` para a camada 0 perguntar ANTES de gastar a fase
@@ -135,7 +139,26 @@ elif [ "$IR_ESTADO" = "needs_decision" ]; then
 else
   ETAPA1=despachar   # sem artefato, ou blocked → re-tenta
 fi
-[ "$HAS_PLANS" = "true" ] && ETAPA2=pular || ETAPA2=despachar
+
+# S-11 (auditoria 48, tarefa 48l): plano `autonomous: false` sem resolução — a marca de
+# resolução É o próprio frontmatter virando `autonomous: true` (workflow.md 2.4b: toda
+# rota (a)/(b)/(c) "flips the plan to autonomous: true" antes de fechar o checkpoint).
+# Fase JÁ verificada (`has_verification`) nunca reabre 2.4b: 3.1 do workflow diz que os
+# planos chegam à etapa 3 já virados — reabrir aqui seria confundir plano arquivado.
+NAO_AUTONOMOS_LIST=""
+if [ "$HAS_PLANS" = "true" ] && [ "$(jq -r '.has_verification' <<<"$RETRATO")" != "true" ]; then
+  for f in "$PHASE_DIR"/*-PLAN.md; do
+    [ -f "$f" ] || continue
+    grep -qE '^autonomous:[[:space:]]*false[[:space:]]*$' "$f" 2>/dev/null || continue
+    b=$(basename -- "$f"); b="${b#$NN-}"; id="${b%-PLAN.md}"
+    NAO_AUTONOMOS_LIST="${NAO_AUTONOMOS_LIST:+$NAO_AUTONOMOS_LIST,}$id"
+  done
+fi
+if [ "$HAS_PLANS" = "true" ]; then
+  if [ -n "$NAO_AUTONOMOS_LIST" ]; then ETAPA2=continuar-2.4b; else ETAPA2=pular; fi
+else
+  ETAPA2=despachar
+fi
 
 # ── 6. vault (5.E-h) ─────────────────────────────────────────────────────────
 VAULT_ALERTA=false; VAULT_TERMOS=""
@@ -225,11 +248,12 @@ gad_json_out "$SLUG" "$(jq -cn \
   --argjson valerta "$VAULT_ALERTA" --arg vtermos "$VAULT_TERMOS" \
   --argjson tasks "$TASKS" --argjson aberta "$ABERTA" \
   --arg ps "$PRE_SPEC" --arg inv "$INVENTARIO" \
-  --argjson posship "$POS_SHIP" --arg uats "$UAT_SUPERFICIE" \
+  --argjson posship "$POS_SHIP" --arg uats "$UAT_SUPERFICIE" --arg nal "$NAO_AUTONOMOS_LIST" \
   '{args:{fase:$fase, ui:$ui, ai:$ai, no_ship:$ns, vault:$va, vault_profile:(if $vp == "" then null else $vp end), obs:$obs},
     retrato:$retrato, contexto:$ctx,
     pre_spec:(if $ps != "" then $ps else null end), inventario:$inv,
     etapa_1:$e1, etapa_2:$e2,
+    nao_autonomos_pendentes:(if $nal == "" then [] else ($nal|split(",")) end),
     vault_alerta:(if $valerta then {alerta:true, termos:$vtermos,
       pergunta:"A fase parece ter login no navegador e a rodada veio sem --vault: sem credenciais, o UAT não verifica esses fluxos (balde 3). Informar um perfil de vault antes de começar?"} else false end),
     pos_ship_alerta:(if ($posship.pendentes|length) > 0 then {alerta:true, pendentes:$posship.pendentes,

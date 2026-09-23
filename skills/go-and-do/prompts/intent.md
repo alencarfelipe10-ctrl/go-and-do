@@ -32,6 +32,10 @@ caminho). A pasta de trabalho da etapa é `<phase_dir>/.intent/` (criada pelo
 `setup-intencao.sh`): briefings, sinos, tabelas, vereditos, runs e marcadores moram lá — na
 raiz da fase só ficam artefatos de verdade. SDK do GSD num bloco Bash?
 `. $HOME/.claude/skills/go-and-do/scripts/lib/gsd-shim.sh` define `gsd_run`.
+**Instrumento ausente** (script chamado que não existe no caminho absoluto acima,
+`command not found`) não é «pule e continue» — é `incidente` (`origem=intent`,
+`detalhe=instrumento ausente: <caminho>`) e trava: pare no passo, registre, e devolva
+`needs_decision`/`blocked` conforme o contrato — nunca contorne à mão o que o script faria.
 </inputs>
 
 <environment>
@@ -193,10 +197,10 @@ Parâmetros obrigatórios do despacho, além dos do protocolo:
 **Conferência PRE-SPEC ↔ SPEC (R2c) — antes de qualquer briefing.** O `r2_avisos` do filho
 já é o resultado; veio ausente (fallback inline, ou SPEC pré-existente na chegada
 `revisao`) → rode você
-`confere-pre-spec.sh --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-PRE-SPEC.md"`.
+`$HOME/.claude/skills/go-and-do/scripts/confere-pre-spec.sh --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-PRE-SPEC.md"`.
 <!-- plano 1, P-02 (D7c) — fiacao-P1-P-02.md -->
 Sem PRE-SPEC na fase (SPEC do dono, ou gerado sem insumo), rode
-`confere-pre-spec.sh --sem-pre-spec --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md"`
+`$HOME/.claude/skills/go-and-do/scripts/confere-pre-spec.sh --sem-pre-spec --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md"`
 — as mesmas linhas `FALHA` reprovam; sem pré-spec não há `EXTENSAO-SUSPEITA` nem
 `RESSALVA-SEM-LIMITACAO`, e uma origem `PS-nn` reprova com «a fase não tem PRE-SPEC». É o que o
 `confere-etapa.sh 1` cobra no fecho (item `r2_spec_sem_pre_spec`).
@@ -305,7 +309,19 @@ que o registro foi feito de memória, no fim, e não no ato.
        | grep -vE '^\s*$|^\s*(licao [0-9]+:|leitura_propria:)' | wc -l)
    echo "sinos_reais=$n"
    ```
-   `sinos_reais=0` → **ciclo 0 dispensado**. Grave o registro de dispensa e vá ao passo 3
+   `sinos_reais=0` → **ciclo 0 dispensado**. **Antes de dispensar, confira que `sinos_reais=0`
+   é silêncio de verdade, não ausência de quem falaria (48e/E4).** Os `.sinos-*.txt` só
+   existem porque `gad-spec`/`gad-discuss` rodaram nesta rodada; numa chegada `revisao` com
+   SPEC **e** CONTEXT já em disco (nenhum dos dois despachado agora), os dois arquivos vêm
+   vazios por AUSÊNCIA de filho, não por ele ter conferido e nada achado — `sinos_reais=0`
+   dispensaria um par nunca checado nesta rodada. Nesse caso, antes do passo 3 (briefing do
+   ciclo 1), rode você mesmo o oráculo do SPEC (a mesma chamada da «Conferência PRE-SPEC ↔
+   SPEC (R2c)» acima) e, se o CONTEXT também não passou pela guarda estrutural nesta rodada
+   (o `gsd-discuss-phase` não rodou), confirme que `spec_origem: v1` do fork já foi
+   carimbado (a cancela de origem do `gsd-spec-phase`) e, se não, isso é o mesmo sinal —
+   trate como conferência pendente e resolva antes de seguir; não dispense o ciclo 0 sobre um
+   par não conferido nesta rodada. Filho rodou de fato (mesmo com zero sino real) → dispense
+   normalmente, é o caso comum. Grave o registro de dispensa e vá ao passo 3
    (briefing do ciclo 1). Não leia os artefatos procurando o que corrigir, não abra script de
    correção, não despache releitura: sem sino não há o que triar, e revisar por conta própria
    texto que o dono escreveu é decidir no lugar dele (F24.5: 15 «sinos» inventados, 4 scripts,
@@ -499,7 +515,10 @@ que o registro foi feito de memória, no fim, e não no ato.
    reprova `VEREDITO-ALTERADO` quando o conteúdo não bate com o último selo. Não é impossível —
    é auditável, e o lugar de registrar uma correção sua é a dívida, não a coluna de veredito.
 
-   **Triagem (sua alçada, achado a achado sobre os `confirmado`) — num turno só.**
+   **Triagem (sua alçada, achado a achado sobre os `confirmado`) — num turno só.** O
+   retorno do verificador é só sumário (48d/E4); leia a tabela cheia (alegação, evidência,
+   vínculo_goal, severidade) de `achados_json` — o caminho absoluto que ele devolveu para
+   `<run_dir>/achados-verificados.json` — antes de triar.
    - **Correção factual** → entra no script de correções (abaixo).
    - **Mexe em requisito, critério de aceite ou oráculo** (`toca_requisito_ou_criterio:
      sim` — confirme você) → decisão do usuário: `<business_pause>`.
@@ -509,7 +528,11 @@ que o registro foi feito de memória, no fim, e não no ato.
      registrada**: linha em `## Dívidas registradas` do INTENT-REVIEW com o motivo do
      verificador (a linha `vinculo_goal: nenhum — …` dele) e o destino (`plan-phase`,
      `code-review`, `deferred` ou `dono`), e entrada em `<phase_dir>/deferred-items.md`
-     quando a categoria for `A-produto` ou `B-viabilidade`. Dispensa não é descarte: o achado
+     quando a categoria for `A-produto` ou `B-viabilidade`. **Destino `deferred` (fora de
+     escopo desta fase) leva o rótulo literal `Out of scope`** no bullet do
+     `deferred-items.md` (48b/S-2): é o que o `confere-reconciliacao.sh` casa
+     (case-insensitive) com o id do achado, no MESMO bloco, para reconhecer a dispensa como
+     registrada em vez de furo. Dispensa não é descarte: o achado
      sai da conta do ciclo, não do registro. **Você não promove um achado dispensado
      (FJ-05INT) — a porta está fechada, sem exceção dentro do ciclo.** Se discordar da
      dispensa, marque a linha como **`contestada`** e escreva o motivo em uma frase: quem
@@ -598,18 +621,25 @@ que o registro foi feito de memória, no fim, e não no ato.
      releitura do texto original antes dos consultores;
      <!-- plano 2, P-05 (C2) — fiacao-P2-P05-releitura.md -->
    - **ciclo ≥ 1, quando os `caminhos` do `.aplicado` incluem o SPEC:** rode
-     `confere-reconciliacao.sh "<phase_dir>" <C>` e passe as linhas `D-NN-DESATUALIZADA
-     c<C> …` (informativas; uma por decisão, com o id) — a releitura as trata como
-     `omissoes_novas`. <!-- plano 2, P-06 (C3) — fiacao-P2-P06-releitura.md -->
+     `$HOME/.claude/skills/go-and-do/scripts/confere-reconciliacao.sh "<phase_dir>" <C>` e
+     passe as linhas `D-NN-DESATUALIZADA c<C> …` (informativas; uma por decisão, com o id) —
+     a releitura as trata como `omissoes_novas`.
+     <!-- plano 2, P-06 (C3) — fiacao-P2-P06-releitura.md -->
    Ele grava `.intent/.releitura-<rodada>.json` (objeto inteiro, `v: 2`, com o veredito) +
    `.releitura-<rodada>.done` — encerre o turno; a notificação te acorda; então leia o `.json`.
-   Devolveu item (`contradiz`, `prescreve_mecanismo`,
-   `omissoes_novas`, `cardinalidade`, `unicidade` ou par em `consistencia`) → corrija **no
-   mesmo turno** (rodada `c<C>b`: novo script, `--inicio` e `--ids` de novo — o `.aplicado`
-   é sobrescrito in-place; uma `D-NN` desatualizada se emenda no CONTEXT ou ganha a tag
-   `superada-c<C>` no bullet, com `context-guard.sh` re-rodado) e **despache uma releitura
-   nova** — a segunda lista o conjunto de caminhos do `.aplicado` vigente, que pode ser
-   maior que o da primeira. Só com a releitura limpa (`ok: true` em disco) você monta o
+   **48a/E4 — um lote só, sem rodada por categoria.** Devolveu QUALQUER item
+   (`contradiz`, `prescreve_mecanismo`, `omissoes_novas`, `cardinalidade`, `unicidade` ou
+   par em `consistencia`) → corrija **no mesmo turno, todos juntos** (bloqueante e
+   documental na MESMA correção — nunca uma rodada por categoria) (rodada `c<C>b`: novo
+   script, `--inicio` e `--ids` de novo — o `.aplicado` é sobrescrito in-place; uma `D-NN`
+   desatualizada se emenda no CONTEXT ou ganha a tag `superada-c<C>` no bullet, com
+   `context-guard.sh` re-rodado) e **despache uma releitura nova** — a segunda lista o
+   conjunto de caminhos do `.aplicado` vigente, que pode ser maior que o da primeira.
+   **A partir desta rodada (`c<C>b` em diante) só `contradiz`/`prescreve_mecanismo` abrem
+   outra rodada** (`c<C>c`): o filho já devolve o documental (`omissoes_novas`/
+   `cardinalidade`/`unicidade`) vazio por contrato — fechou no lote da `c<C>b`, uma
+   releitura só, meta 14 → ~4 releituras/fase (termômetro, medido na próxima fase real).
+   Só com a releitura limpa (`ok: true` em disco) você monta o
    briefing seguinte; `ok: false` ou arquivo incompleto dá exit 4 no `briefing-build.sh`, e
    no último ciclo o `confere-reconciliacao.sh --ordem` cobra o mesmo (`RELEITURA-ABERTA`).
    As linhas de veredito desses itens são escritas pela própria releitura (J5b) — você promove,
@@ -623,6 +653,10 @@ que o registro foi feito de memória, no fim, e não no ato.
    - `para-zerou` / `para-teto` (teto duro: **4 ciclos**) → passo 7.
    - `para-custo-marginal` → aplique os achados do `lote_cde` como **lote único** na saída
      (sem re-submeter aos consultores) e vá ao passo 7.
+   - `para-rendimento` (48b/S-2: a partir do ciclo 3, exatamente 1 A/B novo — não zero, não
+     ≥2) → aplique `lote_cde` **e** `lote_ab` juntos, como **lote único** na saída (mesmo
+     tratamento do `para-custo-marginal`, só que o achado A/B do ciclo vai junto, nunca
+     descartado) e vá ao passo 7.
    - `sem_dados` → o verificador não fechou o ciclo; complete a rota do passo 5 antes.
    Antes de aplicar lote com 2+ alterações de decisão/critério, cheque se elas são
    simultaneamente satisfazíveis. Esses são os freios COMPLETOS — seu juízo de "o consultor
@@ -640,7 +674,9 @@ que o registro foi feito de memória, no fim, e não no ato.
    corpo: a contagem de novos confirmados POR CICLO (com a categoria) e a tabela de achados —
    alegação → veredito → destino → ação tomada → `proposicao` (T3), enumerando **100% dos
    achados brutos** (fundidos com `fontes:`; "já cobertos"/"reformulados" com os ponteiros
-   do filho), mais as linhas do ciclo 0 (`c0-NN | <sino> | corrigido|aberto`).
+   do filho), mais as linhas do ciclo 0 (`c0-NN | <sino> | corrigido|aberto`). Para montar
+   isto, leia o `achados_json` (`achados-verificados.json`) de CADA ciclo — o caminho
+   absoluto que o verificador daquele ciclo devolveu (48d/E4) — não reescreva de memória.
    **Seção `## Dívidas registradas`, antes do commit** — uma linha por achado
    `confirmado_irrelevante` ou `confirmado` com `vinculo_goal: nenhum`:
    `id | alegação | evidência | dono | destino`, com `destino ∈ plan-phase | code-review |
@@ -648,7 +684,8 @@ que o registro foi feito de memória, no fim, e não no ato.
    `<phase_dir>/deferred-items.md`, na convenção do GSD (um heading por item, campos como
    bullets `- **Campo:** …`, fechado por `status: resolved`): é o único registro que a
    verificação de trabalho (`uat.cjs`) e o check 7 da auditoria forense leem, e o que morde
-   em produção precisa de um leitor mecânico. Achado C/D vai só à seção. Nenhuma dívida,
+   em produção precisa de um leitor mecânico. `destino: deferred` leva o bullet
+   `- **Status:** Out of scope` (48b/S-2, rótulo literal — ver passo 5). Achado C/D vai só à seção. Nenhuma dívida,
    nenhuma seção vazia: escreva `## Dívidas registradas` com «nenhuma» — a seção é lida pelo
    planner e pelo code-reviewer rio abaixo.
    **Sinos estruturados, verbatim no corpo:** os literais `req_ausente: <id>`,

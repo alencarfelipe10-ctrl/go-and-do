@@ -1,7 +1,9 @@
 <!-- ============================================================ -->
 <!-- prompts/convergence.md — instruções do subagente da Etapa    -->
 <!-- 2.5 (convergência do plano). Lido do disco PELO SUBAGENTE    -->
-<!-- despachado pela camada 0 (Sub-rotina H do workflow.md).      -->
+<!-- (agente gad-plan, Opus 5.5 / effort medium — mesma def da    -->
+<!-- etapa 2) despachado pela camada 0 (Sub-rotina H do           -->
+<!-- workflow.md).                                                -->
 <!-- ============================================================ -->
 
 # Etapa 2.5 — Convergência do plano (revisão cross-AI)

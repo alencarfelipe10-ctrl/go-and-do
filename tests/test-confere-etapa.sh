@@ -426,6 +426,33 @@ eq "com espelho → {passed, fase, planos, ondas, razao, largura_max, avisos[].c
    "$(printf '%s' "$J" | jq -c '.extrai.plan_gate')" '{"passed":true,"fase":"95","planos":11,"ondas":2,"razao":0.18,"largura_max":6,"avisos":["CADEIA-QUASE-SERIAL"]}'
 eq "…e os extrai antigos seguem" "$(printf '%s' "$J" | jq -c '.extrai|has("nao_autonomos") and has("mapper_pulado")')" "true"
 
+echo "── cancela 2 (S-10, tarefa 48k): reconciliação corpo dos PLAN.md × contador do §13a-bis ──"
+eq "c2com (11/2/6 no espelho × 1 plano real na onda 1) → plan_gate_reconciliacao aviso" \
+   "$(assert_de "$J" plan_gate_reconciliacao)" "aviso"
+casa "…detalhe cita a tarefa 48k e os três números em divergência" \
+   "$(printf '%s' "$J" | jq -r '(.asserts[]|select(.id=="plan_gate_reconciliacao")|.detalhe)')" \
+   '48k.*planos: corpo=1.*13a-bis=11.*ondas: corpo=1.*13a-bis=2.*largura_max: corpo=1.*13a-bis=6'
+
+IFS='|' read -r R PD <<<"$(monta2 c2recbate)"
+printf '{"passed":true,"falhas":[],"avisos":[],"resumo":{"fase":"95","planos":1,"ondas":1,"razao":1,"largura_max":1}}\n' \
+  > "$R/.planning/.gad/last-plan-gate.json"
+J="$(confere2 "$R")"
+eq "espelho batendo com o único plano/onda real → plan_gate_reconciliacao ok" \
+   "$(assert_de "$J" plan_gate_reconciliacao)" "ok"
+
+IFS='|' read -r R PD <<<"$(monta2 c2recmulti)"
+plano3 "$PD" 02 1; plano3 "$PD" 03 2 '"95-01"'
+printf '{"passed":true,"falhas":[],"avisos":[],"resumo":{"fase":"95","planos":3,"ondas":2,"razao":0.67,"largura_max":2}}\n' \
+  > "$R/.planning/.gad/last-plan-gate.json"
+J="$(confere2 "$R")"
+eq "3 planos em 2 ondas (largura 2 na onda 1) batendo com o espelho → ok" \
+   "$(assert_de "$J" plan_gate_reconciliacao)" "ok"
+
+IFS='|' read -r R PD <<<"$(monta2 c2semespelho2)"
+J="$(confere2 "$R")"
+eq "sem last-plan-gate.json → plan_gate_reconciliacao nem roda (nada a reconciliar)" \
+   "$(assert_de "$J" plan_gate_reconciliacao)" "<ausente>"
+
 # ═══════════════════════════════ cancela da ETAPA 3 × escopo por plano (P06, 01/09)
 # confere-plano.sh roda em cada plano com SUMMARY: FORA-DA-LISTA reprova a etapa,
 # COMMITS-A-MENOS só extrai, cada plano reprovado vira `incidente`, e a falha de um plano

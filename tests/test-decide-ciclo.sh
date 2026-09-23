@@ -48,10 +48,11 @@ s=$(roda "$D" 2)
 [ "$(j "$s" .decisao)" = para-zerou ] && ok "decisão para-zerou (o ciclo que só rendeu irrelevantes não compra o seguinte)" || erro "decisão" "$s"
 [ "$(j "$s" .motivo)" = "ciclo 2: nenhum achado novo com vínculo ao Goal — convergiu (3 dispensado(s) registrado(s))" ] \
   && ok "o motivo não diz «nenhum achado» quando houve dispensados" || erro "motivo" "$s"
-D=$(fase misto); vereditos "$D" 3 "c3-01|novo|confirmado|A-produto" "c3-02|novo|confirmado_irrelevante|B-viabilidade" "c3-03|novo|confirmado|C-instrumentacao"
-s=$(roda "$D" 3)
+# ciclo 2 (regra antiga: >0 A/B continua) — não ciclo 3, que a partir de 48b exige >=2
+D=$(fase misto); vereditos "$D" 2 "c2-01|novo|confirmado|A-produto" "c2-02|novo|confirmado_irrelevante|B-viabilidade" "c2-03|novo|confirmado|C-instrumentacao"
+s=$(roda "$D" 2)
 [ "$(j "$s" .decisao)" = continua ] && [ "$(j "$s" .novos_ab)" = 1 ] && [ "$(j "$s" .novos_confirmados)" = 2 ] && [ "$(j "$s" .dispensados)" = 1 ] \
-  && ok "misto: 1 A/B com vínculo continua; o dispensado não conta (novos=2, ab=1, disp=1)" || erro "misto" "$s"
+  && ok "misto: 1 A/B com vínculo continua (ciclo 2); o dispensado não conta (novos=2, ab=1, disp=1)" || erro "misto" "$s"
 D=$(fase disp-c1); vereditos "$D" 1 "c1-01|novo|confirmado_irrelevante|A-produto"
 s=$(roda "$D" 1); [ "$(j "$s" .decisao)" = para-zerou ] && ok "ciclo 1 só de dispensados → para-zerou (zero por dispensa não é silêncio)" || erro "c1 disp" "$s"
 D=$(fase disp-cd); vereditos "$D" 2 "c2-01|novo|confirmado|D-documental" "c2-02|novo|confirmado_irrelevante|A-produto"
@@ -59,11 +60,46 @@ s=$(roda "$D" 2); [ "$(j "$s" .decisao)" = para-custo-marginal ] && [ "$(j "$s" 
   && ok "dispensado A não vira A/B nem entra no lote C/D/E" || erro "lote" "$s"
 
 echo "== retrocompatibilidade — arquivo antigo (só os três vereditos) sai idêntico, mais dispensados: 0"
-D=$(fase legado); vereditos "$D" 3 "c3-01|novo|confirmado|A-produto" "c3-02|novo|ja_coberto|B-viabilidade" "c3-03|novo|nao_sustentado|D-documental"
-s=$(roda "$D" 3)
-[ "$(j "$s" 'keys|join(",")')" = "ciclo,decisao,dispensados,lanes_reprovadas,lote_cde,motivo,novos_ab,novos_confirmados" ] \
-  && ok "chaves do JSON: as de sempre + dispensados" || erro "chaves" "$s"
+# ciclo 2 (regra antiga: >0 A/B continua) — a régua da 48b só aperta a partir do ciclo 3
+D=$(fase legado); vereditos "$D" 2 "c2-01|novo|confirmado|A-produto" "c2-02|novo|ja_coberto|B-viabilidade" "c2-03|novo|nao_sustentado|D-documental"
+s=$(roda "$D" 2)
+[ "$(j "$s" 'keys|join(",")')" = "ciclo,decisao,dispensados,lanes_reprovadas,lote_ab,lote_cde,motivo,novos_ab,novos_confirmados" ] \
+  && ok "chaves do JSON: as de sempre + dispensados + lote_ab (48b)" || erro "chaves" "$s"
 [ "$(j "$s" .dispensados)" = 0 ] && [ "$(j "$s" .decisao)" = continua ] && ok "dispensados=0, decisão de sempre" || erro "legado" "$s"
+[ "$(j "$s" .lote_ab)" = "[]" ] && ok "lote_ab vazio quando a decisão não é para-rendimento" || erro "lote_ab default" "$s"
+
+echo "== S-2 (tarefa 48b) — aperto do rendimento a partir do ciclo 3"
+D=$(fase c3-um-ab); vereditos "$D" 3 "c3-01|novo|confirmado|A-produto" "c3-02|novo|confirmado|D-documental"
+s=$(roda "$D" 3)
+[ "$(j "$s" .decisao)" = para-rendimento ] && ok "ciclo 3, 1 novo A/B (<2), sem custo → para-rendimento" || erro "c3 1ab" "$s"
+[ "$(j "$s" '.lote_ab|join(",")')" = "c3-01" ] && ok "…o A/B confirmado entra em lote_ab (não se descarta)" || erro "lote_ab" "$s"
+[ "$(j "$s" '.lote_cde|join(",")')" = "c3-02" ] && ok "…e o D confirmado continua em lote_cde, separado" || erro "lote_cde" "$s"
+
+D=$(fase c3-dois-ab); vereditos "$D" 3 "c3-01|novo|confirmado|A-produto" "c3-02|reaberto|confirmado|B-viabilidade"
+s=$(roda "$D" 3)
+[ "$(j "$s" .decisao)" = continua ] && ok "ciclo 3, 2 novos A/B (>=2) → continua" || erro "c3 2ab" "$s"
+
+D=$(fase c3-reformulado); vereditos "$D" 3 "c3-01|reformulado|confirmado|A-produto" "c3-02|novo|confirmado|A-produto"
+s=$(roda "$D" 3)
+[ "$(j "$s" .novos_ab)" = 1 ] && [ "$(j "$s" .decisao)" = para-rendimento ] \
+  && ok "reformulado não conta como novo (só 1 A/B novo real → para-rendimento, não continua)" || erro "reformulado" "$s"
+
+D=$(fase c3-custo-ok); vereditos "$D" 3 "c3-01|novo|confirmado|A-produto"
+s=$(GAD_CUSTO_CICLO=2 GAD_CUSTO_POR_ACHADO_TETO=3 roda "$D" 3)
+[ "$(j "$s" .decisao)" = continua ] && ok "ciclo 3, 1 A/B, custo/achado (\$2) <= teto (\$3) → continua" || erro "custo ok" "$s"
+
+D=$(fase c3-custo-alto); vereditos "$D" 3 "c3-01|novo|confirmado|A-produto"
+s=$(GAD_CUSTO_CICLO=10 GAD_CUSTO_POR_ACHADO_TETO=3 roda "$D" 3)
+[ "$(j "$s" .decisao)" = para-rendimento ] && ok "ciclo 3, 1 A/B, custo/achado (\$10) > teto (\$3) → para-rendimento (custo não passa de graça)" || erro "custo alto" "$s"
+
+D=$(fase c3-so-cd); vereditos "$D" 3 "c3-01|novo|confirmado|D-documental" "c3-02|novo|confirmado|C-instrumentacao"
+s=$(roda "$D" 3)
+[ "$(j "$s" .decisao)" = para-custo-marginal ] && [ "$(j "$s" '.lote_ab')" = "[]" ] && [ "$(j "$s" '.lote_cde|sort|join(",")')" = "c3-01,c3-02" ] \
+  && ok "ciclo 3 só C/D (0 A/B) → continua para-custo-marginal (desfecho idêntico ao ciclo 2, sem rótulo novo), lote_cde com os dois" || erro "c3 so cd" "$s"
+
+D=$(fase c4-controle); vereditos "$D" 4 "c4-01|novo|confirmado|A-produto"
+s=$(roda "$D" 4)
+[ "$(j "$s" .decisao)" = para-teto ] && ok "ciclo 4 (teto) prevalece mesmo com 1 A/B — controle: aperto do ciclo 3+ nunca reabre o teto" || erro "c4 controle" "$s"
 
 echo
 [ "$falhas" -eq 0 ] && echo "test-decide-ciclo: TUDO OK" || echo "test-decide-ciclo: $falhas falha(s)"

@@ -69,6 +69,30 @@ saida=$("$SCRIPT" "$D" 2>&1); rc=$?
 printf '%s' "$saida" | grep -q "APLICADO-SEM-VEREDITO c1 c1-07" && [ "$rc" = 1 ] \
   && ok "id promovido sem linha de veredito → APLICADO-SEM-VEREDITO + exit 1" || erro "ASV não acusado" "$saida"
 
+echo "== S-2 (tarefa 48b) — dispensa via deferred-items.md (rótulo «Out of scope»)"
+D=$(fase escopo-ok); vereditos "$D" 1 "c1-04|novo|confirmado|B-viabilidade"
+printf -- '## c1-04 — achado fora do alcance desta fase\n- **Categoria:** B-viabilidade\n- **Disposição:** Out of scope\nstatus: resolved\n' > "$D/deferred-items.md"
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "^CONFIRMADO-FORA-DE-ESCOPO c1 c1-04 veredito=confirmado" && [ "$rc" = 0 ] \
+  && ok "confirmado ausente + deferred-items com «Out of scope» → CONFIRMADO-FORA-DE-ESCOPO, exit 0" || erro "fora-de-escopo não aceito" "$saida"
+printf '%s' "$saida" | grep -q "reconciliacao: ok" && ok "…e a reconciliação segue ok" || erro "fora-de-escopo virou falha" "$saida"
+printf '%s' "$saida" | grep -q "confirmados_fora_de_escopo=1" && ok "…resumo conta confirmados_fora_de_escopo=1" || erro "contador ausente" "$saida"
+printf '%s' "$saida" | grep -q "^CONFIRMADO-NAO-APLICADO c1" && erro "CNA indevido junto com a dispensa" "$saida" || ok "…sem CONFIRMADO-NAO-APLICADO na mesma saída"
+
+echo "== deferred-items.md sem o rótulo «Out of scope» → continua CONFIRMADO-NAO-APLICADO (regressão)"
+D=$(fase escopo-sem-rotulo); vereditos "$D" 1 "c1-04|novo|confirmado|B-viabilidade"
+printf -- '## c1-04 — achado registrado mas não dispensado\n- **Categoria:** B-viabilidade\n- **Destino:** plan-phase\nstatus: resolved\n' > "$D/deferred-items.md"
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "^CONFIRMADO-NAO-APLICADO c1 c1-04" && [ "$rc" = 1 ] \
+  && ok "id no deferred-items.md sem «Out of scope» → continua CONFIRMADO-NAO-APLICADO + exit 1" || erro "regressão: rótulo virou permissivo demais" "$saida"
+
+echo "== «Out of scope» de OUTRO achado no deferred-items.md não dispensa por engano (escopo por bloco)"
+D=$(fase escopo-bloco-errado); vereditos "$D" 1 "c1-04|novo|confirmado|B-viabilidade"
+printf -- '## c1-09 — outro achado, esse sim fora de escopo\n- **Disposição:** Out of scope\nstatus: resolved\n\n## c1-04 — este não tem disposição nenhuma\nstatus: resolved\n' > "$D/deferred-items.md"
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "^CONFIRMADO-NAO-APLICADO c1 c1-04" && [ "$rc" = 1 ] \
+  && ok "«Out of scope» de outro bloco não vaza para c1-04 → CONFIRMADO-NAO-APLICADO + exit 1" || erro "escopo por bloco furou" "$saida"
+
 echo "== id fora do padrão c<N>-<NN> não conta (passada \"b\" é documentada)"
 D=$(fase fora); vereditos "$D" 1 "c1-01|novo|confirmado|A-produto"; aplicado "$D" 1 c1-01,c1b-01,c1b-02
 saida=$("$SCRIPT" "$D" 2>&1); rc=$?

@@ -24,7 +24,13 @@
 #   confirmado    + presente no .aplicado → ok
 #   ja_coberto    + presente             → ok (legítimo: já coberto e a correção reforçou)
 #   nao_sustentado+ presente             → INVERSAO                (o mais grave)
-#   confirmado    + AUSENTE              → CONFIRMADO-NAO-APLICADO
+#   confirmado    + AUSENTE              → CONFIRMADO-NAO-APLICADO, salvo quando o id está
+#     dispensado via `deferred-items.md` (S-2, tarefa 48b) — bloco (delimitado por heading)
+#     que cita o id E traz o rótulo "Out of scope" (case-insensitive) — aí é
+#     CONFIRMADO-FORA-DE-ESCOPO, informativo (conta em `ok`, nunca falha; a dispensa é uma
+#     decisão registrada, não um furo). Lido de `<phase_dir>/deferred-items.md` e, em
+#     fallback, `.planning/deferred-items.md` — os dois caminhos que o
+#     confere-cardinalidade.sh já lê para as dívidas.
 #   presente no .aplicado sem veredito   → APLICADO-SEM-VEREDITO, salvo quando o id não
 #     segue o padrão estrito `c<N>-<NN>` — aí é `fora-do-escopo` e NÃO conta (é o caso
 #     das passadas "b" documentadas, `c<N>b-<NN>`, e de correções de outra origem).
@@ -69,7 +75,8 @@
 #
 # EXIT: 0 = tudo ok (ou n/a) · 1 = INVERSAO, CONFIRMADO-NAO-APLICADO,
 #       APLICADO-SEM-VEREDITO, VEREDITO-ILEGIVEL, ORDEM-VIOLADA ou RELEITURA-ABERTA · 2 = uso inválido.
-#       D-NN-DESATUALIZADA e DISPENSADO-APLICADO nunca mudam o exit (informativos por desenho).
+#       D-NN-DESATUALIZADA, DISPENSADO-APLICADO e CONFIRMADO-FORA-DE-ESCOPO nunca mudam o
+#       exit (informativos por desenho).
 #
 # SOMENTE LEITURA: o script não escreve nada no projeto — por isso NÃO sourceia o
 # lib/gsd-shim.sh nem instala o trap `gad_autoregistro` que os outros gates usam (aquele
@@ -144,6 +151,29 @@ id_de_achado() { printf '%s' "$1" | grep -qE '^c[0-9]+-[0-9]+$'; }
 
 curto() { printf '%s' "${1:-}" | cut -c1-8; }  # hash abreviado para a saída
 
+# S-2 (tarefa 48b): um achado `confirmado` ausente do .aplicado com dispensa GRAVADA no
+# deferred-items.md (rótulo "Out of scope", case-insensitive) é uma decisão registrada, não
+# um furo — mesmos dois arquivos que o confere-cardinalidade.sh já lê para as dívidas (da
+# fase e, em fallback, o do projeto/.planning): `pd/deferred-items.md` e
+# `dirname(dirname(pd))/deferred-items.md`. Checagem por BLOCO (heading `#…`, não o arquivo
+# inteiro): o id e o rótulo têm de aparecer no mesmo item, senão um "Out of scope" de outro
+# achado dispensaria este por engano.
+fora_de_escopo() { # <id>
+  local id="$1" f
+  for f in "$PD/deferred-items.md" "$(dirname -- "$(dirname -- "$PD")")/deferred-items.md"; do
+    [ -f "$f" ] || continue
+    if awk -v id="$id" '
+        function flush() { if (bloco ~ id && tolower(bloco) ~ /out of scope/) achou=1 }
+        /^#/ { flush(); bloco="" }
+        { bloco = bloco "\n" $0 }
+        END { flush(); if (achou) print "sim" }
+      ' "$f" 2>/dev/null | grep -q sim; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Terceiro campo fora do enum: classe própria e declarada, nunca absorvida no contador
 # `ok` (mesmo fail-closed do SEM-INSUMO do confere-rotas.sh).
 veredito_ilegivel() { # <ciclo> <id> <veredito lido>
@@ -151,7 +181,7 @@ veredito_ilegivel() { # <ciclo> <id> <veredito lido>
   n_ileg=$((n_ileg+1)); falha=1
 }
 
-n_ok=0; n_inv=0; n_cna=0; n_asv=0; n_fora=0; n_ileg=0; n_disp=0; n_disp_ap=0
+n_ok=0; n_inv=0; n_cna=0; n_asv=0; n_fora=0; n_ileg=0; n_disp=0; n_disp_ap=0; n_escopo=0
 falha=0
 
 # ── reconciliação, ciclo a ciclo ────────────────────────────────────────────────
@@ -195,8 +225,13 @@ for C in $ciclos; do
     else
       case "$ver" in
         confirmado)
-          echo "CONFIRMADO-NAO-APLICADO c$C $id veredito=confirmado — ausente do .correcoes-c$C.aplicado"
-          n_cna=$((n_cna+1)); falha=1 ;;
+          if fora_de_escopo "$id"; then
+            echo "CONFIRMADO-FORA-DE-ESCOPO c$C $id veredito=confirmado — dispensado via deferred-items.md (rótulo «Out of scope»), não aplicado por decisão registrada (não bloqueante)"
+            n_ok=$((n_ok+1)); n_escopo=$((n_escopo+1))
+          else
+            echo "CONFIRMADO-NAO-APLICADO c$C $id veredito=confirmado — ausente do .correcoes-c$C.aplicado"
+            n_cna=$((n_cna+1)); falha=1
+          fi ;;
         nao_sustentado|ja_coberto) n_ok=$((n_ok+1)) ;;
         confirmado_irrelevante) n_ok=$((n_ok+1)); n_disp=$((n_disp+1)) ;;
         # Fail-closed dos dois lados: absorver uma linha ilegível no contador `ok` só
@@ -233,7 +268,7 @@ if [ -n "$ciclos" ]; then
     done
   fi
 
-  echo "resumo: ok=$n_ok INVERSAO=$n_inv CONFIRMADO-NAO-APLICADO=$n_cna APLICADO-SEM-VEREDITO=$n_asv VEREDITO-ILEGIVEL=$n_ileg fora-do-escopo=$n_fora dispensados=$n_disp dispensados_aplicados=$n_disp_ap"
+  echo "resumo: ok=$n_ok INVERSAO=$n_inv CONFIRMADO-NAO-APLICADO=$n_cna APLICADO-SEM-VEREDITO=$n_asv VEREDITO-ILEGIVEL=$n_ileg fora-do-escopo=$n_fora dispensados=$n_disp dispensados_aplicados=$n_disp_ap confirmados_fora_de_escopo=$n_escopo"
   if [ "$falha" -eq 0 ]; then echo "reconciliacao: ok"; else echo "reconciliacao: falha"; fi
 fi
 

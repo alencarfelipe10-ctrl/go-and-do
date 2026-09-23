@@ -165,7 +165,7 @@ roda "$(p_agent gsd-mempalace-curator opus '' tu-e7f)"
 esp_passou "E7: def gsd-* que pina model segue livre (escopo = gad-*)" gsd-mempalace-curator
 
 monta
-roda "$(p_agent gad-intent claude-opus-5 medium tu-e7e)"
+roda "$(p_agent gad-intent claude-opus-5-5 medium tu-e7e)"
 esp_passou "E7: model/effort IGUAIS à def passam" gad-intent
 
 # ── 47a: a def nova `gad-execute` (host da etapa 3) entra nos mesmos trilhos ──
@@ -175,8 +175,8 @@ esp_passou "47a: Agent(gad-execute) sem model/effort passa" gad-execute
 [ "$(jq -r '.camada // ""' <<<"$ULT")" = 1 ] \
   && ok "47a: gad-execute classificado camada 1 (tools: tem Agent)" \
   || bad "47a: gad-execute classificado camada 1" "camada=$(jq -r .camada <<<"$ULT")"
-[ "$(jq -r '.modelo // ""' <<<"$ULT")" = claude-opus-5 ] \
-  && ok "47a: modelo lido da def (claude-opus-5)" \
+[ "$(jq -r '.modelo // ""' <<<"$ULT")" = claude-opus-5-5 ] \
+  && ok "47a: modelo lido da def (claude-opus-5-5)" \
   || bad "47a: modelo lido da def" "modelo=$(jq -r .modelo <<<"$ULT")"
 [ "$(jq -r '.effort // ""' <<<"$ULT")" = medium ] \
   && ok "47a: effort lido da def (medium)" \
@@ -194,8 +194,8 @@ esp_passou "FM-03GAT: Agent(gad-gates) sem model/effort passa" gad-gates
 [ "$(jq -r '.camada // ""' <<<"$ULT")" = 1 ] \
   && ok "FM-03GAT: gad-gates classificado camada 1 (tools: tem Agent)" \
   || bad "FM-03GAT: gad-gates classificado camada 1" "camada=$(jq -r .camada <<<"$ULT")"
-[ "$(jq -r '.modelo // ""' <<<"$ULT")" = claude-opus-5 ] \
-  && ok "FM-03GAT: modelo lido da def (claude-opus-5)" \
+[ "$(jq -r '.modelo // ""' <<<"$ULT")" = claude-opus-5-5 ] \
+  && ok "FM-03GAT: modelo lido da def (claude-opus-5-5)" \
   || bad "FM-03GAT: modelo lido da def" "modelo=$(jq -r .modelo <<<"$ULT")"
 [ "$(jq -r '.etapa_corrigida // false' <<<"$ULT")" = false ] \
   && ok "FM-03GAT: gad-gates não corrige o checkpoint (serve 4.x e 6)" \
@@ -207,6 +207,19 @@ grep -q 'cacheTtl: 1h' "$REPO/agents/gad-gates.md" "$REPO/agents/gad-contratos.m
   && [ "$(grep -l 'cacheTtl: 1h' "$REPO"/agents/gad-*.md | wc -l)" -eq 5 ] \
   && ok "FM-03GAT/06ENC: 5 hospedeiros com cacheTtl 1h (intent, contratos, plan, execute, gates)" \
   || bad "FM-03GAT/06ENC: hospedeiros com cacheTtl 1h" "$(grep -l 'cacheTtl: 1h' "$REPO"/agents/gad-*.md | tr '\n' ' ')"
+
+# ── Item C (v2.9.0): gad-plan passou a hospedar a etapa 2 E a 2.5 (convergência) — igual ao
+# gad-gates, é multi-etapa e NÃO entra no mapa do FM-02EXE (senão um despacho legítimo com
+# checkpoint "2.5 convergencia" seria reescrito para "2 planejamento").
+monta
+: > "$RL"
+printf '{"sessao":"%s","evento":"checkpoint","etapa":"2.5 convergencia"}\n' "${SESS:0:8}" >> "$RL"
+roda "$(p_agent gad-plan '' '' tu-c1)"
+esp_passou "C: Agent(gad-plan) com checkpoint 2.5 convergencia mantém a etapa (multi-etapa)" gad-plan
+[ "$(jq -r '.etapa // ""' <<<"$ULT")" = "2.5 convergencia" ] \
+  && ok "C: etapa continua 2.5 convergencia" || bad "C: etapa reescrita indevidamente" "$ULT"
+[ "$(jq -r 'has("etapa_corrigida")' <<<"$ULT")" = false ] \
+  && ok "C: gad-plan não corrige o checkpoint (serve 2 e 2.5)" || bad "C: etapa_corrigida indevida" "$ULT"
 
 # ═════════════════════ 2. E3a — SendMessage a filho encerrado ═════════════════════
 monta
@@ -414,6 +427,60 @@ P_MB=$(jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$TP" --arg d "$D120" '
 roda "$P_MB"
 tail -n1 "$RL" | python3 -c 'import sys,json; d=json.loads(sys.stdin.buffer.read().decode("utf-8")); assert len(d["descricao"])==120, len(d["descricao"])' \
   && ok "descricao: 120 caracteres, UTF-8 íntegro" || bad "descricao multibyte" "$(tail -n1 "$RL" | cut -c1-200)"
+
+# ───────── FM-05UAT: dedup do "único terminou" (retomada + SubagentStop do mesmo agente) ─────────
+# PROVADO 10/09: um filho aninhado que encerra o TURNO com filho vivo é acordado de novo pela
+# task-notification — o CC pode disparar SubagentStop mais de uma vez para o MESMO agent_id
+# (turno encerrado ≠ agente morto). Sem dedup, cada disparo vira um `retorno fim_real:true`,
+# contando a mesma finalização em dobro na auditoria (confere-etapa.sh 3).
+echo "── FM-05UAT: dedup do único terminou (retomada + SubagentStop do mesmo agent_id) ──"
+monta
+meta a0dedup gad-verificador tu-dedup-1 2
+printf '%s\n' '{"type":"assistant","timestamp":"2026-09-10T10:00:00-03:00","message":{"model":"claude-sonnet-5"}}' > "$SUB/agent-a0dedup-x.jsonl"
+
+# 1) despacho inicial
+roda "$(p_agent gad-verificador "" "" tu-dedup-1)"
+
+# 2) 1º SubagentStop do agente — o "terminou" que deve valer
+P_STOP_DUP=$(jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$SUB/agent-a0dedup-x.jsonl" '
+  {hook_event_name:"SubagentStop", cwd:$cwd, session_id:$s, agent_id:"a0dedup",
+   agent_type:"gad-verificador", transcript_path:$tp}')
+roda "$P_STOP_DUP"
+ult=$(tail -n1 "$RL")
+grep -q '"fim_real":true' <<<"$ult" \
+  && ok "dedup: 1º SubagentStop do agente grava fim_real:true" \
+  || bad "dedup: 1º SubagentStop deveria gravar fim_real:true" "$ult"
+SEQ1=$(jq -r '.seq' <<<"$ult")
+
+# 3) retomada por SendMessage ao mesmo agente (id hex): despacho + retorno da CHAMADA com
+#    retomada:true — nunca fim_real:true (a retomada não seta FIM_REAL).
+roda "$(p_send a0dedup)"
+esp_passou "dedup: SendMessage(to: a0dedup) retomada passa (despacho)" gad-verificador
+P_SEND_POST=$(jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$TP" '
+  {hook_event_name:"PostToolUse", tool_name:"SendMessage", cwd:$cwd, session_id:$s,
+   transcript_path:$tp, tool_use_id:"tu-sm-dedup",
+   tool_input:{to:"a0dedup", message:"continue"}, tool_response:{content:"ok"}}')
+roda "$P_SEND_POST"
+ult=$(tail -n1 "$RL")
+grep -q '"evento":"retorno"' <<<"$ult" && grep -q '"fim_real":false' <<<"$ult" && grep -q '"retomada":true' <<<"$ult" \
+  && ok "dedup: retorno da retomada (PostToolUse SendMessage) sai fim_real:false" \
+  || bad "dedup: retorno da retomada" "$ult"
+
+# 4) 2º SubagentStop do MESMO agent_id (fim de verdade) — não pode virar um 2º "terminou":
+#    fim_real:false + duplicado_de:<seq do 1º fim_real:true>.
+roda "$P_STOP_DUP"
+ult=$(tail -n1 "$RL")
+grep -q '"evento":"retorno"' <<<"$ult" && grep -q '"fim_real":false' <<<"$ult" \
+  && ok "dedup: 2º SubagentStop do mesmo agent_id não é fim_real:true" \
+  || bad "dedup: 2º SubagentStop deveria ser fim_real:false" "$ult"
+[ "$(jq -r '.duplicado_de // empty' <<<"$ult")" = "$SEQ1" ] \
+  && ok "dedup: duplicado_de aponta pro seq do 1º fim_real:true ($SEQ1)" \
+  || bad "dedup: duplicado_de incorreto" "$ult (esperado duplicado_de=$SEQ1)"
+
+# no run-log inteiro, só 1 fim_real:true para este agent_id
+CNT=$(grep -F '"agent_id":"a0dedup"' "$RL" | grep -c '"fim_real":true')
+[ "$CNT" = 1 ] && ok "dedup: exatamente 1 fim_real:true para agent_id a0dedup no run-log" \
+  || bad "dedup: contagem de fim_real:true para a0dedup" "esperado 1, achei $CNT"
 
 echo "--------------------------------------------------"
 echo "$ok ok / $falhas falhas"

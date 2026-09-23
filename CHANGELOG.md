@@ -2,6 +2,87 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [2.9.0] - 2026-09-23
+
+Bloco B do plano de 23/09: as tarefas 55, 54(b), 48, 44 e as sobras da 34(l) e da 49, executadas
+em oito lanes Sonnet e integradas numa release só. Tema comum: menos tempo e tokens dos
+hospedeiros e do laço de revisão da intenção, medidos pela `/audit-gad`. Suíte 42/42.
+
+**⚠️ Exige sessão nova:** a def do `gad-plan` mudou de descrição e o hook `gad-lifecycle.sh`
+mudou o mapa de etapas; os dois só são relidos na abertura da sessão do Claude Code.
+
+### Hospedeiros e cache (tarefas 55 e 54b)
+
+- **Etapa 2.5 (convergência do plano) ganhou hospedeiro fixo com cache de 1 hora.** Antes ela
+  rodava num agente genérico que herdava o modelo da conversa e perdia o cache a cada 5 minutos,
+  enquanto esperava os revisores externos (Codex e agy) por dezenas de minutos: na F4 RLR esse
+  host consumiu 1,86 M tokens, 56 % da etapa. Agora ela é hospedada pelo mesmo `gad-plan` do
+  planejamento (Opus 5.5 medium, 1 h), a mesma solução que já valeu para os gates 4.x na 2.8.1.
+  Era o último `general-purpose` de camada 1. Nada muda no conteúdo do trabalho.
+- **`gad-lifecycle.sh` trata o `gad-plan` como multi-etapa** (2 e 2.5), igual ao `gad-gates`:
+  sem isso o hook rotularia todo despacho da 2.5 como planejamento e a medição acima sairia
+  falsa. Teste novo `tests/test-contrato-convergence.sh`.
+- **Na `/audit-gad`, régua permanente «miss de cache logo após mensagem assíncrona».** Cada
+  hospedeiro de cada etapa (`--intent`, `--plan`, `--execute`, `--gates`) sai com requests,
+  misses e quantos misses vieram logo após um turno `isMeta` (hand-back de filho,
+  task-notification, SendMessage), com os tokens regravados. Portada da bancada de 23/09
+  (`mede.py`). Os dois `gad-plan` de uma fase saem separados pelo prompt do 1.º turno
+  (`plan.md` × `convergence.md`), nunca pelo tipo. Contra a F4 RLR real: 23 misses, 12 pós-isMeta.
+
+### Laço de revisão da intenção (tarefa 48, auditoria interina da F3 RLR)
+
+- **Verificador espera as lanes por script, não por loop manual:** `roda-lanes.sh --esperar
+  [codex|agy]` (foreground, por lane, timeout ≤ 590 s, JSON de 1 linha) substitui o
+  `until … sleep 15` do passo 0 do `intent-verifica.md`. O overlap «processa o Codex enquanto o
+  agy termina» continua. A ordem de despacho (verificador junto com as lanes, FJ-03INT da
+  2.8.0) não muda: a decisão de 15/09 «verificador depois das lanes» foi absorvida como
+  mecanismo de espera, não como ordem.
+- **Retorno enxuto do verificador:** só sumário (contagens, lanes, `sem_parecer`,
+  `lanes_nao_independentes`, `ponteiros_quebrados`) e caminhos; a tabela de achados vive em
+  `achados-verificados.json` no `run_dir`, de onde o coordenador lê. Estimativa da auditoria:
+  −2 a −3 min e −20 a −30 mil tokens de saída por ciclo.
+- **Releitura documental em lote:** bloqueantes e documentais (ponteiro, rótulo, cardinalidade,
+  unicidade, consistência, omissões) fecham numa correção `c<C>b` só; a partir daí só
+  `contradiz` e `prescreve_mecanismo` abrem `c<C>c`. Meta-termômetro: 14 → ~4 releituras/fase.
+- **Freio de rendimento a partir do ciclo 3:** `decide-ciclo.sh` só continua com ≥ 2 achados
+  A/B novos (`reformulado` não conta) ou custo por achado ≤ teto (`GAD_CUSTO_POR_ACHADO_TETO`,
+  default 3). Decisão nova `para-rendimento`, roteada no `intent.md`: aplica `lote_cde +
+  lote_ab` como lote único e encerra. `confere-reconciliacao.sh` aceita dispensa gravada no
+  `deferred-items.md` com «Out of scope» (classe `CONFIRMADO-FORA-DE-ESCOPO`).
+- **Plano com pergunta ao dono não passa batido:** `abre-rodada.sh` devolve
+  `etapa_2: continuar-2.4b` quando há `NN-PLAN.md` com `autonomous: false`; `pre-despacho.sh
+  2.5` bloqueia (`bloqueio_plano_nao_resolvido`, exit 4) até o 2.4b resolver. Na F3 isso foi
+  resolvido à mão.
+- **`confere-user-setup.sh` (novo):** confere existência, nunca valor, de `.env`, secret do
+  GitHub (`gh secret list`), servidor MCP mencionado e arquivo declarado como precondição; roda
+  no gate 2.5. Precondição declarada = medida.
+- **Sino de tamanho:** `pre-despacho.sh 2` avisa (`sino_tamanho`, teto `GAD_TETO_BRIEFING_KB`
+  = 60) quando SPEC ou CONTEXT passam do teto; o briefing dos filhos do GSD manda ler em fatias
+  e conferir a última linha. Alarme, não muro.
+- **Gate 13a reconciliado com o checker:** `confere-etapa.sh 2` ganha o assert
+  `plan_gate_reconciliacao` (ok/aviso). `plan.md` fixa o dono do RESEARCH pós-pesquisa
+  (coordenador) e a lista fechada de paradas → `needs_decision`.
+- **Caminhos absolutos em todo prompt de filho** (`intent-releitura.md`, `intent.md`,
+  `plan.md`); instrumento ausente = incidente + trava. Cláusula de segurança: rodada que pula o
+  ciclo 0 roda o oráculo e confere o selo de origem antes do ciclo 1.
+- **Contrato do guard no briefing dos filhos do GSD** (3 linhas: o que é negado e a rota).
+  `gad-bash-guard.sh` passa a negar `find /` na raiz e nomeia a rota alternativa no incidente
+  `git_por_subprocess`.
+- **No fork (gen5-patches):** `spec-phase.md` roda a cancela de origem (`confere-pre-spec.sh
+  --exige-origem`) antes de gravar `spec-origem: v1`; `varre-pares.py` (novo, stdlib) faz a
+  varredura par a par «A modifica X e B modifica/lê X» por onda antes do 1.º checker, como sonda
+  não bloqueante do `checker.md`. `triar.sh` 🟢 63.
+
+### Miudezas
+
+- **`confere-plano.sh` acusa `isolation: none`** (sino `ISOLATION-NONE`) quando o projeto tem
+  `worktree-fixtures.txt`, e imprime a razão efetiva de ondas se a premissa fosse honrada
+  (tarefa 44). `plan.md` e `intent-discuss.md` apontam o mecanismo certo.
+- **Dedup do «único terminou»** no `gad-lifecycle.sh`: retomada por SendMessage + SubagentStop
+  do mesmo `agent_id` contam um só `fim_real:true`; o segundo leva `duplicado_de` (FM-05UAT).
+- **34(l)** já estava coberta pelo gate E7(b) do hook; só registrado.
+- Fixtures do `test-gad-lifecycle.sh` acompanham as defs do Opus 5.5 (pendência da 2.8.2).
+
 ## [2.8.2] - 2026-09-22
 
 Migração dos hospedeiros para o Opus 5.5, lançado em 22/09/2026. Segundo a Anthropic, o 5.5 em

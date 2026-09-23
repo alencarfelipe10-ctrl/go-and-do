@@ -5,27 +5,43 @@
 
 # Filho da intenção — verificação de pareceres (ciclo C)
 
-O despacho te entrega: `project_root` e `phase_dir` (absolutos), o número do ciclo `C`, o
+O despacho te entrega: `project_root` e `phase_dir` (absolutos), o prefixo da fase `NN`
+(precisa dele para o `roda-lanes.sh --esperar` do passo 0), o número do ciclo `C`, o
 **`run_id`** das lanes deste ciclo, o run-dir `<phase_dir>/.intent/runs/c<C>/<run_id>/`, o
 diretório de status `<phase_dir>/.intent`, o manifesto de perguntas dirigidas
 `.intent/.perguntas-c<C>.json`, os caminhos dos pareceres
 (`<phase_dir>/pareceres/NN-parecer-*-c<C>.md`), os de `NN-SPEC.md` e `NN-CONTEXT.md`, um
 deadline de espera, e — do ciclo 2 em diante — o `NN-INTENT-REVIEW.md` parcial com a tabela
 dos achados já triados. Os arquivos de trabalho do ciclo vivem em `<phase_dir>/.intent/`.
-Comece todo bloco Bash com `cd "<project_root>"`.
+Comece todo bloco Bash com `cd "<project_root>"`. **Instrumento ausente** (o script chamado
+não existe no caminho absoluto, ou `command not found`) não é «pule e continue» — é
+`incidente` (`origem=intent-verifica`, `detalhe=instrumento ausente: <caminho>`) e trava:
+pare no passo e devolva o que tiver, nunca contorne à mão o que o script faria.
 
 ## Trabalho
 
 0. **Espera pelo STATUS, nunca pelo `.done`.** As lanes ainda estão rodando quando você
    nasce. A autoridade de cada lane é `<phase_dir>/.intent/.status-c<C>-<lane>.json` **com
    o mesmo `run_id` que o despacho te deu** — status com `run_id` diferente é de um run
-   anterior: ignore-o e continue esperando. Espere primeiro o do Codex (chega antes) com um
-   loop barato em Bash (`timeout 590 bash -c 'until … ; do sleep 15; done'`, chamado de novo
-   enquanto a deadline não vence, testando o `run_id` com `jq` — a tool morre aos 600 s, e
-   um `until` com teto igual à deadline morre junto com ela e você conclui que a lane
-   morreu), execute os passos 1–4 sobre esse parecer enquanto o agy termina,
-   depois espere o status do agy e incorpore o parecer dele (funda com o que já verificou —
-   só o que ele acrescenta ou corrobora gera trabalho novo).
+   anterior: ignore-o e continue esperando. Espere primeiro o do Codex (chega antes) com a
+   espera SANCIONADA (48c/E4 — substitui o loop manual antigo; não é `run_in_background`, é
+   um `until … sleep` embutido no próprio script):
+   ```bash
+   $HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh "<phase_dir>" "<NN>" <C> --esperar codex
+   ```
+   Exit 0 (`esperado:true`) → siga. Exit 124 (`esperado:false, motivo:"timeout"`) → o teto
+   do script é 590 s, mas a SUA deadline é de 12 min: **124 não é "a lane morreu"**, é só o
+   teto do script vencendo antes da deadline — chame de novo enquanto a deadline não vencer;
+   só ao vencer a deadline sem `esperado:true` é que a lane conta como morta (`sem_parecer`).
+   Exit 2 (uso errado — ponteiro do ciclo ausente ou argumento faltando) é sinal de que o
+   `roda-lanes.sh` do passo 4 do `intent.md` não rodou antes de você: registre `incidente` e
+   trate como `sem_parecer` das duas lanes. Com o Codex pronto, execute os passos 1–4 sobre
+   esse parecer enquanto o agy termina, depois espere
+   `$HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh "<phase_dir>" "<NN>" <C> --esperar agy`
+   (mesma régua de exit 0/124/2) e incorpore o parecer dele (funda com o que já verificou —
+   só o que ele acrescenta ou corrobora gera trabalho novo). O `--esperar` só confirma que o
+   `.status-c<C>-<lane>.json` do run atual existe — você continua lendo `usable`/
+   `independent` do próprio JSON, igual a sempre.
    O status traz dois eixos:
    - `usable: false` (parecer ausente, vazio, obsoleto ou ilegível) → devolva a lane como
      `sem_parecer: <lane>` **imediatamente**, sem esperar o deadline; a regra de degradação
@@ -133,6 +149,26 @@ Comece todo bloco Bash com `cd "<project_root>"`.
    normalmente — falta de independência muda o peso do achado, não a completude das Q.
    `evidence` é obrigatória em `supported_no` e `unsupported_no` (neste, o que você
    procurou e não achou).
+6c. **Tabela cheia dos achados, em disco (48d/E4).** O retorno deixou de carregar a lista
+   `achados:` inteira (só sumário, ver `## Retorno`) — a tabela com `alegacao`, `evidencia`,
+   `vinculo_goal`, `severidade` etc. por achado é o que quem te despachou usa para montar a
+   triagem e o `NN-INTENT-REVIEW.md`, e agora mora só no disco. Grave
+   `<run_dir>/achados-verificados.json` — array JSON, um objeto por achado, com **exatamente**
+   os campos do bloco `achados:` de antes (id, alegacao, fontes, classe, ref_anterior,
+   veredito, categoria, evidencia, vinculo_goal, independente, severidade,
+   toca_requisito_ou_criterio — omita `ref_anterior` fora de `reformulado`/`reaberto`):
+   ```bash
+   cat > "<run_dir>/achados-verificados.json.tmp" <<'JSON'
+   [{"id":"c<C>-01","alegacao":"...","fontes":["codex","agy"],"classe":"novo",
+     "veredito":"confirmado","categoria":"A-produto","evidencia":"arquivo:linha",
+     "vinculo_goal":"...","independente":"sim","severidade":"...",
+     "toca_requisito_ou_criterio":"nao"}]
+   JSON
+   mv -f "<run_dir>/achados-verificados.json.tmp" "<run_dir>/achados-verificados.json"
+   ```
+   `<run_dir>` sobrevive à limpeza do passo 7b do `intent.md` (`runs/` já está na lista do
+   que não se apaga) — o arquivo continua legível quando o coordenador voltar a ler para
+   escrever o INTENT-REVIEW.
 7. **Prova de máquina de que você rodou:** como últimos atos antes do retorno, nesta ordem:
    ```bash
    IN="<phase_dir>/.intent"
@@ -156,6 +192,11 @@ Comece todo bloco Bash com `cd "<project_root>"`.
 
 ## Retorno (obrigatório, sem prosa antes ou depois)
 
+**48d/E4 — retorno enxuto.** A tabela de achados (alegação, evidência, vínculo_goal,
+severidade por item) não vem mais aqui: ela mora só em disco
+(`achados-verificados.json`, passo 6c). O retorno é sumário — contagens e ponteiros
+absolutos para os três arquivos que quem te despachou vai ler.
+
 ```
 ciclo: <C>
 achados_brutos: <n no(s) parecer(es), antes da fusão>
@@ -165,18 +206,7 @@ ponteiros_quebrados: <n reportados pelo spot-check; 0 se nenhum>
 pareceres_sem_citacao: [<lanes cujo parecer não tem nenhuma citação arquivo:linha; [] se todas citam>]
 sem_parecer: [<lanes com usable:false ou sem status no deadline; [] se nenhuma>]
 lanes_nao_independentes: [<lanes com independent:false; [] se nenhuma>]
+vereditos_txt: <caminho absoluto de .vereditos-c<C>.txt>
 vereditos_dirigidos: <caminho absoluto do vereditos-dirigidos.json que você gravou>
-achados:
-  - id: c<C>-<seq>
-    alegacao: <1-2 linhas>
-    fontes: [codex|agy|codex, agy]
-    classe: novo | reformulado | reaberto
-    ref_anterior: <id do achado original — só p/ reformulado/reaberto>
-    veredito: confirmado | nao_sustentado | ja_coberto | confirmado_irrelevante   ← ausente p/ reformulado
-    categoria: A-produto | B-viabilidade | C-instrumentacao | D-documental | E-decisao-do-dono   ← revalidada por você (desempate para cima)
-    evidencia: <arquivo:linha própria da SUA verificação, ou o porquê da queda, ou o ponteiro do já-coberto>
-    vinculo_goal: <o efeito medido do Goal que fica em risco, 1 linha, com o AC-nn ou o trecho do Goal> | nenhum — <o que você procurou no Goal e não achou>   ← julgado por você, não copiado do parecer
-    independente: sim | nao   ← nao = lane com independent:false (exige evidência sua)
-    severidade: <a estimada pelo consultor, mantida para a triagem>
-    toca_requisito_ou_criterio: sim | nao   ← sim = candidato a pausa de negócio na triagem
+achados_json: <caminho absoluto de achados-verificados.json (passo 6c) — a tabela cheia mora lá>
 ```
