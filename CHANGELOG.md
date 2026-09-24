@@ -2,11 +2,12 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
-## [Não lançada]
+## [2.10.0] - 2026-09-24
 
 Tarefas 8, 9 e 10 do mapa-gad (24/09). Tema: o workflow passa a entrar de fato no prompt, e a
-Etapa 0 cai para 2 requests. Número da release a definir pelo dono (proposta: 2.10.0, porque muda
-a estrutura do workflow). Suíte 44/44.
+Etapa 0 cai para 2 requests. Minor porque muda a estrutura do workflow. Suíte 44/44.
+⚠️ Exige sessão nova. O banner da 0.4 não apareceu nas 4 rodadas da prova; a instrução foi
+ajustada, mas só será conferida na 1ª fase real.
 
 ### O workflow nunca foi anexado — correção da premissa da v2.5.1 (tarefa 9)
 
