@@ -44,7 +44,7 @@ detects an already-archived milestone.
 </objective>
 
 <execution_context>
-@$HOME/.claude/skills/end-mile/workflow.md
+@~/.claude/skills/end-mile/workflow.md
 </execution_context>
 
 <context>

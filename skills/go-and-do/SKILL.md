@@ -21,7 +21,7 @@ allowed-tools:
 ---
 
 <execution_context>
-@$HOME/.claude/skills/go-and-do/workflow.md
+@~/.claude/skills/go-and-do/workflow.md
 </execution_context>
 
 <objective>
