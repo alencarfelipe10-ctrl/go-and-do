@@ -13,7 +13,8 @@
 #     command:"bash $HOME/Projetos-Vox-AI/go-and-do/hooks/gad-bash-guard.sh", timeout:5}]}
 #
 # Escopo (fora dele: allow silencioso, exit 0, sem stdout):
-#   (a) o projeto do `cwd` tem .planning/.gad-rodada-ativa.json (rodada em curso; o ponteiro
+#   (a) o projeto do `cwd` tem .planning/.gad/rodada-ativa.json (v2.10.1; o legado
+#       .planning/.gad-rodada-ativa.json vale por uma release) — rodada em curso; o ponteiro
 #       some no fim da rodada — fora dela o hook dorme e o dono trabalha em paz). Numa cópia
 #       (worktree) o ponteiro está gitignored: procura-se também na árvore principal, via
 #       `git rev-parse --git-common-dir`.
@@ -71,11 +72,13 @@ IN=$(cat 2>/dev/null) || exit 0
 # cwd, na raiz do git ou na árvore principal (cópia/worktree) não há rodada → fora do escopo
 printf '%s' "$IN" | grep -q '"agent_type"' || exit 0
 CWD=$(printf '%s' "$IN" | sed -n 's/.*"cwd":"\([^"\\]*\)".*/\1/p' | head -n1)
-if [ -n "$CWD" ] && [ ! -f "$CWD/.planning/.gad-rodada-ativa.json" ]; then
+if [ -n "$CWD" ] && [ ! -f "$CWD/.planning/.gad/rodada-ativa.json" ] \
+   && [ ! -f "$CWD/.planning/.gad-rodada-ativa.json" ]; then
   ACHOU=0
   for d in $(git -C "$CWD" rev-parse --show-toplevel --path-format=absolute --git-common-dir 2>/dev/null); do
     d="${d%/.git}"
-    [ -f "$d/.planning/.gad-rodada-ativa.json" ] && { ACHOU=1; break; }
+    { [ -f "$d/.planning/.gad/rodada-ativa.json" ] || [ -f "$d/.planning/.gad-rodada-ativa.json" ]; } \
+      && { ACHOU=1; break; }
   done
   [ "$ACHOU" = 1 ] || exit 0
 fi
@@ -308,9 +311,11 @@ def acha_ponteiro(cwd):
     except Exception:
         pass
     for c in cands:
-        p = os.path.join(c, ".planning", ".gad-rodada-ativa.json")
-        if os.path.isfile(p):
-            return p
+        # v2.10.1 (56(a)): novo tem precedência; o legado vale por uma release.
+        for p in (os.path.join(c, ".planning", ".gad", "rodada-ativa.json"),
+                  os.path.join(c, ".planning", ".gad-rodada-ativa.json")):
+            if os.path.isfile(p):
+                return p
     return None
 
 

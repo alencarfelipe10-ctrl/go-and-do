@@ -16,9 +16,13 @@
 #                             no início do nome, com ou sem prefixo de projeto: "20-...",
 #                             "INS-20-...", "RLR-02-..."). Vazio + exit 1 se não achar.
 #   gad_json_out <slug> <json> — contrato de saída PC-5: imprime o JSON COMPACTO em 1
-#                             linha no stdout E espelha em <root>/.planning/.gad/last-
-#                             <slug>.json (o RTK capa stdout em ~50 linhas; o modelo lê
-#                             do espelho se a linha vier truncada). Requer jq.
+#                             linha no stdout E espelha em `last-<slug>.json` (o RTK capa
+#                             stdout em ~50 linhas; o modelo lê do espelho se a linha vier
+#                             truncada). v2.10.1 (56(f)): cópia vai para o CACHE fora do git
+#                             (`gad_cache_dir`), estado continua em `.planning/.gad/`
+#                             (`GAD_ESTADO_SLUGS`); o caminho do espelho sai como PRIMEIRA
+#                             chave do JSON (`espelho`). Requer jq.
+#   Caminhos (estado, cache, ponteiro, pasta da fase): lib/gad-caminhos.sh.
 #   gad_runlog <args...>    — chama o run-log.sh do mesmo diretório de scripts (caminho
 #                             resolvido por pwd -P — symlink-safe). Nunca falha o caller.
 #   GAD_SCRIPTS_DIR         — diretório real (resolvido) de scripts/ da skill.
@@ -36,6 +40,7 @@
 _GAD_SHIM_LOADED=1
 
 GAD_SCRIPTS_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+. "$GAD_SCRIPTS_DIR/lib/gad-caminhos.sh"
 
 GSD_TOOLS=""
 _gsd_resolve() {
@@ -131,8 +136,19 @@ gad_json_out() {
   # estado para julgar (a própria linha 383 do confere-etapa.sh já dizia isso do
   # reconcilia-docs.sh). Com a variável ligada, só o stdout sai.
   if [ "${GAD_DRY_RUN:-0}" != 1 ] && [ -d "$root/.planning" ]; then
-    mkdir -p "$root/.planning/.gad"
-    printf '%s\n' "$compact" > "$root/.planning/.gad/last-$slug.json"
+    # v2.10.1 (56(f)): ESTADO (lista explícita GAD_ESTADO_SLUGS) fica em .planning/.gad/;
+    # CÓPIA vai para o cache fora do git. O caminho entra como 1ª chave (`espelho`): se o
+    # RTK cortar a linha, o começo dela já diz onde ler. Escrita do cache é best-effort —
+    # um .git só-leitura nunca derruba o script que chamou.
+    local esp dir
+    esp="$(gad_espelho_caminho "$root" "$slug")"; dir="$(dirname -- "$esp")"
+    if gad_eh_estado "$slug"; then gad_estado_garante "$root" || esp=""
+    else mkdir -p "$dir" 2>/dev/null || esp=""; fi
+    if [ -n "$esp" ]; then
+      [ "$(printf '%s' "$compact" | jq -r 'type')" = object ] \
+        && compact="$(printf '%s' "$compact" | jq -c --arg e "$esp" '{espelho:$e} + .')"
+      printf '%s\n' "$compact" > "$esp" 2>/dev/null || true
+    fi
   fi
   printf '%s\n' "$compact"
 }
@@ -163,8 +179,8 @@ gad_autoregistro() { # <nome> <exit> [resumo]
   # como "SEM efeito colateral") passaria a gravar um evento `script` mesmo em modo seco.
   [ "${GAD_DRY_RUN:-0}" = 1 ] && return 0
   root="$(gad_project_root)" || return 0
-  p="$root/.planning/.gad-rodada-ativa.json"
-  [ -f "$p" ] || return 0
+  # v2.10.1 (56(a)): ponteiro novo em .planning/.gad/; o legado vale por uma release.
+  p="$(gad_rodada_ativa "$root")" || return 0
   nn=$(jq -r '.nn // empty' "$p" 2>/dev/null); pd=$(jq -r '.phase_dir // empty' "$p" 2>/dev/null)
   rl=$(jq -r '.runlog // empty' "$p" 2>/dev/null)
   [ -n "$nn" ] && [ -n "$pd" ] || return 0

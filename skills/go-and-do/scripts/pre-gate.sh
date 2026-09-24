@@ -41,8 +41,8 @@ if [ "${#ARQ[@]}" -gt 0 ] && git -C "$ROOT" rev-parse HEAD >/dev/null 2>&1; then
 fi
 
 # 3) marcador
-mkdir -p "$ROOT/.planning/.gad"
-M="$ROOT/.planning/.gad/last-pre-gate.json"
+gad_estado_garante "$ROOT"
+M="$(gad_espelho_caminho "$ROOT" pre-gate)"
 jq -cn --arg ts "$(date -Is)" --argjson e "$(date +%s)" --arg h "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo '')" \
   --arg p "$PERG" '{ts:$ts, ts_epoch:$e, head:$h, pergunta:$p}' > "$M"
 gad_runlog "$PD" "$NN" script "$ET" --kv script=pre-gate.sh --kv exit=0 --kv resumo="pré-gate: $N arquivo(s) commitados" >/dev/null 2>&1 || true

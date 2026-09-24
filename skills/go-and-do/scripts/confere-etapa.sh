@@ -56,7 +56,7 @@
 # No pass (fora do --dry-run): mede a etapa com mede-tokens.py (janela desde o
 # checkpoint aberto pelo pre-despacho) e grava o evento `end` com tokens_reais/custo —
 # números só de fonte mecânica (G.1). No fail: grava evento `script` com o resumo.
-# Saída: JSON 1 linha + espelho .planning/.gad/last-confere-etapa.json (PC-5).
+# Saída: JSON 1 linha + espelho last-confere-etapa.json no cache do git (PC-5; v2.10.1).
 # Exit: 0 pass · 1 fail · 2 erro de uso/manifest.
 
 set -euo pipefail
@@ -111,7 +111,7 @@ _gad_ce_grava_script() { # <rc> <resumo>
   [ "${GAD_DRY_RUN:-0}" = 1 ] && return 0
   if [ -n "${PHASE_DIR:-}" ] && [ -n "${NN:-}" ] && [ -n "${RUNLOG_ETAPA:-}" ]; then
     # sites com fase/etapa já resolvidos (via --fase/--projeto OU ponteiro): grava direto,
-    # sem depender do ponteiro `.gad-rodada-ativa.json` (o gad_autoregistro exige `.nn` +
+    # sem depender do ponteiro da rodada (o gad_autoregistro exige `.nn` +
     # `.phase_dir` NELE — bancadas que passam --fase sem ponteiro completo, como
     # test-confere-etapa.sh, ficariam mudas se dependessem só dele).
     gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
@@ -132,7 +132,8 @@ if [ "$ETAPA" != "pausa" ]; then
 fi
 
 ROOT="$(gad_project_root "${PROJ:-$PWD}")"
-PONTEIRO="$ROOT/.planning/.gad-rodada-ativa.json"
+# v2.10.1 (56(a)): novo tem precedência; o legado vale por uma release (rodada da v2.10.0)
+PONTEIRO="$(gad_rodada_ativa "$ROOT" || gad_rodada_ativa_novo "$ROOT")"
 NN=""; PHASE_DIR=""
 if [ -z "$FASE" ] && [ -f "$PONTEIRO" ]; then
   FASE=$(jq -r '.fase // empty' "$PONTEIRO")
@@ -503,7 +504,7 @@ if [ "$ETAPA" = "6" ]; then
   # o formato ilegível reprova por si (assert `state_formato`).
   # Caminho escolhido: checagem PRÓPRIA, e não chamada ao reconcilia-docs.sh em modo
   # verificação — o `--dry-run` dele NÃO é livre de efeito colateral (o `gad_json_out` da
-  # linha final grava `.planning/.gad/last-reconcilia-docs.json` fora da guarda do DRY, e
+  # linha final gravava `.planning/.gad/last-reconcilia-docs.json` fora da guarda do DRY, e
   # medimos isso no grupo-inspired). Uma cancela não pode mutar estado para julgar.
   ST="$ROOT/.planning/STATE.md"
   if [ -f "$ST" ]; then
@@ -694,7 +695,7 @@ PYOBS
     done < <(jq -r '.serializacao_observada[]' <<<"$PAR_OBS")
   fi
   # use_worktrees do início (espelho do pre-despacho.sh 3) × do fecho
-  PRE3="$ROOT/.planning/.gad/last-pre-despacho-3.json"
+  PRE3="$(gad_espelho_caminho "$ROOT" pre-despacho-3)"
   uw0=null; uw1=null
   [ -f "$PRE3" ] && uw0=$(jq -c '.use_worktrees // null' "$PRE3" 2>/dev/null || echo null)
   uw1=$(cd "$ROOT" && gsd_run query config-get workflow.use_worktrees --raw 2>/dev/null | tr -d ' \n\r' || true)

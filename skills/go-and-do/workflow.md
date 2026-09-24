@@ -61,8 +61,9 @@ Read once, apply throughout:
   Bash and compacts output (e.g. RTK), every command whose result feeds a gate decision
   (`wc -l`, empty-output test, `grep` routed by exit code) runs as `rtk proxy <cmd>`. Applies
   to every layer and is passed down in briefings that carry gate commands. Exploratory reads
-  stay filtered. The skill's scripts read the mirrors `.planning/.gad/last-*.json` when stdout
-  is capped (PC-5).
+  stay filtered. When a script's stdout comes capped, read its mirror: the path is the JSON's
+  first key, `espelho` (copies live in the git cache `.git/gad-cache/`, never in `git status`;
+  the 4 state mirrors stay in `.planning/.gad/`) (PC-5).
 - Session usage (5h / weekly) is not readable by a skill, so there is no gate for it: if the
   limit hits, re-run `/go-and-do N` after the reset and the run continues. Manual pause at any
   time: `/gsd-pause-work`.
@@ -117,7 +118,7 @@ calls in parallel:
   — opening and its self-check in one command (never two requests);
 - `ToolSearch` with `select:TaskCreate,TaskUpdate,TaskList` (the task tools of Sub-rotina C).
 
-Obey the abre-rodada JSON (first line; mirror in `.planning/.gad/last-abre-rodada.json`): entry
+Obey the abre-rodada JSON (first line; mirror at its `espelho` key): entry
 gates, phase snapshot (`phase_dir`/`padded_phase`/`has_plans`/`has_verification`), context gate,
 resume decisions (`etapa_1`/`etapa_2`), `vault_alerta`, TaskList snapshot, `run` event + run
 pointer — all in one script. abre-rodada exit ≠ 0 (then the confere does not run) → stop with
@@ -126,8 +127,8 @@ the script's reason (exit 2 = gate/argument · 3 = context at the ceiling · 4 =
 first hard stop (Etapa 0).
 
 **0.3 — Obey the snapshot.**
-- The `confere-etapa.sh 0` verdict already came in the 0.2 output (second JSON line; mirror in
-  `.planning/.gad/last-confere-etapa.json`): only read it — never re-run it. Exit 1 → the opening
+- The `confere-etapa.sh 0` verdict already came in the 0.2 output (second JSON line; mirror at
+  its `espelho` key): only read it — never re-run it. Exit 1 → the opening
   did not land on disk (pointer or `run` event missing): stop with its list.
 - Mirror the TaskList (Sub-rotina C): every `TaskCreate` in ONE response.
 - `vault_alerta` → ask BEFORE spending the phase (phase that looks like an authenticated UI

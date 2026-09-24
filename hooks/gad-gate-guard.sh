@@ -24,12 +24,16 @@ command -v jq >/dev/null 2>&1 || exit 0
 [ "$(jq -r '.hook_event_name // empty' <<<"$IN")" = "PreToolUse" ] || exit 0
 
 CWD=$(jq -r '.cwd // empty' <<<"$IN"); [ -n "$CWD" ] || exit 0
-P="$CWD/.planning/.gad-rodada-ativa.json"
-if [ ! -f "$P" ]; then
-  ROOT=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) || exit 0
-  P="$ROOT/.planning/.gad-rodada-ativa.json"; [ -f "$P" ] || exit 0
-fi
-ROOT=$(dirname "$(dirname "$P")")
+# v2.10.1 (56(a)): ponteiro novo em .planning/.gad/rodada-ativa.json (precedência);
+# o legado .planning/.gad-rodada-ativa.json vale por uma release.
+P=""; ROOT=""
+for _r in "$CWD" "$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null)"; do
+  [ -n "$_r" ] || continue
+  for _c in "$_r/.planning/.gad/rodada-ativa.json" "$_r/.planning/.gad-rodada-ativa.json"; do
+    [ -f "$_c" ] && { P="$_c"; ROOT="$_r"; break 2; }
+  done
+done
+[ -n "$P" ] || exit 0
 SESS=$(jq -r '.session_id // empty' <<<"$IN"); PSESS=$(jq -r '.session_id // empty' "$P" 2>/dev/null)
 [ -n "$SESS" ] && [ "$SESS" = "$PSESS" ] || exit 0
 RL=$(jq -r '.runlog // empty' "$P"); NN=$(jq -r '.nn // empty' "$P"); PD=$(jq -r '.phase_dir // empty' "$P")

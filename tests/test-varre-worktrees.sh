@@ -58,7 +58,7 @@ saida=$("$SCRIPT" --projeto "$R" 2>&1); rc=$?
 [ "$(classe_de "$saida" wt-fantasma)" = fantasma ] && [ "$(campo_de "$saida" wt-fantasma existe)" = false ] \
   && ok "fantasma (registrada, diretório ausente)" || erro "fantasma" "$saida"
 [ "$(G -C "$R" worktree list | wc -l)" = 5 ] && ok "relato não removeu nada" || erro "relato removeu"
-[ -f "$R/.planning/.gad/last-varre-worktrees.json" ] && ok "espelho .planning/.gad/last-varre-worktrees.json" || erro "sem espelho"
+[ -f "$(git -C "$R" rev-parse --path-format=absolute --git-path gad-cache)/last-varre-worktrees.json" ] && ok "espelho last-varre-worktrees.json no cache do git" || erro "sem espelho"
 [ -d "$R/.planning/.gad/worktrees-arquivo" ] && erro "relato criou pasta de arquivo" || ok "relato não arquivou"
 
 echo "== --remover sem arquivo: só a limpa sai; trabalho/suja ficam com motivo"

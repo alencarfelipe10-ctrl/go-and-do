@@ -53,8 +53,8 @@ roda "$R"
 eq "veredito ok, exit 0"              "$(campo .veredito)/$rc" "ok/0"
 eq "tasks=3 commits=5 commits_tarefa=3 (o pós-metadados não é tarefa)" \
    "$(campo '"\(.tasks)/\(.commits)/\(.commits_tarefa)"')" "3/5/3"
-eq "espelho .planning/.gad/last-confere-plano-7-01.json gravado" \
-   "$(jq -r .plan "$R/.planning/.gad/last-confere-plano-7-01.json")" "7-01"
+eq "espelho last-confere-plano-7-01.json gravado no cache do git (v2.10.1)" \
+   "$(jq -r .plan "$(git -C "$R" rev-parse --path-format=absolute --git-path gad-cache)/last-confere-plano-7-01.json")" "7-01"
 
 echo "== (b) arquivo fora da lista → FORA-DA-LISTA com os caminhos (caso 24.4-08)"
 R=$(repo b); plano "$R" 'files_modified:

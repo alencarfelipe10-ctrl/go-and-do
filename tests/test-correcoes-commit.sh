@@ -433,7 +433,7 @@ saida=$(RUN "$PD" 1 --ids "c1-01" "${ALVOS[@]}" 2>&1); rc=$?
 case "$saida" in *"AVISO revalida-documentos"*) ok "o aviso do revalida-documentos chegou ao stderr" ;;
   *) erro "o revalida-documentos não foi chamado (fiação morta)" "$saida" ;; esac
 case "$saida" in *CONTAGEM*) ok "o aviso nomeia a CONTAGEM divergente" ;; *) erro "aviso sem CONTAGEM" "$saida" ;; esac
-esp="$REPO/.planning/.gad/last-correcoes-commit.json"
+esp="$(git -C "$REPO" rev-parse --path-format=absolute --git-path gad-cache)/last-correcoes-commit.json"   # v2.10.1: cópia no cache
 n=$(jq -r '.revalida_avisos // "ausente"' "$esp" 2>/dev/null)
 { [ -n "$n" ] && [ "$n" != ausente ] && [ "$n" -gt 0 ]; } \
   && ok "revalida_avisos=$n no JSON de saída" || erro "revalida_avisos" "$n"

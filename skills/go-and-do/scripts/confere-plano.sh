@@ -37,7 +37,7 @@
 # Uso: confere-plano.sh <phase_dir> <plan_id>       (ex.: … 24.4-08)
 # Saída: JSON de uma linha {plan, tasks, commits, commits_tarefa, fora_da_lista, veredito,
 #        codigos, informativos, decisoes:{plan, summary, faltantes, informational}} + espelho
-#        .planning/.gad/last-confere-plano-<plan>.json
+#        last-confere-plano-<plan>.json no cache do git (v2.10.1)
 # Exit: 0 ok · 1 falha (qualquer código) · 2 uso inválido. Quem aplica a reprovação à
 # etapa é o confere-etapa.sh 3, que lê `codigos` (hoje todos reprovam); `informativos` só reporta.
 

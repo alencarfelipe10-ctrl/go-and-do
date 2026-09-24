@@ -122,7 +122,8 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
      `human_needed` / `gaps_found`).
    - `FENCE-AUSENTE` → **não** devolva `done`. Devolva `estado: done` com `veredito: incompleto`
      e, em `acao_humana_pendente`, a frase literal `reprovado pelo fiscal` seguida do conteúdo de
-     `<project_root>/.planning/.gad/last-confere-etapa.json`, colado inteiro. Nunca conserte o
+     espelho do fiscal (o caminho é a 1ª chave, `espelho`, do JSON do `confere-etapa.sh`; fica no
+     cache do git, `.git/gad-cache/last-confere-etapa.json`), colado inteiro. Nunca conserte o
      fiscal (ver a regra do instrumento no `<environment>`).
    Fidelidade acima de otimismo: reporte o que o disco mostra, não o que o comando prometeu. Na
    F24.5 o coordenador devolveu «pronto · completo · 9/9» com o fiscal reprovando.

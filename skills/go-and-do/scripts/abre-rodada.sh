@@ -34,10 +34,18 @@
 #      camada 0 só espelha com TaskCreate/TaskUpdate
 #   9. grava evento `run` (session_id, versão da skill, modelo da camada 0, hook,
 #      cc_version) +
-#      ponteiro leve .planning/.gad-rodada-ativa.json (PC-3 — é como o hook global acha
-#      o run-log em ms; o stop/fecho da rodada o remove)
+#      ponteiro leve .planning/.gad/rodada-ativa.json (PC-3 — é como o hook global acha
+#      o run-log em ms; o stop/fecho da rodada o remove). v2.10.1 (56(a)): grava SÓ o novo
+#      e apaga o legado .planning/.gad-rodada-ativa.json (dois apontadores divergentes
+#      seriam pior que nenhum).
+#  10. limpeza (56(c)): apaga os `.planning/.gad-last-*.json` órfãos (ninguém lê desde o
+#      8828baa) e as cópias velhas `.planning/.gad/last-<slug-de-cópia>.json` (a cópia mora
+#      no cache desde a 56(f)). SÓ o que não está no índice do git: o rastreado sai em
+#      `legado_rastreado` e o README ensina o comando de uma linha — o script nunca muda
+#      o índice. Saída: `limpeza: [...]` (apagados) e `legado_rastreado: [...]`.
 #
-# Saída: JSON 1 linha + espelho .planning/.gad/last-abre-rodada.json (PC-5).
+# Saída: JSON 1 linha + espelho last-abre-rodada.json no cache fora do git (PC-5; o caminho é
+# a 1ª chave, `espelho`).
 # Exit: 0 ok · 2 argumento/portão · 3 contexto stop · 4 fase não encontrada (fora do
 #       ROADMAP) · 5 fase no ROADMAP mas diretório irresolúvel (phase_dir e
 #       expected_phase_dir vazios no init.phase-op).
@@ -223,13 +231,14 @@ fi
 ABERTA=false
 if [ "$DRY" = 0 ]; then
   mkdir -p "$PHASE_DIR"
+  gad_estado_garante "$ROOT"
   jq -cn --arg sess "$SESS" --arg fase "$FASE" --arg nn "$NN" --arg pd "$PHASE_DIR" \
     --arg rl "$PHASE_DIR/$NN-RUN-LOG.jsonl" --arg ts "$(date -Is)" \
     --argjson ui "$UI" --argjson ai "$AI" --argjson ns "$NO_SHIP" --argjson va "$VAULT" --arg obs "$OBS" \
     --arg vp "$VAULT_PROFILE" \
     '{session_id:$sess, fase:$fase, nn:$nn, phase_dir:$pd, runlog:$rl, aberta_em:$ts,
       args:{ui:$ui, ai:$ai, no_ship:$ns, vault:$va, vault_profile:(if $vp == "" then null else $vp end), obs:$obs}}' \
-    > "$ROOT/.planning/.gad-rodada-ativa.json"
+    > "$(gad_rodada_ativa_novo "$ROOT")"
   gad_runlog "$PHASE_DIR" "$NN" run "0 abertura" \
     ${MODELO:+--modelo "$MODELO"} --camada 0 \
     --kv hook_instalado=$HOOK --kv etapa_1="$ETAPA1" --kv etapa_2="$ETAPA2" \
@@ -237,6 +246,27 @@ if [ "$DRY" = 0 ]; then
     --kv inventario="$INVENTARIO" --kv cc_version="$CCV"
   ABERTA=true
 fi
+
+# ── 10. limpeza da raiz da .planning (56(c)) ─────────────────────────────────
+# Lista dos candidatos: órfãos `.gad-last-*` (convenção anterior ao 8828baa), o ponteiro
+# legado e as cópias velhas em .planning/.gad/ (slug fora de GAD_ESTADO_SLUGS). Rastreado
+# nunca é apagado nem desindexado: vai para `legado_rastreado`. --dry-run só lista o que
+# está rastreado — não apaga nada.
+LIMPEZA="[]"; LEGADO_RASTREADO="[]"
+_cands=("$ROOT"/.planning/.gad-last-*.json "$(gad_rodada_ativa_legado "$ROOT")")
+for _f in "$(gad_estado_dir "$ROOT")"/last-*.json; do
+  _slug="$(basename -- "$_f" .json)"; _slug="${_slug#last-}"
+  gad_eh_estado "$_slug" || _cands+=("$_f")
+done
+for _f in "${_cands[@]}"; do
+  [ -e "$_f" ] || continue
+  _rel="${_f#"$ROOT"/}"
+  if gad_rastreado "$ROOT" "$_f"; then
+    LEGADO_RASTREADO=$(jq -c --arg f "$_rel" '. + [$f]' <<<"$LEGADO_RASTREADO")
+  elif [ "$DRY" = 0 ]; then
+    rm -f -- "$_f" && LIMPEZA=$(jq -c --arg f "$_rel" '. + [$f]' <<<"$LIMPEZA")
+  fi
+done
 
 SLUG=abre-rodada; [ "$DRY" = 1 ] && SLUG=abre-rodada-dry
 gad_json_out "$SLUG" "$(jq -cn \
@@ -249,6 +279,7 @@ gad_json_out "$SLUG" "$(jq -cn \
   --argjson tasks "$TASKS" --argjson aberta "$ABERTA" \
   --arg ps "$PRE_SPEC" --arg inv "$INVENTARIO" \
   --argjson posship "$POS_SHIP" --arg uats "$UAT_SUPERFICIE" --arg nal "$NAO_AUTONOMOS_LIST" \
+  --argjson limp "$LIMPEZA" --argjson legr "$LEGADO_RASTREADO" \
   '{args:{fase:$fase, ui:$ui, ai:$ai, no_ship:$ns, vault:$va, vault_profile:(if $vp == "" then null else $vp end), obs:$obs},
     retrato:$retrato, contexto:$ctx,
     pre_spec:(if $ps != "" then $ps else null end), inventario:$inv,
@@ -260,4 +291,5 @@ gad_json_out "$SLUG" "$(jq -cn \
       pergunta:"Há observação pós-ship de fase anterior marcada como bloqueante e ainda não observada. Abrir esta fase mesmo assim?"} else false end),
     uat_superficie:(if $uats == "" then null else $uats end),
     tasklist:$tasks,
-    rodada:{aberta:$aberta, nn:$nn, phase_dir:$pd}}')"
+    rodada:{aberta:$aberta, nn:$nn, phase_dir:$pd},
+    limpeza:$limp, legado_rastreado:$legr}')"

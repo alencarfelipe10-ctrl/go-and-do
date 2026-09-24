@@ -38,7 +38,7 @@
 #                   frontmatter mínimo (phase/type/reviewers/cycles_run) lido de lá.
 # A cancela `confere-etapa.sh 6` reprova se o STATE.md ainda disser `executing` para a
 # fase — este script roda ANTES dela (workflow 6.5, ambas as rotas).
-# Saída: JSON 1 linha + espelho .planning/.gad/last-reconcilia-docs.json.
+# Saída: JSON 1 linha + espelho last-reconcilia-docs.json no cache do git (v2.10.1).
 # Exit: 0 = rodou (reconciliar é best-effort; o que falhou vem em `pendentes`)
 #       2 = uso inválido
 #       3 = FORMATO-INESPERADO (B2, 31/08): o `current_phase` bate com a fase, mas o campo
@@ -67,7 +67,8 @@ while [ $# -gt 0 ]; do
 done
 
 ROOT="$(gad_project_root "${PROJ:-$PWD}")"
-PONTEIRO="$ROOT/.planning/.gad-rodada-ativa.json"
+# v2.10.1 (56(a)): novo tem precedência; o legado vale por uma release (rodada da v2.10.0)
+PONTEIRO="$(gad_rodada_ativa "$ROOT" || gad_rodada_ativa_novo "$ROOT")"
 NN=""; PHASE_DIR=""
 if [ -z "$FASE" ] && [ -f "$PONTEIRO" ]; then
   FASE=$(jq -r '.fase // empty' "$PONTEIRO")
