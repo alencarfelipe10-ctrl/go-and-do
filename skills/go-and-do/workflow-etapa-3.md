@@ -46,7 +46,7 @@ runs the `base-check` and measures the waves of ≥2 incomplete plans.
   discipline (suite as gate, at most 1× per wave) lives in `prompts/execute.md`.
 
 **Fiscal receipt before `done`.** A `done` return is only acceptable when
-`<phase_dir>/.fence-3.ok` exists and its `head` equals the current HEAD. The host writes it by
+`<phase_dir>/.gad/fences/3.ok` exists and its `head` equals the current HEAD. The host writes it by
 running `confere-etapa.sh 3 --fase <N> --projeto <root> --sem-telemetria` itself; that flag
 evaluates and writes the fence (and clears the lock) **without** measuring tokens and **without**
 logging an event, so it does not leave a second `end` for the stage. Receipt absent, or `head`
@@ -100,7 +100,7 @@ rule) → re-verify. `passed`/`human_needed` → Etapa 4; still `gaps_found` →
 
 **Instrument under judgement.** When a `confere-*.sh`, a hook or a fork script is failing the
 round **because of a defect of its own**, it is evidence, never a target. Write
-`<phase_dir>/.gate-fail-<etapa>-evidencia.txt` with the command, the literal output and the line
+`<phase_dir>/.gad/gates/<etapa>-evidencia.txt` with the command, the literal output and the line
 you believe is wrong; commit it; route the decision to the user through the hard gate
 (Sub-rotina I). Never `sed`, never `Edit`, never a "temporary" patch to the instrument while the
 round it judges is open — not even when your diagnosis is right.

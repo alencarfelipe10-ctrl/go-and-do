@@ -105,15 +105,27 @@ done
 [ -d "$PD" ] || { echo "ERRO: phase_dir inexistente: $PD" >&2; exit 2; }
 case "$CICLO" in ""|*[!0-9]*) [ -z "$CICLO" ] || { echo "ERRO: ciclo deve ser numérico: $CICLO" >&2; exit 2; } ;; esac
 
-IN="$PD/.intent"
+# v2.10.1 (57): arquivos da intenção pelo helper (formato da fase). Só o helper de caminhos
+# (sem side effect) — este gate continua sem o shim, pelo motivo do cabeçalho.
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gad-caminhos.sh"
+IN="$(gad_fase_caminho "$PD" intent)"            # só para mensagens
+IC() { gad_fase_caminho "$PD" "intent/$1"; }     # <nome novo relativo a intent/>
+ciclos_de() { # <padrão novo com c*> [letra] → números de ciclo (só dígitos); com `letra`,
+  local f c   # a letra da rodada (`c3b`) é descartada em vez de excluir o arquivo
+  while IFS= read -r f; do
+    c=$(gad_fase_curinga "$PD" "intent/$1" "$f"); [ -n "${2:-}" ] && c="${c%%[a-z]*}"
+    case "$c" in ''|*[!0-9]*) ;; *) printf '%s\n' "$c" ;; esac
+  done < <(gad_fase_glob "$PD" "intent/$1")
+}
 
 # ── quais ciclos ────────────────────────────────────────────────────────────────
 ciclos=""
 if [ -n "$CICLO" ]; then
-  [ -f "$IN/.vereditos-c$CICLO.txt" ] && ciclos="$CICLO"
+  [ -f "$(IC "c$CICLO/vereditos.txt")" ] && ciclos="$CICLO"
 else
-  ciclos=$(ls "$IN"/.vereditos-c*.txt 2>/dev/null \
-    | sed -n 's/.*\.vereditos-c\([0-9][0-9]*\)\.txt$/\1/p' | sort -n)
+  ciclos=$( { while IFS= read -r f; do c=$(gad_fase_curinga "$PD" 'intent/c*/vereditos.txt' "$f")
+              case "$c" in ''|*[!0-9]*) ;; *) echo "$c" ;; esac
+            done < <(gad_fase_glob "$PD" 'intent/c*/vereditos.txt'); } | sort -n)
 fi
 
 if [ -z "$ciclos" ]; then
@@ -126,7 +138,7 @@ if [ -z "$ciclos" ]; then
   # para pegar. Sair 0 aqui seria reportar verde no caso a conferir (fail-open).
   # Idem para o detector de D-NN desatualizadas: o c0 da 24.4 não tem vereditos e é
   # justamente onde o SPEC mais mudou.
-  [ "$ORDEM" = 1 ] || [ "$FINAL" = 1 ] || ls "$IN"/.correcoes-c*.aplicado >/dev/null 2>&1 || exit 0
+  [ "$ORDEM" = 1 ] || [ "$FINAL" = 1 ] || [ -n "$(gad_fase_glob "$PD" 'intent/c*/correcoes.aplicado')" ] || exit 0
 fi
 
 # ── helpers ─────────────────────────────────────────────────────────────────────
@@ -188,9 +200,9 @@ falha=0
 ultimo_ciclo=""
 for C in $ciclos; do
   ultimo_ciclo="$C"
-  V="$IN/.vereditos-c$C.txt"
-  A="$IN/.correcoes-c$C.aplicado"
-  Z="$IN/.correcoes-c$C.vazio"
+  V="$(IC "c$C/vereditos.txt")"
+  A="$(IC "c$C/correcoes.aplicado")"
+  Z="$(IC "c$C/correcoes.vazio")"
 
   aplicados=$(ids_aplicados "$A")
   commit_c=$(campo_json "$A" commit)
@@ -259,13 +271,12 @@ if [ -n "$ciclos" ]; then
   # enumeração por desenho — mas em aviso explícito, nunca em silêncio. Com recorte de
   # ciclo o aviso é suprimido: quem pediu um ciclo não quer o ruído dos outros.
   if [ -z "$CICLO" ]; then
-    for f in "$IN"/.correcoes-c*.aplicado; do
+    while IFS= read -r f; do
       [ -f "$f" ] || continue
-      c=$(printf '%s' "$f" | sed -n 's/.*\.correcoes-c\([0-9][0-9]*\)\.aplicado$/\1/p')
-      [ -n "$c" ] || continue
-      [ -f "$IN/.vereditos-c$c.txt" ] && continue
+      c=$(gad_fase_curinga "$PD" 'intent/c*/correcoes.aplicado' "$f"); case "$c" in ''|*[!0-9]*) continue ;; esac
+      [ -f "$(IC "c$c/vereditos.txt")" ] && continue
       echo "aviso: c$c tem .correcoes-c$c.aplicado sem .vereditos-c$c.txt — correções promovidas sem veredito registrado (não reconciliável)"
-    done
+    done < <(gad_fase_glob "$PD" 'intent/c*/correcoes.aplicado')
   fi
 
   echo "resumo: ok=$n_ok INVERSAO=$n_inv CONFIRMADO-NAO-APLICADO=$n_cna APLICADO-SEM-VEREDITO=$n_asv VEREDITO-ILEGIVEL=$n_ileg fora-do-escopo=$n_fora dispensados=$n_disp dispensados_aplicados=$n_disp_ap confirmados_fora_de_escopo=$n_escopo"
@@ -348,9 +359,9 @@ PYD
 }
 if [ -n "$ROOT_GIT" ] && [ -n "$CTX_VIG" ]; then
   TMPD=$(mktemp -d "${TMPDIR:-/tmp}/gad-desat-XXXXXX"); trap 'rm -rf "$TMPD"' EXIT
-  for A in "$IN"/.correcoes-c*.aplicado; do
+  while IFS= read -r A; do
     [ -f "$A" ] || continue
-    c=$(printf '%s' "$A" | sed -n 's/.*\.correcoes-c\([0-9][0-9]*\)\.aplicado$/\1/p'); [ -n "$c" ] || continue
+    c=$(gad_fase_curinga "$PD" 'intent/c*/correcoes.aplicado' "$A"); case "$c" in ''|*[!0-9]*) continue ;; esac
     [ -z "$CICLO" ] || [ "$c" = "$CICLO" ] || continue
     commit=$(campo_json "$A" commit); [ -n "$commit" ] || continue
     git -C "$ROOT_GIT" cat-file -e "$commit^{commit}" 2>/dev/null || { echo "nota c$c: commit $(curto "$commit") não está no repositório — D-NN desatualizadas não conferidas"; continue; }
@@ -374,9 +385,9 @@ if [ -n "$ROOT_GIT" ] && [ -n "$CTX_VIG" ]; then
       printf '%s\n' "$out"
       n_desat=$((n_desat + $(printf '%s\n' "$out" | grep -c '^D-NN-DESATUALIZADA ')))
     done
-  done
+  done < <(gad_fase_glob "$PD" 'intent/c*/correcoes.aplicado')
   if [ "$FINAL" = 1 ]; then
-    BS=$(cat "$IN/.base-SPEC.txt" 2>/dev/null | tr -d ' \n'); BC=$(cat "$IN/.base-CONTEXT.txt" 2>/dev/null | tr -d ' \n')
+    BS=$(cat "$(IC base-SPEC.txt)" 2>/dev/null | tr -d ' \n'); BC=$(cat "$(IC base-CONTEXT.txt)" 2>/dev/null | tr -d ' \n')
     if [ -z "$BS" ] || [ -z "$SPEC_VIG" ] || ! git -C "$ROOT_GIT" cat-file -e "$BS" 2>/dev/null; then
       echo "final: n/a (sem .base-SPEC.txt resolvível — fase anterior à selagem)"
     else
@@ -409,22 +420,20 @@ if [ "$ORDEM" = 1 ]; then
     # FM-F4RLR-10INT: o nome do arquivo agora pode carregar a letra da rodada
     # (`.releitura-c<N>b.json`, `.releitura-c<N>c.json`, …) — o número do CICLO continua
     # sendo só os dígitos logo após o `c`; a letra fica de fora da extração aqui.
-    C=$(ls "$IN"/.releitura-c*.json 2>/dev/null \
-      | sed -n 's/.*\.releitura-c\([0-9][0-9]*\)[a-z]*\.json$/\1/p' | sort -n | tail -1)
+    C=$(ciclos_de 'c*/releitura.json' letra | sort -n | tail -1)
   fi
   [ -n "$C" ] || C="$ultimo_ciclo"
   if [ -z "$C" ]; then
-    C=$(ls "$IN"/.correcoes-c*.aplicado 2>/dev/null \
-      | sed -n 's/.*\.correcoes-c\([0-9][0-9]*\)\.aplicado$/\1/p' | sort -n | tail -1)
+    C=$(ciclos_de 'c*/correcoes.aplicado' | sort -n | tail -1)
   fi
   [ -n "$C" ] || { echo "ordem: n/a (nenhum ciclo com releitura ou correção em $IN)"; exit "$falha"; }
   # FM-F4RLR-10INT: lê a rodada MAIS RECENTE do ciclo — a de letra mais alta
   # (.releitura-c<C>b.json, .releitura-c<C>c.json, …) quando existir, senão a normal
   # (.releitura-c<C>.json, 1ª rodada) — mesmo resolvedor do briefing-build.sh
   # (caminho_releitura), sem duplicar a lógica num 2º parser python.
-  R=$(ls "$IN"/.releitura-c"$C"[a-z].json 2>/dev/null | sort | tail -1)
-  [ -n "$R" ] || R="$IN/.releitura-c$C.json"
-  A="$IN/.correcoes-c$C.aplicado"
+  R=$(gad_fase_glob "$PD" "intent/c${C}[a-z]/releitura.json" | sort | tail -1)
+  [ -n "$R" ] || R="$(IC "c$C/releitura.json")"
+  A="$(IC "c$C/correcoes.aplicado")"
   # R9 (plano 3): o último ciclo não abre briefing, logo ninguém lê o veredito da releitura
   # dele. Aqui é o único gate que olha esse arquivo na saída.
   if [ -f "$R" ]; then

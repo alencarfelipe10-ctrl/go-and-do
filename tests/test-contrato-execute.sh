@@ -23,7 +23,7 @@ nao()  { if grep -qF -e "$2" "$P"; then FALHAS=$((FALHAS+1)); printf '  ✘ %s (
 [ -f "$P" ] || { echo "prompts/execute.md ausente"; exit 2; }
 
 tem "46r: a flag --sem-telemetria está no passo de fecho"        '--sem-telemetria'
-tem "46r: o marcador .fence-3.ok é o recibo"                     '.fence-3.ok'
+tem "46r: o marcador fences/3.ok é o recibo (v2.10.1: .gad/fences/)" 'fences/3.ok'
 tem "46r: o retorno de reprovação tem frase literal"             'reprovado pelo fiscal'
 tem "46t: a resposta ao desvio é declarar"                       'ARQUIVO-NAO-DECLARADO: <caminho>'
 tem "45n: contorno por subprocess é proibido"                    'subprocess.run'

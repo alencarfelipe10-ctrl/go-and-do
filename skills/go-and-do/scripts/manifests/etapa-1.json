@@ -35,7 +35,7 @@
     {
       "id": "limpeza_intent",
       "tipo": "glob",
-      "padrao": "{fase}/.intent/.sinos-*.txt",
+      "padrao": "{gad:intent/sinos-*.txt}",
       "min": 0,
       "max": 0,
       "desc": "sinos apagados no fecho (política 1.5 — conteúdo sobrevive no INTENT-REVIEW)"
@@ -43,7 +43,7 @@
     {
       "id": "limpeza_briefings",
       "tipo": "glob",
-      "padrao": "{fase}/.intent/briefing-c*.md",
+      "padrao": "{gad:intent/c*/briefing*.md}",
       "min": 0,
       "max": 0,
       "desc": "briefings apagados no fecho (política 1.5)"
@@ -51,7 +51,7 @@
     {
       "id": "evidencia_tabelas",
       "tipo": "glob",
-      "padrao": "{fase}/.intent/.tabela-c*.txt",
+      "padrao": "{gad:intent/c*/tabela.txt}",
       "min": 1,
       "nivel": "informativo",
       "desc": "tabelas de ciclo preservadas (evidência de auditoria; ausente em fase pré-major ou revisão pulada)"

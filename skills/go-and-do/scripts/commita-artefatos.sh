@@ -16,6 +16,8 @@
 #   runlog — NN-RUN-LOG.jsonl + NN-DECISOES.md (fecho da rodada, 6.5) + evidência dura
 #   evidencia — só a evidência dura (FM-06INT): .intent/, pareceres/, atestados
 #            (.fence-*.ok), NN-RUN-LOG.jsonl, deferred-items.md e NN-DECISOES.md.
+#            Formato novo da fase (v2.10.1, `.gad/FORMATO`): a pasta `.gad/` inteira
+#            (menos o que o `.gitignore` de `.gad/lanes/` ignora) + pareceres/ visíveis.
 #            Medido na F4 RLR: 160 arquivos da pasta da fase — os selos dos ciclos 2/3/4,
 #            os vereditos, os espelhos dos pareceres e os próprios atestados do fiscal —
 #            nunca foram commitados; o run-log commitado tinha 49 linhas e o do disco 171.
@@ -41,11 +43,21 @@ STATUS=ok
 # nunca `git add` de diretório do .planning inteiro.
 gad_evidencia_dura() {
   local pd="$1" nn="$2" escopo="${3:-tudo}" f
-  local -a ARQ=() DIRS=("$pd/.intent")
+  local -a ARQ=() DIRS=("$(gad_fase_caminho "$pd" intent)") EXCL=()
+  # v2.10.1 (57): fase no formato novo → a evidência inteira mora em `.gad/` (intent,
+  # convergencia, lanes, fences, gates, plan-checker, pos-ship, uat, FORMATO e o
+  # `.gitignore` de lanes/). A divisão commitado × ignorado continua a de sempre: o que o
+  # `.gitignore` de `lanes/` ignora (`codex-*`, `*.launch.log`) não entra — nem com `-f`.
+  if [ "$(gad_fase_formato "$pd")" = novo ]; then
+    DIRS=("$pd/.gad")
+    EXCL=(! -path "$pd/.gad/lanes/codex-*" ! -name '*.launch.log')
+  fi
   # `sem_pareceres`: no modo `intencao` a seleção de pareceres/ já é explícita (só
   # `NN-parecer-*.md`) e um teste protege que o parecer da CONVERGÊNCIA
   # (`NN-planrev-parecer-*`) não entre no commit da intenção — ele é da etapa 2 e
   # entra no `evidencia`/`runlog` do fecho.
+  # (no formato novo, `pareceres/` só tem os pareceres VISÍVEIS — os internos foram para
+  # `.gad/lanes/`; a regra `sem_pareceres` segue valendo para eles)
   [ "$escopo" = sem_pareceres ] || DIRS+=("$pd/pareceres")
   # .intent/ e pareceres/ inteiros, menos os temporários (medidos: .tmp-parecer-<lane>.md
   # some sozinho — FM-11INT — e .err/.log são ruído de execução, não evidência).
@@ -54,8 +66,8 @@ gad_evidencia_dura() {
     [ -d "$d" ] || continue
     while IFS= read -r -d '' f; do ARQ+=("$f"); done < <(
       find "$d" -type f \
-        ! -name '.tmp-parecer-*' ! -name '*.tmp' ! -name '*.err' ! -name '*.log' \
-        ! -name '*.pyc' ! -path '*/__pycache__/*' -print0 2>/dev/null)
+        ! -name '.tmp-parecer-*' ! -name 'tmp-parecer-*' ! -name '*.tmp' ! -name '*.err' ! -name '*.log' \
+        ! -name '*.pyc' ! -path '*/__pycache__/*' ${EXCL[@]+"${EXCL[@]}"} -print0 2>/dev/null)
   done
   # Atestados do fiscal + run-log + dívidas + decisões (caminhos explícitos).
   while IFS= read -r -d '' f; do ARQ+=("$f"); done < <(

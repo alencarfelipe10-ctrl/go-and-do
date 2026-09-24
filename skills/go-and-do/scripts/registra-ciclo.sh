@@ -49,7 +49,8 @@ esac
 for f in "${CANDIDATOS[@]}"; do
   [ -s "$f" ] && PARECERES+=("$f")
 done
-TABELA="$PAR/.tabela-c$K.txt"
+TABELA="$(gad_fase_caminho "$PD" "lanes/tabela-c$K.txt")"   # v2.10.1: helper (formato da fase)
+mkdir -p "$(dirname -- "$TABELA")"
 
 # v2.2.0 (R8/E4): a tabela do coordenador é montada com --perguntas/--status-dir/
 # --vereditos; sem essas flags o apêndice daqui contaria menos brutos que a tabela dele
@@ -60,18 +61,19 @@ TABELA="$PAR/.tabela-c$K.txt"
 #     no c1 da convergência);
 #   - cada flag entra só se o arquivo existir (fase antiga, ou ciclo antes do R8).
 FLAGS_TAB=()
-if [ "$ETAPA_SEL" != "convergencia" ] && [ -d "$PD/.intent" ]; then
-  _perg="$PD/.intent/.perguntas-c$K.json"
+_IN="$(gad_fase_caminho "$PD" intent)"
+if [ "$ETAPA_SEL" != "convergencia" ] && [ -d "$_IN" ]; then
+  _perg="$(gad_fase_caminho "$PD" "intent/c$K/perguntas.json")"
   [ -s "$_perg" ] && FLAGS_TAB+=(--perguntas "$_perg")
-  if compgen -G "$PD/.intent/.status-c$K-*.json" >/dev/null 2>&1; then
-    FLAGS_TAB+=(--status-dir "$PD/.intent")
+  if [ -n "$(gad_fase_glob "$PD" "intent/c$K/status-*.json")" ]; then
+    FLAGS_TAB+=(--status-dir "$_IN")
   fi
   # o run vencedor é o do ponteiro (`mv` atômico sob lock) — nunca um glob em runs/,
   # que pegaria um run órfão sobreposto
-  _ptr="$PD/.intent/.run-atual-c$K"
+  _ptr="$(gad_fase_caminho "$PD" "intent/c$K/run-atual")"
   if [ -s "$_ptr" ]; then
     _run=$(tr -d ' \t\r\n' < "$_ptr")
-    _ver="$PD/.intent/runs/c$K/$_run/vereditos-dirigidos.json"
+    _ver="$(gad_fase_caminho "$PD" "intent/c$K/runs/$_run/vereditos-dirigidos.json")"
     [ -n "$_run" ] && [ -s "$_ver" ] && FLAGS_TAB+=(--vereditos "$_ver")
   fi
 fi
@@ -110,7 +112,7 @@ SEM_CITACAO=()
     # apontava para o parecer da convergência). Sem este prefixo o modo `convergencia` lê o
     # espelho errado, ou nenhum. Sem o 4.º argumento, PREFIXO vazio = comportamento de hoje.
     PREFIXO=""; [ "$ETAPA_SEL" = convergencia ] && PREFIXO="planrev-"
-    J="$PAR/.roda-${PREFIXO}$lane-c$K.json"
+    J="$(gad_fase_caminho "$PD" "lanes/roda-${PREFIXO}$lane-c$K.json")"
     [ -s "$J" ] || continue   # -s, não -f: JSON de 0 bytes quebraria o jq sob set -e
     if [ "$lane" = codex ]; then
       echo "- **codex**: modelo_efetivo=\`$(jq -r '.modelo_efetivo' "$J")\` · fresco=$(jq -r '.fresco' "$J") · vazio=$(jq -r '.vazio' "$J")"
@@ -155,7 +157,7 @@ SEM_CITACAO=()
   if [ ${#PARECERES[@]} -eq 0 ]; then
     echo "- brutos na tabela do ciclo: **SEM MEDIÇÃO** (nenhum parecer legível — guarda não conta o que não leu)"
   else
-    echo "- brutos na tabela do ciclo: $BRUTOS (\`pareceres/.tabela-c$K.txt\`)"
+    echo "- brutos na tabela do ciclo: $BRUTOS (\`${TABELA#"$PD"/}\`)"
   fi
 } >> "$REV"
 

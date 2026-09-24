@@ -19,7 +19,7 @@ NN-UAT.md como balde 3 e continua bloqueando o ship.
   3. `prova_mecanica:` aponta arquivo que EXISTE no projeto (a mecânica tem teste);
   4. `bloqueia_proxima:` é `sim` ou `nao`;
   5. `verificavel_em:` nomeia onde se observa;
-  6. veredito `confirmado` para o cenário em `.pos-ship-vereditos.json`, gravado pelo
+  6. veredito `confirmado` para o cenário em `.pos-ship-vereditos.json` (formato novo: `.gad/pos-ship/vereditos.json`), gravado pelo
      verificador cético (prompts/uat-pos-ship.md) — quem classifica não é quem julga.
 
 Subcomandos (saída = JSON de 1 linha):
@@ -53,6 +53,10 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
+
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import gad_caminhos  # noqa: E402 — v2.10.1: caminhos da fase (formato novo × antigo)
 
 RE_TITULO = re.compile(r"^###\s*(\d+)\.\s*(.+)$")
 RE_FASE = re.compile(r"[Ff]ase\s+([0-9]+(?:\.[0-9]+)?)")
@@ -98,7 +102,7 @@ def _blocos(texto: str) -> tuple[list[str], list[dict], list[str]]:
 
 
 def _vereditos(phase_dir: Path) -> dict[int, str]:
-    arq = phase_dir / ".pos-ship-vereditos.json"
+    arq = Path(gad_caminhos.caminho(str(phase_dir), "pos-ship/vereditos.json"))
     if not arq.is_file():
         return {}
     try:

@@ -59,7 +59,7 @@ set -euo pipefail
 
 PD="${1:-}"; C="${2:-}"
 [ -n "$PD" ] && [ -n "$C" ] || { echo "uso: decide-ciclo.sh <phase_dir> <ciclo>" >&2; exit 2; }
-V="$PD/.intent/.vereditos-c$C.txt"
+V="$(gad_fase_caminho "$PD" "intent/c$C/vereditos.txt")"   # v2.10.1: helper (formato da fase)
 if [ ! -f "$V" ]; then
   gad_json_out decide-ciclo "$(jq -cn --arg c "$C" \
     '{ciclo:$c, decisao:"sem_dados", motivo:"vereditos do ciclo ausentes (.intent/.vereditos-c'"$C"'.txt) — gad-verificador não fechou o ciclo"}')" || true
@@ -84,18 +84,18 @@ done < "$V"
 # lanes reprovadas no ciclo (P15) — família da intenção apenas (a convergência tem
 # marcador `.reformat-planrev-…` e não passa por aqui)
 REPROV=()
-for m in "$PD"/pareceres/.reformat-*-c"$C".reprovada; do
+while IFS= read -r m; do
   [ -e "$m" ] || continue
-  l=$(basename -- "$m"); l=${l#.reformat-}; l=${l%-c$C.reprovada}
+  l=$(gad_fase_curinga "$PD" "lanes/reformat-*-c$C.reprovada" "$m")
   case "$l" in planrev-*) continue ;; esac
   REPROV+=("$l")
-done
-for st in "$PD"/.intent/.status-c"$C"-*.json; do
+done < <(gad_fase_glob "$PD" "lanes/reformat-*-c$C.reprovada")
+while IFS= read -r st; do
   [ -s "$st" ] || continue
   [ "$(jq -r '.rc_reason // ""' "$st" 2>/dev/null)" = parecer_informe ] || continue
-  l=$(basename -- "$st" .json); l=${l#.status-c$C-}
+  l=$(gad_fase_curinga "$PD" "intent/c$C/status-*.json" "$st")
   case " ${REPROV[*]-} " in *" $l "*) ;; *) REPROV+=("$l") ;; esac
-done
+done < <(gad_fase_glob "$PD" "intent/c$C/status-*.json")
 NREP=${#REPROV[@]}
 
 CINT=$(printf '%s' "$C" | tr -cd '0-9'); : "${CINT:=1}"

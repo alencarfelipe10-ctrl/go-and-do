@@ -217,7 +217,7 @@ if [ "$SO_R6" = 1 ]; then
   r6_json; exit $?
 fi
 
-mkdir -p "$PD/.intent"
+mkdir -p "$(gad_fase_caminho "$PD" intent)"   # v2.10.1: .gad/intent (novo) ou .intent (antigo)
 
 IR="$PD/$NN-INTENT-REVIEW.md"
 ESTADO=""
@@ -247,7 +247,7 @@ else                                      ENTRADA=revisao
 fi
 
 CPS="$GAD_SCRIPTS_DIR/confere-pre-spec.sh"
-ROTA_F="$PD/.intent/pre-spec-route.json"
+ROTA_F="$(gad_fase_caminho "$PD" intent/pre-spec-route.json)"
 
 # ══ §0.5 — rota do PRE-SPEC (fail-closed) ════════════════════════════════════
 TEXTO_DECISAO='O PRE-SPEC não tem o bloco de decisões legível por máquina. Escolha: migrar o PRE-SPEC para o bloco (o `pre-spec-migra.py` gera um rascunho a partir da prosa para você revisar) OU autorizar a rota antiga (filho lê o arquivo inteiro, com sino `pre_spec_sem_bloco`).'
@@ -333,7 +333,8 @@ fi
 
 # ══ T3 — salvaguarda do blob-base (só em entrada: revisao) ═══════════════════
 t3_um() { # <rotulo SPEC|CONTEXT> <arquivo>  → JSON de um artefato
-  local rot="$1" arq="$2" base="$PD/.intent/.base-$1.txt" ger="$PD/.intent/.gerado-$1.txt"
+  local rot="$1" arq="$2" base ger
+  base="$(gad_fase_caminho "$PD" "intent/base-$1.txt")"; ger="$(gad_fase_caminho "$PD" "intent/gerado-$1.txt")"
   local blob="" motivo="" st=""
   if [ ! -f "$arq" ]; then
     st=nao_aplicavel; motivo="$rot ainda não existe no disco"
@@ -343,9 +344,11 @@ t3_um() { # <rotulo SPEC|CONTEXT> <arquivo>  → JSON de um artefato
     st=nao_medido; motivo="salvaguarda só age em entrada: revisao (na geração a base é gravada pelo filho)"
   else
     local sujo="" g
-    [ -d "$PD/.intent/runs" ] && sujo="já há .intent/runs/ (revisão começou)"
+    { [ -d "$PD/.intent/runs" ] || [ -n "$(gad_fase_glob "$PD" 'intent/c*/runs')" ]; } \
+      && sujo="já há runs/ de lane na pasta da intenção (revisão começou)"
     if [ -z "$sujo" ]; then
-      for g in "$PD/.intent/".correcoes-c* "$PD/".correcoes-c* "$PD/.intent/".done-c* "$PD/".done-c*; do
+      for g in "$PD/.intent/".correcoes-c* "$PD/".correcoes-c* "$PD/.intent/".done-c* "$PD/".done-c* \
+               "$PD"/.gad/intent/c*/correcoes.* "$PD"/.gad/intent/c*/done-*; do
         [ -e "$g" ] && { sujo="marcador de ciclo no disco: $(basename "$g")"; break; }
       done
     fi

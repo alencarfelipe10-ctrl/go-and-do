@@ -388,7 +388,7 @@ def main():
     if motivo.startswith("instrumento_sob_julgamento"):
         razao = (f"[gad-bash-guard] comando negado ({motivo}): o instrumento que julga esta "
                  "rodada nao se edita durante a rodada. Se ele esta reprovando, ele e "
-                 "evidencia: grave <phase_dir>/.gate-fail-<etapa>-evidencia.txt com o comando, "
+                 "evidencia: grave <phase_dir>/.gad/gates/<etapa>-evidencia.txt (fase antiga: <phase_dir>/.gate-fail-<etapa>-evidencia.txt) com o comando, "
                  "a saida literal e a linha suspeita, commite e devolva ao dono pelo gate. "
                  "O dono edita com a rodada fechada. Nao ha excecao e nao ha caminho "
                  "alternativo: a fase fecha, o ponteiro some, a edicao acontece.")

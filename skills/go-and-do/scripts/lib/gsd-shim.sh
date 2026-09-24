@@ -190,11 +190,14 @@ gad_autoregistro() { # <nome> <exit> [resumo]
   # rodado fora do CC), cai no comportamento antigo — não há sessão para filtrar por.
   sess8="${CLAUDE_CODE_SESSION_ID:0:8}"
   if [ -n "$sess8" ]; then
+    # `|| true`: sem checkpoint desta sessão o grep sai 1 e, sob `set -euo pipefail` do
+    # chamador, derrubava o script no trap EXIT (visto na bancada da v2.10.1: rodada aberta
+    # por outra sessão). Telemetria nunca derruba quem chamou.
     et=$(grep "\"sessao\":\"$sess8\"" "$rl" 2>/dev/null | grep '"evento":"checkpoint"' | tail -n1 \
-         | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
+         | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p' || true)
   else
     et=$(grep '"evento":"checkpoint"' "$rl" 2>/dev/null | tail -n1 \
-         | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
+         | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p' || true)
   fi
   : "${et:=0 abertura}"
   gad_runlog "$pd" "$nn" script "$et" \

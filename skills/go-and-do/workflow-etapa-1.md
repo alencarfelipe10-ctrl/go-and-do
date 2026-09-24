@@ -28,11 +28,11 @@ classifies the block (`pre_spec_bloco: ok|ausente|invalido`) and
 `gsd-spec-phase N --auto` (ends at the SPEC, no auto-advance) → child `gad-discuss` hosts
 `gsd-discuss-phase N --auto` without running the `auto_advance`, zeroing
 `workflow._auto_chain_active` on return (layer 1 runs the scout and a `gad-explore` first and
-hands `explore: <phase_dir>/.intent/.explore-discuss.md`) → specialist consultancy (Codex +
+hands `explore: <phase_dir>/.gad/intent/explore-discuss.md`) → specialist consultancy (Codex +
 agy — agy = Gemini 3.7 Flash — ↔ `gad-verificador`, which also re-reads each cycle's committed
 amendment in `releitura` mode, `prompts/intent-releitura.md`; loop by `decide-ciclo.sh`, hard
 ceiling 4; fail-closed at the "≥1 consultant" floor). The lanes run in
-the background (`roda-lanes.sh`; lane authority is `.intent/.status-c<C>-<lane>.json`,
+the background (`roda-lanes.sh`; lane authority is `.gad/intent/c<C>/status-<lane>.json`,
 `usable`/`independent`); the 4-turns-per-cycle budget (5 when the `releitura` corrected) is an
 audit ruler measured by `/audit-gad` in the transcript, not counted in session.
 
@@ -50,11 +50,11 @@ alcance`, which is a legitimate route (owner's decision of 11/09: layer 0 passes
 `nao_medido` as the fallback).
 
 **1.3 — Routing the return.**
-- `done` → route gate: `confere-rotas.sh <phase_dir>/.intent` (exit 1 → back to the SAME
+- `done` → route gate: `confere-rotas.sh <phase_dir>/.gad/intent` (exit 1 → back to the SAME
   subagent, step 7b of intent.md, fail-closed) → `confere-etapa.sh 1` (includes
   `confere-reconciliacao.sh --final`: lists the D-NN citing a criterion changed since the
   sealed base, `D-NN-DESATUALIZADA`, informative; mechanical fence — SPEC/CONTEXT/review
-  closed/chain zeroed/`.intent/` cleanup — and the measured `end`; exit 1 → same subagent).
+  closed/chain zeroed/`.gad/intent/` cleanup — and the measured `end`; exit 1 → same subagent).
   Keep from the return: `transparencia` (input of 6.2), `sinos` (for the banner) and announce
   `pausas_de_negocio` in one line. Bells with a skipped review (`intent_review: skipped`) →
   `skip` event + a line to the user + mandatory item in `itens_nao_rodados`. Continue.
@@ -68,7 +68,7 @@ alcance`, which is a legitimate route (owner's decision of 11/09: layer 0 passes
     review) or (b) authorize the legacy route (the child reads the whole file; the
     `pre_spec_sem_bloco` bell is mandatory in the return and in the INTENT-REVIEW). Never
     continue with "zero decisions" in silence. The answer is durable
-    (`.intent/pre-spec-route.json`) while the PRE-SPEC hash does not change.
+    (`.gad/intent/pre-spec-route.json`) while the PRE-SPEC hash does not change.
 - `blocked` — BOTH consultants installed but failing with no complete cycle (fail-closed,
   decision of 02/07: without a second opinion the intent does not proceed; ONE failing
   continues degraded with a bell; NONE installed becomes `skipped` in the pre-check) →
@@ -77,8 +77,8 @@ alcance`, which is a legitimate route (owner's decision of 11/09: layer 0 passes
   `/go-and-do N`."
 
 **1.3a — The fiscal now leaves a receipt.** `confere-etapa.sh <etapa>` writes, on a pass,
-`<phase_dir>/.fence-<etapa>.ok` with the HEAD it checked, and deletes it on a fail (the pair of the
-`.gate-fail-<etapa>.json` lock). `gad-intent` only returns `done` after running the fiscal itself
+`<phase_dir>/.gad/fences/<etapa>.ok` with the HEAD it checked, and deletes it on a fail (the pair of the
+`.gad/gates/<etapa>.json` lock). `gad-intent` only returns `done` after running the fiscal itself
 and seeing a valid fence. A return that says `done` **without** a valid fence on disk is an
 incident of the subagent, not of the fiscal: log it and send it back to the same subagent, as the
 gate already prescribes. `--dry-run` neither writes nor deletes a fence.

@@ -118,16 +118,19 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-IN="$PD/.intent"; mkdir -p "$IN"
-BASE="$IN/.correcoes-c$C.base.json"
+# v2.10.1 (57): arquivos do ciclo pelo helper (formato da fase): `.gad/intent/c<C>/…` no
+# novo, `.intent/.<x>-c<C>…` no antigo.
+CI() { gad_fase_caminho "$PD" "intent/c$C/$1"; }
+mkdir -p "$(dirname -- "$(CI correcoes.base.json)")"
+BASE="$(CI correcoes.base.json)"
 
 if [ "$MODO" = vazio ]; then
   printf '{"v":1,"ciclo":"%s","motivo":"ciclo sem correção factual","ts":"%s"}\n' \
-    "$C" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$IN/.correcoes-c$C.vazio.tmp" \
-    && mv -f "$IN/.correcoes-c$C.vazio.tmp" "$IN/.correcoes-c$C.vazio"
-  rm -f "$IN/.correcoes-c$C.aplicado"
+    "$C" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$(CI correcoes.vazio.tmp)" \
+    && mv -f "$(CI correcoes.vazio.tmp)" "$(CI correcoes.vazio)"
+  rm -f "$(CI correcoes.aplicado)"
   gad_json_out correcoes-commit "$(jq -cn --arg c "$C" \
-    --arg m "$IN/.correcoes-c$C.vazio" '{ciclo:$c, modo:"vazio", marcador:$m}')"
+    --arg m "$(CI correcoes.vazio)" '{ciclo:$c, modo:"vazio", marcador:$m}')"
   exit 0
 fi
 
@@ -205,7 +208,7 @@ if [ "$MODO" = inicio ]; then
     sujo=false; patch=""
     if [ -n "$head_blob" ] && [ "$head_blob" != "$blob" ]; then
       sujo=true
-      patch="$IN/.correcoes-c$C.pre-$i.patch"
+      patch="$(CI correcoes.pre-$i.patch)"
       git -C "$ROOT" diff --no-color -- "$r" > "$patch" 2>/dev/null || true
     fi
     ENTRADAS+=("$(jq -cn --arg p "$r" --arg b "$blob" --arg h "$head_blob" \
@@ -242,7 +245,7 @@ fi
 # Fonte dos vereditos: `.intent/.vereditos-c<C>.txt`, `id | classe | veredito | categoria`
 # (mesma leitura do confere-reconciliacao.sh). Ciclo sem arquivo de vereditos (o c0, que
 # não passa pela consultoria) → trava inativa, declarada no stderr, nunca silenciosa.
-VERED="$IN/.vereditos-c$C.txt"
+VERED="$(CI vereditos.txt)"
 if [ -f "$VERED" ]; then
   declare -A VER_DE=()
   VALIDOS=()
@@ -523,14 +526,14 @@ for r in "${COMITADOS[@]}"; do
     '{path:$p, blob_commit:$c, blob_worktree:$w}')")
 done
 BLOBS_JSON=$(printf '%s\n' "${BLOBS[@]}" | jq -cs .)
-APL="$IN/.correcoes-c$C.aplicado"
+APL="$(CI correcoes.aplicado)"
 jq -cn --arg c "$C" --arg commit "$CAND" --arg msg "$MSG" \
   --argjson ids "$IDS_JSON" --argjson cor "$COR_JSON" --argjson cam "$CAM_JSON" \
   --argjson bl "$BLOBS_JSON" --argjson aus "$AUS_JSON" \
   '{v:1, ciclo:$c, ids:$ids, correcoes:$cor, commit:$commit, caminhos:$cam,
     hash_ausente:$aus, blobs:$bl, mensagem:$msg}' \
   > "$APL.tmp" && mv -f "$APL.tmp" "$APL"
-rm -f "$IN/.correcoes-c$C.vazio"
+rm -f "$(CI correcoes.vazio)"
 
 gad_autoregistro "correcoes-commit.sh" 0 "c$C commit $CAND (${#COMITADOS[@]} caminhos)" || true
 gad_json_out correcoes-commit "$(jq -cn --arg c "$C" --arg commit "$CAND" --arg a "$APL" \

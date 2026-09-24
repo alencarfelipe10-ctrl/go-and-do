@@ -66,7 +66,15 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    existiu (FJ-03EXE).
 2. Deixe o motor de ondas trabalhar. O `--auto` **não silencia** as paradas de
    realidade — falha de teste de regressão, schema drift, conflito pós-merge — e elas
-   devem parar mesmo: são decisões do usuário → siga o `<environment>` (devolva
+   devem parar mesmo: são decisões do usuário → siga o `**Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
+`<phase_dir>/.gad/` e aparecem aqui pelo NOME NOVO (ex.: `.gad/intent/c<C>/vereditos.txt`) — o
+formato de toda fase com `<phase_dir>/.gad/FORMATO`. Fase SEM esse arquivo (aberta antes da
+v2.10.1) usa os nomes antigos: o caminho real é o que
+`bash $HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh "<phase_dir>" <nome depois de .gad/>`
+imprime (ex.: `intent/c1/vereditos.txt` → `.intent/.vereditos-c1.txt`). Os blocos bash abaixo já
+resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
+
+<environment>` (devolva
    `needs_decision` com a pergunta mastigada). Um executor que pare pedindo uma
    **decisão respondível por texto** (ex.: autorizar um gasto, escolher entre duas
    rotas) também sobe como `needs_decision`; na continuação, retome esse mesmo executor
@@ -110,7 +118,7 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    ```bash
    bash "$HOME/.claude/skills/go-and-do/scripts/confere-etapa.sh" 3 \
      --fase <N> --projeto "<project_root>" --sem-telemetria
-   F="<phase_dir>/.fence-3.ok"
+   F=$(bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" fences/3.ok)
    H=$(git -C "<project_root>" rev-parse HEAD 2>/dev/null || echo "")
    [ -f "$F" ] && [ "$(jq -r '.head' "$F")" = "$H" ] && echo FENCE-OK || echo FENCE-AUSENTE
    ```
@@ -357,7 +365,7 @@ depender do reflexo de quem errou.
 
 **Instrumento sob julgamento.** Quando um `confere-*.sh`, um hook ou um script do fork está
 reprovando a rodada **por defeito dele mesmo**, ele é evidência, nunca alvo. Grave
-`<phase_dir>/.gate-fail-<etapa>-evidencia.txt` com o comando, a saída literal e a linha que você
+`<phase_dir>/.gad/gates/<etapa>-evidencia.txt` com o comando, a saída literal e a linha que você
 julga errada, commite e devolva a decisão ao coordenador. Nunca `sed`, nunca `Edit`, nunca um
 remendo «temporário» no instrumento enquanto a rodada que ele julga está aberta — nem quando o
 seu diagnóstico está certo. F24.5, 23:47–23:49: o diagnóstico **estava** certo e o gesto

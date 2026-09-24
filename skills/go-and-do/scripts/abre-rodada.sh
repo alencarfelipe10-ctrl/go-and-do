@@ -229,8 +229,29 @@ if [ -n "$SESS" ]; then
   [ -n "$_tr" ] && MODELO=$(jq -rs '[.[] | select(.type=="assistant") | .message.model] | last // ""' "$_tr" 2>/dev/null || true)
 fi
 ABERTA=false
+# ── 9a. formato da evidência da fase (57(b), v2.10.1) ─────────────────────────
+# Quem abre a fase decide: fase SEM nenhuma evidência no formato antigo nasce no formato
+# novo (`.gad/FORMATO` + `.gad/lanes/.gitignore`); com evidência antiga fica antiga —
+# uma fase nunca mistura os dois. O marcador é COMMITADO aqui, antes de qualquer etapa
+# (a primeira evidência da Etapa 1 e as worktrees da Etapa 3 já nascem vendo o formato).
+# Commit com pathspec explícito (`--only`): o que o dono tiver staged fica como estava.
+FORMATO="$(gad_fase_formato "$PHASE_DIR")"; FORMATO_COMMIT=nao_aplicavel
 if [ "$DRY" = 0 ]; then
   mkdir -p "$PHASE_DIR"
+  FORMATO="$(gad_fase_inicia "$PHASE_DIR")"
+  if [ "$FORMATO" = novo ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    _fm=("$PHASE_DIR/.gad/FORMATO" "$PHASE_DIR/.gad/lanes/.gitignore")
+    if git -C "$ROOT" ls-files --error-unmatch -- "${_fm[@]}" >/dev/null 2>&1 \
+       && git -C "$ROOT" diff --quiet HEAD -- "${_fm[@]}" 2>/dev/null; then
+      FORMATO_COMMIT=ja_commitado
+    else
+      git -C "$ROOT" add -f -- "${_fm[@]}" 2>/dev/null || true
+      if git -C "$ROOT" commit -q --only -m "docs(fase $NN): formato da evidência da fase (.gad/FORMATO, go-and-do v2.10.1)" \
+           -- "${_fm[@]}" >/dev/null 2>&1; then FORMATO_COMMIT=ok; else FORMATO_COMMIT=falhou; fi
+    fi
+  fi
+fi
+if [ "$DRY" = 0 ]; then
   gad_estado_garante "$ROOT"
   jq -cn --arg sess "$SESS" --arg fase "$FASE" --arg nn "$NN" --arg pd "$PHASE_DIR" \
     --arg rl "$PHASE_DIR/$NN-RUN-LOG.jsonl" --arg ts "$(date -Is)" \
@@ -280,6 +301,7 @@ gad_json_out "$SLUG" "$(jq -cn \
   --arg ps "$PRE_SPEC" --arg inv "$INVENTARIO" \
   --argjson posship "$POS_SHIP" --arg uats "$UAT_SUPERFICIE" --arg nal "$NAO_AUTONOMOS_LIST" \
   --argjson limp "$LIMPEZA" --argjson legr "$LEGADO_RASTREADO" \
+  --arg fmt "$FORMATO" --arg fmc "$FORMATO_COMMIT" \
   '{args:{fase:$fase, ui:$ui, ai:$ai, no_ship:$ns, vault:$va, vault_profile:(if $vp == "" then null else $vp end), obs:$obs},
     retrato:$retrato, contexto:$ctx,
     pre_spec:(if $ps != "" then $ps else null end), inventario:$inv,
@@ -291,5 +313,5 @@ gad_json_out "$SLUG" "$(jq -cn \
       pergunta:"Há observação pós-ship de fase anterior marcada como bloqueante e ainda não observada. Abrir esta fase mesmo assim?"} else false end),
     uat_superficie:(if $uats == "" then null else $uats end),
     tasklist:$tasks,
-    rodada:{aberta:$aberta, nn:$nn, phase_dir:$pd},
+    rodada:{aberta:$aberta, nn:$nn, phase_dir:$pd, formato_fase:$fmt, formato_commit:$fmc},
     limpeza:$limp, legado_rastreado:$legr}')"

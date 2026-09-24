@@ -113,7 +113,7 @@ leaves basket 3 without open `issue`. Order matters: re-run first, triage what i
    candidate. Exit 0 → proceed to step 3.
 3. Any scenario carrying `pos_ship: candidato` → dispatch the skeptic (`Agent`,
    `model: sonnet`, synchronous) with `prompts/uat-pos-ship.md`; it writes
-   `.pos-ship-vereditos.json`. Whoever classifies never judges.
+   `.gad/pos-ship/vereditos.json`. Whoever classifies never judges.
 4. `scripts/pos-ship.py move <phase_dir> <NN> <project_root>` — moves only what passes its six
    conditions; a refused candidate stays in `NN-UAT.md` as basket 3 and keeps blocking the
    ship. Then `confere-etapa.sh 5` again (it may now promote `status: complete`) and

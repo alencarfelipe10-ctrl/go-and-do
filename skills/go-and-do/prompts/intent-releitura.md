@@ -10,7 +10,7 @@
 # Filho da intenção — releitura da emenda (ciclo C)
 
 O despacho te entrega: `project_root` e `phase_dir` (absolutos), `NN`, o número do ciclo
-`C`, o conteúdo (ou o caminho) de `<phase_dir>/.intent/.correcoes-c<C>.aplicado` — JSON
+`C`, o conteúdo (ou o caminho) de `<phase_dir>/.gad/intent/c<C>/correcoes.aplicado` — JSON
 `{commit, caminhos:[...], correcoes:[{id, hash}]}` — e, conforme o ciclo:
 
 - **ciclo 0:** a seção "Consistência interna" do `NN-SPEC.md` (R4), o bloco `gsd:acs`
@@ -32,6 +32,14 @@ Você lê o que o ciclo **acabou de escrever nos artefatos** (SPEC, CONTEXT, INT
 quando o ciclo os tocou, ROADMAP/REQUIREMENTS) e responde uma pergunta só: **a emenda
 estragou alguma coisa?** No ciclo 0 a "emenda" inclui o texto original: é a única vez em
 que alguém relê o que o spec e o discuss produziram antes dos consultores.
+
+**Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
+`<phase_dir>/.gad/` e aparecem aqui pelo NOME NOVO (ex.: `.gad/intent/c<C>/vereditos.txt`) — o
+formato de toda fase com `<phase_dir>/.gad/FORMATO`. Fase SEM esse arquivo (aberta antes da
+v2.10.1) usa os nomes antigos: o caminho real é o que
+`bash $HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh "<phase_dir>" <nome depois de .gad/>`
+imprime (ex.: `intent/c1/vereditos.txt` → `.intent/.vereditos-c1.txt`). Os blocos bash abaixo já
+resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
 
 ## Trabalho
 
@@ -162,16 +170,17 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
 
    ```bash
    cd "<project_root>"
-   IN="<phase_dir>/.intent"
-   cat > "$IN/.releitura-<RODADA>.json.tmp" <<'JSON'
+   G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
+   R=$(G intent/<RODADA>/releitura.json); mkdir -p "$(dirname "$R")"
+   cat > "$R.tmp" <<'JSON'
    {"v": 2, "ciclo": <C>, "commit": "<commit>",
     "artefatos": [{"path": "<caminho>", "blob": "<blob>"}, ...],
     "contradiz": [...], "prescreve_mecanismo": [...], "omissoes_novas": [...],
     "cardinalidade": [...], "unicidade": [...], "consistencia": ..., "ok": true|false,
     "observacao": "..."}
    JSON
-   mv -f "$IN/.releitura-<RODADA>.json.tmp" "$IN/.releitura-<RODADA>.json"
-   touch "$IN/.releitura-<RODADA>.done"
+   mv -f "$R.tmp" "$R"
+   touch "$(G intent/<RODADA>/releitura.done)"
    ```
 
    - `commit` = o `commit` do `.aplicado`, verbatim.
@@ -182,37 +191,38 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
      entra quando a `c<C>b` emendou uma `D-NN`): liste o conjunto vigente.
    - `blob` = `git rev-parse <commit>:<path>` (o blob **do commit**; o gate confere contra
      o commit **e** contra o worktree atual).
-   - **Ciclo sem correção** (`.correcoes-c<C>.vazio` no lugar do `.aplicado`) → o mesmo
+   - **Ciclo sem correção** (`c<C>/correcoes.vazio` no lugar do `.aplicado`) → o mesmo
      objeto com `"commit": ""`, `"artefatos": []`, todas as listas vazias e `ok: true`, mais
      o `.done`. O arquivo é obrigatório mesmo assim.
    - **Ordem obrigatória:** o `.json` completo primeiro, o `.done` por último — marcador na
      frente de JSON meio-escrito é fabricação de evidência.
    - **`<RODADA>` é o rótulo que o despacho te passou**, não o número do ciclo: `c0` na primeira
      rodada do ciclo 0, `c0b` na correção pós-releitura, `c0c` na seguinte, e assim por diante
-     (`c1`, `c1b`, …). O **`.json` leva o nome da própria rodada** (`.releitura-<RODADA>.json`,
-     igual ao `.done`): a primeira rodada do ciclo (`c<C>`) grava `.releitura-c<C>.json` — o
+     (`c1`, `c1b`, …). O **`.json` leva o nome da própria rodada** (`<RODADA>/releitura.json`,
+     igual ao `.done`): a primeira rodada do ciclo (`c<C>`) grava `c<C>/releitura.json` — o
      nome fixo de sempre —, e CADA rodada de correção pós-releitura (`c<C>b`, `c<C>c`, …)
-     grava um arquivo PRÓPRIO — `.releitura-c<C>b.json`, `.releitura-c<C>c.json`, … —, sem
+     grava um arquivo PRÓPRIO — `c<C>b/releitura.json`, `c<C>c/releitura.json`, … —, sem
      sobrescrever o da rodada anterior do mesmo ciclo. O `.done` já ganhava o nome da rodada
      por este mesmo motivo: sem isso, o marcador da rodada anterior satisfaz a espera da
      seguinte e o coordenador abre a rodada nova sobre premissa falsa (F24.5: 5 rodadas de
      releitura no ciclo 0, `c0c` lançado 51 s antes de o `c0b` acabar — a mesma fase em que a
      rodada MAIS RECENTE, não a primeira, importa). O gate do `briefing-build.sh` lê, para
-     cada ciclo, a rodada de letra mais alta que existir — senão a primeira (`.releitura-c<C>.json`).
+     cada ciclo, a rodada de letra mais alta que existir — senão a primeira (`c<C>/releitura.json`).
    - Despacho sem `<RODADA>` declarado → use o próprio ciclo (`c<C>`), que é o comportamento antigo
-     (grava `.releitura-c<C>.json`, igual a sempre).
+     (grava `c<C>/releitura.json`, igual a sempre).
    - **Veredito dos itens que você devolveu (J5b).** Todo item que você devolve (`contradiz`,
      `prescreve_mecanismo`, `omissoes_novas`, `cardinalidade`, `unicidade`, par em `consistencia`)
      vira uma correção que quem te despachou vai promover no mesmo turno — e o fiscal da etapa exige
      linha de veredito por id promovido. **Quem julga escreve.** Acrescente, para cada item, uma
-     linha em `<phase_dir>/.intent/.vereditos-c<C>.txt`, no formato de quatro campos de sempre:
+     linha em `<phase_dir>/.gad/intent/c<C>/vereditos.txt`, no formato de quatro campos de sempre:
      `<id> | releitura | confirmado | <categoria>`, com o `id` continuando a série do ciclo a partir
      do último já usado (nunca reaproveitando um id de achado). `classe: releitura` é o que distingue
      estas linhas das do consultor na tabela do INTENT-REVIEW.
    - **Re-sele o recibo.** Depois de acrescentar as linhas, regrave
-     `<phase_dir>/.intent/.vereditos-c<C>.origem.json` com o sha256 novo e acrescente-se ao histórico:
+     `<phase_dir>/.gad/intent/c<C>/vereditos.origem.json` com o sha256 novo e acrescente-se ao histórico:
      ```bash
-     IN="<phase_dir>/.intent"; V="$IN/.vereditos-c<C>.txt"; O="$IN/.vereditos-c<C>.origem.json"
+     G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
+     V=$(G intent/c<C>/vereditos.txt); O=$(G intent/c<C>/vereditos.origem.json)
      jq --arg s "$(sha256sum "$V" | cut -d' ' -f1)" --arg t "$(date -Is)" --argjson n "$(grep -cvE '^\s*(#|$)' "$V")" \
         '.sha256=$s | .n_linhas=$n | .escritores += [{"agente":"gad-verificador","modo":"releitura","ts":$t}]' \
         "$O" > "$O.tmp" && mv -f "$O.tmp" "$O"
@@ -222,20 +232,20 @@ que alguém relê o que o spec e o discuss produziram antes dos consultores.
    - Você **não** decide destino nem promove nada: continua valendo o item 5 do
      `intent-verifica.md`. O que muda é que o veredito do que você achou não passa mais pela mão de
      quem você está auditando.
-   - **Ciclo 0, primeira rodada:** você grava **só** `.releitura-c0.json` + `.releitura-c0.done`.
-     O `.ciclo0.json` (sinos, correções, releitura) é escrito pelo **coordenador**, não por
-     você — e o campo `.ciclo0.json`.`releitura` dele é o objeto **inteiro** do arquivo da
+   - **Ciclo 0, primeira rodada:** você grava **só** `c0/releitura.json` + `c0/releitura.done`.
+     O `c0/ciclo.json` (sinos, correções, releitura) é escrito pelo **coordenador**, não por
+     você — e o campo `c0/ciclo.json`.`releitura` dele é o objeto **inteiro** do arquivo da
      **rodada mais recente que você gravou** (com o `v: 2` e o veredito), por isso você
      devolve o mesmo objeto no retorno: é o que ele copia, sem recalcular. Numa fase com
-     `c0b`/`c0c`/…, o coordenador copia do arquivo da ÚLTIMA rodada (`.releitura-c0c.json`,
-     não `.releitura-c0.json`) — copiar o da primeira rodada reintroduziria o veredito velho
+     `c0b`/`c0c`/…, o coordenador copia do arquivo da ÚLTIMA rodada (`c0c/releitura.json`,
+     não `c0/releitura.json`) — copiar o da primeira rodada reintroduziria o veredito velho
      (possivelmente `ok: false`) que a rodada seguinte já corrigiu.
    - **Correção pós-releitura (`c<C>b`, `c<C>c`, …):** quem te despachou corrige no mesmo
      turno, gera **novo commit** e te despacha **de novo**. Cada releitura seguinte grava um
-     arquivo **próprio** (`.releitura-c<C>b.json`, `.releitura-c<C>c.json`, …) — **não
+     arquivo **próprio** (`c<C>b/releitura.json`, `c<C>c/releitura.json`, …) — **não
      sobrescreve** o da rodada anterior do mesmo ciclo. O briefing do ciclo seguinte lê a
      rodada mais recente do ciclo (a de letra mais alta, senão a primeira). Invariante:
-     `commit` e conjunto de `path` sempre idênticos ao `.correcoes-c<C>.aplicado` vigente.
+     `commit` e conjunto de `path` sempre idênticos ao `c<C>/correcoes.aplicado` vigente.
 
 ## Retorno (obrigatório, sem prosa antes ou depois)
 
@@ -263,5 +273,5 @@ para leitura; o que você devolve é JSON válido, sem cerca de código):
 `omissoes_novas`, `cardinalidade`, `unicidade`) estão vazias **e** `consistencia` não é
 objeto com pares insatisfazíveis. Um `contradiz: []` honesto passa — o gate cobra que você
 tenha respondido às perguntas, não quantas respostas deu. Qualquer item → `ok: false`, e
-quem te despachou corrige no mesmo turno (novo `.correcoes-c<C>b`, novo commit, nova
+quem te despachou corrige no mesmo turno (novo `c<C>b/correcoes`, novo commit, nova
 releitura) **antes** do briefing C+1; o `briefing-build.sh` reprova `ok: false` em disco.

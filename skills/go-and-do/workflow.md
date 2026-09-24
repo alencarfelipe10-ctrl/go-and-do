@@ -57,6 +57,11 @@ Read once, apply throughout:
   in the resumo's transparency block. Never mutate project config to make a step not run.
 - Paths: the skill lives at `$HOME/.claude/skills/go-and-do/`; `phase_dir`/`padded_phase`
   (the `NN` prefix) come from the abre-rodada snapshot. Dispatch paths are always absolute.
+- Phase evidence (v2.10.1): a phase opened by abre-rodada with no older evidence keeps ALL run
+  evidence under `<phase_dir>/.gad/` (marker `.gad/FORMATO`, committed at opening;
+  `formato_fase` in the abre-rodada and pre-despacho JSON). The stage files cite those new
+  names (`.gad/fences/3.ok`, `.gad/intent/c<C>/…`). A phase without the marker keeps the old
+  dotfiles: resolve each name with `scripts/caminho-fase.sh <phase_dir> <rel>`. Never mix.
 - Gates decide on RAW output, never on wrapper-filtered output. Under a hook that rewrites
   Bash and compacts output (e.g. RTK), every command whose result feeds a gate decision
   (`wc -l`, empty-output test, `grep` routed by exit code) runs as `rtk proxy <cmd>`. Applies

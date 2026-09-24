@@ -8,6 +8,14 @@ PRE-SPEC, `pre_spec_mode: structured|legacy` + o insumo correspondente. Traz ain
 `goal_roadmap`, `issues` (R6) e `licoes` (checklist). Comece todo bloco Bash com
 `cd "<project_root>"` e use caminhos absolutos em tudo.
 
+**Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
+`<phase_dir>/.gad/` e aparecem aqui pelo NOME NOVO (ex.: `.gad/intent/c<C>/vereditos.txt`) — o
+formato de toda fase com `<phase_dir>/.gad/FORMATO`. Fase SEM esse arquivo (aberta antes da
+v2.10.1) usa os nomes antigos: o caminho real é o que
+`bash $HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh "<phase_dir>" <nome depois de .gad/>`
+imprime (ex.: `intent/c1/vereditos.txt` → `.intent/.vereditos-c1.txt`). Os blocos bash abaixo já
+resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
+
 ## Trabalho
 
 1. Se `<phase_dir>/NN-SPEC.md` já existe → não re-rode nada; vá direto ao retorno
@@ -106,9 +114,10 @@ PRE-SPEC, `pre_spec_mode: structured|legacy` + o insumo correspondente. Traz ain
    nome do arquivo). Sem essa base a proveniência dos achados sai `não_medido`, e o
    coordenador não a reconstrói depois:
    ```bash
-   cd "<project_root>"; mkdir -p "<phase_dir>/.intent"
-   git hash-object    "<phase_dir>/NN-SPEC.md" > "<phase_dir>/.intent/.gerado-SPEC.txt"
-   git hash-object -w "<phase_dir>/NN-SPEC.md" > "<phase_dir>/.intent/.base-SPEC.txt"
+   cd "<project_root>"; G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
+   mkdir -p "$(G intent)"
+   git hash-object    "<phase_dir>/NN-SPEC.md" > "$(G intent/gerado-SPEC.txt)"
+   git hash-object -w "<phase_dir>/NN-SPEC.md" > "$(G intent/base-SPEC.txt)"
    ```
 
 ## Checklist de lições
@@ -126,7 +135,7 @@ resposta = checklist incompleta.
   `[auto] unclassified — RN…`).
 - Os tokens literais `pre_spec_sem_bloco`, `req_ausente: <id>` e `fase_sem_req` quando as
   regras acima os exigirem.
-Grave-os verbatim em `<phase_dir>/.intent/.sinos-spec.txt` (1 por linha; crie a pasta
+Grave-os verbatim em `<phase_dir>/.gad/intent/sinos-spec.txt` (1 por linha; crie a pasta
 com `mkdir -p`) E repita-os em `sinos` no retorno. O briefing do revisor lê do ARQUIVO
 (`briefing-build.sh`) — o retorno é só roteamento; sino que não está no arquivo não
 chega ao revisor.

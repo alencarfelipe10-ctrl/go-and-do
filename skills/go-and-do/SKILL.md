@@ -87,7 +87,7 @@ Fail-closed: block missing or invalid → Etapa 1 returns `needs_decision` with 
 the file (`scripts/pre-spec-migra.py` drafts the block from the prose for the owner to review;
 legacy tool for PRE-SPECs written before 2.2.0) or authorize the legacy route (the child reads
 the whole file; mandatory `pre_spec_sem_bloco` bell). Never "zero decisions in silence". The
-answer is durable (`.intent/pre-spec-route.json`); a changed file hash invalidates it and
+answer is durable (`.gad/intent/pre-spec-route.json`); a changed file hash invalidates it and
 re-asks. `scripts/confere-pre-spec.sh` is the gate (it runs inside `setup-intencao.sh` and
 `confere-etapa.sh 1`); its header carries the exact failure codes.
 

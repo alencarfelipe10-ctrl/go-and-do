@@ -20,7 +20,9 @@ você no disco:
 3. O `bloqueia_proxima` está honesto. `nao` só vale para medição ou curiosidade operacional;
    se a resposta puder invalidar o que a fase seguinte constrói e está `nao`, recuse e diga.
 
-Grave `<phase_dir>/.pos-ship-vereditos.json` — uma lista, um objeto por candidato:
+Grave `<phase_dir>/.gad/pos-ship/vereditos.json` — numa fase sem `<phase_dir>/.gad/FORMATO`
+(aberta antes da v2.10.1), o caminho é o antigo, `<phase_dir>/.pos-ship-vereditos.json`
+(`caminho-fase.sh <phase_dir> pos-ship/vereditos.json` imprime o certo) — uma lista, um objeto por candidato:
 
 ```json
 [{"cenario": 9, "veredito": "confirmado", "motivo": "<1 linha, com o comando que rodou>"},

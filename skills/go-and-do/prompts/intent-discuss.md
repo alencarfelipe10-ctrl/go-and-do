@@ -11,6 +11,14 @@ absoluto, `command not found`) não é «pule e continue» — é `incidente` (`
 intent-discuss`, `detalhe=instrumento ausente: <caminho>`) e trava: devolva
 `estado: falha`/`blocked` com o motivo, nunca contorne à mão o que o script faria.
 
+**Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
+`<phase_dir>/.gad/` e aparecem aqui pelo NOME NOVO (ex.: `.gad/intent/c<C>/vereditos.txt`) — o
+formato de toda fase com `<phase_dir>/.gad/FORMATO`. Fase SEM esse arquivo (aberta antes da
+v2.10.1) usa os nomes antigos: o caminho real é o que
+`bash $HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh "<phase_dir>" <nome depois de .gad/>`
+imprime (ex.: `intent/c1/vereditos.txt` → `.intent/.vereditos-c1.txt`). Os blocos bash abaixo já
+resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
+
 ## Trabalho
 
 0. **Nada de leitura antes da `Skill` (D5a).** É **proibido** ler o SPEC, o código do
@@ -28,7 +36,7 @@ intent-discuss`, `detalhe=instrumento ausente: <caminho>`) e trava: devolva
    **As duas linhas de invocação exatas (FJ-08INT — cole, não redescubra):**
    ```
    bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/scout.sh" "<N>" \
-     --spec "<phase_dir>/NN-SPEC.md" --out "<phase_dir>/.intent/.scout-discuss.md"
+     --spec "<phase_dir>/NN-SPEC.md" --out "<phase_dir>/.gad/intent/scout-discuss.md"
    python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/decisions-index.py" \
      .planning --out .planning/DECISIONS-INDEX.md
    ```
@@ -105,9 +113,10 @@ intent-discuss`, `detalhe=instrumento ausente: <caminho>`) e trava: devolva
 
    ```bash
    cd "<project_root>"
-   mkdir -p "<phase_dir>/.intent"
-   git hash-object    "<phase_dir>/NN-CONTEXT.md" > "<phase_dir>/.intent/.gerado-CONTEXT.txt"
-   git hash-object -w "<phase_dir>/NN-CONTEXT.md" > "<phase_dir>/.intent/.base-CONTEXT.txt"
+   G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
+   mkdir -p "$(G intent)"
+   git hash-object    "<phase_dir>/NN-CONTEXT.md" > "$(G intent/gerado-CONTEXT.txt)"
+   git hash-object -w "<phase_dir>/NN-CONTEXT.md" > "$(G intent/base-CONTEXT.txt)"
    ```
 
    O rótulo do arquivo é `CONTEXT` (não o nome do artefato). Sem essa base a proveniência
@@ -173,6 +182,6 @@ base_context: <blob do .base-CONTEXT.txt; nao_gravado + porquê se o CONTEXT nã
 dedup_aplicada: <n parágrafos substituídos por ponteiro; 0 se o passe já saiu limpo>
 leituras_proprias: <n arquivos do projeto que você abriu além do explore; 0 é o esperado>
 criterios_nao_fecham: <n; 0 quando nenhum>
-sinos: [<um item por linha; ausente se vazio — grave também em <phase_dir>/.intent/.sinos-discuss.txt (1 por linha): o briefing do revisor lê do arquivo, não do retorno>]
+sinos: [<um item por linha; ausente se vazio — grave também em <phase_dir>/.gad/intent/sinos-discuss.txt (1 por linha): o briefing do revisor lê do arquivo, não do retorno>]
 pergunta: <só no estado pausa — a decisão pendente com opções e sua recomendação primeiro>
 ```

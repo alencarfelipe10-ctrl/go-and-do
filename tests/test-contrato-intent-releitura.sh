@@ -17,19 +17,19 @@ erro() { echo "  FALHA — $1"; falhas=$((falhas+1)); }
 tem() { grep -qF -- "$2" "$1" && ok "$3" || erro "$3"; }
 
 echo "== intent-releitura.md (quem grava)"
-tem "$R" 'cat > "$IN/.releitura-<RODADA>.json.tmp"' "heredoc grava no nome da própria rodada, não mais fixo no ciclo"
-tem "$R" 'mv -f "$IN/.releitura-<RODADA>.json.tmp" "$IN/.releitura-<RODADA>.json"' "mv atômico para .releitura-<RODADA>.json"
+tem "$R" 'R=$(G intent/<RODADA>/releitura.json)' "heredoc grava no nome da própria rodada, não mais fixo no ciclo"
+tem "$R" 'mv -f "$R.tmp" "$R"' "mv atômico para <RODADA>/releitura.json (v2.10.1: nome novo, resolvido pelo caminho-fase.sh)"
 tem "$R" 'CADA rodada de correção pós-releitura (`c<C>b`, `c<C>c`, …)' "texto explícito: toda rodada pós-releitura grava arquivo próprio"
-tem "$R" '`.releitura-c<C>b.json`, `.releitura-c<C>c.json`, …' "grafia exata .releitura-c<C>b.json (e cadeia c<C>c, …), sem sobrescrever a rodada anterior"
+tem "$R" '`c<C>b/releitura.json`, `c<C>c/releitura.json`, …' "grafia exata .releitura-c<C>b.json (e cadeia c<C>c, …), sem sobrescrever a rodada anterior"
 tem "$R" 'a rodada de letra mais alta que existir' "explica ao filho que o consumidor prioriza a letra mais alta"
 
 echo "== intent.md (quem despacha e explica o marcador)"
-tem "$I" 'leva o nome da própria rodada (`.releitura-<rodada>.json`, igual ao `.done`)' "despacho: .json segue o rótulo da rodada, igual ao .done"
+tem "$I" 'leva o nome da própria rodada (`<rodada>/releitura.json`, igual ao `.done`)' "despacho: .json segue o rótulo da rodada, igual ao .done"
 tem "$I" 'de correção pós-releitura (`c<C>b`, `c<C>c`, …) grava seu próprio arquivo' "despacho: grafia exata — toda rodada pós-releitura grava arquivo próprio"
 
 echo "== briefing-build.sh (quem lê)"
 tem "$B" 'def caminho_releitura(IN, ciclo):' "resolvedor único (não duplicado nos dois pontos de leitura)"
-tem "$B" '.releitura-c%s[a-z].json' "resolvedor procura QUALQUER letra de rodada (mesma família \`cNb\`/\`cNc\` do .correcoes-cNb), pega a mais alta"
+tem "$B" 'intent/c%s[a-z]/releitura.json' "resolvedor procura QUALQUER letra de rodada (mesma família \`cNb\`/\`cNc\` do .correcoes-cNb), pega a mais alta"
 tem "$B" 'rel_path = caminho_releitura(IN, prev)' "leitura do ciclo anterior (c>=2) passa pelo resolvedor"
 
 echo

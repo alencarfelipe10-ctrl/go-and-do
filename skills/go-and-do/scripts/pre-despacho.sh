@@ -468,6 +468,7 @@ PAR_KV=(); [ "$PARALELISMO_ATIVO" = 1 ] && PAR_KV=(--kv paralelismo=ok)
 gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" --arg st "${status:-unknown}" --arg rz "$reason" \
   --arg pr "prompts" --argjson t "${tokens:-0}" --argjson p "${pct:-0}" --argjson l "${limite:-0}" \
   --argjson sil "$silencio" --argjson x "$extras" \
+  --arg fmt "$( [ -n "$PHASE_DIR" ] && gad_fase_formato "$PHASE_DIR" || echo desconhecido)" \
   '{etapa:$e, despacho:"ok",
     contexto:({tokens:$t,pct:$p,limit:$l,status:$st} + (if $rz != "" then {reason:$rz} else {} end)),
-    janela_silencio:$sil} + $x')"
+    janela_silencio:$sil, formato_fase:$fmt} + $x')"

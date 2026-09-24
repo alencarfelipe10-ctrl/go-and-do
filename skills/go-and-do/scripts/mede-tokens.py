@@ -283,6 +283,7 @@ def main():
         while d != os.path.dirname(d):
             if os.path.isdir(os.path.join(d, ".planning")):
                 try:
+                    sys.dont_write_bytecode = True
                     sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "lib"))
                     import gad_caminhos
                     esp = gad_caminhos.espelho_caminho(d, "mede-tokens")

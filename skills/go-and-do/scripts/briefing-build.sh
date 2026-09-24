@@ -68,21 +68,28 @@ while [ $# -gt 0 ]; do
 done
 [ -d "$PD" ] || { echo "ERRO: phase_dir inexistente: $PD" >&2; exit 2; }
 ROOT="$(gad_project_root "$PD")"
-mkdir -p "$PD/.intent"
-OUT="$PD/.intent/briefing-c$C.md"
+# v2.10.1 (57): arquivos da intenção pelo helper (formato da fase).
+IC() { gad_fase_caminho "$PD" "intent/$1"; }
+OUT="$(IC "c$C/briefing.md")"
+mkdir -p "$(dirname -- "$OUT")"
 AVISOS=()
 
 # ── GATE E2c/R1 — antes de escrever qualquer coisa (nonce inclusive) ──────────
 # Régua: o briefing do ciclo C só nasce se o ciclo anterior fechou o laço
 # correção → commit → releitura, com os blobs conferidos contra o commit E contra o
 # worktree atual (edição depois da releitura invalida a releitura).
-GATE_JSON=$(GAD_PD="$PD" GAD_C="$C" GAD_ROOT="$ROOT" python3 - <<'PY'
+GATE_JSON=$(GAD_PD="$PD" GAD_C="$C" GAD_ROOT="$ROOT" GAD_LIB="$GAD_SCRIPTS_DIR/lib" python3 - <<'PY'
 import glob, json, os, re, subprocess, sys
 
 PD   = os.environ["GAD_PD"]
 C    = os.environ["GAD_C"]
 ROOT = os.environ["GAD_ROOT"]
-IN   = os.path.join(PD, ".intent")
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.environ["GAD_LIB"])
+import gad_caminhos  # v2.10.1: caminhos da fase (formato novo × antigo)
+def P(rel):
+    return gad_caminhos.caminho(PD, "intent/" + rel)
+IN   = P("")   # só para mensagens
 
 def die(msg):
     print(json.dumps({"ok": False, "erro": msg}, ensure_ascii=False))
@@ -109,10 +116,10 @@ def caminho_releitura(IN, ciclo):
     globava `c0*.done`). O briefing do ciclo seguinte lê a rodada MAIS RECENTE do ciclo:
     a de letra mais alta quando existir (F24.5 teve 5 rodadas no ciclo 0, até `c0e`),
     senão a normal (`.releitura-c<ciclo>.json`, primeira rodada)."""
-    letradas = sorted(glob.glob(os.path.join(IN, ".releitura-c%s[a-z].json" % ciclo)))
+    letradas = gad_caminhos.glob_fase(PD, "intent/c%s[a-z]/releitura.json" % ciclo)
     if letradas:
         return letradas[-1]
-    return os.path.join(IN, ".releitura-c%s.json" % ciclo)
+    return P("c%s/releitura.json" % ciclo)
 
 def exige_chaves(d, chaves, rotulo):
     if not isinstance(d, dict):
@@ -253,8 +260,8 @@ def valida_releitura(rel, aplicado, vazio, rotulo, ciclo):  # noqa: C901
 
 def guarda_sinos_reais(diretorio):
     """`sinos: []` (ou dispensa) com sino real no disco esconderia R3 — reprova."""
-    for nome in (".sinos-spec.txt", ".sinos-discuss.txt"):
-        p = os.path.join(diretorio, nome)
+    for nome in ("sinos-spec.txt", "sinos-discuss.txt"):
+        p = P(nome)
         if not os.path.exists(p):
             continue
         # as respostas do checklist de lições (R8(3)) e as linhas `leitura_propria:` do
@@ -271,7 +278,7 @@ def guarda_sinos_reais(diretorio):
 info = {"ok": True, "gate": "c%s" % C, "avisos": [], "sinos": []}
 
 if str(C) == "1":
-    z = carrega(os.path.join(IN, ".ciclo0.json"), "`.intent/.ciclo0.json` (E2c)")
+    z = carrega(P("c0/ciclo.json"), "`.intent/.ciclo0.json` (E2c)")
     exige_chaves(z, ["v", "sinos", "correcoes", "releitura"], "`.ciclo0.json`")
     if z["v"] != 1:
         die("`.ciclo0.json`: schema v=%s desconhecido (esperado v=1)" % z["v"])
@@ -334,7 +341,7 @@ if str(C) == "1":
 
         aplicado = None
         if cors:
-            aplicado = carrega(os.path.join(IN, ".correcoes-c0.aplicado"),
+            aplicado = carrega(P("c0/correcoes.aplicado"),
                                "`.intent/.correcoes-c0.aplicado` (E2c)")
             exige_chaves(aplicado, ["commit", "caminhos", "correcoes"], "`.correcoes-c0.aplicado`")
             par_z = sorted((c["id"], c["hash"]) for c in cors)
@@ -351,7 +358,7 @@ if str(C) == "1":
         # decidido pelo `.ciclo0.json`.`releitura` que o coordenador copiou do `.json` da
         # rodada vigente (FM-F4RLR-10INT: `.releitura-c0.json` na 1ª rodada,
         # `.releitura-c0b.json` na correção pós-releitura — ver `caminho_releitura`).
-        if not glob.glob(os.path.join(IN, ".releitura-c0*.done")):
+        if not gad_caminhos.glob_fase(PD, "intent/c0*/releitura.done"):
             die("`.intent/.releitura-c0*.done` ausente (R1: a releitura do ciclo 0 não fechou)")
 
         info["ciclo0_vazio"] = not cors
@@ -369,8 +376,8 @@ else:
         prev = int(str(C)) - 1
     except ValueError:
         die("ciclo `%s` não é numérico — o gate C>=2 não sabe qual é o anterior" % C)
-    ap_p  = os.path.join(IN, ".correcoes-c%d.aplicado" % prev)
-    vaz_p = os.path.join(IN, ".correcoes-c%d.vazio" % prev)
+    ap_p  = P("c%d/correcoes.aplicado" % prev)
+    vaz_p = P("c%d/correcoes.vazio" % prev)
     tem_ap, tem_vaz = os.path.exists(ap_p), os.path.exists(vaz_p)
     if not tem_ap and not tem_vaz:
         die("nem `.correcoes-c%d.aplicado` nem `.correcoes-c%d.vazio` — o ciclo %d não "
@@ -407,7 +414,7 @@ mapfile -t GATE_AV < <(printf '%s' "$GATE_JSON" | jq -r '.avisos[]?')
 AVISOS+=(${GATE_AV[@]+"${GATE_AV[@]}"})
 
 # ── canário de leitura: nonce nasce aqui, só no arquivo ──────────────────────
-PROVA="$PD/.intent/.prova-leitura-c$C.txt"
+PROVA="$(IC "c$C/prova-leitura.txt")"
 NONCE="PROVA-$(od -An -N3 -tx1 /dev/urandom | tr -d ' ')"
 echo "Token de prova de leitura do ciclo $C: $NONCE" > "$PROVA"
 
@@ -424,7 +431,7 @@ add_q raio_de_explosao
 # R8(3): as respostas do checklist de lições que os filhos gravam nos `.sinos-*.txt`
 # (linha ASCII `licao <n>: aplicada|nao_se_aplica — porquê`) NÃO voltam ao briefing —
 # elas saíram dele de propósito. Vão para cá, como evidência de auditoria.
-LICOES="$PD/.intent/.licoes-c$C.txt"
+LICOES="$(IC "c$C/licoes.txt")"
 : > "$LICOES"
 
 REVAL=()   # linhas "sino|origem|correcao_id" — a lista continua inteira (nenhum sino some)
@@ -622,9 +629,10 @@ fi
   # responde vive no MESMO arquivo de sinos (`licao <n>: aplicada|nao_se_aplica — …`).
   # Isso é evidência de auditoria, não insumo do consultor: despejá-lo aqui devolveria ao
   # briefing exatamente o que o R8(3) tirou dele. Nenhum SINO é filtrado.
-  for s in "$PD/.intent/".sinos-*.txt; do
+  mapfile -t _SINOS < <(gad_fase_glob "$PD" 'intent/sinos-*.txt')
+  for s in ${_SINOS[@]+"${_SINOS[@]}"}; do
     [ -f "$s" ] || continue
-    FONTE=$(basename "$s" | sed 's/^\.sinos-//; s/\.txt$//')
+    FONTE=$(basename "$s" | sed 's/^\.\{0,1\}sinos-//; s/\.txt$//')
     grep -aE '^[[:space:]]*licao [0-9]+:' "$s" \
       | sed -E "s|^[[:space:]]*|$FONTE \| |" >> "$LICOES" || true
     RESTO=$(grep -avE '^[[:space:]]*licao [0-9]+:' "$s" || true)
@@ -689,7 +697,7 @@ fi
     echo "### Revalidação dirigida (ciclo 0)"
     echo
     echo "Antes deste ciclo o coordenador corrigiu os sinos abaixo, nos artefatos (commit"
-    echo "registrado em \`$PD/.intent/.correcoes-c0.aplicado\`). Responda à pergunta"
+    echo "registrado em \`$(IC c0/correcoes.aplicado)\`). Responda à pergunta"
     echo "**$QREVAL**: alguma dessas correções criou problema novo, ficou incompleta ou está"
     echo "errada? \`sim\` exige qual e a evidência; \`não\` exige o que você conferiu para dizer"
     echo "isso."
@@ -706,7 +714,7 @@ fi
 } > "$OUT"
 
 # Manifesto de completude das perguntas (R8.3) — insumo do confere-ciclo.sh --perguntas
-MAN="$PD/.intent/.perguntas-c$C.json"
+MAN="$(IC "c$C/perguntas.json")"
 {
   printf '{"v":1,"ciclo":"%s","qids":[' "$C"
   for i in "${!QIDS[@]}"; do [ "$i" = 0 ] || printf ','; printf '"%s"' "${QIDS[$i]}"; done
