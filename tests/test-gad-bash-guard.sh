@@ -188,6 +188,7 @@ for c in "sed -i \"88d\" $H/scripts/confere-plano.sh" \
          "tee $H/prompts/plan.md < /tmp/x" \
          "echo x > $H/scripts/confere-ciclo.sh" \
          "echo x >> $A/workflow.md" \
+         "echo x >> $H/workflow-etapa-3.md" \
          "cp /tmp/x.sh $H/scripts/confere-ciclo.sh" \
          "mv /tmp/x.md \$HOME/.claude/agents/gad-plan.md" \
          "patch -p1 $H/hooks/x.sh < /tmp/p.diff" \

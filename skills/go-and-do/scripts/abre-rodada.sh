@@ -141,7 +141,7 @@ else
 fi
 
 # S-11 (auditoria 48, tarefa 48l): plano `autonomous: false` sem resolução — a marca de
-# resolução É o próprio frontmatter virando `autonomous: true` (workflow.md 2.4b: toda
+# resolução É o próprio frontmatter virando `autonomous: true` (workflow-etapa-2.md §2.4b: toda
 # rota (a)/(b)/(c) "flips the plan to autonomous: true" antes de fechar o checkpoint).
 # Fase JÁ verificada (`has_verification`) nunca reabre 2.4b: 3.1 do workflow diz que os
 # planos chegam à etapa 3 já virados — reabrir aqui seria confundir plano arquivado.

@@ -2,6 +2,30 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançada]
+
+### Histórico retirado do workflow (tarefa 9 do mapa-gad)
+
+Na divisão do `workflow.md` saíram as frases de histórico datado que explicavam a origem de uma
+regra sem ser regra (casos da F24.5, bancadas). A regra ficou; a história mora aqui, citada
+**verbatim, em inglês** como estava no workflow (o arquivo de origem entre crases; o trecho entre
+colchetes diz de onde saiu). Na dúvida entre histórico e regra, a frase ficou no workflow: por isso
+continuam lá, por exemplo, a medição de 7 s do fiscal da etapa 3, o «Measured on GSD 1.13.0» do
+5.3 e as decisões datadas do dono que definem uma rota (02/07, 09/08, 11/09, 20/07, 27/08).
+
+- `workflow.md` — F24.5: `NN-RELATORIOS-EVIDENCIA.md` said «8 linhas» and enumerated 7; the sentence reached the UAT prompt intact. [Sub-rotina H]
+- `workflow.md` — (F24.5: the 23:50 question was opened inside the window with nothing committed and no handoff; the mirrors stayed 6 h stale.) [Sub-rotina I]
+- `workflow-etapa-2.md` — on F24.5 the judge's reason ("phase only modifies files") is the very one this workflow's own prompt names as a trap, and two new scripts were on the plans. [2.4a]
+- `workflow-etapa-3.md` — F24.5 lost one dispatch of `gad-verificador` to exactly that [3.3, E7(b)]
+- `workflow-etapa-3.md` — The def carries `experimental: cacheTtl: 1h`: on F24.5 this host spent 75 % of the stage waiting, and 30 expirations of the 5-minute cache cost US$ 57 of its US$ 94 (bench A, 12/09/2026: after a 6-min wait the new def re-read 44 k from cache and wrote 214). [3.3]
+- `workflow-etapa-3.md` — F24.5: the execution host returned «pronto · completo · 9/9» while the fiscal was failing — the second time in the same round that a host declared done without the gate. [3.3, Fiscal receipt]
+- `workflow-etapa-3.md` — F24.5: four PLAN.md were edited at 23:42 and 23:44, after execution, so the gate would pass. [3.3, plan contract]
+- `workflow-etapa-3.md` — F24.5: the eleven incidents of the stage all landed in the same second, at close, and the audit lost the order of events. [3.3, One incidente per item]
+- `workflow-etapa-3.md` — (F24.5: the agent disobeyed the instruction and saved the phase) [3.4]
+- `workflow-etapa-3.md` — F24.5: an unscoped dispatch ran the fast suite whole for 30+ min with 4 GB of swap, and the full suite took 56 min 50 s against a measured band of 17–35 min. [3.4]
+- `workflow-etapa-3.md` — F24.5, 23:47–23:49: the diagnosis **was** right and the gesture was still wrong; only the permission classifier stopped it, twice. [Instrument under judgement]
+- `workflow-etapa-3.md` — F24.5: layer 0 told the user «the parallelism may not have happened» with the clocks of all nine executors on disk. [Instrument versus disk]
+
 ## [2.9.0] - 2026-09-23
 
 Bloco B do plano de 23/09: as tarefas 55, 54(b), 48, 44 e as sobras da 34(l) e da 49, executadas

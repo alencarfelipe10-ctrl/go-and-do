@@ -155,7 +155,7 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    sucesso vazio.
    **`nao_autonomos` que você relatar não morre nesta rodada (48l/S-11).** Plano com
    `autonomous: false` cuja pendência não vira `autonomous: true` no frontmatter (a marca de
-   resolução do 2.4b, `workflow.md`) fica pendente entre rodadas: a próxima abertura
+   resolução do 2.4b, `workflow-etapa-2.md`) fica pendente entre rodadas: a próxima abertura
    (`abre-rodada.sh`) força a retomada em `continuar-2.4b` em vez de pular para a execução, e
    o `pre-despacho.sh` recusa o gate 2.5 (`despacho: bloqueio_plano_nao_resolvido`, exit 4,
    listando os planos) enquanto ele não virar. Não é seu papel resolver — é da camada 0 no

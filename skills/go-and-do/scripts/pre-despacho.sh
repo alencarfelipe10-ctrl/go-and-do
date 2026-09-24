@@ -143,7 +143,7 @@ if [ -n "$CFG_KEY" ]; then
 fi
 # S-11 (auditoria 48, tarefa 48l): a etapa 2.5 (convergência) não pode despachar enquanto
 # houver `NN-PLAN.md` com `autonomous: false` sem resolução — 2.4b resolve ISSO virando o
-# frontmatter para `autonomous: true` (workflow.md, ~284-298); sem essa marca, convergir ou
+# frontmatter para `autonomous: true` (workflow-etapa-2.md §2.4b); sem essa marca, convergir ou
 # executar um plano com checkpoint pendente é o mesmo furo que a retomada manual de 15/09
 # cobriu à mão. Hardcoded em `$ETAPA` (não no manifest — a etapa-2.5.json não é arquivo
 # desta lane); ver relatório para a lane de prompts decidir se migra para `pre.nao_autonomos`.
@@ -165,7 +165,7 @@ if [ "$ETAPA" = "2.5" ]; then
     exit 4
   fi
   # S-8 (tarefa 48i): confere-user-setup.sh acoplado ao MESMO gate — 2.4b é onde o
-  # checkpoint de setup humano deveria ter sido resolvido (workflow.md, 2.4b(d): precondition
+  # checkpoint de setup humano deveria ter sido resolvido (workflow-etapa-2.md §2.4b(d): precondition
   # checável agora e falsa vira NN-ACAO-HUMANA.md ANTES daqui). Informativo — nunca bloqueia
   # sozinho (2.4b(d): "não checável agora → deixa, o executor confere em runtime").
   US_OUT=$(bash "$GAD_SCRIPTS_DIR/confere-user-setup.sh" "$PHASE_DIR" "$ROOT" 2>/dev/null) || true

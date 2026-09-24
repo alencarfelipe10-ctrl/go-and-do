@@ -13,6 +13,9 @@
 set -u
 AQUI="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 W="$AQUI/../skills/go-and-do/workflow.md"
+# tarefa 9 do mapa-gad (24/09): o bloco da etapa 2.5 mora em workflow-etapa-2.5.md; o núcleo
+# (workflow.md) guarda o pipeline_index e a Sub-rotina H
+W25="$AQUI/../skills/go-and-do/workflow-etapa-2.5.md"
 A="$AQUI/../agents/gad-plan.md"
 C="$AQUI/../skills/go-and-do/prompts/convergence.md"
 falhas=0
@@ -21,14 +24,14 @@ erro() { echo "  FALHA — $1"; falhas=$((falhas+1)); }
 tem()  { grep -qF -- "$2" "$1" && ok "$3" || erro "$3"; }
 nao()  { grep -qF -- "$2" "$1" && erro "$3 (literal ainda presente: $2)" || ok "$3"; }
 
-echo "== workflow.md"
+echo "== workflow.md + workflow-etapa-2.5.md"
 tem "$W" '| 2.5 | plan convergence | 🔒 ⏭️ agent `gad-plan` + `prompts/convergence.md` (PC-6 fail-closed) |' \
   "pipeline_index: etapa 2.5 cita o agente gad-plan"
-tem "$W" 'Dispatch the agent `gad-plan`' \
+tem "$W25" 'Dispatch the agent `gad-plan`' \
   "bloco da etapa 2.5: despacha o agente gad-plan (mesma prosa de dispatch da etapa 2)"
 tem "$W" '`gad-plan` for 2 and 2.5' \
   "Sub-rotina H: a lista de defs próprias inclui a 2.5 sob gad-plan"
-nao "$W" 'Dispatch via Sub-rotina H with `prompts/convergence.md`: the subagent hosts' \
+nao "$W25" 'Dispatch via Sub-rotina H with `prompts/convergence.md`: the subagent hosts' \
   "a frase antiga de despacho genérico (\"the subagent hosts\") saiu"
 
 echo "== agents/gad-plan.md"

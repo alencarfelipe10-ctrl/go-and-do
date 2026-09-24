@@ -1540,7 +1540,7 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
   if [ -n "$SUJOS" ]; then
     n_sujos=$( { printf '%s\n' "$SUJOS" | grep -c . || true; } )
     # ── DECISÃO DO DONO (21/09), sobre a contradição medida pelo executor 1 ───────
-    # O `workflow.md` roda o fiscal ANTES do `commita-artefatos.sh`, então cobrar árvore
+    # O workflow (`workflow-etapa-5.md`/`-6.md`) roda o fiscal ANTES do `commita-artefatos.sh`, então cobrar árvore
     # limpa de TUDO deixaria a etapa em impasse (o `NN-UAT.md` que o próprio fiscal
     # escreve sujaria a etapa 5; o run-log é reescrito por toda etapa antes de qualquer
     # fiscal). O dono decidiu, sem inverter a ordem do workflow:
@@ -1593,7 +1593,7 @@ fi
 case "${RUNLOG_ETAPA%% *}" in
   0|1|1.5|2|2.5|3|4.1|4.1b) ;;
   *)
-    # FM-02GAT: `.fence-4.1b.ok` (re-review, workflow.md §4.1) não herda o recibo do
+    # FM-02GAT: `.fence-4.1b.ok` (re-review, workflow-etapa-4.md §4.1) não herda o recibo do
     # 4.1 — é o mais recente dos dois que vale (o 4.1b substitui o 4.1 quando existe).
     F41="$PHASE_DIR/.fence-4.1.ok"
     F41B="$PHASE_DIR/.fence-4.1b.ok"
