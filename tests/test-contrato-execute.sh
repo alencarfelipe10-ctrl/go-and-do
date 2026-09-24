@@ -10,7 +10,7 @@
 #   47b  — o contrato de leitura (<required_reading>/<execution_context>) desce verbatim
 #   47d  — o host não conserta código: conserto pós-merge vai a executor
 #   47e  — a espera de filho `Agent` não é por waiter (a frase «não recebe notificações» caiu)
-#   F4RLR FJ-01EXE — mesma frase de handoff pro gsd-verifier em execute.md e workflow.md 3.4
+#   F4RLR FJ-01EXE — mesma frase de handoff pro gsd-verifier em execute.md e workflow-etapa-3.md §3.4
 #   F4RLR FM-08EXE — escopo do commit por extenso no briefing (FM-08EXE)
 #   bash tests/test-contrato-execute.sh      · exit 0 = verde
 set -u
@@ -41,6 +41,12 @@ tem "47e: filho Agent acorda o pai"                              'encerre o turn
 nao "47e: a frase falsa de que não chegam notificações saiu"     'você **não recebe notificações**'
 tem "FJ-01EXE: a mesma frase de handoff ao gsd-verifier"         'números medidos da suíte completa e o escopo de módulos tocados'
 tem "FM-08EXE: escopo do commit por extenso no briefing"         'escopo dos seus commits: (NN-PP)'
+# o outro lado do FJ-01EXE: a camada 0 manda a MESMA frase no despacho do 3.4 (arquivo de etapa
+# desde a divisão do workflow, tarefa 9 do mapa-gad)
+W3="$RAIZ/skills/go-and-do/workflow-etapa-3.md"
+if grep -qF -e 'suíte completa e o escopo de módulos tocados' "$W3"; then
+  OK=$((OK+1)); printf '  ✔ %s\n' "FJ-01EXE: workflow-etapa-3.md §3.4 carrega a mesma frase"
+else FALHAS=$((FALHAS+1)); printf '  ✘ %s\n' "FJ-01EXE: frase do handoff ausente em workflow-etapa-3.md"; fi
 
 echo
 echo "── resumo: $OK ok / $FALHAS falhas ──"

@@ -131,6 +131,11 @@ Atalho idempotente para o `SubagentStop` e para o `gad-gate-guard` (seção abai
 `bash hooks/registra-hooks.sh --dry-run` mostra o que faria; sem `--dry-run` faz backup do
 `settings.json` e grava. Rode você mesmo, na sua sessão — a skill nunca edita o settings.
 
+Para conferir a instalação (ao instalar ou atualizar a skill), sem gravar nada:
+`bash hooks/registra-hooks.sh --confere` — exit 0 se o `gad-lifecycle.sh` existe em
+`~/.claude/hooks/` e está em `PreToolUse`/`PostToolUse` (matcher com `Agent`) e `SubagentStop`;
+exit 1 com uma linha `falta: …` por item faltante.
+
 ### Hook de cerimônia `gad-gate-guard` (recomendado)
 
 `hooks/gad-gate-guard.sh` nega um `AskUserQuestion` dentro de uma rodada ativa quando (a) a hora

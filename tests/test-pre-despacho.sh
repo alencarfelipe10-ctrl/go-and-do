@@ -291,6 +291,47 @@ status: secured
 J6=$(cd "$R" && bash "$P" 6 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)
 eq "FM-01ENC: lista vazia com SECURITY falando em risco aceito → suspeita declarada"    "$(jq -c '.transparencia.riscos_aceitos_lista_vazia_suspeita' <<<"$J6")" "true"
 
+# ── tarefa 10(d) do mapa-gad: o 1º checkpoint da sessão re-mede a janela da Etapa 0 ──
+# A abertura roda `abre-rodada.sh && confere-etapa.sh 0` num Bash só → o `end 0` sai com janela
+# vazia. O 1º pre-despacho.sh da sessão depois do `run` mede `run` → agora (mede-tokens.py, com
+# HOME falso: transcript de bancada, nunca o ~/.claude real) e grava um 2º `end "0 abertura"`,
+# que o run-log.sh marca `substitui:<seq>`. O 2º checkpoint não re-mede de novo.
+echo "== tarefa 10(d): janela da Etapa 0 re-medida no 1º checkpoint da sessão"
+H0="$BASE/home-d4"; SID0="d4bancada-0000-0000-0000-000000000000"
+mkdir -p "$H0/.claude/projects/proj"
+R0="$BASE/d4"; PD0="$R0/.planning/phases/99-bancada"; mkdir -p "$PD0"
+git init -q "$R0" >/dev/null 2>&1
+git -C "$R0" -c user.name=t -c user.email=t@t commit -q --allow-empty -m base >/dev/null 2>&1
+printf '{}\n' > "$R0/.planning/config.json"
+jq -cn --arg pd "$PD0" '{session_id:"bancada", fase:"99", nn:"99", phase_dir:$pd, args:{}}' > "$R0/.planning/.gad-rodada-ativa.json"
+printf '%s\n' \
+  '{"ts":"2026-09-24T10:00:00-03:00","seq":1,"sessao":"d4bancad","evento":"run","etapa":"0 abertura"}' \
+  '{"ts":"2026-09-24T10:00:01-03:00","seq":2,"sessao":"d4bancad","evento":"end","etapa":"0 abertura","veredito":"pass","medicao":"janela vazia"}' \
+  > "$PD0/99-RUN-LOG.jsonl"
+# r0 cai ANTES do run (fora da janela); r1 e r2 são a Etapa 0 depois do confere (ToolSearch, TaskCreate)
+printf '%s\n' \
+  '{"requestId":"r0","timestamp":"2026-09-24T12:59:59.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":10,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":5}}}' \
+  '{"requestId":"r1","timestamp":"2026-09-24T13:00:05.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":1000,"output_tokens":50}}}' \
+  '{"requestId":"r2","timestamp":"2026-09-24T13:00:09.000Z","message":{"model":"claude-opus-5-5","usage":{"input_tokens":200,"cache_creation_input_tokens":0,"cache_read_input_tokens":1000,"output_tokens":70}}}' \
+  > "$H0/.claude/projects/proj/$SID0.jsonl"
+d4() { (cd "$R0" && HOME="$H0" CLAUDE_CODE_SESSION_ID="$SID0" bash "$P" "$1" --projeto "$R0" >/dev/null 2>&1); }
+fins0() { grep '"evento":"end"' "$PD0/99-RUN-LOG.jsonl" | grep -cF '"etapa":"0 abertura"'; }
+d4 1
+E0=$(grep '"evento":"end"' "$PD0/99-RUN-LOG.jsonl" | grep -F '"etapa":"0 abertura"' | tail -1)
+eq "10(d): 2º end da Etapa 0 com os tokens de run → agora (r1+r2 = 420)" "$(jq -r '.tokens_reais' <<<"$E0")" "420"
+eq "10(d): o 2º end declara substitui do 1º (seq 2)"                   "$(jq -r '.substitui' <<<"$E0")" "2"
+eq "10(d): n_requests da camada 0 na janela = 2"                        "$(jq -r '.n_requests' <<<"$E0")" "2"
+eq "10(d): veredito copiado do 1º end"                                 "$(jq -r '.veredito' <<<"$E0")" "pass"
+casa "10(d): o checkpoint da etapa 1 vem depois do end re-medido" "$(tail -1 "$PD0/99-RUN-LOG.jsonl")" '"evento":"checkpoint","etapa":"1 intencao"'
+n_antes=$(fins0)
+d4 2
+eq "10(d): o 2º checkpoint da sessão não re-mede de novo" "$(fins0)" "$n_antes"
+# novo `run` sem `end 0` depois dele (o confere 0 não passou) → não inventa end
+printf '%s\n' '{"ts":"2026-09-24T11:00:00-03:00","seq":90,"sessao":"d4bancad","evento":"run","etapa":"0 abertura"}' >> "$PD0/99-RUN-LOG.jsonl"
+n_antes=$(fins0)
+d4 1
+eq "10(d): sem end 0 depois do run (confere 0 falhou) → nenhum end sintético" "$(fins0)" "$n_antes"
+
 echo "--------------------------------------------------"
 echo "test-pre-despacho.sh: $OK ok / $FALHAS falha(s)"
 [ "$FALHAS" -eq 0 ]

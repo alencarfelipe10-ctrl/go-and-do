@@ -8,7 +8,7 @@
 # `templates/user-setup.md`) e `<precondition>` (agents/gsd-planner.md) DECLARAM setup que
 # um humano precisa terminar antes da fase rodar de verdade — chave de API, secret do
 # GitHub Actions, servidor MCP, arquivo de credencial. Ninguém conferia se o que foi
-# declarado de fato existe: o 2.4b (workflow.md, "flip the plan to autonomous: true") podia
+# declarado de fato existe: o 2.4b (workflow-etapa-2.md, "flip the plan to autonomous: true") podia
 # fechar o checkpoint por resposta em texto sem o item físico ter sido criado.
 #
 # Uso: confere-user-setup.sh <phase_dir> <project_root>

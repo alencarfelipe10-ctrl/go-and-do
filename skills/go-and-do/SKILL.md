@@ -21,15 +21,16 @@ allowed-tools:
 ---
 
 <execution_context>
-@$HOME/.claude/skills/go-and-do/workflow.md
+@~/.claude/skills/go-and-do/workflow.md
 </execution_context>
 
 <objective>
 Run a single GSD phase end-to-end by invoking the native GSD commands in order and chaining
 them. The full pipeline, the layered orchestration (layer 0 = this conversation; layer 1 =
 disposable host subagents; layer 2 = the agents GSD spawns), every gate and stop point, the
-decision triage, the telemetry and the resume logic are specified in workflow.md above. This
-file only carries what workflow.md does not: the argument contract and the PRE-SPEC contract.
+decision triage, the telemetry and the resume logic are specified in workflow.md above (the
+core) and in the per-stage files it names (`workflow-etapa-*.md`, read on entering each stage).
+This file only carries what those do not: the argument contract and the PRE-SPEC contract.
 
 Every phase runs the full pipeline. There is no size classifier: one was built, measured on
 real phases and removed because it always escalated to maximum rigor (decision of 2026-07-05;
@@ -104,8 +105,9 @@ re-asks. `scripts/confere-pre-spec.sh` is the gate (it runs inside `setup-intenc
 </context>
 
 <process>
-Execute end-to-end following workflow.md: its operating rules, stages, stop points and
-sub-routines are the specification. Honor every gate and stop point as written there; route
+Execute end-to-end following workflow.md: its operating rules, stop points and sub-routines,
+plus each stage's `workflow-etapa-*.md` (read on entering the stage, as its pipeline index
+says), are the specification. Honor every gate and stop point as written there; route
 every would-be question through the decision triage (Sub-rotina I); dispatch the stages marked
 "via subagent" through Sub-rotina H and route their compact return. A step that does not run
 is never silent.

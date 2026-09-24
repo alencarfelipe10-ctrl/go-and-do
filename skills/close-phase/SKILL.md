@@ -42,7 +42,7 @@ ship's own environment gates (no remote, no `gh`, wrong branch) and to its revie
 </objective>
 
 <execution_context>
-@$HOME/.claude/skills/close-phase/workflow.md
+@~/.claude/skills/close-phase/workflow.md
 </execution_context>
 
 <context>

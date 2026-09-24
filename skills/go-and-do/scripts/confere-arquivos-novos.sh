@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # confere-arquivos-novos.sh — lista os arquivos que os PLAN.md declaram tocar e que AINDA
 # NÃO existem no repositório. Insumo mecânico do julgamento 2.E (pattern-mapper) do
-# prompts/plan.md e da cancela `mapper_pulado` da camada 0 (workflow.md 2.4).
+# prompts/plan.md e da cancela `mapper_pulado` da camada 0 (workflow-etapa-2.md §2.4a).
 #
 # Origem: F24.5 (09/09/2026), reincidente da F24.3. O host pulou o mapper com a frase que o
 # próprio prompt chama de armadilha («fase só modifica arquivos»), e os planos criavam

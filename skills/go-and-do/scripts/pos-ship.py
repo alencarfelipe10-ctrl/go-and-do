@@ -27,7 +27,7 @@ Subcomandos (saída = JSON de 1 linha):
                                              sem candidato malformado (ver abaixo)
   conferir <phase_dir> <NN> <project_root>   FJ-F4RLR-06UAT: mesma checagem de formato do `move`,
                                              mas NUNCA escreve nada — roda antes do cético
-                                             (workflow.md 5.6 passo 2). Exit 1 = há candidato
+                                             (workflow-etapa-5.md §5.6 passo 2). Exit 1 = há candidato
                                              malformado; o condutor devolve antes de despachar.
   lista    <phase_dir> <NN>                  itens do NN-POS-SHIP.md (para o resumo/banner)
   gate     <project_root> <fase>             Etapa 0: itens `bloqueia_proxima: sim` ainda não

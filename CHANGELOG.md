@@ -2,6 +2,120 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançada]
+
+Tarefas 8, 9 e 10 do mapa-gad (24/09). Tema: o workflow passa a entrar de fato no prompt, e a
+Etapa 0 cai para 2 requests. Número da release a definir pelo dono (proposta: 2.10.0, porque muda
+a estrutura do workflow). Suíte 44/44.
+
+### O workflow nunca foi anexado — correção da premissa da v2.5.1 (tarefa 9)
+
+- **A v2.5.1 tirou da SKILL.md tudo que repetia o workflow porque «o workflow entra no mesmo
+  prompt». Nunca entrou.** Duas causas somadas, medidas em 23/09: (1) o Claude Code só resolve
+  `@~/…` no corpo de uma SKILL.md, e a skill usava `@$HOME/…` (herdado do instalador antigo do
+  GSD) — os transcripts da F4 RLR (20 e 21/09) não têm anexo nenhum; (2) há um teto de anexo em
+  tokens (≈ 25 mil, o mesmo limite do `Read`; ~61 KB no Opus 5.5) acima do qual o CC descarta o
+  arquivo **em silêncio** — o workflow de 78 KB não anexaria nem com `@~/`. Sem o anexo, a camada 0
+  relia o workflow com 4 a 7 `Read`/`cat`/`sed` na Etapa 0 (~15–25 s, metade dos requests) e nada
+  garantia leitura inteira. A dieta da v2.5.2 encurtou essa releitura, não um custo fixo do prompt.
+- **`@$HOME/` → `@~/` nas três SKILL.md** (go-and-do, close-phase, end-mile). A varredura do repo
+  não achou outras ocorrências.
+- **O `workflow.md` foi dividido em núcleo + um arquivo por etapa.** O núcleo (38,5 KB: papel,
+  regras de operação, índice, Etapa 0, sub-rotinas A–I e paradas) é o que o `@~/` anexa. Cada etapa
+  de 1 a 6 mora em `workflow-etapa-{1,1.5,2,2.5,3,4,5,6}.md` (1,3 a 9,4 KB; 44,7 KB no total), com o
+  bloco `<stage>` movido verbatim. O índice ganhou as colunas «arquivo» e «primeiro comando da
+  camada 0 ao entrar», e a regra: o `Read` do arquivo da etapa sai **na mesma resposta** do primeiro
+  comando dela, sem request próprio; a retomada lê só a etapa em que entra; regra de outra etapa se
+  lê no passo que a usa (as referências cruzadas que carregam regra agora nomeiam o arquivo, ex.
+  `workflow-etapa-3.md §3.3`). Uma etapa pulada (1.5 sem flag, 2.5 com verificação pronta) nunca
+  entra na janela. As 5 menções «Opus 5» às defs dos hospedeiros viraram «Opus 5.5».
+- **Guarda contra regressão: `tests/test-tamanho-workflow.sh`.** Falha se o núcleo passar de
+  53.000 bytes ou uma etapa de 55.000, com a mensagem «alarme, não muro: mova o trecho para um
+  arquivo de etapa», e confere que cada `<stage id>` existe em exatamente um arquivo.
+
+### Etapa 0 com menos requests (tarefa 10)
+
+- **Abertura e conferência num Bash só:** o 0.2 manda `abre-rodada.sh N [flags] && confere-etapa.sh
+  0`, e o 0.3 só lê o veredito. O `abre-rodada.sh` não mudou.
+- **`ToolSearch` em paralelo:** na mesma resposta, `select:TaskCreate,TaskUpdate,TaskList`.
+- **TaskCreate enxuta:** `subject` = `titulo` do snapshot, `description` = só «Etapa N», sem
+  `activeForm`, todas numa resposta.
+- **Banner (0.4):** nunca omitido; pode abrir a resposta que entra na etapa seguinte ou ter
+  resposta própria (ver a prova abaixo).
+
+### Ledger da Etapa 0: nenhum token sem dono (tarefa 10(d))
+
+- Com a abertura e a conferência juntas, a janela `run` → `end 0` sai vazia («janela vazia —
+  medição indisponível»). Investigado: os requests seguintes da Etapa 0 (ToolSearch, TaskCreate,
+  banner, entrada da etapa seguinte) **já** caíam fora de toda janela do run-log antes desta
+  mudança (a janela da Etapa 1 começa no checkpoint dela), e o `token-ledger.py` da `/audit-gad` os
+  empurrava para a Etapa 1 sem aviso.
+- **Decisão: medir.** O 1º `pre-despacho.sh` da sessão depois do `run` re-mede `run` → agora e
+  grava um 2º `end "0 abertura"` (com `n_requests` e `janela`); o `run-log.sh` já declara
+  `substitui:<seq>` sozinho e quem soma conta só o último. Só re-mede se o `confere-etapa.sh 0`
+  passou; medição indisponível não grava nada. Conferido contra o `token-ledger.py`: a Etapa 0 do
+  ledger passa a ir do `run` ao checkpoint seguinte e bate com o `end`. 7 casos novos em
+  `tests/test-pre-despacho.sh`.
+- **Ressalvas declaradas:** o 1º request da rodada (o próprio Bash da abertura + ToolSearch) segue
+  ANTES do evento `run` — fica em `preparacao (pré-checkpoint)` no ledger e fora do `end 0`, como
+  sempre foi. Numa retomada que entra na Etapa 5, a leitura de estado do 5.1 cai na janela da Etapa
+  0. A `/audit-gad` (nota na SKILL.md) e o `dashboard/README.md` do gsd-optimize registram a mudança
+  de fronteira entre Etapa 0 e Etapa 1.
+
+### `registra-hooks.sh --confere` (tarefa 8)
+
+- Modo só leitura para rodar na instalação ou atualização da skill: confere se
+  `~/.claude/hooks/gad-lifecycle.sh` existe e se está em `PreToolUse` e `PostToolUse` (matcher com
+  `Agent`) e em `SubagentStop`. Exit 0 = tudo certo; exit 1 = falta algo, uma linha `falta: …` por
+  item (no modo normal, o 1 continua sendo «nada a fazer»); exit 2 = uso ou settings ausente.
+  Teste novo `tests/test-registra-hooks.sh` com `HOME` falso e `sha256sum` do settings antes e
+  depois.
+
+### Prova com o modelo real (Opus 5.5 headless, CC 2.1.282, 24/09)
+
+Bancada remontada do molde de 23/09 (skill local ao projeto de bancada, parada antes do primeiro
+despacho de camada 1, workflow e scripts copiados para `~/.cache` com os caminhos trocados). 4
+rodadas, US$ 2,54:
+
+- attachment `file` com o **núcleo novo**: 4/4 (592/592 linhas);
+- `Read`/`cat`/`sed` do workflow na Etapa 0: 0 nas 4;
+- `Bash` (abre && confere 0) e `ToolSearch` no mesmo `requestId`: 4/4;
+- as 11 `TaskCreate` num `requestId` só: 4/4;
+- `Read` de `workflow-etapa-1.md` no mesmo `requestId` do `pre-despacho.sh 1`: 4/4;
+- requests da Etapa 0 até a entrada da Etapa 1: **2** (meta 3; eram 8 na variante C e 10–11 no
+  controle em 23/09); cache lido nesse trecho: ~78,6 mil (contra ~420 mil e ~560 mil);
+- início do comando → entrada da Etapa 1: 16,6–19,3 s (régua diferente de 23/09, que media até o
+  banner: C 32,5–35,0 s, controle 40,5–47,3 s);
+- `end "0 abertura"` re-medido pelo `pre-despacho.sh 1`, com `substitui`: 4/4 (7,4–7,9 mil
+  tokens reais, US$ 0,10–0,11).
+- **Não saiu o banner em nenhuma das 4** enquanto a prosa o prendia a uma resposta com chamadas
+  de ferramenta; em 23/09, com a prosa antiga, saiu em todas. A 0.4 final devolve a opção de
+  resposta própria (pior caso: 3 requests = a meta); não re-provada, porque a 5ª rodada passaria
+  do teto de custo. Conferir na 1ª fase real.
+- Só a entrada da Etapa 1 foi provada; as etapas 1.5–6 usam a mesma regra, ainda sem prova.
+
+### Histórico retirado do workflow (tarefa 9 do mapa-gad)
+
+Na divisão do `workflow.md` saíram as frases de histórico datado que explicavam a origem de uma
+regra sem ser regra (casos da F24.5, bancadas). A regra ficou; a história mora aqui, citada
+**verbatim, em inglês** como estava no workflow (o arquivo de origem entre crases; o trecho entre
+colchetes diz de onde saiu). Na dúvida entre histórico e regra, a frase ficou no workflow: por isso
+continuam lá, por exemplo, a medição de 7 s do fiscal da etapa 3, o «Measured on GSD 1.13.0» do
+5.3 e as decisões datadas do dono que definem uma rota (02/07, 09/08, 11/09, 20/07, 27/08).
+
+- `workflow.md` — F24.5: `NN-RELATORIOS-EVIDENCIA.md` said «8 linhas» and enumerated 7; the sentence reached the UAT prompt intact. [Sub-rotina H]
+- `workflow.md` — (F24.5: the 23:50 question was opened inside the window with nothing committed and no handoff; the mirrors stayed 6 h stale.) [Sub-rotina I]
+- `workflow-etapa-2.md` — on F24.5 the judge's reason ("phase only modifies files") is the very one this workflow's own prompt names as a trap, and two new scripts were on the plans. [2.4a]
+- `workflow-etapa-3.md` — F24.5 lost one dispatch of `gad-verificador` to exactly that [3.3, E7(b)]
+- `workflow-etapa-3.md` — The def carries `experimental: cacheTtl: 1h`: on F24.5 this host spent 75 % of the stage waiting, and 30 expirations of the 5-minute cache cost US$ 57 of its US$ 94 (bench A, 12/09/2026: after a 6-min wait the new def re-read 44 k from cache and wrote 214). [3.3]
+- `workflow-etapa-3.md` — F24.5: the execution host returned «pronto · completo · 9/9» while the fiscal was failing — the second time in the same round that a host declared done without the gate. [3.3, Fiscal receipt]
+- `workflow-etapa-3.md` — F24.5: four PLAN.md were edited at 23:42 and 23:44, after execution, so the gate would pass. [3.3, plan contract]
+- `workflow-etapa-3.md` — F24.5: the eleven incidents of the stage all landed in the same second, at close, and the audit lost the order of events. [3.3, One incidente per item]
+- `workflow-etapa-3.md` — (F24.5: the agent disobeyed the instruction and saved the phase) [3.4]
+- `workflow-etapa-3.md` — F24.5: an unscoped dispatch ran the fast suite whole for 30+ min with 4 GB of swap, and the full suite took 56 min 50 s against a measured band of 17–35 min. [3.4]
+- `workflow-etapa-3.md` — F24.5, 23:47–23:49: the diagnosis **was** right and the gesture was still wrong; only the permission classifier stopped it, twice. [Instrument under judgement]
+- `workflow-etapa-3.md` — F24.5: layer 0 told the user «the parallelism may not have happened» with the clocks of all nine executors on disk. [Instrument versus disk]
+
 ## [2.9.0] - 2026-09-23
 
 Bloco B do plano de 23/09: as tarefas 55, 54(b), 48, 44 e as sobras da 34(l) e da 49, executadas
