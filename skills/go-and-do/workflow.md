@@ -142,8 +142,9 @@ first hard stop (Etapa 0).
   pipeline index). A phase with a server → `workflow-dev-server.md` at the first step that uses it
   (Sub-rotina B).
 
-**0.4 — Banner**, in the same response as the `TaskCreate` calls — not a request of its own.
-Double ASCII frame in a `text` block:
+**0.4 — Banner.** Print it now, before anything of the next stage — the user reads it to know the
+run started and with which flags. It may open the response that enters the next stage or be a
+response of its own; it is never omitted. Double ASCII frame in a `text` block:
 
 ```text
 ╔══════════════════════════════════════════════════╗
