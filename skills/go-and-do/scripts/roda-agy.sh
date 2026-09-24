@@ -63,8 +63,9 @@ esac; done
 mkdir -p "$PD/pareceres"
 : "${OUT:=$PD/pareceres/$NN-parecer-agy-c$K.md}"
 : "${LOG:=$PD/pareceres/$NN-agy-c$K.log}"
-: "${ERR:=$PD/pareceres/.agy-c$K.err}"   # 0 bytes é NORMAL do agy (glog vai pro log-file)
-: "${ESPELHO:=$PD/pareceres/.roda-agy-c$K.json}"
+: "${ERR:=$(gad_fase_caminho "$PD" "lanes/agy-c$K.err")}"   # 0 bytes é NORMAL do agy (glog vai pro log-file)
+: "${ESPELHO:=$(gad_fase_caminho "$PD" "lanes/roda-agy-c$K.json")}"   # v2.10.1: helper (formato da fase)
+gad_fase_lanes_garante "$PD"
 for _d in "$OUT" "$LOG" "$ERR" "$ESPELHO"; do mkdir -p "$(dirname -- "$_d")"; done
 MODELO_ESPERADO="Gemini 3.7 Flash"
 
@@ -84,7 +85,7 @@ if [ -n "$PROVA_ARQ" ] && [ -f "$PROVA_ARQ" ]; then
 elif grep -q "prova_leitura" "$BRIEF"; then
   : # briefing já traz canário próprio, mas ninguém passou --prova: sem token a conferir
 else
-  PROVA="$PD/pareceres/.prova-leitura-c$K.txt"
+  PROVA="$(gad_fase_caminho "$PD" "lanes/prova-leitura-c$K.txt")"
   NONCE="PROVA-$(od -An -N3 -tx1 /dev/urandom | tr -d ' ')"
   echo "Token de prova de leitura do ciclo $K: $NONCE" > "$PROVA"
   { echo; echo "## Prova de leitura (obrigatória)"; echo

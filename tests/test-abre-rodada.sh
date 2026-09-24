@@ -171,7 +171,7 @@ fixture t6 "{\"phase_found\":true,\"phase_number\":\"RLR-02\",\"phase_name\":\"i
   \"phase_dir\":\"$ROOT/.planning/phases/RLR-02-identidade\",\"expected_phase_dir\":null,
   \"padded_phase\":\"02\",\"planning_exists\":true,\"has_context\":true,\"has_plans\":false,
   \"has_research\":false,\"has_reviews\":false,\"has_verification\":false,\"plan_count\":0}"
-rm -f "$ROOT/.planning/.gad-rodada-ativa.json"
+rm -f "$ROOT/.planning/.gad/rodada-ativa.json"
 
 roda_args 2 --obs a b --dry-run
 eq   "--obs junta as palavras até a próxima flag" "$(campo "$J" .args.obs)" "a b"
@@ -185,8 +185,8 @@ eq "--projeto sem valor → exit 2" "$EXIT" "2"
 
 roda_args 2 --vault --ui
 eq "--vault sem valor → exit 2" "$EXIT" "2"
-nao_casa "nenhum dos 3 casos de erro criou .gad-rodada-ativa.json" \
-  "$(cat "$ROOT/.planning/.gad-rodada-ativa.json" 2>/dev/null || echo AUSENTE)" '^\{'
+nao_casa "nenhum dos 3 casos de erro criou o ponteiro (.gad/rodada-ativa.json)" \
+  "$(cat "$ROOT/.planning/.gad/rodada-ativa.json" 2>/dev/null || echo AUSENTE)" '^\{'
 
 roda_args 2 --vault p --dry-run
 eq   "--vault com valor → exit 0"      "$EXIT" "0"
@@ -200,12 +200,12 @@ eq "args.vault_profile = \"p\" (dry-run, na saída)" "$(campo "$J" .args.vault_p
 roda_args 2 --dry-run
 eq "sem --vault → args.vault_profile null" "$(campo "$J" .args.vault_profile)" "null"
 
-rm -f "$ROOT/.planning/.gad-rodada-ativa.json"
+rm -f "$ROOT/.planning/.gad/rodada-ativa.json"
 roda_args 2 --vault p
 eq "abertura real: exit 0"                     "$EXIT" "0"
 eq "ponteiro grava vault_profile"               \
-  "$(jq -r '.args.vault_profile' "$ROOT/.planning/.gad-rodada-ativa.json" 2>/dev/null)" "p"
-rm -f "$ROOT/.planning/.gad-rodada-ativa.json"
+  "$(jq -r '.args.vault_profile' "$ROOT/.planning/.gad/rodada-ativa.json" 2>/dev/null)" "p"
+rm -f "$ROOT/.planning/.gad/rodada-ativa.json"
 
 # ══════════════════════════ casos T5: alerta de vault antes de gastar a fase
 echo "── caso 9 (T5): login só no ROADMAP + --ui → alerta ──"
@@ -273,14 +273,14 @@ eq "--registra-aninhamento não é mais um modo (flag desconhecida)" "$EXIT" "2"
 roda_args 2 --dry-run
 nao_casa "JSON não tem mais a chave aninhamento" "$J" '"aninhamento"'
 
-rm -f "$ROOT/.planning/.gad-rodada-ativa.json"
+rm -f "$ROOT/.planning/.gad/rodada-ativa.json"
 ( cd "$ROOT" && HOME="$HOME_FALSO" CLAUDE_CODE_SESSION_ID= RUNLOG_SEM_ESPELHO=1 bash "$S" 2 ) \
   > "$BASE/saida.txt" 2>&1
 EXIT=$?; J="$(cat "$BASE/saida.txt")"
 eq "abertura real (HOME falso): exit 0" "$EXIT" "0"
 RUNLOG="$PD/02-RUN-LOG.jsonl"
 casa "evento run grava cc_version" "$(cat "$RUNLOG" 2>/dev/null || true)" '"cc_version"'
-rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG"
+rm -f "$ROOT/.planning/.gad/rodada-ativa.json" "$RUNLOG"
 
 echo
 
@@ -289,13 +289,13 @@ echo "── caso 16 (T3): hook_instalado sai do JSON, mas fica no evento run (H
 roda_args 2 --dry-run
 nao_casa "JSON não tem mais a chave hook_instalado" "$J" '"hook_instalado"'
 
-rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG"
+rm -f "$ROOT/.planning/.gad/rodada-ativa.json" "$RUNLOG"
 ( cd "$ROOT" && HOME="$HOME_FALSO" CLAUDE_CODE_SESSION_ID= RUNLOG_SEM_ESPELHO=1 bash "$S" 2 ) \
   > "$BASE/saida.txt" 2>&1
 EXIT=$?; J="$(cat "$BASE/saida.txt")"
 eq   "abertura real, sem hook no settings falso: exit 0" "$EXIT" "0"
 casa "evento run grava hook_instalado:false" "$(cat "$RUNLOG" 2>/dev/null || true)" '"hook_instalado":false'
-rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG"
+rm -f "$ROOT/.planning/.gad/rodada-ativa.json" "$RUNLOG"
 
 printf '{"hooks":{"PreToolUse":[{"hooks":[{"command":"gad-lifecycle.sh"}]}]}}\n' > "$HOME_FALSO/.claude/settings.json"
 ( cd "$ROOT" && HOME="$HOME_FALSO" CLAUDE_CODE_SESSION_ID= RUNLOG_SEM_ESPELHO=1 bash "$S" 2 ) \
@@ -303,7 +303,7 @@ printf '{"hooks":{"PreToolUse":[{"hooks":[{"command":"gad-lifecycle.sh"}]}]}}\n'
 EXIT=$?; J="$(cat "$BASE/saida.txt")"
 eq   "abertura real, com hook no settings falso: exit 0" "$EXIT" "0"
 casa "evento run grava hook_instalado:true" "$(cat "$RUNLOG" 2>/dev/null || true)" '"hook_instalado":true'
-rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG" "$HOME_FALSO/.claude/settings.json"
+rm -f "$ROOT/.planning/.gad/rodada-ativa.json" "$RUNLOG" "$HOME_FALSO/.claude/settings.json"
 
 echo
 
@@ -313,17 +313,19 @@ fixture_roadmap t5r2 '{"found":true,"section":"## Fase 2\nTela de login do usuá
 roda_args 2 --ui
 nao_casa "pergunta não cita 24/31"     "$(campo "$J" .vault_alerta.pergunta)" '24/31'
 casa     "pergunta nova (balde 3)"     "$(campo "$J" .vault_alerta.pergunta)" 'balde 3'
-ESPELHO_REAL="$ROOT/.planning/.gad/last-abre-rodada.json"
+# v2.10.1 (56(f)): a cópia mora no cache do git, fora da .planning
+CACHE="$(git -C "$ROOT" rev-parse --path-format=absolute --git-path gad-cache)"
+ESPELHO_REAL="$CACHE/last-abre-rodada.json"
 [ -f "$ESPELHO_REAL" ] || falha "espelho real precisa existir após abertura de verdade" "ausente: $ESPELHO_REAL"
 CONTEUDO_ANTES="$(cat "$ESPELHO_REAL" 2>/dev/null)"
-rm -f "$ROOT/.planning/.gad-rodada-ativa.json" "$RUNLOG"
+rm -f "$ROOT/.planning/.gad/rodada-ativa.json" "$RUNLOG"
 
 roda_args 2 --dry-run
 eq "dry-run não altera o espelho real" "$(cat "$ESPELHO_REAL" 2>/dev/null)" "$CONTEUDO_ANTES"
-[ -f "$ROOT/.planning/.gad/last-abre-rodada-dry.json" ] \
+[ -f "$CACHE/last-abre-rodada-dry.json" ] \
   && ok "espelho do dry-run tem nome próprio" \
   || falha "espelho do dry-run tem nome próprio" "last-abre-rodada-dry.json ausente"
-rm -f "$ROOT/.planning/.gad/last-abre-rodada-dry.json" "$ESPELHO_REAL"
+rm -f "$CACHE/last-abre-rodada-dry.json" "$ESPELHO_REAL"
 unset GAD_ROADMAP_FIXTURE
 
 echo

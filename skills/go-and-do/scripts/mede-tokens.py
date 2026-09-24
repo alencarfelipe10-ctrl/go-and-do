@@ -19,8 +19,8 @@ Uso (normalmente chamado pelo confere-etapa.sh no fecho de cada etapa):
                 janela (atribuição por despacho, igual ao ledger da auditoria).
   --transcript/--subagents  sobrescrevem a descoberta (teste/aceite).
 
-Saída: JSON compacto em 1 linha no stdout + espelho em
-<root>/.planning/.gad/last-mede-tokens.json (PC-5: o RTK capa o stdout).
+Saída: JSON compacto em 1 linha no stdout + espelho `last-mede-tokens.json` no cache fora
+do git (v2.10.1; `espelho` = 1ª chave do JSON; PC-5: o RTK capa o stdout).
 Campos: camada0/subagentes/total (4 campos de usage + custo_usd), n_requests,
 n_subagentes, precos_de (proveniência da tabela — PC-7), avisos.
 
@@ -276,18 +276,26 @@ def main():
         "avisos": avisos,
     }
 
-    compacto = json.dumps(resultado, ensure_ascii=False, separators=(",", ":"))
-    if not args.sem_espelho:
+    if not args.sem_espelho and os.environ.get("GAD_DRY_RUN", "0") != "1":
+        # v2.10.1 (56(f)): é CÓPIA → cache fora do git (lib/gad_caminhos.py), com o
+        # caminho como 1ª chave do JSON (mesma regra do gad_json_out). Best-effort.
         d = os.getcwd()
         while d != os.path.dirname(d):
             if os.path.isdir(os.path.join(d, ".planning")):
-                os.makedirs(os.path.join(d, ".planning", ".gad"), exist_ok=True)
-                with open(os.path.join(d, ".planning", ".gad",
-                                       "last-mede-tokens.json"),
-                          "w", encoding="utf-8") as fh:
-                    fh.write(compacto + "\n")
+                try:
+                    sys.dont_write_bytecode = True
+                    sys.path.insert(0, os.path.join(os.path.dirname(os.path.realpath(__file__)), "lib"))
+                    import gad_caminhos
+                    esp = gad_caminhos.espelho_caminho(d, "mede-tokens")
+                    os.makedirs(os.path.dirname(esp), exist_ok=True)
+                    resultado = {"espelho": esp, **resultado}
+                    with open(esp, "w", encoding="utf-8") as fh:
+                        fh.write(json.dumps(resultado, ensure_ascii=False, separators=(",", ":")) + "\n")
+                except Exception:
+                    pass
                 break
             d = os.path.dirname(d)
+    compacto = json.dumps(resultado, ensure_ascii=False, separators=(",", ":"))
     print(json.dumps(resultado, ensure_ascii=False, indent=2) if args.pretty
           else compacto)
 

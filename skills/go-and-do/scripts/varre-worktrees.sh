@@ -23,8 +23,9 @@
 # --arquivar: com-trabalho → `git format-patch <base>..<branch>` em
 #   .planning/.gad/worktrees-arquivo/<nome>/; sujeira → `nao-commitado.diff` na mesma
 #   pasta; README.md com origem, base, data, contagem e o comando para reaplicar. A pasta
-#   é gitignored (`.planning/.gad/`): os patches carregam código do projeto e ficam só
-#   no disco do dono. Só arquivos rastreados entram — o format-patch não vê ignorados.
+#   é gitignored (`.planning/.gad/`, garantido pelo `.gitignore` com `*` que o helper
+#   `gad_estado_garante` grava desde a v2.10.1): os patches carregam código do projeto e
+#   ficam só no disco do dono. Só arquivos rastreados entram — o format-patch não vê ignorados.
 #
 # --remover: `git worktree remove --force` + `git branch -D` + `git worktree prune`.
 #   limpa sai sem arquivo. com-trabalho/suja exigem `--arquivar` na mesma chamada ou
@@ -36,7 +37,7 @@
 #
 # Saída: JSON de 1 linha {projeto, base, acao, worktrees:[{path, branch, head, classe,
 #   commits, sujeira, nao_rastreados, idade_dias, existe, arquivado_em, removida, motivo}],
-#   removidas} + espelho .planning/.gad/last-varre-worktrees.json.
+#   removidas} + espelho last-varre-worktrees.json no cache do git (v2.10.1).
 # Exit: 0 = rodou (mesmo com cópias pendentes); 2 = uso inválido.
 set -u
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
@@ -68,7 +69,7 @@ COMMON=$(CDPATH= cd -- "$COMMON" && pwd -P)
 
 BASE=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null) || BASE=HEAD
 BASE_SHA=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null) || { echo "USO-INVALIDO: raiz sem commit" >&2; exit 2; }
-ARQ_RAIZ="$ROOT/.planning/.gad/worktrees-arquivo"
+ARQ_RAIZ="$(gad_estado_dir "$ROOT")/worktrees-arquivo"
 AGORA=$(date +%s)
 HOJE=$(date +%Y-%m-%d)
 
@@ -108,6 +109,7 @@ conferir_arquivo() {
 arquivar() {
   local nome="$1" sha="$2" branch="$3" wt="$4" commits="$5" sujeira="$6" base="$7" pasta n_patch=0
   pasta="$ARQ_RAIZ/$nome"
+  gad_estado_garante "$ROOT" || true
   mkdir -p "$pasta" || return 1
   rm -f "$pasta"/*.patch "$pasta/nao-commitado.diff"
   if [ "$commits" -gt 0 ]; then

@@ -8,7 +8,8 @@
 # Uso: pre-despacho.sh <etapa> [--fase N] [--projeto DIR] [--dry-run]
 #   <etapa> casa com scripts/manifests/etapa-<etapa>.json (string opaca — "1.5" e "2.5"
 #   nunca viram int, PC-9). Sem --fase/--projeto, lê o ponteiro da rodada ativa
-#   (.planning/.gad-rodada-ativa.json, escrito pelo abre-rodada.sh).
+#   (.planning/.gad/rodada-ativa.json, escrito pelo abre-rodada.sh; o legado
+#   .planning/.gad-rodada-ativa.json vale por uma release).
 #
 # Campo `despacho` do JSON (política 100% em script, aprovada 08/08):
 #   ok                   — despache com prompts/<etapa>.md.
@@ -40,7 +41,8 @@
 # abertura da janela; kv despacho=autorizado) e, só no 1º checkpoint da sessão, o `end` re-medido
 # da Etapa 0 (bloco «janela da Etapa 0», tarefa 10(d)). O ciclo de vida fino de cada Agent() é do
 # hook gad-lifecycle.sh (eventos despacho/retorno) — nunca daqui.
-# Saída: JSON 1 linha + espelho .planning/.gad/last-pre-despacho.json (PC-5). Exit 0=ok.
+# Saída: JSON 1 linha + espelho .planning/.gad/last-pre-despacho.json (PC-5; é ESTADO — lido
+# pelo lib/veredito-end.sh — então fica em .planning/.gad/, não no cache). Exit 0=ok.
 
 set -euo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
@@ -62,7 +64,8 @@ MANIFEST="$GAD_SCRIPTS_DIR/manifests/etapa-$ETAPA.json"
 RUNLOG_ETAPA=$(jq -r '.runlog_etapa' "$MANIFEST")
 
 ROOT="$(gad_project_root "${PROJ:-$PWD}")"
-PONTEIRO="$ROOT/.planning/.gad-rodada-ativa.json"
+# v2.10.1 (56(a)): novo tem precedência; o legado vale por uma release (rodada da v2.10.0)
+PONTEIRO="$(gad_rodada_ativa "$ROOT" || gad_rodada_ativa_novo "$ROOT")"
 
 # fase/NN/fase_dir: ponteiro da rodada > flags > descoberta no disco
 NN=""; PHASE_DIR=""
@@ -253,8 +256,8 @@ if [ "$(jq -r '.pre.paralelismo // false' "$MANIFEST")" = "true" ]; then
       baseref_aplicado:$ba, interactive_nos_args:$it} + (if $msg != "" then {message:$msg} else {} end)')
   # espelho lido pelo confere-etapa.sh 3 (compara use_worktrees do início com o do fecho);
   # --dry-run não grava nada, como o resto do script
-  [ "$DRY" = 1 ] || { mkdir -p "$ROOT/.planning/.gad"; jq -cn --arg ts "$(date -Is)" --argjson par "$PAR" \
-    '{ts:$ts, use_worktrees:$par.use_worktrees, paralelismo:$par}' > "$ROOT/.planning/.gad/last-pre-despacho-3.json"; }
+  [ "$DRY" = 1 ] || { gad_estado_garante "$ROOT"; jq -cn --arg ts "$(date -Is)" --argjson par "$PAR" \
+    '{ts:$ts, use_worktrees:$par.use_worktrees, paralelismo:$par}' > "$(gad_espelho_caminho "$ROOT" pre-despacho-3)"; }
   if [ "$uw" = false ]; then
     bloqueia_par "workflow.use_worktrees=false" "workflow.use_worktrees está false: toda onda de >=2 planos rodaria em série. Religar (config-set workflow.use_worktrees true) e continuar, ou aceitar a serialização?" "$PAR"
   fi
@@ -282,7 +285,7 @@ if [ "$(jq -r '.pre.paralelismo // false' "$MANIFEST")" = "true" ]; then
   # singleton por .planning/.gad/: um `passed: true` da fase anterior liberaria a fase nova sem
   # portão, por isso `resumo.fase` tem de casar com a fase (comparados pelo sufixo numérico —
   # o índice diz "24.4", o ponteiro pode dizer "INS-24.4").
-  PG="$ROOT/.planning/.gad/last-plan-gate.json"; PG_OK=false; PG_MOTIVO=""
+  PG="$(gad_espelho_caminho "$ROOT" plan-gate)"; PG_OK=false; PG_MOTIVO=""
   if [ ! -f "$PG" ]; then PG_MOTIVO="last-plan-gate.json ausente (o portão não rodou)"
   elif [ "$(jq -r '.passed // false' "$PG" 2>/dev/null)" != true ]; then PG_MOTIVO="last-plan-gate.json com passed=$(jq -r 'if has("passed") then (.passed|tostring) else "ilegível" end' "$PG" 2>/dev/null): $(jq -r '[.falhas[]?.codigo]|unique|join(",")' "$PG" 2>/dev/null)"
   else
@@ -450,7 +453,7 @@ if [ "$status" = "stop" ]; then
   if [ "$DRY" = 0 ]; then
     gad_runlog "$PHASE_DIR" "$NN" stop "$RUNLOG_ETAPA" \
       "$tokens" "$pct" "" "$limite" "" "contexto em $((tokens/1000))k"
-    rm -f "$PONTEIRO"   # PC-3: rodada parada não arma mais o hook
+    rm -f "$(gad_rodada_ativa_novo "$ROOT")" "$(gad_rodada_ativa_legado "$ROOT")"   # PC-3: rodada parada não arma mais o hook
   fi
   gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" --arg h "$handoff" \
     --argjson t "${tokens:-0}" --argjson p "${pct:-0}" --argjson l "${limite:-0}" --argjson x "$extras" \
@@ -465,6 +468,7 @@ PAR_KV=(); [ "$PARALELISMO_ATIVO" = 1 ] && PAR_KV=(--kv paralelismo=ok)
 gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" --arg st "${status:-unknown}" --arg rz "$reason" \
   --arg pr "prompts" --argjson t "${tokens:-0}" --argjson p "${pct:-0}" --argjson l "${limite:-0}" \
   --argjson sil "$silencio" --argjson x "$extras" \
+  --arg fmt "$( [ -n "$PHASE_DIR" ] && gad_fase_formato "$PHASE_DIR" || echo desconhecido)" \
   '{etapa:$e, despacho:"ok",
     contexto:({tokens:$t,pct:$p,limit:$l,status:$st} + (if $rz != "" then {reason:$rz} else {} end)),
-    janela_silencio:$sil} + $x')"
+    janela_silencio:$sil, formato_fase:$fmt} + $x')"

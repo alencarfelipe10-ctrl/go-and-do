@@ -130,7 +130,11 @@ lane_unlock() { rm -rf "${1:-}" 2>/dev/null || true; }
 # Família de artefatos (45 m/45 j) — escritor único dos caminhos, para que supervisor
 # e lançador nunca discordem sobre onde mora o run e como se chama o alias.
 # ═══════════════════════════════════════════════════════════════════════════════
-fam_base()   { case "$1" in convergencia) printf '%s/.convergencia' "$2" ;; *) printf '%s/.intent' "$2" ;; esac; }
+# v2.10.1 (57): os caminhos saem do helper único (lib/gad-caminhos.sh), conforme o formato
+# da fase — `.gad/intent/c<C>/…` no novo, `.intent/.<x>-c<C>…` no antigo.
+fam_tipo()   { case "$1" in convergencia) printf 'convergencia' ;; *) printf 'intent' ;; esac; }
+fam_base()   { gad_fase_caminho "$2" "$(fam_tipo "$1")"; }
+fam_arq()    { gad_fase_caminho "$2" "$(fam_tipo "$1")/c$3/$4"; }   # <fam> <pd> <C> <nome>
 fam_prefixo(){ case "$1" in convergencia) printf 'planrev-' ;; *) printf '' ;; esac; }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -152,7 +156,7 @@ if [ "${4:-}" = "--esperar" ]; then
     || { echo "uso: roda-lanes.sh <phase_dir> <NN> <C> --esperar [<lane>] [--familia intencao|convergencia]" >&2; exit 2; }
 
   INTENT_ESP="$(fam_base "$FAMILIA_ESP" "$PD")"
-  PONTEIRO_ESP="$INTENT_ESP/.run-atual-c$C"
+  PONTEIRO_ESP="$(fam_arq "$FAMILIA_ESP" "$PD" "$C" run-atual)"
   [ -f "$PONTEIRO_ESP" ] \
     || { echo "ERRO: nenhuma rodada de lanes lançada para o ciclo $C (ponteiro ausente: $PONTEIRO_ESP) — chame o lançador antes de esperar" >&2; exit 2; }
   RUN_ATUAL="$(cat "$PONTEIRO_ESP" 2>/dev/null || true)"
@@ -163,7 +167,7 @@ if [ "${4:-}" = "--esperar" ]; then
   # o codex; esperar as duas de sempre ficaria preso 590 s esperando o agy de um run que
   # nunca existiu. `supervisor-<lane>.out` nasce por `nohup … >>arquivo` no MOMENTO do
   # lançamento (antes de qualquer status) — é o inventário real e imediato do run.
-  RUN_DIR_ESP="$INTENT_ESP/runs/c$C/$RUN_ATUAL"
+  RUN_DIR_ESP="$(fam_arq "$FAMILIA_ESP" "$PD" "$C" "runs/$RUN_ATUAL")"
   LANES_ESP="$LANE_ESP"
   if [ -z "$LANES_ESP" ] && [ -d "$RUN_DIR_ESP" ]; then
     for sf in "$RUN_DIR_ESP"/supervisor-*.out; do
@@ -181,7 +185,7 @@ if [ "${4:-}" = "--esperar" ]; then
 
   T0=$(date +%s)
   for LN in $LANES_ESP; do
-    ALIAS_STATUS="$INTENT_ESP/.status-c$C-$LN.json"
+    ALIAS_STATUS="$(fam_arq "$FAMILIA_ESP" "$PD" "$C" "status-$LN.json")"
     # run_id tem de casar com o ponteiro ATUAL: um status de run anterior do mesmo ciclo
     # (sobreposição, ver cabeçalho do lançador) não conta como pronto.
     until [ -s "$ALIAS_STATUS" ] && [ "$(jq -r '.run_id // empty' "$ALIAS_STATUS" 2>/dev/null)" = "$RUN_ATUAL" ]; do
@@ -214,8 +218,8 @@ if [ "${1:-}" = "--supervisiona" ]; then
   FAMILIA="${9:-intencao}"
   INTENT="$(fam_base "$FAMILIA" "$PD")"
   PREFIXO="$(fam_prefixo "$FAMILIA")"
-  LOCK="$INTENT/.lock-c$C"
-  PONTEIRO="$INTENT/.run-atual-c$C"
+  LOCK="$(fam_arq "$FAMILIA" "$PD" "$C" lock)"
+  PONTEIRO="$(fam_arq "$FAMILIA" "$PD" "$C" run-atual)"
 
   PARECER="$RUN_DIR/parecer-$LANE.md"
   ESPELHO="$RUN_DIR/espelho-$LANE.json"
@@ -368,14 +372,14 @@ if [ "${1:-}" = "--supervisiona" ]; then
 
   # ── (4) promoção dos aliases canônicos — só o dono do ponteiro, sob o lock ───
   ALIAS_PARECER="$PD/pareceres/$NN-${PREFIXO}parecer-$LANE-c$C.md"
-  ALIAS_ESPELHO="$PD/pareceres/.roda-${PREFIXO}$LANE-c$C.json"
-  ALIAS_STATUS="$INTENT/.status-c$C-$LANE.json"
-  ALIAS_DONE="$INTENT/.done-c$C-$LANE"
+  ALIAS_ESPELHO="$(gad_fase_caminho "$PD" "lanes/roda-${PREFIXO}$LANE-c$C.json")"
+  ALIAS_STATUS="$(fam_arq "$FAMILIA" "$PD" "$C" "status-$LANE.json")"
+  ALIAS_DONE="$(fam_arq "$FAMILIA" "$PD" "$C" "done-$LANE")"
 
   if lane_lock "$LOCK" 100; then
     DONO="$(cat "$PONTEIRO" 2>/dev/null || true)"
     if [ "$DONO" = "$RUN_ID" ]; then
-      mkdir -p "$PD/pareceres"
+      mkdir -p "$PD/pareceres" "$(dirname -- "$ALIAS_ESPELHO")" "$(dirname -- "$ALIAS_STATUS")"
       # cópia + rename atômico: nunca `mv` do original — o run-dir tem de continuar
       # íntegro para um verificador antigo que ainda esteja lendo.
       [ -e "$PARECER" ] && cp -f "$PARECER" "$ALIAS_PARECER.tmp" && mv -f "$ALIAS_PARECER.tmp" "$ALIAS_PARECER"
@@ -417,21 +421,22 @@ esac
 
 LANES="${LANES_ARG:-${GAD_LANES_LANES:-codex agy}}"
 INTENT="$(fam_base "$FAMILIA" "$PD")"
-LOCK="$INTENT/.lock-c$C"
-PONTEIRO="$INTENT/.run-atual-c$C"
-mkdir -p "$INTENT/runs/c$C" "$PD/pareceres"
+LOCK="$(fam_arq "$FAMILIA" "$PD" "$C" lock)"
+PONTEIRO="$(fam_arq "$FAMILIA" "$PD" "$C" run-atual)"
+gad_fase_lanes_garante "$PD"
+mkdir -p "$(fam_arq "$FAMILIA" "$PD" "$C" runs)" "$PD/pareceres" "$(gad_fase_caminho "$PD" lanes)"
 
 RUN_ID="$(date -u +%Y%m%dT%H%M%S)-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')"
-RUN_DIR="$INTENT/runs/c$C/$RUN_ID"
+RUN_DIR="$(fam_arq "$FAMILIA" "$PD" "$C" "runs/$RUN_ID")"
 
 # ── devolução de uma lane (P15) ─────────────────────────────────────────────────
 if [ -n "$REFORMATA" ]; then
-  MARC="$PD/pareceres/.reformat-$(fam_prefixo "$FAMILIA")$REFORMATA-c$C"
+  MARC="$(gad_fase_caminho "$PD" "lanes/reformat-$(fam_prefixo "$FAMILIA")$REFORMATA-c$C")"
   if [ -e "$MARC" ]; then
     echo "RECUSADO: lane $REFORMATA já foi devolvida uma vez no ciclo $C ($MARC). A 2ª ocorrência de parecer_informe reprova a lane (confere-ciclo.sh --tabela); não há 3ª tentativa." >&2
     exit 4
   fi
-  BRIEF_R="$INTENT/briefing-c$C-reformat-$REFORMATA.md"
+  BRIEF_R="$(fam_arq "$FAMILIA" "$PD" "$C" "briefing-reformat-$REFORMATA.md")"
   {
     cat "$BRIEF"
     echo

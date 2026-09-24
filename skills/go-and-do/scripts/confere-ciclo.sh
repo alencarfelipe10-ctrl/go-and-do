@@ -84,6 +84,7 @@
 # achados em redução → leitura obrigatória do parecer bruto (regra no prompt).
 
 set -u
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gad-caminhos.sh"   # v2.10.1: caminhos da fase
 . "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gsd-shim.sh" 2>/dev/null && trap 'gad_autoregistro "confere-ciclo.sh" "$?"' EXIT || true
 
 SEV='HIGH|MEDIUM|LOW|CRITICAL|BLOCKER|ALTA|ALTO|M[ÉE]DIA|M[ÉE]DIO|BAIXA|BAIXO|CR[ÍI]TIC'
@@ -141,14 +142,14 @@ cancela_parecer_informe() {
   nn=$(basename -- "$p" | sed -E 's/^([0-9.]+)-.*$/\1/')
   fam=""; etapa="1 intencao"
   case "$(basename -- "$p")" in *-planrev-*) fam="planrev-"; etapa="2.5 convergencia" ;; esac
-  marc="$dir/.reformat-${fam}${lane}-c${c}"; rep="$marc.reprovada"
+  marc="$(gad_fase_caminho "$pd" "lanes/reformat-${fam}${lane}-c${c}")"; rep="$marc.reprovada"
   if [ ! -e "$marc" ]; then
     echo "parecer_informe: ${lane} devolver"
     return 0
   fi
   echo "parecer_informe: ${lane} reprovada"
   if [ -n "$sd" ]; then
-    st="$sd/.status-c${c}-${lane}.json"
+    st="$(gad_fase_arq_da_base "$sd" "intent/c${c}/status-${lane}.json")"
     if [ -s "$st" ] && jq -e . "$st" >/dev/null 2>&1; then
       jq -c '.usable=false | .independent=false | .rc_reason="parecer_informe"' "$st" > "$st.tmp" \
         && mv -f "$st.tmp" "$st"
@@ -164,8 +165,9 @@ cancela_parecer_informe() {
 if [ "${1:-}" = "--origem-vereditos" ]; then
   PD="${2:-}"; C="${3:-}"
   [ -n "$PD" ] && [ -n "$C" ] || { echo "uso: confere-ciclo.sh --origem-vereditos <phase_dir> <C>" >&2; exit 2; }
-  IN="$PD/.intent"; V="$IN/.vereditos-c$C.txt"; O="$IN/.vereditos-c$C.origem.json"
-  R="$IN/.rota-verificacao-c$C.json"
+  V="$(gad_fase_caminho "$PD" "intent/c$C/vereditos.txt")"
+  O="$(gad_fase_caminho "$PD" "intent/c$C/vereditos.origem.json")"
+  R="$(gad_fase_caminho "$PD" "intent/c$C/rota-verificacao.json")"
   if [ ! -f "$V" ]; then
     echo "origem_vereditos: n/a (sem .vereditos-c$C.txt)"; exit 0
   fi
@@ -245,19 +247,19 @@ if [ "${1:-}" = "--frescor" ]; then
   # da iteração, extraído do nome — nunca pela ordem em que o glob devolveu os arquivos.
   _fr_max_iter() { # <dir> → maior epoch e o caminho do iter-N.yaml de maior N
     local dir="$1" melhor=-1 quem="" f n
-    for f in "$dir"/.plan-checker/iter-*.yaml; do
+    while IFS= read -r f; do
       [ -e "$f" ] || continue
       n="$(basename "$f" .yaml)"; n="${n#iter-}"
       case "$n" in ''|*[!0-9]*) continue ;; esac
       if [ "$n" -gt "$melhor" ]; then melhor="$n"; quem="$f"; fi
-    done
+    done < <(gad_fase_glob "$dir" 'plan-checker/iter-*.yaml')
     if [ -n "$quem" ]; then printf '%s\t%s\n' "$(_fr_epoch "$quem")" "$quem"
     else printf '0\t\n'; fi
   }
 
   # o briefing do ciclo k da convergência (untracked por desenho → mtime)
   FBRIEF="$FPD/pareceres/briefing-planrev-c$FK.md"
-  [ -e "$FBRIEF" ] || FBRIEF="$FPD/.convergencia/briefing-c$FK.md"
+  [ -e "$FBRIEF" ] || FBRIEF="$(gad_fase_caminho "$FPD" "convergencia/c$FK/briefing.md")"
 
   IFS=$'\t' read -r PLAN_E PLAN_Q < <(_fr_max "$FPD"/*-PLAN.md)
   IFS=$'\t' read -r CHK_E  CHK_Q  < <(_fr_max_iter "$FPD")
@@ -380,11 +382,15 @@ if [ "${1:-}" = "--tabela" ]; then
   DIR_JSON='{}'
   if [ -n "$PERG" ]; then
     DIR_OUT=$(GAD_MAN="$PERG" GAD_VER="$VERED" GAD_SD="$STATUSDIR" GAD_LANES="$LANES_TSV" \
+      GAD_LIB="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib" \
       python3 - <<'PY'
 import json, os, re, sys, unicodedata
 
 MAN = os.environ["GAD_MAN"]; VER = os.environ.get("GAD_VER", "")
 SD  = os.environ.get("GAD_SD", ""); LANES = os.environ.get("GAD_LANES", "")
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.environ["GAD_LIB"])
+import gad_caminhos  # v2.10.1: caminhos da fase (formato novo × antigo)
 
 def norm(s):
     s = unicodedata.normalize("NFKD", s or "")
@@ -473,7 +479,7 @@ for entrada in LANES.strip().splitlines():
         continue
     lane, ciclo, path = partes
     if SD and ciclo:
-        st = os.path.join(SD, ".status-c%s-%s.json" % (ciclo, lane))
+        st = gad_caminhos.arq_da_base(SD, "intent/c%s/status-%s.json" % (ciclo, lane))
         if os.path.exists(st):
             try:
                 if json.load(open(st, encoding="utf-8")).get("usable") is False:

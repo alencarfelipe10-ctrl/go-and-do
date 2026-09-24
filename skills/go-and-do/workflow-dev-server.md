@@ -21,7 +21,9 @@ Mecanizada no `scripts/dev-server.sh` (decisão 4.B + adendo 5.A):
   relacionado". (Guarda permanente no próprio script: NUNCA derivar pgid via `ps` — em
   shell não-interativo o pgid devolvido é o do shell PAI, e um `kill -- -PGID` mata o
   próprio orquestrador; caso real no aceite de 09/08, exit 144.)
-- Estado em `.planning/.gad-dev-server.json` (PID, porta, receita usada, `ja_estava`).
+- Estado em `.planning/.gad/dev-server.json` (PID, porta, receita usada, `ja_estava`; log em
+  `.planning/.gad/dev-server.log`). O legado `.planning/.gad-dev-server.json` ainda é lido por
+  uma release.
 
 Regras que o script não muda:
 

@@ -11,7 +11,7 @@
 **2.3 — Plan (via subagent).** Dispatch the agent `gad-plan` (Opus 5.5 medium — the entry
 judgments have high leverage) with `prompts/plan.md` (`N`, `NN`, `phase_dir`, `project_root`,
 base args `N --tdd`): it judges research (2.D) · mapper (2.E) · granularity (2.G), invokes
-`gsd-plan-phase` and persists the checker trail (`.plan-checker/iter-N.yaml`, 2.B). Routing:
+`gsd-plan-phase` and persists the checker trail (`.gad/plan-checker/iter-N.yaml`, 2.B). Routing:
 `done · planejado` → 2.4 (note research/mapper/granularity/bells for transparency) ·
 `done · sem_plano` → `stop` event, stop · `needs_decision` → question + continuation ·
 `blocked` → `stop`, stop.

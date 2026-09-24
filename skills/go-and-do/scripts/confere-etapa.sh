@@ -56,7 +56,7 @@
 # No pass (fora do --dry-run): mede a etapa com mede-tokens.py (janela desde o
 # checkpoint aberto pelo pre-despacho) e grava o evento `end` com tokens_reais/custo —
 # números só de fonte mecânica (G.1). No fail: grava evento `script` com o resumo.
-# Saída: JSON 1 linha + espelho .planning/.gad/last-confere-etapa.json (PC-5).
+# Saída: JSON 1 linha + espelho last-confere-etapa.json no cache do git (PC-5; v2.10.1).
 # Exit: 0 pass · 1 fail · 2 erro de uso/manifest.
 
 set -euo pipefail
@@ -111,7 +111,7 @@ _gad_ce_grava_script() { # <rc> <resumo>
   [ "${GAD_DRY_RUN:-0}" = 1 ] && return 0
   if [ -n "${PHASE_DIR:-}" ] && [ -n "${NN:-}" ] && [ -n "${RUNLOG_ETAPA:-}" ]; then
     # sites com fase/etapa já resolvidos (via --fase/--projeto OU ponteiro): grava direto,
-    # sem depender do ponteiro `.gad-rodada-ativa.json` (o gad_autoregistro exige `.nn` +
+    # sem depender do ponteiro da rodada (o gad_autoregistro exige `.nn` +
     # `.phase_dir` NELE — bancadas que passam --fase sem ponteiro completo, como
     # test-confere-etapa.sh, ficariam mudas se dependessem só dele).
     gad_runlog "$PHASE_DIR" "$NN" script "$RUNLOG_ETAPA" \
@@ -132,7 +132,8 @@ if [ "$ETAPA" != "pausa" ]; then
 fi
 
 ROOT="$(gad_project_root "${PROJ:-$PWD}")"
-PONTEIRO="$ROOT/.planning/.gad-rodada-ativa.json"
+# v2.10.1 (56(a)): novo tem precedência; o legado vale por uma release (rodada da v2.10.0)
+PONTEIRO="$(gad_rodada_ativa "$ROOT" || gad_rodada_ativa_novo "$ROOT")"
 NN=""; PHASE_DIR=""
 if [ -z "$FASE" ] && [ -f "$PONTEIRO" ]; then
   FASE=$(jq -r '.fase // empty' "$PONTEIRO")
@@ -201,7 +202,13 @@ if [ "$ETAPA" = "pausa" ]; then
 fi
 
 subst() {
-  local s="$1"
+  local s="$1" rel ini
+  # v2.10.1 (57): `{gad:<rel>}` = caminho de evidência pelo NOME NOVO (relativo a .gad/),
+  # resolvido pelo helper conforme o formato da fase (lib/gad-caminhos.sh).
+  while [[ "$s" == *"{gad:"* ]]; do
+    ini="${s%%\{gad:*}"; rel="${s#*\{gad:}"; rel="${rel%%\}*}"
+    s="$ini$(gad_fase_caminho "$PHASE_DIR" "$rel")${s#*\{gad:$rel\}}"
+  done
   s="${s//\{fase\}/$PHASE_DIR}"; s="${s//\{nn\}/$NN}"
   s="${s//\{n\}/$FASE}";         s="${s//\{root\}/$ROOT}"
   printf '%s' "$s"
@@ -503,7 +510,7 @@ if [ "$ETAPA" = "6" ]; then
   # o formato ilegível reprova por si (assert `state_formato`).
   # Caminho escolhido: checagem PRÓPRIA, e não chamada ao reconcilia-docs.sh em modo
   # verificação — o `--dry-run` dele NÃO é livre de efeito colateral (o `gad_json_out` da
-  # linha final grava `.planning/.gad/last-reconcilia-docs.json` fora da guarda do DRY, e
+  # linha final gravava `.planning/.gad/last-reconcilia-docs.json` fora da guarda do DRY, e
   # medimos isso no grupo-inspired). Uma cancela não pode mutar estado para julgar.
   ST="$ROOT/.planning/STATE.md"
   if [ -f "$ST" ]; then
@@ -694,7 +701,7 @@ PYOBS
     done < <(jq -r '.serializacao_observada[]' <<<"$PAR_OBS")
   fi
   # use_worktrees do início (espelho do pre-despacho.sh 3) × do fecho
-  PRE3="$ROOT/.planning/.gad/last-pre-despacho-3.json"
+  PRE3="$(gad_espelho_caminho "$ROOT" pre-despacho-3)"
   uw0=null; uw1=null
   [ -f "$PRE3" ] && uw0=$(jq -c '.use_worktrees // null' "$PRE3" 2>/dev/null || echo null)
   uw1=$(cd "$ROOT" && gsd_run query config-get workflow.use_worktrees --raw 2>/dev/null | tr -d ' \n\r' || true)
@@ -1073,7 +1080,7 @@ if [ "$ETAPA" = "1" ]; then
   SETUP_I="$GAD_SCRIPTS_DIR/setup-intencao.sh"
   CPS="$GAD_SCRIPTS_DIR/confere-pre-spec.sh"
   SPEC_F="$PHASE_DIR/$NN-SPEC.md"; PRE_F="$PHASE_DIR/$NN-PRE-SPEC.md"
-  ROTA_F="$PHASE_DIR/.intent/pre-spec-route.json"
+  ROTA_F="$(gad_fase_caminho "$PHASE_DIR" intent/pre-spec-route.json)"
 
   # ── R2: as falhas do confere-pre-spec.sh ((a) MARCA-SEM-ID, (b) ID-INEXISTENTE e as
   # demais, inclusive AC-SEM-ORIGEM / AC-ORIGEM-INEXISTENTE — P12) REPROVAM;
@@ -1246,9 +1253,9 @@ if [ "$ETAPA" = "1" ]; then
   # J5/`confere-ciclo.sh --origem-vereditos` mede pelo sha256 do `.vereditos-c<C>.origem.json`
   # contra o `escritores[]`: um bloco abaixo, sem duplicar aqui.)
   declare -A SELO_BLOB=()
-  for ap in "$PHASE_DIR/.intent/".correcoes-c*.aplicado; do
+  while IFS= read -r ap; do
     [ -f "$ap" ] || continue
-    c_ap=$(basename "$ap" | sed -n 's/^\.correcoes-c\([0-9][0-9]*\)b\?\.aplicado$/\1/p')
+    c_ap=$(gad_fase_curinga "$PHASE_DIR" 'intent/c*/correcoes.aplicado' "$ap" | sed -n 's/^\([0-9][0-9]*\)b\?$/\1/p')
     [ -n "$c_ap" ] || c_ap=0
     while IFS=$'\t' read -r bp bc; do
       [ -n "$bp" ] || continue
@@ -1262,7 +1269,7 @@ if [ "$ETAPA" = "1" ]; then
         SELO_BLOB["$bp"]="$c_ap:$bc"
       fi
     done < <(jq -r '(.blobs//[])[] | "\(.path)\t\(.blob_commit)"' "$ap" 2>/dev/null)
-  done
+  done < <(gad_fase_glob "$PHASE_DIR" 'intent/c*/correcoes.aplicado')
   SEM_SELO=()
   for bp in "${!SELO_BLOB[@]}"; do
     bc="${SELO_BLOB[$bp]#*:}"
@@ -1285,9 +1292,9 @@ if [ "$ETAPA" = "1" ]; then
   CCICLO="$GAD_SCRIPTS_DIR/confere-ciclo.sh"
   if [ -f "$CCICLO" ]; then
     J5_NIVEL=FALHA; [ "$DRY" = 1 ] && J5_NIVEL=aviso
-    for vf in "$PHASE_DIR/.intent/".vereditos-c*.txt; do
+    while IFS= read -r vf; do
       [ -f "$vf" ] || continue
-      c=$(basename "$vf" | sed -n 's/^\.vereditos-c\([0-9][0-9]*\)\.txt$/\1/p')
+      c=$(gad_fase_curinga "$PHASE_DIR" 'intent/c*/vereditos.txt' "$vf" | sed -n 's/^\([0-9][0-9]*\)$/\1/p')
       [ -n "$c" ] || continue
       jrc=0; jout=$(bash "$CCICLO" --origem-vereditos "$PHASE_DIR" "$c" 2>&1) || jrc=$?
       if [ "$jrc" = 0 ]; then
@@ -1298,7 +1305,7 @@ if [ "$ETAPA" = "1" ]; then
           '. + [{id:$id, resultado:$n, detalhe:$d}]' <<<"$RES")
         if [ "$J5_NIVEL" = FALHA ]; then FALHAS=$((FALHAS+1)); fi
       fi
-    done
+    done < <(gad_fase_glob "$PHASE_DIR" 'intent/c*/vereditos.txt')
   fi
 
   # ── C3 (plano 2, 05/09/2026): D-NN que citam critério mudado desde a base selada e não foram
@@ -1329,7 +1336,7 @@ if [ "$ETAPA" = "1" ]; then
   [ -n "$R6" ] || R6='{}'
   jq -e . >/dev/null 2>&1 <<<"$R6" || R6='{}'
   SINO_FONTES=("$PHASE_DIR/$NN-INTENT-REVIEW.md")
-  for sf in "$PHASE_DIR/.intent/".sinos-*.txt; do [ -f "$sf" ] && SINO_FONTES+=("$sf"); done
+  while IFS= read -r sf; do [ -f "$sf" ] && SINO_FONTES+=("$sf"); done < <(gad_fase_glob "$PHASE_DIR" 'intent/sinos-*.txt')
   tem_sino() { # <regex>
     local f; for f in "${SINO_FONTES[@]}"; do
       [ -f "$f" ] || continue
@@ -1534,7 +1541,7 @@ fi
 if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   SUJOS=$( { git -C "$ROOT" status --porcelain --untracked-files=all -- "$PHASE_DIR" 2>/dev/null \
     | sed 's/^...//' \
-    | grep -vE '(^|/)\.(gad|gad-[a-z-]*|correcoes-c[0-9a-z]*\.(tmp|pre-[0-9]+\.patch))' \
+    | grep -vE '^\.planning/\.gad(/|-)|(^|/)\.gad-[a-z-]*$|(^|/)\.correcoes-c[0-9a-z]*\.(tmp|pre-[0-9]+\.patch)$|/\.gad/intent/c[0-9a-z]+/correcoes\.(tmp|pre-[0-9]+\.patch)$' \
     | grep -vE '\.(tmp|swp|err|log|pyc)$|(^|/)__pycache__/|(^|/)\.DS_Store$' \
     | head -40; } || true )
   if [ -n "$SUJOS" ]; then
@@ -1555,13 +1562,20 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     DURA=""; RESTO=""
     while IFS= read -r arq; do
       [ -n "$arq" ] || continue
+      # v2.10.1 (57): os dois formatos, braço a braço — formato novo `.gad/intent/` e
+      # `.gad/lanes/` = os antigos `.intent/` e `pareceres/.*`; `.gad/fences/` = `.fence-*.ok`.
+      # O resto de `.gad/` (convergencia, plan-checker, gates, pos-ship, uat, FORMATO) segue
+      # AVISO, como os equivalentes antigos sempre foram.
       case "$arq" in
-        *"/.intent/"*|*"/pareceres/"*)
+        *"/.intent/"*|*"/pareceres/"*|*"/.gad/intent/"*|*"/.gad/lanes/"*)
           # produzidos pela etapa 1 → isentos NELA, duros das etapas 2 em diante
           if [ "${ETAPA%% *}" = "1" ]; then RESTO="$RESTO $arq"; else DURA="$DURA $arq"; fi ;;
         *"/.fence-"*".ok")
           # o atestado da PRÓPRIA etapa é escrito adiante; os das etapas anteriores não
           if [ "$arq" = "${arq%/.fence-${ETAPA%% *}.ok}" ]; then DURA="$DURA $arq"
+          else RESTO="$RESTO $arq"; fi ;;
+        *"/.gad/fences/"*".ok")
+          if [ "$arq" = "${arq%/.gad/fences/${ETAPA%% *}.ok}" ]; then DURA="$DURA $arq"
           else RESTO="$RESTO $arq"; fi ;;
         *) RESTO="$RESTO $arq" ;;
       esac
@@ -1595,8 +1609,8 @@ case "${RUNLOG_ETAPA%% *}" in
   *)
     # FM-02GAT: `.fence-4.1b.ok` (re-review, workflow-etapa-4.md §4.1) não herda o recibo do
     # 4.1 — é o mais recente dos dois que vale (o 4.1b substitui o 4.1 quando existe).
-    F41="$PHASE_DIR/.fence-4.1.ok"
-    F41B="$PHASE_DIR/.fence-4.1b.ok"
+    F41="$(gad_fase_caminho "$PHASE_DIR" fences/4.1.ok)"
+    F41B="$(gad_fase_caminho "$PHASE_DIR" fences/4.1b.ok)"
     if [ -f "$F41B" ] && { [ ! -f "$F41" ] || [ "$F41B" -nt "$F41" ]; }; then
       F41="$F41B"
     fi
@@ -1734,12 +1748,12 @@ if [ "$FALHAS" = 0 ]; then VEREDITO=pass; else VEREDITO=fail; fi
 # dente do gate (auditorias F21-ox/F24-pausa/F24-fecho — 3ª ocorrência de "guarda cega
 # reporta verde"): o fail deixa um lock que o run-log.sh HONRA — nenhum `end` desta
 # etapa é gravável enquanto o lock existir. Só ESTE script, ao dar pass, remove o lock.
-LOCK="$PHASE_DIR/.gate-fail-${RUNLOG_ETAPA%% *}.json"
+LOCK="$(gad_fase_caminho "$PHASE_DIR" "gates/${RUNLOG_ETAPA%% *}.json")"
 # 46(j)/46(r): recibo do fiscal. O lock acima é o dente do fail; este é o do pass. O
 # coordenador da etapa só pode devolver `done` com este arquivo válido — «válido» = existe E
 # `head` é o HEAD atual. Na F24.5 a etapa 1 e a etapa 3 devolveram «pronto» sem o fiscal ter
 # rodado. Formato definido no PLANO-1; a etapa 3 usa o mesmo (fiacao-P1-fence.md).
-FENCE="$PHASE_DIR/.fence-${RUNLOG_ETAPA%% *}.ok"
+FENCE="$(gad_fase_caminho "$PHASE_DIR" "fences/${RUNLOG_ETAPA%% *}.ok")"
 MEDICAO=null
 if [ "$DRY" = 0 ]; then
   if [ "$VEREDITO" = pass ]; then
@@ -1753,6 +1767,7 @@ if [ "$DRY" = 0 ]; then
       POS_FAIL=1; rm -f "$LOCK"
     fi
     HEAD_NOW=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "")
+    mkdir -p "$(dirname -- "$FENCE")"
     jq -cn --arg e "${RUNLOG_ETAPA%% *}" --arg f "$NN" --arg h "$HEAD_NOW" \
       --arg t "$(date -Is)" --arg s "${CLAUDE_CODE_SESSION_ID:0:8}" \
       --argjson n "$(jq 'length' <<<"$RES")" \
@@ -1806,6 +1821,7 @@ if [ "$DRY" = 0 ]; then
     rm -f "$FENCE"
     resumo=$(jq -r '[.[] | select(.resultado=="FALHA") | .id] | join(",")' <<<"$RES")
     if [ "$SEMTEL" = 0 ]; then
+      mkdir -p "$(dirname -- "$LOCK")"
       printf '{"etapa":"%s","ts":"%s","resumo":"falhas: %s"}\n' \
         "${RUNLOG_ETAPA%% *}" "$(date -Is)" "$resumo" > "$LOCK"
       # B1 (F4 RLR): idem — o `trap EXIT` grava o evento `script` (exit=1, resumo com

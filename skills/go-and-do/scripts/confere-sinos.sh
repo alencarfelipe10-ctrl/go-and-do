@@ -37,7 +37,9 @@ PD="${1:-}"
 [ -n "$PD" ] || { echo "uso: confere-sinos.sh <phase_dir>" >&2; exit 2; }
 [ -d "$PD" ] || { echo "ERRO: phase_dir inexistente: $PD" >&2; exit 2; }
 
-IN="$PD/.intent"
+# v2.10.1 (57): helper de caminhos (formato da fase).
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gad-caminhos.sh"
+IN="$(gad_fase_caminho "$PD" intent)"
 
 # Nem procuramos arquivo se o diretório .intent/ nem existe — fase sem etapa de
 # intenção rodada ainda é caso legítimo de "sem sinos", não erro.
@@ -47,13 +49,13 @@ if [ ! -d "$IN" ]; then
 fi
 
 # shellcheck disable=SC2012
-ARQS=$(ls "$IN"/.ciclo[0-9]*.json 2>/dev/null | sort -V)
+ARQS=$(gad_fase_glob "$PD" 'intent/c[0-9]*/ciclo.json' | sort -V)
 if [ -z "$ARQS" ]; then
   echo "sinos_abertos: n/a (sem .ciclo0.json)"
   exit 0
 fi
 
-SAIDA=$(GAD_ARQS="$ARQS" python3 - <<'PY'
+SAIDA=$(GAD_ARQS="$ARQS" GAD_PD="$PD" GAD_LIB="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib" python3 - <<'PY'
 import json, os, sys
 
 arqs = [a for a in os.environ["GAD_ARQS"].splitlines() if a]
@@ -66,9 +68,11 @@ abertos = []  # (id, origem, ciclo)
 total_sinos = 0
 
 for caminho in arqs:
-    nome = os.path.basename(caminho)
-    # `.cicloN.json` -> N
-    ciclo = nome[len(".ciclo"):-len(".json")]
+    # `.cicloN.json` (antigo) ou `cN/ciclo.json` (novo, v2.10.1) -> N
+    sys.dont_write_bytecode = True
+    sys.path.insert(0, os.environ["GAD_LIB"])
+    import gad_caminhos
+    ciclo = gad_caminhos.curinga(os.environ["GAD_PD"], "intent/c*/ciclo.json", caminho)
 
     try:
         with open(caminho, encoding="utf-8") as fh:

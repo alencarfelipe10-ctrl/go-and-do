@@ -29,12 +29,27 @@ set -u
 DIR="${1:?uso: confere-rotas.sh <dir de trabalho da revisão (.intent/; aceita pareceres/ legado)>}"
 [ -d "$DIR" ] || { echo "ERRO: diretório não encontrado: $DIR" >&2; exit 2; }
 
-ciclos=$(ls "$DIR"/.done-c*-* "$DIR"/.tabela-c*.txt 2>/dev/null \
-  | grep -oE '\.(done|tabela)-c[0-9]+' | grep -oE '[0-9]+' | sort -un)
+# v2.10.1 (57): a base pode ser `.intent/` (formato antigo) ou `.gad/intent/` (novo); os
+# arquivos de cada ciclo saem do helper (lib/gad-caminhos.sh), nunca de nome escrito aqui.
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gad-caminhos.sh"
+DIR="${DIR%/}"; PD="$(gad_fase_de_base "$DIR")"; LEGADO_PAR=0
+# base avulsa (não é `.intent`/`.gad/intent`/`pareceres`): nomes antigos direto nela
+[ "$PD" = "$DIR" ] && LEGADO_PAR=1
+A() { # <nome novo do arquivo do ciclo> <N> → caminho real
+  if [ "$LEGADO_PAR" = 1 ]; then printf '%s/%s' "$DIR" "$(basename -- "$(gad_fase_legado_rel "intent/c$2/$1")")"
+  else gad_fase_caminho "$PD" "intent/c$2/$1"; fi
+}
+lista_base() { # arquivos de ciclo candidatos (tabela/done), no formato da base
+  if [ "$LEGADO_PAR" = 1 ]; then compgen -G "$DIR/.done-c*-*"; compgen -G "$DIR/.tabela-c*.txt"
+  else gad_fase_glob "$PD" 'intent/c*/tabela.txt'; gad_fase_glob "$PD" 'intent/c*/done-*'; fi
+  return 0
+}
+ciclos=$( lista_base \
+  | sed -nE 's#.*/c([0-9]+)/(tabela\.txt|done-[^/]*)$#\1#p; s#.*/\.(done|tabela)-c([0-9]+)[^/]*$#\2#p' | sort -un)
 # Fase anterior à pasta .intent/ (gad-major): trabalho morava em pareceres/ — fallback
 # declarado para retomada/auditoria de fase antiga (PC-2).
 if [ -z "$ciclos" ] && [ "$(basename "$DIR")" = ".intent" ] && [ -d "$(dirname "$DIR")/pareceres" ]; then
-  DIR="$(dirname "$DIR")/pareceres"
+  DIR="$(dirname "$DIR")/pareceres"; LEGADO_PAR=1
   echo "aviso: nada em .intent/ — usando layout legado $DIR"
   ciclos=$(ls "$DIR"/.done-c*-* "$DIR"/.tabela-c*.txt 2>/dev/null \
     | grep -oE '\.(done|tabela)-c[0-9]+' | grep -oE '[0-9]+' | sort -un)
@@ -47,7 +62,7 @@ fi
 
 falha=0
 for N in $ciclos; do
-  tabela="$DIR/.tabela-c$N.txt"
+  tabela="$(A tabela.txt "$N")"
   if [ ! -f "$tabela" ]; then
     echo "SEM-TABELA c$N (confere-ciclo.sh --tabela não rodou; contagem autorreportada)"
     falha=1
@@ -57,17 +72,17 @@ for N in $ciclos; do
   # zerava com lanes fora do padrão); fallback = linhas de achado com lane livre
   brutos=$(sed -n 's/^achados_estruturais_total: *//p' "$tabela" | head -1 | tr -cd '0-9')
   [ -n "$brutos" ] || brutos=$(grep -acE '^\| [^|]+ \| L?[0-9]+ \|' "$tabela" || true)
-  if [ "$brutos" -ge 3 ] && [ ! -f "$DIR/.verificador-c$N.done" ]; then
+  if [ "$brutos" -ge 3 ] && [ ! -f "$(A verificador.done "$N")" ]; then
     echo "VIOLACAO c$N ($brutos brutos sem gad-verificador — rota inline fora do teto de 2)"
     falha=1
   else
-    echo "ok c$N ($brutos brutos$([ -f "$DIR/.verificador-c$N.done" ] && echo ', verificador rodou'))"
+    echo "ok c$N ($brutos brutos$([ -f "$(A verificador.done "$N")" ] && echo ', verificador rodou'))"
   fi
   # ── E5a: violação INVERSA (rota cara sem gatilho) ──────────────────────────
   # Ausência do .rota-verificacao-cN.json é AVISO nesta versão (o coordenador só passa
   # a gravá-lo com o intent.md da v2.2.0); silêncio, nunca. Vira falha quando o prompt
   # estiver publicado — a decisão está declarada aqui, não implícita.
-  rota="$DIR/.rota-verificacao-c$N.json"
+  rota="$(A rota-verificacao.json "$N")"
   if [ ! -f "$rota" ]; then
     echo "aviso: c$N sem .rota-verificacao-c$N.json — rota declarada não medível (E5a não avaliado)"
   else

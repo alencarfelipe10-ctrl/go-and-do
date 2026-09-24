@@ -48,7 +48,8 @@ done
 
 SPEC=$(ls "$PD"/*-SPEC.md 2>/dev/null | head -1)
 CTX=$(ls "$PD"/*-CONTEXT.md 2>/dev/null | head -1)
-BASE="$PD/.intent/.correcoes-c$C.base.json"
+. "$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib/gad-caminhos.sh"   # v2.10.1
+BASE="$(gad_fase_caminho "$PD" "intent/c$C/correcoes.base.json")"
 
 ACUSACOES=0
 acusa() { echo "$*"; ACUSACOES=$((ACUSACOES+1)); }

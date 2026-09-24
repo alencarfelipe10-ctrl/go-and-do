@@ -454,7 +454,10 @@ fi
   # fecham janela sem passar pelo gate: interrompida=true (pausa) e stop/skip.
   if [ "$evento" = "end" ]; then
     _id="${etapa%% *}"
-    _lock="$dir/.gate-fail-$_id.json"
+    # v2.10.1 (57): o lock mora onde o formato da fase manda (`.gad/gates/<id>.json` ou o
+    # antigo `.gate-fail-<id>.json`) — tabela única no lib/gad-caminhos.sh.
+    . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gad-caminhos.sh"
+    _lock="$(gad_fase_caminho "$dir" "gates/$_id.json")"
     _interr=0
     for _kv in ${kvs[@]+"${kvs[@]}"}; do [ "$_kv" = "interrompida=true" ] && _interr=1; done
     if [ -f "$_lock" ] && [ "$_interr" = 0 ]; then

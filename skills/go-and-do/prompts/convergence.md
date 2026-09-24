@@ -24,9 +24,17 @@ bloco Bash com `cd "<project_root>"`. A camada 0 já rodou o `pre-despacho.sh 2.
 em `$HOME/.claude/skills/go-and-do/scripts/`.
 </inputs>
 
+**Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
+`<phase_dir>/.gad/` e aparecem aqui pelo NOME NOVO (ex.: `.gad/intent/c<C>/vereditos.txt`) — o
+formato de toda fase com `<phase_dir>/.gad/FORMATO`. Fase SEM esse arquivo (aberta antes da
+v2.10.1) usa os nomes antigos: o caminho real é o que
+`bash $HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh "<phase_dir>" <nome depois de .gad/>`
+imprime (ex.: `intent/c1/vereditos.txt` → `.intent/.vereditos-c1.txt`). Os blocos bash abaixo já
+resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
+
 <mission>
 1. **Briefing direcionado (monte UMA vez, atualize por ciclo):**
-   - Anexe os `<phase_dir>/.plan-checker/iter-*.yaml` com a instrução: "isto já foi
+   - Anexe os `<phase_dir>/.gad/plan-checker/iter-*.yaml` com a instrução: "isto já foi
      verificado e corrigido internamente — não re-litigue estrutura, cobertura de
      requisito, grafo de dependências, scope sanity".
    - Dirija a atenção ao que o checker é estruturalmente cego: **(A) correção de
@@ -49,13 +57,13 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    script em `falha`.
 
    **Replan não dispensa o juiz estrutural.** Depois de qualquer replan — o inline do
-   comando ou um fix cirúrgico seu —, o `.plan-checker/` tem de ter iteração mais nova que
+   comando ou um fix cirúrgico seu —, o `.gad/plan-checker/` tem de ter iteração mais nova que
    o PLAN.md mais recentemente editado ANTES de você montar o briefing do ciclo seguinte.
    Confira com
    `bash $HOME/.claude/skills/go-and-do/scripts/confere-ciclo.sh --frescor "<phase_dir>" "<NN>" <k+1>`;
    `veredito: falha` com código `CHECKER-STALE` → rode o checker (`Skill` →
    `gsd-plan-phase <N> --reviews` deixa o comando fazê-lo) e só então monte o briefing.
-   Na F24.5 o plano 06 foi ao ciclo 2 com `.plan-checker/iter-2.yaml` anterior ao replan:
+   Na F24.5 o plano 06 foi ao ciclo 2 com `.gad/plan-checker/iter-2.yaml` anterior ao replan:
    o único juiz estrutural tinha aprovado outra versão.
 
    **A ata é do escrivão.** O `NN-REVIEWS.md` é gravado pelo agente de revisão que o
@@ -78,20 +86,23 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    **As lanes externas rodam pelos scripts** — quando o workflow hospedado mandar
    digitar os comandos dos revisores, rode em vez disso o lançador, em PRIMEIRO PLANO
    (ele devolve em menos de 1 s e deixa as duas lanes correndo por dentro).
-   Antes de qualquer glob de `.roda-*.json` num bloco seu, rode `setopt nullglob` (zsh) —
+   Antes de qualquer glob de `.gad/lanes/roda-*.json` num bloco seu, rode `setopt nullglob` (zsh) —
    sem ele, «no matches found» aborta o bloco **antes** do comando seguinte, e na F24.5
    isso apagou os 4 espelhos sem backup (o `cp` morreu, o `rm -f` rodou).
    ```bash
    cd "<project_root>"
-   rm -f "<phase_dir>/.convergencia/.done-c<k>-"*
+   G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
+   setopt nullglob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
+   rm -f $(G 'convergencia/c<k>/done-*')
    bash $HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh \
      "<phase_dir>" "<NN>" <k> "<briefing>" --prova "<briefing>" --familia convergencia
    ```
    Depois espere pelo disco, com o waiter sancionado, repetido enquanto faltar arquivo
    (o teto de uma chamada Bash é 600 s e uma lane pode levar 660 s):
    ```bash
-   B="<phase_dir>/.convergencia"
-   timeout 570 bash -c 'until [ -e "'"$B"'/.done-c<k>-codex" ] && [ -e "'"$B"'/.done-c<k>-agy" ]; do sleep 15; done'
+   G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
+   A=$(G convergencia/c<k>/done-codex); B=$(G convergencia/c<k>/done-agy)
+   timeout 570 bash -c 'until [ -e "'"$A"'" ] && [ -e "'"$B"'" ]; do sleep 15; done'
    ```
    **`-e`, não `-s`**: o `.done` nasce vazio (`roda-lanes.sh`, `: > "$ALIAS_DONE"`) e
    `[ -s ]` esperaria até o timeout. O guard não olha o teste; olha o `until`.
@@ -109,7 +120,7 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    `usable:false` com qualquer outro `rc_reason` = revisor FALHOU neste ciclo
    (vazio/obsoleto/ilegível) → conta como lane caída, nunca como "sem achados" ·
    `usable:true, independent:false` = parecer vale como corroboração, não sustenta
-   ciclo novo sozinho. Os espelhos promovidos (`pareceres/.roda-planrev-<lane>-c<k>.json`)
+   ciclo novo sozinho. Os espelhos promovidos (`.gad/lanes/roda-planrev-<lane>-c<k>.json`)
    carregam banner/evidência/canário — você não coleta evidência à mão.
    **Não commite nada. O host commita ao fim do passo.** — acrescente essa linha literal
    ao prompt de todo agente que o comando hospedado despachar (planner do replan
@@ -120,16 +131,16 @@ em `$HOME/.claude/skills/go-and-do/scripts/`.
    (o 4º argumento escolhe a família de pareceres — sem ele o c1 da convergência misturava
    os brutos do c1 da intenção: 10 contados onde eram 2, F24.3)
    — ele grava o apêndice de evidências no `NN-REVIEWS.md` e a tabela anti-omissão
-   (`pareceres/.tabela-c<k>.txt`). A contagem de brutos do ciclo vem da tabela, nunca
+   (`.gad/lanes/tabela-c<k>.txt`). A contagem de brutos do ciclo vem da tabela, nunca
    da sua leitura. **Leitura do bruto obrigatória** quando: a tabela acusa
    `NAO-COBERTO` no resumo do ciclo, OU o resumo REDUZ a contagem vs o parecer — o
    script é piso, não teto (um HIGH real já sumiu de resumo de ciclo). Omissão
    recuperada entra em `incidentes:`.
-   Se a `pareceres/.tabela-c<k>.txt` trouxer `parecer_informe: <lane> devolver`: relance só
+   Se a `.gad/lanes/tabela-c<k>.txt` trouxer `parecer_informe: <lane> devolver`: relance só
    essa lane com
    `bash $HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh "<phase_dir>" "<NN>" <k> "<briefing>" --prova "<briefing>" --familia convergencia --reformata <lane>`
    (o script monta o briefing com o bloco `## Reformatação obrigatória`, grava o marcador
-   `pareceres/.reformat-planrev-<lane>-c<k>` e recusa com exit 4 uma 2.ª devolução da mesma lane
+   `.gad/lanes/reformat-planrev-<lane>-c<k>` e recusa com exit 4 uma 2.ª devolução da mesma lane
    no mesmo ciclo), espere pelo `.done` como no §2 e re-rode o `registra-ciclo.sh`. Exit 4 = a
    lane está reprovada (incidente); siga com a outra lane e sino.
    **Aterramento e modelo (GSD 1.11.0 — #3194/#2295):** o JSON do `registra-ciclo.sh`

@@ -35,6 +35,13 @@ em resumo herdado — leia o estado real antes de agir.
 </chegada>
 
 <julgamento>
+**Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
+`<phase_dir>/.gad/` e aparecem aqui pelo NOME NOVO (ex.: `.gad/intent/c<C>/vereditos.txt`) — o
+formato de toda fase com `<phase_dir>/.gad/FORMATO`. Fase SEM esse arquivo (aberta antes da
+v2.10.1) usa os nomes antigos: o caminho real é o que
+`bash $HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh "<phase_dir>" <nome depois de .gad/>`
+imprime (ex.: `intent/c1/vereditos.txt` → `.intent/.vereditos-c1.txt`). Nunca misture os dois formatos na mesma fase.
+
 ## Julgamento inicial (1º turno, ANTES de invocar o plan-phase)
 
 Leia `NN-SPEC.md`, `NN-CONTEXT.md`, a seção `## Dívidas registradas` do
@@ -138,7 +145,7 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    `plan_gate_reconciliacao` (`confere-etapa.sh 2`, aviso — recontagem de `*-PLAN.md` no
    disco × `plan_gate` do §13a-bis) é seu para relatar em `sinos:`, não para silenciar.
 3. **Trilha do plan-checker (2.B).** A cada retorno do checker dentro do comando,
-   persista o bloco YAML de issues em `<phase_dir>/.plan-checker/iter-<i>.yaml`
+   persista o bloco YAML de issues em `<phase_dir>/.gad/plan-checker/iter-<i>.yaml`
    (crie a pasta; inclua status + contagem de blockers/warnings + iteração). Sem a
    trilha, o loop evapora com a sua janela e ninguém audita se ele rodou — e é ela
    que deixa a convergência da 2.5 dizer aos revisores o que o checker JÁ viu.
@@ -200,7 +207,7 @@ Você não mexe em TaskList nem em telemetria — são da camada 0.
 nenhuma tool**. O Claude Code não considera terminado um agente que tem filho vivo: quando
 o filho acaba, você é acordado por uma notificação com o id dele. O aviso é prosa; o
 resultado vale pelo **disco** — leia o artefato que o filho grava (`NN-PLAN.md`,
-`PATTERNS.md`, `RESEARCH.md`, o `.roda-*.json` da lane) antes de decidir qualquer coisa.
+`PATTERNS.md`, `RESEARCH.md`, o `.gad/lanes/roda-*.json` da lane) antes de decidir qualquer coisa.
 Não durma, não faça polling, não chame `wait`. Os filhos do planejamento (researcher,
 pattern-mapper, planner, checker) são despachados pelo `gsd-plan-phase` hospedado inline:
 quando o passo hospedado mandar esperar, encerre o turno em vez de esperar. Acordou e o
@@ -232,7 +239,7 @@ planos: <n> (<w> ondas — largura máx <k>)
 pesquisa: feita | pulada | reusada — <motivo em 1 linha>
 mapper: rodou | pulado — <motivo em 1 linha>
 granularidade: coarse | standard | fine — <motivo em 1 linha>
-iteracoes_checker: <n — pela trilha .plan-checker/>
+iteracoes_checker: <n — pela trilha .gad/plan-checker/>
 nao_autonomos: [<ids, ex.: 03-03, 03-05>; ausente se nenhum]
 incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido; sem desvio, escreva literalmente: nenhum>]
 sinos: [<ex.: "coverage gate desligado por config neste projeto"; ausente se vazio>]

@@ -15,7 +15,8 @@
 #      receita → heurística (Expo → web:8081 com CI=1 BROWSER=none; web comum → dev/
 #      start em 3000/5173/8080) → espera a porta responder → SUCESSO SEM RECEITA →
 #      persiste run-<nome>/SKILL.md com os valores constatados (P15). Estado em
-#      .planning/.gad-dev-server.json (pid de grupo + porta).
+#      .planning/.gad/dev-server.json (pid de grupo + porta; v2.10.1 — antes
+#      .planning/.gad-dev-server.json, ainda lido por uma release).
 # down: mata a ÁRVORE inteira (kill no process group — o Metro do Expo abre filhos).
 #
 # JSON: {status: up|ja_estava|falhou|down, porta, pid, receita, comando}. Exit 0 = ok ·
@@ -33,8 +34,12 @@ while [ $# -gt 0 ]; do case "$1" in
   *) shift ;;
 esac; done
 ROOT="$(gad_project_root "${PROJ:-$PWD}")"
-ESTADO="$ROOT/.planning/.gad-dev-server.json"
-LOGF="$ROOT/.planning/.gad-dev-server.log"
+# v2.10.1 (56(b)): estado em .planning/.gad/dev-server.{json,log}. A LEITURA aceita o legado
+# .planning/.gad-dev-server.json por uma release (server subido pela v2.10.0); a escrita é
+# sempre no novo, e o legado some quando o estado é regravado ou derrubado.
+ESTADO="$(gad_dev_server_estado "$ROOT" json)"
+ESTADO_NOVO="$(gad_estado_dir "$ROOT")/dev-server.json"
+LOGF="$(gad_estado_dir "$ROOT")/dev-server.log"
 
 porta_viva() { curl -sf -o /dev/null --max-time 2 "http://localhost:$1" 2>/dev/null || \
                curl -s -o /dev/null -w '%{http_code}' --max-time 2 "http://localhost:$1" 2>/dev/null | grep -qE '^[1-5]'; }
@@ -119,6 +124,7 @@ if [ -z "$CMD" ]; then
 fi
 
 # ── sobe em process group próprio (o kill do down alcança a árvore) ──────────
+gad_estado_garante "$ROOT"
 ( cd "$ROOT" && env $ENVS setsid bash -c "$CMD" >"$LOGF" 2>&1 </dev/null & echo $! > /tmp/.gad-ds-pid )
 PID=$(cat /tmp/.gad-ds-pid); rm -f /tmp/.gad-ds-pid
 
@@ -160,6 +166,7 @@ EOF
   fi
 fi
 jq -cn --argjson pid "$PID" --argjson porta "$PORTA" --arg c "$CMD" --arg r "$REC_STATUS" \
-  '{status:"up", pid:$pid, porta:$porta, comando:$c, receita:$r}' > "$ESTADO"
+  '{status:"up", pid:$pid, porta:$porta, comando:$c, receita:$r}' > "$ESTADO_NOVO"
+[ "$ESTADO" = "$ESTADO_NOVO" ] || rm -f "$ESTADO"
 gad_autoregistro "dev-server.sh" 0 "up porta=$PORTA receita=$REC_STATUS" || true
-gad_json_out dev-server "$(cat "$ESTADO")"
+gad_json_out dev-server "$(cat "$ESTADO_NOVO")"

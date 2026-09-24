@@ -28,9 +28,22 @@ Seu diretório de trabalho inicial não é a raiz do projeto: comece todo bloco 
 `cd "<project_root>"` e use caminhos absolutos em tudo que escrever ou passar adiante.
 
 Os scripts da skill vivem em `$HOME/.claude/skills/go-and-do/scripts/` (chame-os por esse
-caminho). A pasta de trabalho da etapa é `<phase_dir>/.intent/` (criada pelo
-`setup-intencao.sh`): briefings, sinos, tabelas, vereditos, runs e marcadores moram lá — na
-raiz da fase só ficam artefatos de verdade. SDK do GSD num bloco Bash?
+caminho). A pasta de trabalho da etapa é `<phase_dir>/.gad/intent/` (criada pelo
+`setup-intencao.sh`): briefings, sinos, tabelas, vereditos, runs e marcadores moram lá, um
+subdiretório por ciclo (`c1/`, `c2/`…) — na raiz da fase só ficam artefatos de verdade.
+
+**Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
+`<phase_dir>/.gad/` e aparecem aqui pelo NOME NOVO: `.gad/intent/c<C>/vereditos.txt`,
+`.gad/lanes/…`, `.gad/fences/1.ok` — e, na prosa, só `c<C>/vereditos.txt` quando o contexto já
+é a pasta da intenção. É o formato de toda fase com `<phase_dir>/.gad/FORMATO` (o despacho traz
+`formato_fase`). Fase SEM esse arquivo (aberta antes da v2.10.1) usa os nomes antigos: o caminho
+real é o que `bash $HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh "<phase_dir>" <nome
+depois de .gad/>` imprime (ex.: `intent/c1/vereditos.txt` → `.intent/.vereditos-c1.txt`;
+`--tabela` mostra a tabela inteira). Os blocos bash abaixo já resolvem por ele (função `G`) e
+servem aos dois formatos. Nunca misture: nada de `.gad/` numa fase antiga, nada de nome antigo
+numa fase nova.
+
+SDK do GSD num bloco Bash?
 `. $HOME/.claude/skills/go-and-do/scripts/lib/gsd-shim.sh` define `gsd_run`.
 **Instrumento ausente** (script chamado que não existe no caminho absoluto acima,
 `command not found`) não é «pule e continue» — é `incidente` (`origem=intent`,
@@ -63,18 +76,18 @@ Regras do despacho, iguais para todos:
   e registre `espera_por_waiter: <marcador>` em `incidentes:` — o waiter é rede de segurança, não
   rotina. `sleep` cru segue negado pelo `gad-bash-guard.sh`.
   Marcadores:
-  `gad-verificador` (verificação) → `<phase_dir>/.intent/.verificador-c<C>.done`;
-  `gad-verificador` (releitura) → `<phase_dir>/.intent/.releitura-<rodada>.done` (`c0`, `c0b`, …);
+  `gad-verificador` (verificação) → `<phase_dir>/.gad/intent/c<C>/verificador.done`;
+  `gad-verificador` (releitura) → `<phase_dir>/.gad/intent/<rodada>/releitura.done` (`c0`, `c0b`, …);
   `gad-spec` → `<phase_dir>/NN-SPEC.md`; `gad-discuss` → `<phase_dir>/NN-CONTEXT.md`;
   `gad-explore` → peça no prompt que ele grave a conclusão em
-  `<phase_dir>/.intent/.explore-<slug>.md` e espere por esse arquivo.
-  **Uma rodada, um marcador.** A releitura grava `.releitura-<rodada>.done`, com o rótulo da rodada
+  `<phase_dir>/.gad/intent/explore-<slug>.md` e espere por esse arquivo.
+  **Uma rodada, um marcador.** A releitura grava `<rodada>/releitura.done`, com o rótulo da rodada
   (`c0`, `c0b`, `c0c`, `c1`, `c1b`, …), nunca só o número do ciclo — passe o rótulo no despacho, em
   `rodada: <rótulo>`. Marcador de rodada anterior nunca satisfaz a espera da seguinte, e o `.json`
-  leva o nome da própria rodada (`.releitura-<rodada>.json`, igual ao `.done`): cada rodada
+  leva o nome da própria rodada (`<rodada>/releitura.json`, igual ao `.done`): cada rodada
   de correção pós-releitura (`c<C>b`, `c<C>c`, …) grava seu próprio arquivo, sem sobrescrever
   o da rodada anterior — o briefing do ciclo seguinte lê a rodada de letra mais alta quando
-  existir, senão a normal (`.releitura-c<C>.json`, 1ª rodada). Para
+  existir, senão a normal (`c<C>/releitura.json`, 1ª rodada). Para
   redespacho de uma MESMA rodada (o filho morreu, você relança o `c0b`), apague o marcador antes do
   `Agent` (`rm -f <marcador>`). F24.5: 5 rodadas de releitura no c0 porque o `.done` era um só.
 - **NUNCA passe `model` nem `effort` no `Agent` de um `gad-*`** (E7): a def pina os dois e
@@ -105,7 +118,7 @@ Regras do despacho, iguais para todos:
 **Batching.** Cada turno seu recusta o contexto inteiro em cache read. Quando várias
 ações não dependem umas das outras, faça todas no MESMO turno. Na consultoria especializada
 o alvo é **4 turnos seus por ciclo**: (1) `roda-lanes.sh` + `gad-verificador` (e o turno encerra) ·
-(2) triagem + `.correcoes-c<C>` + commit · (3) releitura (e o turno encerra) + a correção `c<C>b`
+(2) triagem + `c<C>/correcoes` + commit · (3) releitura (e o turno encerra) + a correção `c<C>b`
 quando ela voltar com item · (4) briefing do ciclo seguinte. Com o protocolo de espera acima,
 nenhum turno seu é gasto esperando: o waiter só aparece em incidente. `sleep` chutado conta turno E
 é negado. O 5º turno só é
@@ -163,7 +176,7 @@ structured|legacy|null`.
   $HOME/.claude/skills/go-and-do/scripts/setup-intencao.sh "<phase_dir>" "<NN>" \
     --pre-spec-route legacy|structured --resposta "<texto do dono, verbatim>"
   ```
-  A rota é durável (`.intent/pre-spec-route.json`) e vale enquanto o sha256 do PRE-SPEC
+  A rota é durável (`.gad/intent/pre-spec-route.json`) e vale enquanto o sha256 do PRE-SPEC
   não mudar. `legacy` → sino `pre_spec_sem_bloco` obrigatório no seu retorno **e** no
   `NN-INTENT-REVIEW.md`.
 - `pre_spec_mode` vai **explícito** no despacho dos DOIS filhos (passos 1 e 2).
@@ -175,7 +188,7 @@ structured|legacy|null`.
 Despache **`gad-spec`** (protocolo do `<environment>`) com o arquivo de instruções
 `prompts/intent-spec.md`. O filho hospeda o `gsd-spec-phase N --auto` na janela dele,
 devolve o caminho do `NN-SPEC.md` + score de ambiguidade e grava os sinos em
-`.intent/.sinos-spec.txt`.
+`.gad/intent/sinos-spec.txt`.
 
 Parâmetros obrigatórios do despacho, além dos do protocolo:
 - **PRE-SPEC** — `pre_spec_mode: structured|legacy` (do setup) e o insumo correspondente:
@@ -212,7 +225,7 @@ Linha `FALHA` (`MARCA-SEM-ID`, `ID-INEXISTENTE`, `FATO-SEM-EVIDENCIA`,
 decisão do dono) — é o que o `confere-etapa.sh 1` cobra no fecho. Os cinco últimos só reprovam
 em SPEC com `<!-- spec-classe: v1 -->` (molde novo); num SPEC antigo saem como aviso. `AVISO
 EXTENSAO-SUSPEITA`, `AVISO ORIGEM-NAO-CONFERIDA` e `AVISO AC-ORIGEM-REPETIDA` **não** reprovam:
-copie as linhas para a `.intent/.varredura.md`, sob o heading `### Extensões suspeitas ao
+copie as linhas para a `.gad/intent/varredura.md`, sob o heading `### Extensões suspeitas ao
 PRE-SPEC (R2c)`, para chegarem ao consultor no briefing; a `AC-ORIGEM-REPETIDA` é o convite à
 pergunta de unicidade (dois critérios com a mesma origem: qual verificação derruba só cada um?)
 — quem decide é você.
@@ -224,11 +237,11 @@ pergunta de unicidade (dois critérios com a mesma origem: qual verificação de
 <!-- plano 2, P-01 (C5, rota B — resposta 4 do dono) — fiacao-P2-P01-intent.md -->
 Antes do despacho, com `cd "<project_root>"` (o `scout.sh` resolve caminhos a partir do
 cwd), rode `bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/scout.sh" "<N>"
---spec "<phase_dir>/NN-SPEC.md" --out "<phase_dir>/.intent/.scout-discuss.md"` e despache
+--spec "<phase_dir>/NN-SPEC.md" --out "<phase_dir>/.gad/intent/scout-discuss.md"` e despache
 **um** `gad-explore` com a pergunta: "para cada requisito R-n do SPEC, qual é o comportamento
-atual nos arquivos listados em <phase_dir>/.intent/.scout-discuss.md — uma conclusão por R-n,
+atual nos arquivos listados em <phase_dir>/.gad/intent/scout-discuss.md — uma conclusão por R-n,
 com arquivo:linha, sem trecho de código". Grave o retorno em
-`<phase_dir>/.intent/.explore-discuss.md` e passe o caminho ao `gad-discuss` no parâmetro
+`<phase_dir>/.gad/intent/explore-discuss.md` e passe o caminho ao `gad-discuss` no parâmetro
 `explore`. Uma leitura cara, feita uma vez, fora da janela que relê tudo (na F24.4 foram 21
 turnos do discuss abrindo código, relidos nos 70 turnos da janela). `scout.sh` ausente
 (projeto sem o fork) → despache o `gad-explore` só com o SPEC como insumo.
@@ -242,7 +255,7 @@ Parâmetros obrigatórios, além dos do protocolo: `pre_spec_mode` + o insumo �
 `structured`, **só o bloco `gad:decisoes` inline**, nunca o arquivo; em `legacy`,
 `pre_spec: <caminho>` — decisões travadas ali não são re-perguntadas nem contrariadas no
 CONTEXT — as mesmas `licoes` do passo 1, e `explore:
-<phase_dir>/.intent/.explore-discuss.md` (ausente quando o `gad-explore` não rodou — o passo
+<phase_dir>/.gad/intent/explore-discuss.md` (ausente quando o `gad-explore` não rodou — o passo
 0 do `intent-discuss.md` já trata a ausência). `goal_roadmap`/`issues` **não** vão: são do
 SPEC.
 
@@ -280,7 +293,7 @@ consultores externos**. Nenhum instalado → `<skipped_path>` (ausência de ferr
 não parede). Só um → prossiga com ele, degradação em `sinos`. Pelo menos um instalado → vale o
 piso fail-closed: instalado-mas-falho em runtime é falha, não ausência (os DOIS falhos sem
 ciclo completo → `<blocked_path>`). Prepare `mkdir -p "<phase_dir>/pareceres"` (pareceres
-são artefatos commitados; o trabalho do ciclo vive em `.intent/`).
+são artefatos commitados; o trabalho do ciclo vive em `.gad/intent/`).
 
 **Incidente se grava na hora (FM-07INT).** Todo desvio entra no run-log NO TURNO em que
 acontece — `run-log.sh "<phase_dir>" "<NN>" incidente "1 intencao" --kv origem=… --kv
@@ -293,7 +306,7 @@ que o registro foi feito de memória, no fim, e não no ato.
    pontual = `sed -n 'X,Yp'`.
 2. **Varredura reversa de impacto (seu único insumo de modelo no briefing).** Para cada
    constante, contagem, valor, regra ou invariante que o SPEC/CONTEXT prescreve **mudar**,
-   rode `git grep` do símbolo — código E testes — e escreva `.intent/.varredura.md` com a
+   rode `git grep` do símbolo — código E testes — e escreva `.gad/intent/varredura.md` com a
    seção **"Asserções existentes que esta fase falsifica"**: uma linha por asserção, com
    `arquivo:linha` · veredito (inverter / reancorar / remover) · plano dono da
    reconciliação. Nenhuma atingida → a seção afirma isso explicitamente. Espelhe a seção no
@@ -304,8 +317,8 @@ que o registro foi feito de memória, no fim, e não no ato.
    filho deixou; ele não é uma revisão própria dos artefatos. Conte os sinos reais em disco:
    ```bash
    cd "<project_root>"
-   IN="<phase_dir>/.intent"
-   n=$(cat "$IN/.sinos-spec.txt" "$IN/.sinos-discuss.txt" 2>/dev/null \
+   G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
+   n=$(cat "$(G intent/sinos-spec.txt)" "$(G intent/sinos-discuss.txt)" 2>/dev/null \
        | grep -vE '^\s*$|^\s*(licao [0-9]+:|leitura_propria:)' | wc -l)
    echo "sinos_reais=$n"
    ```
@@ -327,8 +340,10 @@ que o registro foi feito de memória, no fim, e não no ato.
    texto que o dono escreveu é decidir no lugar dele (F24.5: 15 «sinos» inventados, 4 scripts,
    5 releituras, 5 commits, 38 min — 37 % da etapa — e 8 das 15 eram reescrita de estilo).
    ```bash
+   G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
+   mkdir -p "$(dirname "$(G intent/c0/ciclo.json)")"
    printf '%s\n' '{"v":1,"dispensado":true,"motivo":"sem sino em disco","sinos":[],"correcoes":[],"releitura":{}}' \
-     > "<phase_dir>/.intent/.ciclo0.json"
+     > "$(G intent/c0/ciclo.json)"
    ```
    Declare `ciclo0: dispensado (sem sino)` em `transparencia:` no retorno **e** escreva, no corpo do
    `NN-INTENT-REVIEW.md` do passo 7, a linha `ciclo 0: dispensado (sem sino em disco)` no lugar onde
@@ -338,11 +353,11 @@ que o registro foi feito de memória, no fim, e não no ato.
    item despachado ao `gad-verificador` pela regra do passo 5 (ver «Alegação própria do
    coordenador»), nunca como emenda direta.
 
-   Leia `.intent/.sinos-spec.txt` e `.intent/.sinos-discuss.txt` e corrija **só o
+   Leia `.gad/intent/sinos-spec.txt` e `.gad/intent/sinos-discuss.txt` e corrija **só o
    mecanicamente provável**, com fonte-de-verdade explícita: **fato de código citado >
    SPEC > CONTEXT**; requisito ou critério de aceite, manda o **SPEC**; o *como*, manda o
    **CONTEXT**. Mesma esteira do passo 5 (`correcoes-commit.sh --inicio` → um
-   `.intent/.correcoes-c0.py|.sh` num turno → `--ids`/`--vazio`) e mesma releitura do 5b
+   `.gad/intent/c0/correcoes.py|.sh` num turno → `--ids`/`--vazio`) e mesma releitura do 5b
    (no c0 ela recebe também a seção "Consistência interna" do SPEC, o bloco `gsd:acs` ou o
    SPEC inteiro, o Anexo A do PRE-SPEC quando houver e o bloco `<decisions>` original do
    CONTEXT; seção de consistência ausente → o filho devolve `consistencia: não_disponível`,
@@ -354,56 +369,56 @@ que o registro foi feito de memória, no fim, e não no ato.
    consultoria; o CONTEXT não ganha decisão por isso. `leitura_propria: <arquivo> — <fato>`
    é leitura de código que o discuss fez por conta própria — evidência de auditoria (métrica
    M2), não sino a corrigir; o `briefing-build.sh` a ignora na guarda anti-cegueira.
-   Depois grave `.intent/.ciclo0.json` — schema exigido pelo `briefing-build.sh`:
+   Depois grave `.gad/intent/c0/ciclo.json` — schema exigido pelo `briefing-build.sh`:
    `{"v":1, "sinos":[{"id":"c0-01","origem":"spec|discuss","disposicao":"corrigido|
    descartado|aberto","correcao_id":"c0-01"}], "correcoes":[{"id":"c0-01","hash":"<copiado
-   verbatim de .correcoes-c0.aplicado>"}],
+   verbatim de intent/c0/correcoes.aplicado>"}],
    "releitura":<o objeto INTEIRO da rodada mais recente do ciclo 0, com "v":2 e o veredito>}`
-   Copie o objeto de releitura inteiro (`jq .` sobre o `.intent/.releitura-c0<letra>.json`
-   da ÚLTIMA rodada — `.releitura-c0.json` se não houve correção pós-releitura, senão o de
-   letra mais alta, ex.: `.releitura-c0c.json`), não só `commit` e `artefatos`: o gate do c1
+   Copie o objeto de releitura inteiro (`jq .` sobre o `.gad/intent/c0<letra>/releitura.json`
+   da ÚLTIMA rodada — `c0/releitura.json` se não houve correção pós-releitura, senão o de
+   letra mais alta, ex.: `c0c/releitura.json`), não só `commit` e `artefatos`: o gate do c1
    lê o `v: 2` e o `ok` de lá, e copiar o arquivo da primeira rodada reintroduziria um
    veredito `ok: false` já corrigido. O `hash` vem do disco: `jq -r '.correcoes[] | .id + " " + .hash'` sobre
-   `.intent/.correcoes-c0.aplicado`, copiado caractere a caractere. Desde o conserto C1 ele
+   `.gad/intent/c0/correcoes.aplicado`, copiado caractere a caractere. Desde o conserto C1 ele
    carrega um blob sha real (ou string vazia, quando o `.aplicado` listou o id em
    `hash_ausente[]`), e o gate do briefing c1 compara os dois lados — valor divergente sai
-   como "`.ciclo0.json`.correcoes != `.aplicado`.correcoes".
+   como "`c0/ciclo.json`.correcoes != `.aplicado`.correcoes".
    Arrays vazios **explícitos** (`{}` ou chave faltando → exit 4); `corrigido` exige um
-   `correcao_id` existente no `.correcoes-c0.aplicado`, `descartado`/`aberto` proíbem o
+   `correcao_id` existente no `c0/correcoes.aplicado`, `descartado`/`aberto` proíbem o
    campo. **Nenhum sino some:** cada correção c0 volta ao consultor na seção "Revalidação
-   dirigida (ciclo 0)" do briefing c1 (montada do `.ciclo0.json` — o consultor pode derrubar
+   dirigida (ciclo 0)" do briefing c1 (montada do `c0/ciclo.json` — o consultor pode derrubar
    a sua correção), e o INTENT-REVIEW ganha `c0-NN | <sino> | corrigido|aberto`.
 3. **Monte o briefing por script:**
    ```bash
    $HOME/.claude/skills/go-and-do/scripts/briefing-build.sh "<phase_dir>" "<NN>" <C> \
-     --varredura "<phase_dir>/.intent/.varredura.md" [--mudancas "<phase_dir>/.intent/.mudancas-c<C>.md"]
+     --varredura "<phase_dir>/.gad/intent/varredura.md" [--mudancas "<phase_dir>/.gad/intent/c<C>/mudancas.md"]
    ```
    (`--mudancas`, do ciclo 2 em diante: **duas** seções, `## O que corrigi` e `## Achados
    resolvidos`, e nada mais. Não escreva onde o consultor deve olhar nem o que ainda não foi
    atacado — dirigir o olhar do consultor é decidir o achado no lugar dele. Conclusão sua
    que ele precise saber entra sob `## O que corrigi` marcada `alegação a testar:` — é ela
    que ele pode derrubar. Heading fora do contrato é omitido do briefing com aviso
-   `MUDANCAS-SECAO-FORA-DO-CONTRATO`.) O script monta `.intent/briefing-c<C>.md`: missão
+   `MUDANCAS-SECAO-FORA-DO-CONTRATO`.) O script monta `.gad/intent/c<C>/briefing.md`: missão
    canônica, o Goal do SPEC verbatim, taxonomia, livro-razão das decisões `[auto]`, a
    entrada da fase no ROADMAP, no ciclo 1 a obrigação de conferir os documentos a montante,
-   os sinos do disco, as perguntas dirigidas (manifesto `.intent/.perguntas-c<C>.json`) e o
-   canário de leitura (nonce em `.intent/.prova-leitura-c<C>.txt` — o valor nunca aparece no
+   os sinos do disco, as perguntas dirigidas (manifesto `.gad/intent/c<C>/perguntas.json`) e o
+   canário de leitura (nonce em `.gad/intent/c<C>/prova-leitura.txt` — o valor nunca aparece no
    briefing). Não redija briefing à mão.
-   **Exit 4 = gate do ciclo anterior** (falta `.ciclo0.json` no c1, ou
-   `.correcoes-c<C-1>.aplicado`/`.vazio` + `.releitura-c<C-1>.json` coerentes de C≥2):
+   **Exit 4 = gate do ciclo anterior** (falta `c0/ciclo.json` no c1, ou
+   `c<C-1>/correcoes.aplicado`/`.vazio` + `c<C-1>/releitura.json` coerentes de C≥2):
    vá fazer o passo que falta — não re-rode o build nem contorne.
 4. **Lance as lanes e despache o verificador — NO MESMO TURNO.**
    ```bash
    cd "<project_root>"
    $HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh "<phase_dir>" "<NN>" <C> \
-     "<phase_dir>/.intent/briefing-c<C>.md" \
-     --prova "<phase_dir>/.intent/.prova-leitura-c<C>.txt"
+     "<phase_dir>/.gad/intent/c<C>/briefing.md" \
+     --prova "<phase_dir>/.gad/intent/c<C>/prova-leitura.txt"
    ```
    Bash comum: **retorna em < 1 s** com `{run_id, pids, status_paths}` e deixa um
    supervisor por lane vivo por conta própria — não use `run_in_background`, não espere,
    não rode `wait`. Os comandos crus do Codex e do agy saíram daqui: quem os monta (modelo,
    log, espelho, nonce do briefing) são os `roda-<lane>.sh` que ele chama. Tudo do run vive
-   em `.intent/runs/c<C>/<run_id>/`; os pareceres canônicos
+   em `.gad/intent/c<C>/runs/<run_id>/`; os pareceres canônicos
    (`pareceres/NN-parecer-<lane>-c<C>.md`) são aliases promovidos pelo run vencedor — são
    eles que o passo 7 commita.
 
@@ -413,21 +428,21 @@ que o registro foi feito de memória, no fim, e não no ato.
    campo.
    ```bash
    printf '{"run_id":"<run_id>","mode":"child"}\n' \
-     > "<phase_dir>/.intent/.rota-verificacao-c<C>.json"
+     > "<phase_dir>/.gad/intent/c<C>/rota-verificacao.json"
    ```
    Gravar depois do despacho é escrever a regra sabendo o resultado: na F24.5 as duas rotas foram
    gravadas 3 min DEPOIS de o verificador fechar. Aqui é só a ordem: antes, sempre.
 
    **No MESMO turno**, despache **`gad-verificador`** com `prompts/intent-verifica.md`,
-   passando o `run_id`, `<phase_dir>/.intent` (dos `.status-c<C>-<lane>.json`), o run-dir
-   `.intent/runs/c<C>/<run_id>`, o manifesto `.intent/.perguntas-c<C>.json`, SPEC/CONTEXT,
+   passando o `run_id`, `<phase_dir>/.gad/intent` (dos `c<C>/status-<lane>.json`), o run-dir
+   `.gad/intent/c<C>/runs/<run_id>`, o manifesto `.gad/intent/c<C>/perguntas.json`, SPEC/CONTEXT,
    o ciclo `C`, deadline de 12 min e — do ciclo 2 em diante — o `NN-INTENT-REVIEW.md`
    parcial. Turno só para esperar lane é desperdício medido. Encerre o turno depois do despacho; a
    notificação do verificador te acorda (protocolo de filhos). Ao acordar, leia
-   `<phase_dir>/.intent/.verificador-c<C>.done` e só então o run-dir.
+   `<phase_dir>/.gad/intent/c<C>/verificador.done` e só então o run-dir.
 
    **A autoridade sobre a lane é o status, nunca o marcador `.done`.**
-   `.intent/.status-c<C>-<lane>.json` tem dois eixos: `usable` (parecer não-vazio, fresco,
+   `.gad/intent/c<C>/status-<lane>.json` tem dois eixos: `usable` (parecer não-vazio, fresco,
    legível) e `independent` (`nonce_ok && modelo_ok`).
    - `usable: false` → lane é `sem_parecer: <lane>`: degrade já, sem esperar o deadline.
    - `usable: true, independent: false` (nonce ausente, modelo divergente ou espelho
@@ -453,11 +468,11 @@ que o registro foi feito de memória, no fim, e não no ato.
    **(a) Contagem conservadora, PRÉ-rota** (sem `--vereditos` — ainda não existem):
    ```bash
    $HOME/.claude/skills/go-and-do/scripts/confere-ciclo.sh --tabela \
-     --perguntas "<phase_dir>/.intent/.perguntas-c<C>.json" \
-     --status-dir "<phase_dir>/.intent" \
+     --perguntas "<phase_dir>/.gad/intent/c<C>/perguntas.json" \
+     --status-dir "<phase_dir>/.gad/intent" \
      "<phase_dir>/pareceres/NN-parecer-codex-c<C>.md" \
      "<phase_dir>/pareceres/NN-parecer-agy-c<C>.md" \
-     > "<phase_dir>/.intent/.tabela-c<C>.txt"
+     > "<phase_dir>/.gad/intent/c<C>/tabela.txt"
    ```
    `brutos` = a linha `achados_estruturais_total:` DESSE arquivo, lida mecanicamente, nunca
    da sua leitura. Ela já inclui as respostas dirigidas (`sim`/`incerto`) e conta `não`
@@ -468,10 +483,10 @@ que o registro foi feito de memória, no fim, e não no ato.
    vez, no mesmo ciclo, antes de decidir a rota:
    ```bash
    $HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh "<phase_dir>" "<NN>" <C> \
-     "<phase_dir>/.intent/briefing-c<C>.md" \
-     --prova "<phase_dir>/.intent/.prova-leitura-c<C>.txt" --reformata <lane>
+     "<phase_dir>/.gad/intent/c<C>/briefing.md" \
+     --prova "<phase_dir>/.gad/intent/c<C>/prova-leitura.txt" --reformata <lane>
    ```
-   Espere o `.status-c<C>-<lane>.json` novo e re-rode o (a). `parecer_informe: <lane>
+   Espere o `c<C>/status-<lane>.json` novo e re-rode o (a). `parecer_informe: <lane>
    reprovada` na 2ª tabela = a lane fica `usable:false` (`rc_reason=parecer_informe`) e
    entra como `sem_parecer: <lane>`; o incidente já está no run-log. Não há 3ª tentativa
    (`--reformata` de novo devolve exit 4). `sem_achado_novo: <lane>` é parecer válido com
@@ -481,8 +496,8 @@ que o registro foi feito de memória, no fim, e não no ato.
    **(b) A rota é `child`, sempre (FJ-F4RLR-03INT).** Não há mais decisão a tomar aqui: o
    filho já foi despachado no passo 4, junto com as lanes, antes de o volume de brutos deste
    ciclo existir — decidir "inline" depois da contagem seria escrever a regra sabendo o
-   resultado, e o `.verificador-c<C>.done` não distingue as rotas para desfazer. Confira só
-   que `mode` no `.rota-verificacao-c<C>.json` é `child` e siga com o filho já despachado;
+   resultado, e o `c<C>/verificador.done` não distingue as rotas para desfazer. Confira só
+   que `mode` no `c<C>/rota-verificacao.json` é `child` e siga com o filho já despachado;
    `mode` divergente é incidente (registre em `incidentes`), nunca conserto silencioso.
    `confere-rotas.sh` ainda sabe ler `mode:"inline"` (exceção de script, não deste
    workflow) — mas você nunca grava `inline`: a rota fixa `child` não tem mais exceção
@@ -491,8 +506,8 @@ que o registro foi feito de memória, no fim, e não no ato.
    **(c) Contagem FINAL, depois da verificação** — a mesma linha do (a) **mais** os
    vereditos dirigidos, sobrescrevendo a tabela:
    ```bash
-   …  --vereditos "<phase_dir>/.intent/runs/c<C>/<run_id>/vereditos-dirigidos.json" \
-     > "<phase_dir>/.intent/.tabela-c<C>.txt"
+   …  --vereditos "<phase_dir>/.gad/intent/c<C>/runs/<run_id>/vereditos-dirigidos.json" \
+     > "<phase_dir>/.gad/intent/c<C>/tabela.txt"
    ```
    É ela que alimenta o `decide-ciclo.sh` e a contagem do INTENT-REVIEW; só `supported_no`
    tira uma pergunta dirigida da conta. **Você NÃO relê os pareceres** quando o filho roda:
@@ -510,8 +525,8 @@ que o registro foi feito de memória, no fim, e não no ato.
    `origem: coordenador` e o destino (`plan-phase`, `code-review`, `deferred`, `dono`), e **não é
    promovida neste ciclo**. **Exceção que não é exceção:** item devolvido pela releitura do 5b já vem
    com veredito escrito por ela (J5b) — você promove sem julgar, no mesmo turno de sempre.
-   Escrever a linha de veredito você mesmo no `.vereditos-c<C>.txt` deixa rastro: o arquivo é selado
-   por `.vereditos-c<C>.origem.json` (sha256 + lista de `escritores`), e o `confere-etapa.sh 1`
+   Escrever a linha de veredito você mesmo no `c<C>/vereditos.txt` deixa rastro: o arquivo é selado
+   por `c<C>/vereditos.origem.json` (sha256 + lista de `escritores`), e o `confere-etapa.sh 1`
    reprova `VEREDITO-ALTERADO` quando o conteúdo não bate com o último selo. Não é impossível —
    é auditável, e o lugar de registrar uma correção sua é a dívida, não a coluna de veredito.
 
@@ -588,7 +603,7 @@ que o registro foi feito de memória, no fim, e não no ato.
       ```
       `--docs` **só** quando o ciclo resolve issue R6 ou reconcilia o Goal — neles o
       script comita só o delta do ciclo, mesmo se já estavam sujos.
-   2. Escreva **um** `.intent/.correcoes-c<C>.py|.sh` com TODAS as correções factuais do
+   2. Escreva **um** `.gad/intent/c<C>/correcoes.py|.sh` com TODAS as correções factuais do
       ciclo e execute-o **no mesmo turno**. Uma edição por achado, id `c<C>-NN`.
    3. Feche:
       ```bash
@@ -603,7 +618,7 @@ que o registro foi feito de memória, no fim, e não no ato.
       `id:<caminho relativo à raiz do repo>` —
       `--ids "c<C>-01:.planning/phases/<fase>/NN-SPEC.md,c<C>-02:.planning/ROADMAP.md"`.
       Sem essa declaração o script grava `hash: ""` e lista os ids em `hash_ausente[]` no
-      `.correcoes-c<C>.aplicado`: a ausência fica auditável, mas a releitura perde a âncora
+      `c<C>/correcoes.aplicado`: a ausência fica auditável, mas a releitura perde a âncora
       por correção. Com um só arquivo no ciclo, a forma só-ids basta.
       Ciclo sem correção → `correcoes-commit.sh "<phase_dir>" <C> --vazio` (marcador
       explícito; ausência não vale). Exit 3 = **nada promovido**: leia a razão, conserte e
@@ -612,8 +627,8 @@ que o registro foi feito de memória, no fim, e não no ato.
 5b. **Releitura da emenda (R1b) — entre o commit e o briefing do ciclo seguinte.**
    Despache **`gad-verificador`** com `prompts/intent-releitura.md`, passando `rodada: c<C>`
    (ou `c<C>b`, `c<C>c` nas correções em cascata — um rótulo por rodada, nunca reaproveitado) e
-   `project_root`, `phase_dir`, `NN`, `C`, o conteúdo do `.intent/.correcoes-c<C>.aplicado`
-   (ou o `.correcoes-c<C>.vazio`), `spec_do_dono: sim|nao` (o contrato da abertura deste
+   `project_root`, `phase_dir`, `NN`, `C`, o conteúdo do `.gad/intent/c<C>/correcoes.aplicado`
+   (ou o `c<C>/correcoes.vazio`), `spec_do_dono: sim|nao` (o contrato da abertura deste
    bloco) e, conforme o ciclo:
    - **ciclo 0:** a seção "Consistência interna" do `NN-SPEC.md`, o bloco `gsd:acs` (ou o
      SPEC inteiro), o Anexo A do `NN-PRE-SPEC.md` quando existir e o bloco `<decisions>`
@@ -625,8 +640,8 @@ que o registro foi feito de memória, no fim, e não no ato.
      passe as linhas `D-NN-DESATUALIZADA c<C> …` (informativas; uma por decisão, com o id) —
      a releitura as trata como `omissoes_novas`.
      <!-- plano 2, P-06 (C3) — fiacao-P2-P06-releitura.md -->
-   Ele grava `.intent/.releitura-<rodada>.json` (objeto inteiro, `v: 2`, com o veredito) +
-   `.releitura-<rodada>.done` — encerre o turno; a notificação te acorda; então leia o `.json`.
+   Ele grava `.gad/intent/<rodada>/releitura.json` (objeto inteiro, `v: 2`, com o veredito) +
+   `<rodada>/releitura.done` — encerre o turno; a notificação te acorda; então leia o `.json`.
    **48a/E4 — um lote só, sem rodada por categoria.** Devolveu QUALQUER item
    (`contradiz`, `prescreve_mecanismo`, `omissoes_novas`, `cardinalidade`, `unicidade` ou
    par em `consistencia`) → corrija **no mesmo turno, todos juntos** (bloqueante e
@@ -715,7 +730,7 @@ que o registro foi feito de memória, no fim, e não no ato.
    falhou (sem git, nada a commitar) → não pare; anote no retorno e siga.
 7b. **Gate de rota (fail-closed) — antes de devolver `done`:**
    ```bash
-   $HOME/.claude/skills/go-and-do/scripts/confere-rotas.sh "<phase_dir>/.intent"
+   $HOME/.claude/skills/go-and-do/scripts/confere-rotas.sh "<phase_dir>/.gad/intent"
    ```
    Exit 0 → **antes de apagar nada**, confira que os sinos estruturais do passo 7 já estão
    verbatim no `NN-INTENT-REVIEW.md` (`grep -c 'req_ausente:\|fase_sem_req\|
@@ -723,26 +738,28 @@ que o registro foi feito de memória, no fim, e não no ato.
    `confere-etapa.sh 1` da camada 0 vai procurá-los. Só então a limpeza (política 1.5):
    ```bash
    setopt nullglob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
-   rm -f "<phase_dir>/.intent/".sinos-*.txt "<phase_dir>/.intent/"briefing-c*.md \
-         "<phase_dir>/.intent/".varredura.md "<phase_dir>/.intent/".mudancas-c*.md
+   G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
+   rm -f $(G 'intent/sinos-*.txt') $(G 'intent/c*/briefing*.md') \
+         $(G intent/varredura.md) $(G 'intent/c*/mudancas.md')
    ```
    **Não alargue esses globs.** SOBREVIVEM, por serem insumo da `/audit-gad` e dos gates:
-   `runs/`, `.status-c*`, `.tabela-c*`, `.vereditos-c*`, `.prova-leitura-c*`,
-   `.rota-verificacao-c*`, `.correcoes-c*.aplicado|.vazio`, `.releitura-c*`,
-   `.ciclo0.json`, `.vereditos-c*.origem.json` (o recibo do J5), `.gerado-*`,
-   `.base-*` (blobs-base do T3) e `pre-spec-route.json`. Fora de `.intent/`, o
-   `<phase_dir>/.fence-*.ok` (recibo do fiscal) também não se apaga — a lista está aqui
+   `c*/runs/`, `c*/status-*`, `c*/tabela.txt`, `c*/vereditos.txt`, `c*/prova-leitura.txt`,
+   `c*/rota-verificacao.json`, `c*/correcoes.aplicado|.vazio`, `c*/releitura.*`,
+   `c0/ciclo.json`, `c*/vereditos.origem.json` (o recibo do J5), `gerado-*`,
+   `base-*` (blobs-base do T3) e `pre-spec-route.json` (formato antigo: os mesmos, com os
+   nomes que o `caminho-fase.sh` traduz). Fora de `.gad/intent/`, o
+   `<phase_dir>/.gad/fences/*.ok` (recibo do fiscal) também não se apaga — a lista está aqui
    justamente para ninguém alargar o glob até `<phase_dir>`.
    Siga ao passo 8. Exit 1 → **você não devolve `done`**: `SEM-TABELA` → gere a tabela do
    ciclo; `VIOLACAO` → despache um `gad-verificador` retroativo sobre os pareceres daquele
    ciclo e incorpore o resultado; `VIOLACAO-INVERSA` → verifique inline o que faltar e
-   corrija a `.rota-verificacao-c<C>.json`. Em todos: `incidentes` + re-rode o gate.
+   corrija a `c<C>/rota-verificacao.json`. Em todos: `incidentes` + re-rode o gate.
 8. **Recibo do fiscal, antes de devolver `done`.** Rode o fiscal você mesmo e leia o recibo:
    ```bash
    cd "<project_root>"
    $HOME/.claude/skills/go-and-do/scripts/confere-etapa.sh 1 --fase <N> --projeto "<project_root>" \
      --sem-telemetria; rc=$?
-   F="<phase_dir>/.fence-1.ok"
+   F=$(bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" fences/1.ok)
    H=$(git rev-parse HEAD 2>/dev/null || echo "")
    [ -f "$F" ] && [ "$(jq -r '.head' "$F")" = "$H" ] && echo "FENCE-OK" || echo "FENCE-AUSENTE"
    ```

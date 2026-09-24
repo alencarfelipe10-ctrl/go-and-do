@@ -26,7 +26,7 @@
   only then let the fiscal → `end` → recibo sequence close.
 - **Gate 4.1b is its own re-dispatch of 4.1, not a footnote of it** (FM-02GAT): open a
   checkpoint labeled **"4.1b re-review"**, run `pre-despacho.sh 4-code-review` and
-  `confere-etapa.sh 4-code-review` exactly like 4.1, and stamp its own `.fence-4.1b.ok`. It
+  `confere-etapa.sh 4-code-review` exactly like 4.1, and stamp its own `.gad/fences/4.1b.ok`. It
   does not inherit 4.1's fence.
 - **The host never fixes a 4.1b finding itself** (FJ-04GAT): it goes to `gsd-code-fixer` with a
   scope EQUAL to the finding's own scope. Widening that scope, or changing observable behavior

@@ -17,7 +17,8 @@
 #     "Agent|Task|SendMessage")
 #
 # Vive no settings GLOBAL e dispara em qualquer sessão/projeto — por isso os guards
-# (PC-3): acha o ponteiro leve .planning/.gad-rodada-ativa.json a partir do cwd
+# (PC-3): acha o ponteiro leve .planning/.gad/rodada-ativa.json (legado: .planning/
+# .gad-rodada-ativa.json, por uma release) a partir do cwd
 # (1 stat; fallback raiz git), compara session_id e verifica que a rodada não parou.
 # Qualquer guard falhando → no-op em milissegundos, exit 0 SEMPRE (telemetria jamais
 # bloqueia um despacho).
@@ -54,20 +55,23 @@ SESS=$(jq -r '.session_id // empty' <<<"$IN" 2>/dev/null)
 # não o da árvore principal). Caminho de falha, barato: 1 chamada git a mais só quando as
 # duas primeiras tentativas falham OU acham um ponteiro de outra sessão (ponteiro tracked/
 # obsoleto na cópia — visto em worktrees reais do RLR).
+# v2.10.1 (56(a)): o ponteiro mudou para .planning/.gad/rodada-ativa.json; o legado
+# .planning/.gad-rodada-ativa.json vale por uma release (rodada aberta pela v2.10.0). Em
+# cada raiz candidata o NOVO tem precedência; vence o primeiro cuja sessão casa.
+ponteiro_da_raiz() { # <raiz> → caminho do ponteiro desta sessão, se houver
+  local c psess
+  for c in "$1/.planning/.gad/rodada-ativa.json" "$1/.planning/.gad-rodada-ativa.json"; do
+    [ -f "$c" ] || continue
+    psess=$(jq -r '.session_id // empty' "$c" 2>/dev/null)
+    [ "$SESS" = "$psess" ] && { printf '%s' "$c"; return 0; }
+  done
+  return 1
+}
 achar_ponteiro() {
-  local cand="$CWD/.planning/.gad-rodada-ativa.json" root psess
-  if [ -f "$cand" ]; then
-    psess=$(jq -r '.session_id // empty' "$cand" 2>/dev/null)
-    [ "$SESS" = "$psess" ] && { printf '%s' "$cand"; return 0; }
-  fi
+  local root
+  ponteiro_da_raiz "$CWD" && return 0
   root=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null)
-  if [ -n "$root" ]; then
-    cand="$root/.planning/.gad-rodada-ativa.json"
-    if [ -f "$cand" ]; then
-      psess=$(jq -r '.session_id // empty' "$cand" 2>/dev/null)
-      [ "$SESS" = "$psess" ] && { printf '%s' "$cand"; return 0; }
-    fi
-  fi
+  [ -n "$root" ] && ponteiro_da_raiz "$root" && return 0
   local common main
   common=$(git -C "$CWD" rev-parse --git-common-dir 2>/dev/null) || return 1
   case "$common" in
@@ -75,11 +79,7 @@ achar_ponteiro() {
     *)  main=$(cd "$CWD" 2>/dev/null && cd "$(dirname "$common")" 2>/dev/null && pwd -P) ;;
   esac
   [ -n "$main" ] || return 1
-  cand="$main/.planning/.gad-rodada-ativa.json"
-  [ -f "$cand" ] || return 1
-  psess=$(jq -r '.session_id // empty' "$cand" 2>/dev/null)
-  [ "$SESS" = "$psess" ] || return 1
-  printf '%s' "$cand"
+  ponteiro_da_raiz "$main"
 }
 P=$(achar_ponteiro) || exit 0
 [ -n "$P" ] || exit 0
@@ -291,7 +291,7 @@ if [ "$TIPO" = despacho ]; then
       fi
     fi
     # ── E3(b): 2º despacho do mesmo filho na mesma fase (artefato já existe) ─────
-    # phase_dir e NN vêm do ponteiro .gad-rodada-ativa.json (PD/NN) — 1 stat cada.
+    # phase_dir e NN vêm do ponteiro da rodada (PD/NN) — 1 stat cada.
     case "$AGN" in
       gad-discuss) [ -f "$PD/$NN-CONTEXT.md" ] && gad_nega "filho_encerrado: 2º Agent(gad-discuss) na fase $NN — $NN-CONTEXT.md já existe. A etapa de discuss já produziu o artefato; reabrir o filho refaz o trabalho. Edite o CONTEXT e re-rode context-guard.sh." ;;
       gad-spec)    [ -f "$PD/$NN-SPEC.md" ]    && gad_nega "filho_encerrado: 2º Agent(gad-spec) na fase $NN — $NN-SPEC.md já existe. A etapa de spec já produziu o artefato; reabrir o filho refaz o trabalho. Corrija o SPEC no coordenador." ;;

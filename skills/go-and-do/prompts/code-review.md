@@ -25,6 +25,14 @@ retomada antes de te despachar — não re-cheque. Scripts em
 `$HOME/.claude/skills/go-and-do/scripts/`.
 </inputs>
 
+**Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
+`<phase_dir>/.gad/` e aparecem aqui pelo NOME NOVO (ex.: `.gad/intent/c<C>/vereditos.txt`) — o
+formato de toda fase com `<phase_dir>/.gad/FORMATO`. Fase SEM esse arquivo (aberta antes da
+v2.10.1) usa os nomes antigos: o caminho real é o que
+`bash $HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh "<phase_dir>" <nome depois de .gad/>`
+imprime (ex.: `intent/c1/vereditos.txt` → `.intent/.vereditos-c1.txt`). Os blocos bash abaixo já
+resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
+
 <mission>
 0. **Escopo por iteração (4.C — o re-review NUNCA relê o escopo inteiro):**
    - `iteracao: 1` → escopo cheio (o comando resolve pelos SUMMARY.md).
@@ -36,15 +44,17 @@ retomada antes de te despachar — não re-cheque. Scripts em
 1. **Lane Codex paralela (SÓ na iteração 1 — re-review é conferência de fix, não caça
    nova; 4.D):** ANTES de invocar o comando, monte o briefing do revisor externo:
    copie `$HOME/.claude/skills/go-and-do/prompts/codex-code-review.md` para
-   `<phase_dir>/pareceres/.briefing-review.md` e anexe a lista de arquivos do escopo
+   `<phase_dir>/.gad/lanes/briefing-review.md` e anexe a lista de arquivos do escopo
    (dos SUMMARY.md) + o caminho do repo. Lance em background:
    ```bash
-   rm -f "<phase_dir>/pareceres/.codex-review.done"
-   ( $HOME/.claude/skills/go-and-do/scripts/roda-codex.sh "<phase_dir>" "<NN>" review \
-       "<phase_dir>/pareceres/.briefing-review.md" \
+   G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
+   BR=$(G lanes/briefing-review.md); M=$(G lanes/codex-review.done); rm -f "$M"
+   ( $HOME/.claude/skills/go-and-do/scripts/roda-codex.sh "<phase_dir>" "<NN>" review "$BR" \
        --out "<phase_dir>/pareceres/<NN>-parecer-codex-review.md" ;
-     touch "<phase_dir>/pareceres/.codex-review.done" ) &
+     touch "$M" ) &
    ```
+   (Os caminhos saem ANTES do grupo `( … ) &`: o `gad-bash-guard` só aceita o grupo sem
+   parênteses por dentro — `$(…)` ali dentro seria negado.)
    O `; touch <marcador>` **não é enfeite**: é a única forma de `&` de fundo que o
    `gad-bash-guard` aceita (`hooks/gad-bash-guard.sh`, regex `WAITER`). Sem ele o comando
    é negado — aconteceu na retomada de 10/09, 3 negações em 5 s (`setsid`, depois `&`), e
@@ -84,7 +94,8 @@ retomada antes de te despachar — não re-cheque. Scripts em
    `NN-REVIEW-FIX*.md`.
 2b. **Funil + merge da lane Codex (iteração 1, depois que o comando fechar):** espere o
    parecer com o waiter de disco pelo marcador que o passo 1 criou —
-   `timeout 570 bash -c 'until [ -e "<phase_dir>/pareceres/.codex-review.done" ]; do sleep 15; done'`,
+   `timeout 570 bash -c 'until [ -e "<marcador>" ]; do sleep 15; done'` (o `<marcador>` é o `$M`
+   do passo 1 — `.gad/lanes/codex-review.done`, ou `pareceres/.codex-review.done` numa fase antiga),
    chamado de novo enquanto o arquivo não existir, até o deadline de 10 min; não chegou →
    siga sem ele, sino. Nunca com `run_in_background`. É a chegada do parecer no disco que conta
    — não um `.done` de terceiro; assim que o marcador existe, leia. Parecer presente → despache **`gad-verificador`** (síncrono)

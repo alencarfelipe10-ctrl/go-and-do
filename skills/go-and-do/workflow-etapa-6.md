@@ -114,7 +114,8 @@ hidden in a copy. Then:
   step. End.
 - Hand-back: the 6.4-HB frame (do not duplicate the box) + basket-3 items + pendings.
 In both: `stop` event (etapa `ship`/`handback`), remove the pointer
-`.planning/.gad-rodada-ativa.json` (PC-3) and `commita-artefatos.sh <phase_dir> <NN> runlog`.
+`.planning/.gad/rodada-ativa.json` (PC-3; also the legacy `.planning/.gad-rodada-ativa.json`
+if it exists) and `commita-artefatos.sh <phase_dir> <NN> runlog`.
 Idempotent: re-running after the ship lands here and reprints.
 
 **6.6 — Guard.** If the self-check reveals a plan without `SUMMARY.md` (a human action that

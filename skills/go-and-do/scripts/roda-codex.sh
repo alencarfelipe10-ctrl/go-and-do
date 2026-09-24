@@ -48,8 +48,9 @@ esac; done
 
 mkdir -p "$PD/pareceres"
 : "${OUT:=$PD/pareceres/$NN-parecer-codex-c$K.md}"
-: "${ESPELHO:=$PD/pareceres/.roda-codex-c$K.json}"
-: "${ERR:=$PD/pareceres/.codex-c$K.err}"   # não vai no git (evidência durável = banner copiado)
+: "${ESPELHO:=$(gad_fase_caminho "$PD" "lanes/roda-codex-c$K.json")}"   # v2.10.1: helper (formato da fase)
+: "${ERR:=$(gad_fase_caminho "$PD" "lanes/codex-c$K.err")}"   # não vai no git (evidência durável = banner copiado)
+gad_fase_lanes_garante "$PD"
 for _d in "$OUT" "$ESPELHO" "$ERR" ${LOG:+"$LOG"}; do mkdir -p "$(dirname -- "$_d")"; done
 
 if ! command -v codex >/dev/null 2>&1; then

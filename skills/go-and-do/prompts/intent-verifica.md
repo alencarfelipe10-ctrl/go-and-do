@@ -7,12 +7,20 @@
 
 O despacho te entrega: `project_root` e `phase_dir` (absolutos), o prefixo da fase `NN`
 (precisa dele para o `roda-lanes.sh --esperar` do passo 0), o número do ciclo `C`, o
-**`run_id`** das lanes deste ciclo, o run-dir `<phase_dir>/.intent/runs/c<C>/<run_id>/`, o
-diretório de status `<phase_dir>/.intent`, o manifesto de perguntas dirigidas
-`.intent/.perguntas-c<C>.json`, os caminhos dos pareceres
+**`run_id`** das lanes deste ciclo, o run-dir `<phase_dir>/.gad/intent/c<C>/runs/<run_id>/`, o
+diretório de status `<phase_dir>/.gad/intent`, o manifesto de perguntas dirigidas
+`.gad/intent/c<C>/perguntas.json`, os caminhos dos pareceres
 (`<phase_dir>/pareceres/NN-parecer-*-c<C>.md`), os de `NN-SPEC.md` e `NN-CONTEXT.md`, um
 deadline de espera, e — do ciclo 2 em diante — o `NN-INTENT-REVIEW.md` parcial com a tabela
-dos achados já triados. Os arquivos de trabalho do ciclo vivem em `<phase_dir>/.intent/`.
+dos achados já triados. Os arquivos de trabalho do ciclo vivem em `<phase_dir>/.gad/intent/`.
+**Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
+`<phase_dir>/.gad/` e aparecem aqui pelo NOME NOVO (ex.: `.gad/intent/c<C>/vereditos.txt`) — o
+formato de toda fase com `<phase_dir>/.gad/FORMATO`. Fase SEM esse arquivo (aberta antes da
+v2.10.1) usa os nomes antigos: o caminho real é o que
+`bash $HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh "<phase_dir>" <nome depois de .gad/>`
+imprime (ex.: `intent/c1/vereditos.txt` → `.intent/.vereditos-c1.txt`). Os blocos bash abaixo já
+resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
+
 Comece todo bloco Bash com `cd "<project_root>"`. **Instrumento ausente** (o script chamado
 não existe no caminho absoluto, ou `command not found`) não é «pule e continue» — é
 `incidente` (`origem=intent-verifica`, `detalhe=instrumento ausente: <caminho>`) e trava:
@@ -21,7 +29,7 @@ pare no passo e devolva o que tiver, nunca contorne à mão o que o script faria
 ## Trabalho
 
 0. **Espera pelo STATUS, nunca pelo `.done`.** As lanes ainda estão rodando quando você
-   nasce. A autoridade de cada lane é `<phase_dir>/.intent/.status-c<C>-<lane>.json` **com
+   nasce. A autoridade de cada lane é `<phase_dir>/.gad/intent/c<C>/status-<lane>.json` **com
    o mesmo `run_id` que o despacho te deu** — status com `run_id` diferente é de um run
    anterior: ignore-o e continue esperando. Espere primeiro o do Codex (chega antes) com a
    espera SANCIONADA (48c/E4 — substitui o loop manual antigo; não é `run_in_background`, é
@@ -40,7 +48,7 @@ pare no passo e devolva o que tiver, nunca contorne à mão o que o script faria
    `$HOME/.claude/skills/go-and-do/scripts/roda-lanes.sh "<phase_dir>" "<NN>" <C> --esperar agy`
    (mesma régua de exit 0/124/2) e incorpore o parecer dele (funda com o que já verificou —
    só o que ele acrescenta ou corrobora gera trabalho novo). O `--esperar` só confirma que o
-   `.status-c<C>-<lane>.json` do run atual existe — você continua lendo `usable`/
+   `c<C>/status-<lane>.json` do run atual existe — você continua lendo `usable`/
    `independent` do próprio JSON, igual a sempre.
    O status traz dois eixos:
    - `usable: false` (parecer ausente, vazio, obsoleto ou ilegível) → devolva a lane como
@@ -54,7 +62,7 @@ pare no passo e devolva o que tiver, nunca contorne à mão o que o script faria
 
 1. **Piso mecânico antes de ler:** rode
    `$HOME/.claude/skills/go-and-do/scripts/confere-ciclo.sh --tabela --perguntas
-   <.intent/.perguntas-c<C>.json> --status-dir <phase_dir>/.intent <parecer(es)>` —
+   <phase_dir>/.gad/intent/c<C>/perguntas.json --status-dir <phase_dir>/.gad/intent <parecer(es)>` —
    ele extrai o esqueleto dos achados estruturais (lane · linha · elicitação). Sua
    fusão parte desse esqueleto: cada linha dele precisa de destino na sua tabela final
    (é o piso anti-omissão; prosa sem marcador o script não vê — a sua leitura cobre o
@@ -118,7 +126,7 @@ pare no passo e devolva o que tiver, nunca contorne à mão o que o script faria
    dele e confirmar — nunca por dedução da saída. Registre só o que você conferiu; um "parece
    que o script X está bugado" sem tê-lo aberto não vira alegação.
 6. **Vereditos em disco (insumo do decide-ciclo.sh):** grave
-   `<phase_dir>/.intent/.vereditos-c<C>.txt` — uma linha por achado, formato exato:
+   `<phase_dir>/.gad/intent/c<C>/vereditos.txt` — uma linha por achado, formato exato:
    `id | classe | veredito | categoria` (ex.: `c2-03 | novo | confirmado | A-produto`;
    `confirmado_irrelevante` é o quarto valor do terceiro campo — nunca um quinto campo: o
    `decide-ciclo.sh` lê quatro e um excedente cairia dentro de `categoria` em silêncio).
@@ -171,23 +179,24 @@ pare no passo e devolva o que tiver, nunca contorne à mão o que o script faria
    escrever o INTENT-REVIEW.
 7. **Prova de máquina de que você rodou:** como últimos atos antes do retorno, nesta ordem:
    ```bash
-   IN="<phase_dir>/.intent"
+   G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
+   V=$(G intent/c<C>/vereditos.txt)
    printf '{"v":1,"ciclo":"<C>","run_id":"<run_id>","agente":"gad-verificador","mode":"<child|inline>","ts":"%s","n_linhas":%s,"sha256":"%s"}\n' \
-     "$(date -Is)" "$(grep -cvE '^\s*(#|$)' "$IN/.vereditos-c<C>.txt")" \
-     "$(sha256sum "$IN/.vereditos-c<C>.txt" | cut -d' ' -f1)" \
-     > "$IN/.vereditos-c<C>.origem.json"
-   touch "$IN/.verificador-c<C>.done"
+     "$(date -Is)" "$(grep -cvE '^\s*(#|$)' "$V")" \
+     "$(sha256sum "$V" | cut -d' ' -f1)" \
+     > "$(G intent/c<C>/vereditos.origem.json)"
+   touch "$(G intent/c<C>/verificador.done)"
    ```
-   O `.verificador-c<C>.done` é o marcador que o `confere-rotas.sh` cruza com a
-   `.tabela-c<C>.txt` no fecho da etapa, para provar que a rota de verificação independente foi
-   respeitada. O recibo `.vereditos-c<C>.origem.json` é o que torna o arquivo de vereditos
+   O `c<C>/verificador.done` é o marcador que o `confere-rotas.sh` cruza com a
+   `c<C>/tabela.txt` no fecho da etapa, para provar que a rota de verificação independente foi
+   respeitada. O recibo `c<C>/vereditos.origem.json` é o que torna o arquivo de vereditos
    **fechado**: o `confere-ciclo.sh --origem-vereditos` recalcula o sha256 e reprova qualquer linha
    acrescentada depois de você sair. Grave-o só DEPOIS de os vereditos estarem completos em disco e
    ANTES do `.done`: marcador sem trabalho é fabricação de evidência, e recibo sem os vereditos
    finais é pior — sela o arquivo errado.
    **Na rota `inline`** (ciclos 3+ com ≤ 2 brutos, quando quem te despachou verifica ele mesmo) o
    recibo é gravado pelo coordenador com `"mode":"inline"`: a rota já está declarada na
-   `.rota-verificacao-c<C>.json` e o `confere-ciclo.sh` só aceita `inline` quando as duas dizem o
+   `c<C>/rota-verificacao.json` e o `confere-ciclo.sh` só aceita `inline` quando as duas dizem o
    mesmo.
 
 ## Retorno (obrigatório, sem prosa antes ou depois)
@@ -206,7 +215,7 @@ ponteiros_quebrados: <n reportados pelo spot-check; 0 se nenhum>
 pareceres_sem_citacao: [<lanes cujo parecer não tem nenhuma citação arquivo:linha; [] se todas citam>]
 sem_parecer: [<lanes com usable:false ou sem status no deadline; [] se nenhuma>]
 lanes_nao_independentes: [<lanes com independent:false; [] se nenhuma>]
-vereditos_txt: <caminho absoluto de .vereditos-c<C>.txt>
+vereditos_txt: <caminho absoluto de c<C>/vereditos.txt>
 vereditos_dirigidos: <caminho absoluto do vereditos-dirigidos.json que você gravou>
 achados_json: <caminho absoluto de achados-verificados.json (passo 6c) — a tabela cheia mora lá>
 ```

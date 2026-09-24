@@ -15,7 +15,7 @@ set -uo pipefail
 PD="${1:-}"; NN="${2:-}"; MODO="${3:-}"
 [ -n "$PD" ] && [ -n "$NN" ] || { echo "uso: confere-cardinalidade.sh <phase_dir> <NN> [--json]"; exit 0; }
 
-python3 - "$PD" "$NN" "$MODO" <<'PYCARD'
+GAD_LIB="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/lib" python3 - "$PD" "$NN" "$MODO" <<'PYCARD'
 import glob
 import json
 import os
@@ -23,6 +23,9 @@ import re
 import sys
 
 pd, nn, modo = sys.argv[1], sys.argv[2], sys.argv[3]
+sys.dont_write_bytecode = True
+sys.path.insert(0, os.environ["GAD_LIB"])
+import gad_caminhos  # v2.10.1: caminhos da fase (formato novo × antigo)
 avisos = []
 medido = {}
 
@@ -77,7 +80,7 @@ for linha in corpo_tabela.splitlines():
 
 # ── (3) arquivos de veredito do disco ──────────────────────────────────────
 ver_disco = {"confirmados": 0, "descartados": 0, "dispensados": 0}
-arquivos = sorted(glob.glob(os.path.join(pd, ".intent", ".vereditos-c*.txt")))
+arquivos = gad_caminhos.glob_fase(pd, "intent/c*/vereditos.txt")
 for f in arquivos:
     for linha in open(f, encoding="utf-8", errors="replace"):
         cels = [c.strip() for c in linha.split("|")]

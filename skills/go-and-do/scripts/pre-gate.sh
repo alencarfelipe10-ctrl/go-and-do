@@ -25,8 +25,19 @@ fi
 
 # 2) commit dos artefatos da fase (pathspec explícito)
 ARQ=()
-for f in "$PD"/*.md "$PD"/*.jsonl "$PD"/*.json "$PD"/*.txt "$PD"/.gate-fail-*.json "$PD"/.gate-fail-*.txt \
-         "$PD"/pareceres/*.md "$PD"/.intent/*.json "$PD"/.intent/*.md "$PD"/.plan-checker/*.yaml; do
+# v2.10.1 (57): os mesmos grupos pelo helper (formato da fase) — travas de gate, JSON/MD da
+# pasta da intenção (no formato novo, também os das pastas de ciclo) e a trilha do checker;
+# no formato novo entram ainda o marcador FORMATO e o .gitignore de lanes/.
+_G=(); while IFS= read -r _f; do _G+=("$_f"); done < <(
+  gad_fase_glob "$PD" 'gates/*.json'; gad_fase_glob "$PD" 'gates/*.txt'
+  gad_fase_glob "$PD" 'intent/*.json'; gad_fase_glob "$PD" 'intent/*.md'
+  [ "$(gad_fase_formato "$PD")" = novo ] || gad_fase_glob "$PD" 'intent/pre-spec-route.json'
+  if [ "$(gad_fase_formato "$PD")" = novo ]; then
+    gad_fase_glob "$PD" 'intent/c*/*.json'; gad_fase_glob "$PD" 'intent/c*/*.md'
+    printf '%s\n' "$PD/.gad/FORMATO" "$PD/.gad/lanes/.gitignore"
+  fi
+  gad_fase_glob "$PD" 'plan-checker/*.yaml')
+for f in "$PD"/*.md "$PD"/*.jsonl "$PD"/*.json "$PD"/*.txt "$PD"/pareceres/*.md ${_G[@]+"${_G[@]}"}; do
   case "$f" in *.err|*.log|*.tmp) continue ;; esac
   [ -f "$f" ] && ARQ+=("$f")
 done
@@ -41,8 +52,8 @@ if [ "${#ARQ[@]}" -gt 0 ] && git -C "$ROOT" rev-parse HEAD >/dev/null 2>&1; then
 fi
 
 # 3) marcador
-mkdir -p "$ROOT/.planning/.gad"
-M="$ROOT/.planning/.gad/last-pre-gate.json"
+gad_estado_garante "$ROOT"
+M="$(gad_espelho_caminho "$ROOT" pre-gate)"
 jq -cn --arg ts "$(date -Is)" --argjson e "$(date +%s)" --arg h "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo '')" \
   --arg p "$PERG" '{ts:$ts, ts_epoch:$e, head:$h, pergunta:$p}' > "$M"
 gad_runlog "$PD" "$NN" script "$ET" --kv script=pre-gate.sh --kv exit=0 --kv resumo="pré-gate: $N arquivo(s) commitados" >/dev/null 2>&1 || true
