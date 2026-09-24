@@ -122,7 +122,8 @@ da chamada, não do agente):
 ```
 
 O hook é global mas só age quando encontra uma rodada `/go-and-do` ativa **da própria
-sessão** (ponteiro `.planning/.gad-rodada-ativa.json`); fora disso é no-op em
+sessão** (ponteiro `.planning/.gad/rodada-ativa.json`; o antigo `.planning/.gad-rodada-ativa.json`
+ainda é lido por uma release); fora disso é no-op em
 milissegundos. **Sem o hook a skill funciona normalmente** — o evento `run` registra
 `hook_instalado: false` (o run-log fica sem os eventos `despacho`/`retorno`, e as
 conferências que dependem deles viram informativas).
@@ -269,6 +270,35 @@ Depois do milestone completo:
 ```bash
 /end-mile
 ```
+
+## O que a skill grava na `.planning/`
+
+Duas pastas ocultas com o mesmo nome e papéis opostos — leia a diferença antes de mexer:
+
+| Pasta | O que guarda | Git |
+|---|---|---|
+| `.planning/.gad/` (raiz) | **Estado efêmero da rodada**: `rodada-ativa.json` (o ponteiro que os hooks procuram), `dev-server.{json,log}`, `worktrees-arquivo/` e os 4 espelhos que algum script lê para decidir (`last-pre-despacho.json`, `last-pre-despacho-3.json`, `last-pre-gate.json`, `last-plan-gate.json`) | **ignorada** — a skill grava ali um `.gitignore` com `*`, sem tocar no `.gitignore` do projeto |
+| `.planning/phases/NN-x/.gad/` (uma por fase) | **Evidência da rodada**: `intent/c<N>/…` (lanes, tabela, vereditos, correções e releituras de cada ciclo), `convergencia/c<N>/…`, `lanes/` (espelhos e marcadores das lanes Codex/agy), `fences/<etapa>.ok` (recibo do fiscal), `gates/` (trava de gate reprovado), `plan-checker/`, `pos-ship/`, `uat/` e o marcador `FORMATO` | **commitada** — o fiscal cobra (`commita-artefatos.sh … evidencia`); só `lanes/codex-*` e `lanes/*.launch.log` ficam fora, pelo `.gitignore` da própria pasta |
+
+- As **cópias contra o corte do RTK** (`last-<script>.json` de todo script) moram no cache do git,
+  `.git/gad-cache/` (numa worktree, `.git/worktrees/<nome>/gad-cache/`, que some com ela; fora de
+  repositório git, `$XDG_CACHE_HOME/gad/<projeto>-<hash>/`). Nunca aparecem no `git status`. O
+  caminho sai como primeira chave (`espelho`) do JSON de cada script.
+- **Fase nova × fase antiga.** Quem decide é o `abre-rodada.sh`: fase sem nenhuma evidência no
+  formato antigo nasce com `.gad/FORMATO` (commitado na abertura, com `git commit --only` — o que
+  você tiver staged fica como estava). Fase que já tem evidência antiga (`.intent/`, `.fence-*.ok`,
+  `pareceres/.roda-*`…) continua no formato antigo até o fim: uma fase nunca mistura os dois. Os
+  scripts, os hooks e a `/audit-gad` leem os dois. Para ver a tradução nome novo → antigo:
+  `bash ~/.claude/skills/go-and-do/scripts/caminho-fase.sh --tabela`.
+- **Limpeza automática.** A cada abertura, o `abre-rodada.sh` apaga os `.planning/.gad-last-*.json`
+  órfãos (convenção anterior a 2026-08), o ponteiro antigo e as cópias velhas em `.planning/.gad/`
+  — **só o que não está no git**. O que está rastreado sai listado em `legado_rastreado` e a skill
+  não mexe no índice. Para tirar do índice de uma vez (os arquivos continuam no disco e o
+  `.gitignore` da pasta passa a ignorá-los):
+
+  ```bash
+  git rm -r -q --cached .planning/.gad && git commit -m "chore: .planning/.gad fora do git (go-and-do 2.10.1)"
+  ```
 
 ## Atualização
 

@@ -2,6 +2,114 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançada]
+
+Release proposta: **2.10.1** (número aprovado pelo dono; quem publica troca este cabeçalho).
+Tarefas 56 e 57 (24/09). Tema: a `.planning/` mais limpa — a raiz sem arquivos soltos e **uma** entrada
+oculta por fase. Patch porque não muda o que a rodada faz, só onde ela guarda. Suíte 46/46.
+⚠️ Exige sessão nova (hooks e skill mudaram de caminho de leitura).
+
+### O que mudou de lugar
+
+- **Raiz da `.planning/` (tarefa 56).** O ponteiro da rodada saiu de `.planning/.gad-rodada-ativa.json`
+  para `.planning/.gad/rodada-ativa.json`; o estado do dev server, de `.planning/.gad-dev-server.{json,log}`
+  para `.planning/.gad/dev-server.{json,log}`.
+- **Cópias contra o corte do RTK (56(f)).** O `last-<script>.json` que todo script grava (para o modelo ler
+  quando a linha do stdout vem cortada) saiu da `.planning` e foi para o cache do git: `.git/gad-cache/` no
+  checkout principal e `.git/worktrees/<nome>/gad-cache/` numa worktree (some junto com ela). Fora de
+  repositório git: `$XDG_CACHE_HOME/gad/<projeto>-<hash>/`. **O caminho agora é a primeira chave do JSON de
+  todo script (`espelho`)**: se o RTK cortar a linha, o começo dela já diz onde ler. Nunca aparece no
+  `git status`.
+- **Pasta da fase (tarefa 57).** Numa fase nova, toda a evidência da rodada mora em
+  `phases/NN-x/.gad/`: `intent/c<N>/` (uma pasta por ciclo, nomes sem ponto e sem o sufixo de ciclo —
+  `.intent/.status-c1-codex.json` virou `intent/c1/status-codex.json`), `convergencia/c<N>/`, `lanes/` (o que
+  era `pareceres/.<coisa>`), `fences/<etapa>.ok`, `gates/<etapa>.json`, `plan-checker/`, `pos-ship/`, `uat/`.
+  A pasta da fase fica com **uma** entrada oculta. Os pareceres visíveis continuam em `pareceres/`.
+- **Uma tabela só.** Os nomes novo → antigo vivem em `scripts/lib/gad-caminhos.sh` (e no gêmeo
+  `lib/gad_caminhos.py`); nenhum script escreve caminho à mão. Para prompts e para o modelo há
+  `scripts/caminho-fase.sh <phase_dir> <nome>` (`--tabela` mostra a tradução).
+
+### O que continua onde estava, e por quê
+
+- **Estado × cópia.** Quatro espelhos não são cópia: algum script decide por eles. Ficam em
+  `.planning/.gad/`: `last-pre-despacho.json` (rota do handback da Etapa 6), `last-pre-despacho-3.json`
+  (`use_worktrees` do início × fecho), `last-pre-gate.json` (o hook `gad-gate-guard` exige) e
+  `last-plan-gate.json` (portão da Etapa 3, gravado pelo fork). O inventário que separou os dois está em
+  `gsd-optimize/go-and-do-evolucao/v2.10.1-planning-limpa/INVENTARIO.md`.
+- **A divisão commitado × ignorado da evidência é a mesma.** O que era commitado continua commitado (o
+  fiscal cobra). O que os projetos ignoravam em `pareceres/` (`.codex-*`, `*.launch.log`) continua ignorado
+  em `.gad/lanes/`, agora por um `.gitignore` gravado dentro da própria pasta — não depende mais do
+  `.gitignore` de cada projeto. Escolha declarada: `*.err` **não** entrou nesse `.gitignore` (só o inspired o
+  ignorava; o `commita-artefatos.sh` já não o commita). Efeito colateral declarado: o
+  `.codex-review.done` do 4.1 era commitado por acidente do `git add -f`; no formato novo não é mais.
+
+### Decisão da 56(d): `.planning/.gad/` fica fora do git
+
+- Com as cópias no cache, a pasta guarda só estado efêmero e o `worktrees-arquivo/` (que tem patch de
+  código). O helper grava lá um `.gitignore` com `*`, que vale só para essa pasta — nada muda no
+  `.gitignore` do projeto. Nenhum leitor dependia do arquivo commitado (inventário A4: numa worktree do
+  RLR os `last-*.json` rastreados eram cópias velhas do commit). **Nomes parecidos, papéis opostos:**
+  `.planning/.gad/` = estado, ignorado; `phases/*/.gad/` = evidência, commitada. O README ganhou a seção.
+
+### Retomada e compatibilidade
+
+- **Rodada aberta pela 2.10.0** (só o ponteiro antigo existe): `pre-despacho.sh`, `confere-etapa.sh`,
+  `reconcilia-docs.sh`, o manifest da Etapa 0 e os três hooks (`gad-lifecycle`, `gad-bash-guard`,
+  `gad-gate-guard`) aceitam o caminho antigo por uma release; o novo tem precedência. O próximo
+  `abre-rodada.sh` grava só o novo e apaga o antigo.
+- **Fase antiga** (qualquer uma com evidência no formato de sempre) continua no formato de sempre até o
+  fim — lida e escrita pelos mesmos scripts, pelo mesmo helper. Uma fase nunca mistura os dois: quem
+  decide é o `abre-rodada.sh`, e **ele agora faz um commit** numa fase nova: `docs(fase NN): formato da
+  evidência da fase (.gad/FORMATO…)`, com `git commit --only` (o que você tiver staged fica como
+  estava). É esse commit que garante que a Etapa 3 e as lanes, em worktrees, enxerguem o mesmo formato.
+- Os prompts citam os nomes novos e trazem uma regra única para fase antiga (traduzir pelo
+  `caminho-fase.sh`); os blocos bash dos prompts já resolvem pelo helper e servem aos dois formatos.
+- A `/audit-gad` e o fork do GSD (`plan-phase` grava a trilha em `.gad/plan-checker/`; `roda-suite.sh`
+  lê o ponteiro novo) leem os dois formatos. O dashboard não lê nenhum desses caminhos.
+
+### Limpeza automática da raiz (56(c))
+
+- A cada abertura, o `abre-rodada.sh` apaga os `.planning/.gad-last-*.json` órfãos (ninguém os lê desde o
+  `8828baa`), o ponteiro antigo e as cópias velhas em `.planning/.gad/` — **só o que não está no git** — e
+  lista o que apagou em `limpeza`. O que está rastreado (o RLR commita 32 `last-*.json`) sai em
+  `legado_rastreado` e não é tocado: a skill nunca muda o índice. O README ensina o comando de uma linha
+  para tirar do índice.
+
+### Consertos que a bancada achou
+
+- `gad_autoregistro` (auto-registro dos scripts no run-log): sem checkpoint da sessão atual, o `grep`
+  saía 1 e, sob `set -euo pipefail`, derrubava o script que chamou (visto no `setup-intencao.sh --r6`
+  com uma rodada aberta por outra sessão). Telemetria volta a nunca derrubar o chamador.
+- O filtro de sujeira do fiscal descartava qualquer caminho com `/.gad` — no layout novo esconderia toda
+  a evidência. Agora só a raiz `.planning/.gad` sai do filtro, e as categorias FALHA × AVISO são as
+  mesmas de antes, braço a braço (`intent/`, `lanes/`, `fences/` = FALHA dura; `convergencia/`,
+  `plan-checker/`, `gates/` = AVISO, como seus equivalentes antigos).
+
+### A prova
+
+- **Bancada sem modelo (custo zero), 18/18 critérios.** Sequência real da camada 0 (gsd-tools real) num
+  projeto de brinquedo: a fase terminou com **uma** entrada oculta (`.gad`); raiz da `.planning` com 0
+  `.gad-*`; `git ls-files .planning/.gad` = 0 e `git status` limpo; 15 arquivos de evidência dura
+  commitados em `.gad/`; `.codex-*`/`*.launch.log` fora do git (3/3 ignorados); 3 cópias no cache e 2
+  estados em `.planning/.gad/` (`pre-despacho`, `pre-gate` — os outros dois só nascem no plan-phase do
+  fork e no `pre-despacho.sh 3`); fiscal verde nas etapas 0 e 1; trava de gate em `.gad/gates/2.json`.
+  Rodada da 2.10.0 retomada pelo ponteiro antigo (script e hook com payload `PreToolUse`/`SubagentStop`)
+  e migrada no `abre-rodada.sh` seguinte. Worktree: enxerga `FORMATO`, espelho no cache dela, os dois
+  `git status` limpos. Fase antiga (cópia da F4 RLR): fica antiga, recibo lido no caminho antigo, fiscal
+  seco verde com os mesmos asserts da 2.10.0, nada escrito no formato novo.
+- **`/audit-gad` (custo zero).** Recortes plan/execute/gates/uat/fecho + etiqueta-achados na cópia da F4
+  RLR: código antigo × novo iguais (fora o carimbo `gerado_em`); formato antigo × a mesma fase convertida
+  para `.gad/` (252 arquivos, ida e volta pela tabela) iguais.
+- **Com o modelo (Opus 5.5 headless, `--permission-mode auto`, CC 2.1.282), 3 rodadas, US$ 1,98.** 3/3:
+  ponteiro novo e antigo ausente; `FORMATO` commitado na abertura; entrada da Etapa 1 com
+  `formato_fase: novo`; `.planning/.gad` fora do git. Nas 2 rodadas em que a bancada mandou ler o espelho
+  do `abre-rodada.sh` (com o `Read` fora do `--allowedTools`), o modelo achou o caminho pela chave
+  `espelho` e o `Read` em `.git/gad-cache/` voltou sem erro e sem pedido de permissão. Etapa 0 da rodada
+  sem o `Read` extra: 2 requests, `end "0 abertura"` = 7.897 tokens / US$ 0,110 (2.10.0: 7,4–7,9 mil /
+  US$ 0,10–0,11). O sandbox do Bash não está ligado neste ambiente: o critério «gravar no cache dentro
+  do sandbox» não foi provado aqui.
+- **Falta:** prova numa fase real (57(e)).
+
 ## [2.10.0] - 2026-09-24
 
 Tarefas 8, 9 e 10 do mapa-gad (24/09). Tema: o workflow passa a entrar de fato no prompt, e a
