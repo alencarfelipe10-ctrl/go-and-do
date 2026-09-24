@@ -77,7 +77,7 @@ gate (`pre-despacho.sh`) before it.
 
 | Etapa | what | how | file (in `$HOME/.claude/skills/go-and-do/`) | first layer-0 command on entry |
 |---|---|---|---|---|
-| 0 | preparation | `abre-rodada.sh` + `confere-etapa.sh 0` + banner | this file | `abre-rodada.sh` (0.2) |
+| 0 | preparation | `abre-rodada.sh` + `confere-etapa.sh 0` + banner | this file | `abre-rodada.sh … && confere-etapa.sh 0` + `ToolSearch`, in one response (0.2) |
 | 1 | intent: spec + discuss + specialist consultancy | 🔒 ⏭️ agent `gad-intent` + `prompts/intent.md` | `workflow-etapa-1.md` | `pre-despacho.sh 1` (1.1 comes from the snapshot: `etapa_1: pular` → skip the stage and its file) |
 | 1.5 | design contracts | 🎌 `setup-contratos.sh` → agent `gad-contratos` + `prompts/contratos.md` | `workflow-etapa-1.5.md` | `setup-contratos.sh <phase_dir> <NN> [--ui] [--ai]` (with neither flag: run it alone and read the file only if it does not skip) |
 | 2 | planning | 🔒 ⏭️ agent `gad-plan` + `prompts/plan.md`; 2.4b resolves `autonomous: false` | `workflow-etapa-2.md` | `pre-despacho.sh 2` (2.1 comes from the snapshot: `etapa_2: pular` → Etapa 2.5) |
@@ -111,18 +111,25 @@ stop and ask. Keep `--no-ship` (terminal route of Etapa 6), `vault_profile` (goe
 UAT — the 0.2 JSON and the run pointer carry it as `args.vault_profile`) and `obs_text` (note
 to every dispatch of the run — Sub-rotina H).
 
-**0.2 — Atomic opening.** Run `$HOME/.claude/skills/go-and-do/scripts/abre-rodada.sh N [flags]`
-and obey the JSON (mirror in `.planning/.gad/last-abre-rodada.json`): entry gates, phase
-snapshot (`phase_dir`/`padded_phase`/`has_plans`/`has_verification`), context gate, resume
-decisions (`etapa_1`/`etapa_2`), `vault_alerta`, TaskList
-snapshot, `run` event + run pointer — all in one script. Exit ≠ 0 → stop with the script's reason (exit 2 =
-gate/argument · 3 = context at the ceiling · 4 = phase not found · 5 = phase in the ROADMAP but
-its directory unresolvable). Missing entry
-prerequisites are the first hard stop (Etapa 0).
+**0.2 — Atomic opening + self-check, one response.** Your first response of the run carries two
+calls in parallel:
+- one Bash: `S=$HOME/.claude/skills/go-and-do/scripts; $S/abre-rodada.sh N [flags] && $S/confere-etapa.sh 0`
+  — opening and its self-check in one command (never two requests);
+- `ToolSearch` with `select:TaskCreate,TaskUpdate,TaskList` (the task tools of Sub-rotina C).
+
+Obey the abre-rodada JSON (first line; mirror in `.planning/.gad/last-abre-rodada.json`): entry
+gates, phase snapshot (`phase_dir`/`padded_phase`/`has_plans`/`has_verification`), context gate,
+resume decisions (`etapa_1`/`etapa_2`), `vault_alerta`, TaskList snapshot, `run` event + run
+pointer — all in one script. abre-rodada exit ≠ 0 (then the confere does not run) → stop with
+the script's reason (exit 2 = gate/argument · 3 = context at the ceiling · 4 = phase not found ·
+5 = phase in the ROADMAP but its directory unresolvable). Missing entry prerequisites are the
+first hard stop (Etapa 0).
 
 **0.3 — Obey the snapshot.**
-- `confere-etapa.sh 0` (self-check of the opening: pointer + `run` event on disk).
-- Mirror the TaskList (Sub-rotina C).
+- The `confere-etapa.sh 0` verdict already came in the 0.2 output (second JSON line; mirror in
+  `.planning/.gad/last-confere-etapa.json`): only read it — never re-run it. Exit 1 → the opening
+  did not land on disk (pointer or `run` event missing): stop with its list.
+- Mirror the TaskList (Sub-rotina C): every `TaskCreate` in ONE response.
 - `vault_alerta` → ask BEFORE spending the phase (phase that looks like an authenticated UI
   without `--vault`).
 - `pos_ship_alerta` → ask BEFORE spending the phase, listing `pendentes` (a previous phase left
@@ -130,11 +137,13 @@ prerequisites are the first hard stop (Etapa 0).
   decides; record the answer in `NN-DECISOES.md`. The phase named in the item's
   `verificavel_em` never triggers it.
 - `uat_superficie` (absolute path or null) → keep it for 5.4: it is the project's UAT contract.
-- `--ui`/UI-SPEC → read `workflow-ui.md`; `--ai`/AI-SPEC → `workflow-ai.md` (the only reads of
-  Etapa 0; each later stage reads its own file — pipeline index). A phase with a server → `workflow-dev-server.md` at the first step that uses it
+- `--ui`/UI-SPEC → read `workflow-ui.md`; `--ai`/AI-SPEC → `workflow-ai.md`, in the same response
+  as the `TaskCreate` calls (the only reads of Etapa 0; each later stage reads its own file —
+  pipeline index). A phase with a server → `workflow-dev-server.md` at the first step that uses it
   (Sub-rotina B).
 
-**0.4 — Banner.** Double ASCII frame in a `text` block:
+**0.4 — Banner**, in the same response as the `TaskCreate` calls — not a request of its own.
+Double ASCII frame in a `text` block:
 
 ```text
 ╔══════════════════════════════════════════════════╗
@@ -210,6 +219,9 @@ touches it.
   tasks: intent 1–3, contracts 4–5, plan 6, convergence 7, execute 8, gates 9–13, UAT 14,
   close 15 — only the ones applicable to the run are created). You only apply
   `TaskCreate`/`TaskUpdate` to mirror. On a resume, the list is born faithful to what is done.
+- Lean creation, all tasks in ONE response: `subject` = the snapshot's `titulo`;
+  `description` = only `Etapa <N>` (the field is mandatory; nothing else in it); no
+  `activeForm`. The tools come from the `ToolSearch` of 0.2 — never a request of its own.
 - Availability first: the task tools are a runtime flag (they vanish without changelog).
   Without `TaskCreate`/`TaskList` in the window (nor via `ToolSearch`), skip the whole
   sub-routine: declare once ("TaskList indisponível — seguindo pelo disco") and mention it in
@@ -336,7 +348,7 @@ has an owner:
 |---|---|---|
 | `run` | `abre-rodada.sh` | run opening |
 | `checkpoint` | `pre-despacho.sh` | opens the stage window, with the context snapshot |
-| `end` | `confere-etapa.sh` | closes the window on pass, with `tokens_reais`/`custo_usd` from `mede-tokens.py` (transcript, never self-declaration) |
+| `end` | `confere-etapa.sh` | closes the window on pass, with `tokens_reais`/`custo_usd` from `mede-tokens.py` (transcript, never self-declaration). Etapa 0 only: its window closes empty in 0.2, so the session's first `pre-despacho.sh` re-measures `run` → its checkpoint and writes a 2nd `end "0 abertura"` (`substitui`) |
 | `despacho`/`retorno` | hook `gad-lifecycle.sh` | start/end of every `Agent()`, with origin layer and model/effort of the def |
 | `script` | each script of the skill | self-registration name+exit+summary in an active run |
 | `stop` | `pre-despacho.sh` (ceiling) or you (pause/end of run) | outcome |

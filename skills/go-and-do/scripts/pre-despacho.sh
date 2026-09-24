@@ -37,7 +37,8 @@
 # confere-user-setup.sh — informativo, nunca bloqueia sozinho).
 #
 # Escritor único (T.2): este script grava o CHECKPOINT da etapa (fotografia do contexto +
-# abertura da janela; kv despacho=autorizado). O ciclo de vida fino de cada Agent() é do
+# abertura da janela; kv despacho=autorizado) e, só no 1º checkpoint da sessão, o `end` re-medido
+# da Etapa 0 (bloco «janela da Etapa 0», tarefa 10(d)). O ciclo de vida fino de cada Agent() é do
 # hook gad-lifecycle.sh (eventos despacho/retorno) — nunca daqui.
 # Saída: JSON 1 linha + espelho .planning/.gad/last-pre-despacho.json (PC-5). Exit 0=ok.
 
@@ -406,6 +407,41 @@ if [ "$ETAPA" = "6" ]; then
       transparencia:{balde_4:$b4, balde_3:$b3, intent_review:$itr, skips_runlog:$sk,
                      riscos_aceitos:$ra, riscos_aceitos_lista_vazia_suspeita:$rav,
                      incidentes:$inc}}')
+fi
+
+# ── janela da Etapa 0 (tarefa 10(d) do mapa-gad, 24/09/2026) ──────────────────
+# A abertura roda `abre-rodada.sh … && confere-etapa.sh 0` num Bash só (workflow.md 0.2): a
+# janela `run` → `end 0` sai vazia («janela vazia — medição indisponível») e os requests da
+# Etapa 0 que vêm depois dela (ToolSearch, TaskCreate, banner, a entrada da etapa seguinte)
+# cairiam fora de toda janela do run-log. No PRIMEIRO checkpoint da sessão depois do `run`
+# (etapa 1 numa rodada nova, qualquer uma numa retomada), este bloco re-mede `run` → agora e
+# grava um 2º `end "0 abertura"` — o run-log.sh declara `substitui:<seq>` sozinho, e quem soma
+# conta só o último. Só re-mede se o `confere-etapa.sh 0` passou (há `end 0` depois do `run`);
+# medição indisponível → não grava nada (o 1º `end` fica). Telemetria: nunca falha o despacho.
+if [ "$DRY" = 0 ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] && [ -z "${RUNLOG_SEM_MEDICAO:-}" ]; then
+  _rl="$PHASE_DIR/$NN-RUN-LOG.jsonl"; _s8="${CLAUDE_CODE_SESSION_ID:0:8}"
+  if [ -f "$_rl" ]; then
+    _run_ln=$(grep -n "\"sessao\":\"$_s8\"" "$_rl" | grep '"evento":"run"' | tail -n1 | cut -d: -f1 || true)
+    if [ -n "$_run_ln" ]; then
+      _depois=$(tail -n +"$((_run_ln+1))" "$_rl" | grep "\"sessao\":\"$_s8\"" || true)
+      _ncp=$(printf '%s\n' "$_depois" | grep -c '"evento":"checkpoint"' || true)
+      _end0=$(printf '%s\n' "$_depois" | grep '"evento":"end"' | grep -F '"etapa":"0 abertura"' | tail -n1 || true)
+      if [ "${_ncp:-0}" = 0 ] && [ -n "$_end0" ]; then
+        _run_ts=$(sed -n "${_run_ln}p" "$_rl" | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')
+        _ver0=$(printf '%s' "$_end0" | sed -n 's/.*"veredito":"\([^"]*\)".*/\1/p')
+        _med0=$(python3 "$GAD_SCRIPTS_DIR/mede-tokens.py" --sessao "$CLAUDE_CODE_SESSION_ID" \
+                  --desde "$_run_ts" --ate "$(date -Is)" --sem-espelho 2>/dev/null \
+                || echo '{"status":"sem_medicao"}')
+        if [ -n "$_run_ts" ] && [ "$(jq -r '.status // empty' <<<"$_med0" 2>/dev/null)" = ok ]; then
+          gad_runlog "$PHASE_DIR" "$NN" end "0 abertura" \
+            --tokens-reais "$(jq -r '.total.input_tokens + .total.output_tokens + .total.cache_creation_tokens + (.total.cache_creation_1h_tokens // 0)' <<<"$_med0")" \
+            --custo "$(jq -r '.total.custo_usd // 0' <<<"$_med0")" \
+            --kv veredito="${_ver0:-pass}" --kv n_requests="$(jq -r '.camada0.n_requests // 0' <<<"$_med0")" \
+            --kv janela="run ate o 1o checkpoint (pre-despacho.sh $ETAPA)" >/dev/null 2>&1 || true
+        fi
+      fi
+    fi
+  fi
 fi
 
 # ── política de limite (2.C) ─────────────────────────────────────────────────
