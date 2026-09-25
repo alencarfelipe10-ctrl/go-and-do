@@ -2,9 +2,8 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
-## [Não lançada]
+## [2.10.1] - 2026-09-24
 
-Release proposta: **2.10.1** (número aprovado pelo dono; quem publica troca este cabeçalho).
 Tarefas 56 e 57 (24/09). Tema: a `.planning/` mais limpa — a raiz sem arquivos soltos e **uma** entrada
 oculta por fase. Patch porque não muda o que a rodada faz, só onde ela guarda. Suíte 46/46.
 ⚠️ Exige sessão nova (hooks e skill mudaram de caminho de leitura).
