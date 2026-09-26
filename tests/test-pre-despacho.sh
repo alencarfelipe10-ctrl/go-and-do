@@ -332,6 +332,35 @@ n_antes=$(fins0)
 d4 1
 eq "10(d): sem end 0 depois do run (confere 0 falhou) → nenhum end sintético" "$(fins0)" "$n_antes"
 
+# ── t59 FM-F27INS-01GAT: o 4.1b tem rótulo próprio e abre janela paralela; o 4.5 também ──
+# F27 INS: o pre-despacho respondeu «pular» ao 4.1b (marcador do 4.1), o checkpoint dele fechou
+# vazio quando o 4.5 abriu (seq 356–359) e o 4.4 levou um end automático antes do real.
+echo "== t59 FM-F27INS-01GAT: 4.1b próprio + janelas paralelas"
+R9="$BASE/g1"; PD9="$R9/.planning/phases/99-bancada"; mkdir -p "$PD9" "$BASE/home-g1"
+git init -q "$R9" >/dev/null 2>&1
+git -C "$R9" -c user.name=t -c user.email=t@t commit -q --allow-empty -m base >/dev/null 2>&1
+printf '{}\n' > "$R9/.planning/config.json"
+jq -cn --arg pd "$PD9" '{session_id:"bancada", fase:"99", nn:"99", phase_dir:$pd, args:{}}' > "$R9/.planning/.gad-rodada-ativa.json"
+printf -- '---\nstatus: clean\n---\n' > "$PD9/99-REVIEW.md"
+SID9="g1bancad-0000-0000-0000-000000000000"; RL9="$PD9/99-RUN-LOG.jsonl"
+g1() { (cd "$R9" && HOME="$BASE/home-g1" CLAUDE_CODE_SESSION_ID="$SID9" bash "$P" "$@" --projeto "$R9" 2>/dev/null | tail -1); }
+J=$(g1 4-code-review)
+eq "sem --rereview o 4.1 com REVIEW.md pronto é «pular» (retomada, inalterado)" "$(jq -r .despacho <<<"$J")" "pular"
+g1 4-secure >/dev/null
+J=$(g1 4-code-review --rereview)
+eq "--rereview: despacho ok (não «pular» pelo marcador do 4.1)" "$(jq -r .despacho <<<"$J")" "ok"
+eq "--rereview: rótulo próprio do manifest" "$(jq -r .runlog_etapa <<<"$J")" "4.1b re-review"
+casa "--rereview: checkpoint \"4.1b re-review\" paralelo no run-log" "$(tail -n1 "$RL9")" '"evento":"checkpoint","etapa":"4.1b re-review".*"paralelo":true'
+J=$(g1 4-validate)
+eq "4.5 com a janela do 4.1b aberta → paralelo automático" "$(jq -r .paralelo <<<"$J")" "true"
+grep -q '"auto_fechado":true' "$RL9" && falha "abrir 4.1b/4.5 fechou janela" "$(grep auto_fechado "$RL9")" \
+  || ok "nenhuma janela fechada à força (4.4, 4.1b e 4.5 abertas)"
+eq "run-log.sh abertas: as 3 janelas da sessão" \
+  "$(CLAUDE_CODE_SESSION_ID="$SID9" bash "$RAIZ/skills/go-and-do/scripts/run-log.sh" "$PD9" 99 abertas | cut -f2 | tr '\n' '|')" \
+  "4.4 secure|4.1b re-review|4.5 validate|"
+RC=$(cd "$R9" && bash "$P" 4-secure --rereview --projeto "$R9" --dry-run >/dev/null 2>&1; echo $?)
+eq "--rereview em etapa sem runlog_etapa_rereview → exit 2" "$RC" "2"
+
 echo "--------------------------------------------------"
 echo "test-pre-despacho.sh: $OK ok / $FALHAS falha(s)"
 [ "$FALHAS" -eq 0 ]

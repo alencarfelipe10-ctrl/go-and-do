@@ -40,7 +40,8 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
      `--files=<a lista>` aos args (diff desde o último review + dependentes reversos
      de 1 salto — o raio além disso é da suíte Nyquist e do UAT).
    - Re-review disparado porque o secure tocou src/ (gate 4.1b) → a camada 0 já mandou
-     `--files=` calculado com `--tocados`.
+     `--files=` calculado com `--tocados`. O rótulo deste despacho no run-log é
+     "4.1b re-review" (não "4.1 code-review"): use-o em todo evento que você gravar.
 1. **Lane Codex paralela (SÓ na iteração 1 — re-review é conferência de fix, não caça
    nova; 4.D):** ANTES de invocar o comando, monte o briefing do revisor externo:
    copie `$HOME/.claude/skills/go-and-do/prompts/codex-code-review.md` para

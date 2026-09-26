@@ -11,6 +11,8 @@
 # Uso: confere-etapa.sh <etapa> [--fase N] [--projeto DIR] [--dry-run]
 #   <etapa> = nome do manifest (string opaca, PC-9): 0 · 1 · 1.5 · 2 · 2.5 · 3 ·
 #   4-code-review · 4-ui-review · 4-eval-review · 4-secure · 4-validate · 5 · 6.
+#   --rereview (só 4-code-review): o gate 4.1b — rótulo "4.1b re-review", recibo
+#   `fences/4.1b.ok` (t59, FM-F27INS-01GAT). Sem a flag, detectado pela janela aberta no run-log.
 #   <etapa> = "pausa" (sem manifest): fecho de INTERRUPÇÃO (Sub-rotina D) — mede a
 #   janela aberta desta sessão com mede-tokens.py e grava o `end` com o rótulo
 #   CANÔNICO do checkpoint + "interrompida":true (fix da falha 2 da auditoria F24:
@@ -65,8 +67,8 @@ shopt -s nullglob
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/veredito-end.sh"
 
 ETAPA="${1:-}"; shift || true
-[ -n "$ETAPA" ] || { echo "uso: confere-etapa.sh <etapa> [--fase N] [--projeto DIR] [--dry-run] [--fix-cycle] [--reuat]" >&2; exit 2; }
-FASE=""; PROJ=""; DRY=0; SEMTEL=0; FIXCYCLE=0; POSPAUSA=0; REUAT=0
+[ -n "$ETAPA" ] || { echo "uso: confere-etapa.sh <etapa> [--fase N] [--projeto DIR] [--dry-run] [--fix-cycle] [--reuat] [--rereview]" >&2; exit 2; }
+FASE=""; PROJ=""; DRY=0; SEMTEL=0; FIXCYCLE=0; POSPAUSA=0; REUAT=0; REREVIEW=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --fase)    FASE="${2:-}"; shift 2 ;;
@@ -75,6 +77,7 @@ while [ $# -gt 0 ]; do
     --sem-telemetria) SEMTEL=1; shift ;;
     --fix-cycle) FIXCYCLE=1; shift ;;
     --reuat) REUAT=1; shift ;;
+    --rereview) REREVIEW=1; shift ;;
     --pos-pausa) POSPAUSA=1; shift ;;
     *) echo "flag desconhecida: $1" >&2; exit 2 ;;
   esac
@@ -144,6 +147,62 @@ fi
 [ -n "$PHASE_DIR" ] && [ -d "$PHASE_DIR" ] || PHASE_DIR=$(gad_phase_dir "$ROOT" "$FASE") \
   || { echo "ERRO: fase $FASE não encontrada em $ROOT/.planning/phases/" >&2; exit 2; }
 [ -n "$NN" ] || NN=$(basename "$PHASE_DIR" | grep -o '[0-9][0-9.]*' | head -1)
+
+# ── t59 (FM-F27INS-01GAT): o 4.1b é o `4-code-review` com rótulo próprio ─────────
+# Mesmos asserts do 4.1 (o ETAPA segue `4-code-review`), mas rótulo "4.1b re-review" — e,
+# por ele, recibo `fences/4.1b.ok`, trava `gates/<fase>/4.1b.json`, `end` e janela próprios.
+# Na F27 INS o fiscal só sabia gravar o `4.1.ok`: o hospedeiro reescreveu o recibo à mão, o
+# 4.1 ganhou um 2º `end` que engoliu o 4.4, e o fiscal do 4.4 reprovou por isso. Quem decide:
+# `--rereview` explícito, ou o run-log — a janela mais recente de ID 4.1/4.1b ainda aberta
+# nesta sessão é a do 4.1b (aberta por `pre-despacho.sh 4-code-review --rereview`). Sem sessão
+# (ou sem janela 4.1/4.1b aberta nela — ex.: fiscal re-rodado depois do `end`), vale o último
+# checkpoint 4.1/4.1b do arquivo: só um novo `pre-despacho.sh 4-code-review` o troca de volta.
+# Run-log antigo, sem checkpoint do 4.1b, segue no rótulo do 4.1.
+if [ "$ETAPA" = "4-code-review" ]; then
+  RR_ETAPA=$(jq -r '.runlog_etapa_rereview // empty' "$MANIFEST")
+  if [ "$REREVIEW" = 0 ] && [ -n "$RR_ETAPA" ]; then
+    _rl41="$PHASE_DIR/$NN-RUN-LOG.jsonl"; _ult41=""
+    if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
+      _ult41=$( { bash "$GAD_SCRIPTS_DIR/run-log.sh" "$PHASE_DIR" "$NN" abertas 2>/dev/null | cut -f2 \
+                  | awk '{ print $1 }' | grep -E '^4\.1b?$' | tail -n1; } || true )
+    fi
+    if [ -z "$_ult41" ] && [ -f "$_rl41" ]; then
+      _ult41=$( { grep '"evento":"checkpoint"' "$_rl41" \
+                  | sed -n 's/.*"evento":"checkpoint","etapa":"\(4\.1b\{0,1\}\)[ "].*/\1/p' | tail -n1; } || true )
+    fi
+    [ "$_ult41" = "4.1b" ] && REREVIEW=1
+  fi
+  if [ "$REREVIEW" = 1 ]; then
+    [ -n "$RR_ETAPA" ] || { echo "ERRO: manifest sem runlog_etapa_rereview" >&2; exit 2; }
+    RUNLOG_ETAPA="$RR_ETAPA"
+  fi
+elif [ "$REREVIEW" = 1 ]; then
+  echo "ERRO: --rereview só vale para 4-code-review (o gate 4.1b)" >&2; exit 2
+fi
+
+# ── t59 (FM-F27INS-02UAT): qual recibo a cerca desta etapa tolera fora do git ──────
+# O da própria etapa (escrito adiante, neste script) e o da etapa IMEDIATAMENTE anterior na
+# ordem canônica — nunca mais que isso («tolerar demais esconderia um recibo que devia estar no
+# git»). O 4.1b vem entre o 4.1 e o 4.4. Recuar além de uma etapa só passa por etapa OPCIONAL
+# que não deixou recibo (2.5 com a config off, 4.1b que não houve, 4.2 sem --ui, 4.3 sem --ai);
+# etapa obrigatória sem recibo encerra o recuo nela mesma. A chave é o rótulo do run-log (o
+# argumento `4-secure` vira `4.4`), a mesma do nome do recibo.
+ORDEM_RECIBOS="0 1 1.5 2 2.5 3 4.1 4.1b 4.2 4.3 4.4 4.5 5 6"
+RECIBOS_OPCIONAIS=" 2.5 4.1b 4.2 4.3 "
+RECIBO_PROPRIO="${RUNLOG_ETAPA:-$ETAPA}"; RECIBO_PROPRIO="${RECIBO_PROPRIO%% *}"
+RECIBO_ANTERIOR=""
+_antes=(); for _i in $ORDEM_RECIBOS; do [ "$_i" = "$RECIBO_PROPRIO" ] && break; _antes+=("$_i"); done
+if [ "${#_antes[@]}" -lt "$(wc -w <<<"$ORDEM_RECIBOS")" ]; then
+  for (( _k=${#_antes[@]}-1; _k>=0; _k-- )); do
+    _i="${_antes[$_k]}"
+    if [ "${RECIBOS_OPCIONAIS/ $_i /}" != "$RECIBOS_OPCIONAIS" ] \
+       && [ ! -f "$(gad_fase_caminho "$PHASE_DIR" "fences/$_i.ok")" ] && [ ! -f "$PHASE_DIR/.fence-$_i.ok" ] \
+       && [ ! -f "$PHASE_DIR/.gad/fences/$_i.ok" ]; then
+      continue
+    fi
+    RECIBO_ANTERIOR="$_i"; break
+  done
+fi
 
 # ── modo pausa --pos-pausa: o STATE.md aponta o commit real da parada? ───────
 if [ "$ETAPA" = "pausa" ] && [ "$POSPAUSA" = 1 ]; then
@@ -1625,13 +1684,13 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
         *"/.intent/"*|*"/pareceres/"*|*"/.gad/intent/"*|*"/.gad/lanes/"*)
           # produzidos pela etapa 1 → isentos NELA, duros das etapas 2 em diante
           if [ "${ETAPA%% *}" = "1" ]; then RESTO="$RESTO $arq"; else DURA="$DURA $arq"; fi ;;
-        *"/.fence-"*".ok")
-          # o atestado da PRÓPRIA etapa é escrito adiante; os das etapas anteriores não
-          if [ "$arq" = "${arq%/.fence-${ETAPA%% *}.ok}" ]; then DURA="$DURA $arq"
-          else RESTO="$RESTO $arq"; fi ;;
-        *"/.gad/fences/"*".ok")
-          if [ "$arq" = "${arq%/.gad/fences/${ETAPA%% *}.ok}" ]; then DURA="$DURA $arq"
-          else RESTO="$RESTO $arq"; fi ;;
+        *"/.fence-"*".ok"|*"/.gad/fences/"*".ok")
+          # o atestado da PRÓPRIA etapa é escrito adiante; t59 (FM-F27INS-02UAT): o da etapa
+          # IMEDIATAMENTE anterior também é isento (nasce 1 s depois do último commit dela e
+          # reprovava a cerca seguinte — 6 vezes na F27 INS); os demais são duros.
+          _rid="${arq##*/}"; _rid="${_rid#.fence-}"; _rid="${_rid%.ok}"
+          if [ "$_rid" = "$RECIBO_PROPRIO" ] || { [ -n "$RECIBO_ANTERIOR" ] && [ "$_rid" = "$RECIBO_ANTERIOR" ]; }
+          then RESTO="$RESTO $arq"; else DURA="$DURA $arq"; fi ;;
         *) if [ -n "$UAT_OBRIG" ] && printf '%s' "$UAT_OBRIG" | grep -qxF -- "$arq"; then
              DURA_UAT="$DURA_UAT $arq"
            else RESTO="$RESTO $arq"; fi ;;
@@ -1933,6 +1992,6 @@ if [ "$DRY" = 0 ]; then
 fi
 
 gad_json_out confere-etapa "$(jq -cn --arg e "$ETAPA" --arg v "$VEREDITO" \
-  --argjson r "$RES" --argjson x "$EXTRAI" --argjson m "$MEDICAO" \
-  '{etapa:$e, veredito:$v, asserts:$r, extrai:$x, medicao:$m}')"
+  --argjson r "$RES" --argjson x "$EXTRAI" --argjson m "$MEDICAO" --arg rle "$RUNLOG_ETAPA" \
+  '{etapa:$e, veredito:$v, asserts:$r, extrai:$x, medicao:$m, runlog_etapa:$rle}')"
 [ "$VEREDITO" = pass ]

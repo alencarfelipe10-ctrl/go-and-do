@@ -875,6 +875,24 @@ J2="$(bash "$C" 3 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
 eq "atestado de OUTRA etapa fora de commit → FALHA dura" \
    "$(assert_de "$J2" evidencia_fora_do_git)" "FALHA"
 rm -f "$PD/.fence-1.ok"
+# — t59 FM-F27INS-02UAT: isento só o recibo da etapa IMEDIATAMENTE anterior (o 4.1b entre 4.1 e 4.4)
+ev_de() { bash "$C" "$1" --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1 | jq -r '(.asserts[]|select(.id=="evidencia_fora_do_git")|.resultado) // "<ausente>"'; }
+echo ok > "$PD/.fence-4.5.ok"
+eq "etapa 5: recibo do 4.5 (imediatamente anterior) fora de commit → isento" "$(ev_de 5)" "<ausente>"
+rm -f "$PD/.fence-4.5.ok"; echo ok > "$PD/.fence-4.4.ok"
+eq "etapa 5: recibo do 4.4 (duas atrás) fora de commit → FALHA dura" "$(ev_de 5)" "FALHA"
+eq "etapa 4-secure: o próprio recibo (4.4) fora de commit → isento (rótulo do run-log, não o argumento)" "$(ev_de 4-secure)" "<ausente>"
+rm -f "$PD/.fence-4.4.ok"; echo ok > "$PD/.fence-4.1.ok"
+eq "etapa 4-secure sem 4.1b/4.2/4.3: o anterior é o 4.1 → isento" "$(ev_de 4-secure)" "<ausente>"
+echo ok > "$PD/.fence-4.1b.ok"
+eq "etapa 4-secure com recibo do 4.1b: o 4.1 deixa de ser o anterior → FALHA dura" "$(ev_de 4-secure)" "FALHA"
+( cd "$R" && git add -f "$PD/.fence-4.1.ok" && git -c user.name=t -c user.email=t@t.io \
+    -c commit.gpgsign=false commit -qm f41 >/dev/null 2>&1 )
+eq "…e o 4.1b (anterior do 4.4 na ordem) fora de commit é isento" "$(ev_de 4-secure)" "<ausente>"
+eq "etapa 4-validate: o 4.1b não é o anterior do 4.5 → FALHA dura" "$(ev_de 4-validate)" "FALHA"
+rm -f "$PD/.fence-4.1b.ok"
+( cd "$R" && git rm -q --cached "$PD/.fence-4.1.ok" >/dev/null 2>&1 && git -c user.name=t -c user.email=t@t.io \
+    -c commit.gpgsign=false commit -qm rm-f41 >/dev/null 2>&1 ); rm -f "$PD/.fence-4.1.ok"
 
 # — t59 FM-F27INS-01UAT: NN-POS-SHIP.md e a evidência CITADA por cenário são DUROS
 mkdir -p "$PD/uat-evidencia"
@@ -1059,6 +1077,41 @@ eq "espelho de OUTRA etapa (5, stale) → pass, não herda o handback" "$(gad_ve
 
 R="$(monta_pd6 ve7 '{"etapa":"6","rota":"handback"}')"
 eq "etapa != 6 (mesmo com espelho de handback) → pass, não se aplica" "$(gad_veredito_end "$R" "1 intencao")" "pass"
+
+# ═══════════════════════════ t59 FM-F27INS-01GAT: 4.1b com rótulo, recibo e trava próprios
+echo "── t59 FM-F27INS-01GAT: o 4.1b é o 4-code-review com rótulo próprio ──"
+IFS='|' read -r R PD <<<"$(monta rr 99)"
+printf -- '---\nstatus: clean\ncritical: 0\nwarning: 0\ntotal: 0\n---\n' > "$PD/99-REVIEW.md"
+RLR="$PD/99-RUN-LOG.jsonl"
+rle() { printf '%s' "$1" | jq -r '.runlog_etapa // "<ausente>"'; }
+printf '%s\n' '{"ts":"2026-09-25T17:00:00-03:00","seq":1,"sessao":"sessrr00","evento":"checkpoint","etapa":"4.1 code-review"}' \
+  '{"ts":"2026-09-25T17:30:00-03:00","seq":2,"sessao":"sessrr00","evento":"end","etapa":"4.1 code-review","veredito":"pass"}' > "$RLR"
+J=$(CLAUDE_CODE_SESSION_ID= bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)
+eq "run-log sem checkpoint do 4.1b (legado) → rótulo do 4.1" "$(rle "$J")" "4.1 code-review"
+J=$(CLAUDE_CODE_SESSION_ID= bash "$C" 4-code-review --rereview --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)
+eq "--rereview explícito → rótulo do 4.1b" "$(rle "$J")" "4.1b re-review"
+printf '%s\n' '{"ts":"2026-09-25T19:00:00-03:00","seq":3,"sessao":"sessrr00","evento":"checkpoint","etapa":"4.1b re-review","paralelo":true}' \
+  '{"ts":"2026-09-25T19:00:05-03:00","seq":4,"sessao":"sessrr00","evento":"checkpoint","etapa":"4.5 validate","paralelo":true}' >> "$RLR"
+J=$(CLAUDE_CODE_SESSION_ID="sessrr00-0000-0000" bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)
+eq "janela do 4.1b aberta nesta sessão (com o 4.5 aberto depois) → rótulo do 4.1b" "$(rle "$J")" "4.1b re-review"
+J=$(CLAUDE_CODE_SESSION_ID= bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)
+eq "sem sessão: último checkpoint 4.1/4.1b do arquivo é o 4.1b → rótulo do 4.1b" "$(rle "$J")" "4.1b re-review"
+CLAUDE_CODE_SESSION_ID= bash "$C" 4-code-review --projeto "$R" --fase 99 --sem-telemetria >/dev/null 2>&1
+F41B="$(bash "$RAIZ/skills/go-and-do/scripts/caminho-fase.sh" "$PD" fences/4.1b.ok 2>/dev/null)"
+F41="$(bash "$RAIZ/skills/go-and-do/scripts/caminho-fase.sh" "$PD" fences/4.1.ok 2>/dev/null)"
+[ -n "$F41B" ] && [ -f "$F41B" ] && ok "pass do 4.1b grava o recibo próprio (fences/4.1b.ok)" \
+  || falha "pass do 4.1b não gravou fences/4.1b.ok" "$(ls -a "$PD")"
+[ -n "$F41" ] && [ -f "$F41" ] && falha "o 4.1b gravou o recibo do 4.1" || ok "o 4.1b não toca no recibo do 4.1"
+eq "o recibo do 4.1b declara etapa 4.1b" "$(jq -r .etapa "$F41B" 2>/dev/null)" "4.1b"
+printf 'sem cabecalho\n' > "$PD/99-REVIEW.md"
+CLAUDE_CODE_SESSION_ID= bash "$C" 4-code-review --projeto "$R" --fase 99 >/dev/null 2>&1
+[ -f "$(trava "$R" "$PD" 4.1b)" ] && ok "fail do 4.1b grava a trava própria (gates/<fase>/4.1b.json)" \
+  || falha "fail do 4.1b não gravou a trava 4.1b"
+[ -f "$(trava "$R" "$PD" 4.1)" ] && falha "fail do 4.1b travou o 4.1" || ok "fail do 4.1b não trava o 4.1"
+grep -q '"evento":"script","etapa":"4.1b re-review"' "$RLR" && ok "o evento script do fiscal sai com o rótulo do 4.1b" \
+  || falha "evento script do fiscal sem o rótulo do 4.1b" "$(tail -n2 "$RLR")"
+RC=$(bash "$C" 4-secure --rereview --projeto "$R" --fase 99 --dry-run >/dev/null 2>&1; echo $?)
+eq "--rereview fora do 4-code-review → exit 2" "$RC" "2"
 
 echo "--------------------------------------------------"
 echo "test-confere-etapa.sh: $OK ok / $FALHAS falha(s)"

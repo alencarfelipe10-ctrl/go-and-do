@@ -1,5 +1,6 @@
 {
   "etapa": "4-code-review", "nome": "code-review", "runlog_etapa": "4.1 code-review",
+  "runlog_etapa_rereview": "4.1b re-review",
   "pre": { "retomada": { "arquivo": "{fase}/{nn}-REVIEW.md", "regex": "^status:" } },
   "asserts": [
     { "id": "review_com_frontmatter", "tipo": "grep", "arquivo": "{fase}/{nn}-REVIEW.md",

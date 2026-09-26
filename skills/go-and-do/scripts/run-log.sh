@@ -42,6 +42,8 @@
 # Modos:  run-log.sh <phase_dir> <NN> audit                    → audita a GRADE (não muta)
 #         run-log.sh <phase_dir> <NN> close --sessao <id> [m]  → fecho ADMINISTRATIVO de
 #                    janela órfã de sessão MORTA (2 ocorrências: F19-inspired e F2-rlr)
+#         run-log.sh <phase_dir> <NN> abertas [--sessao <id>]  → janelas abertas da sessão
+#                    (default: a atual), uma por linha "linha<TAB>etapa<TAB>ts" (não muta)
 #         run-log.sh --selftest                                → sandbox (única rota exit != 0)
 #
 # ── PAPEL DOS NÚMEROS (leia antes de somar qualquer coisa) ─────────────────────────────
@@ -62,7 +64,9 @@
 #   seq            — contador monotônico por arquivo; ordenação canônica (7 pares end/
 #                    checkpoint no mesmo segundo na F20 tornavam timestamp ambíguo).
 #   auto-fechamento— checkpoint novo com a janela anterior da MESMA sessão ainda aberta →
-#                    grava antes um `end` sintético `"auto_fechado":true` e avisa no stdout.
+#                    grava antes um `end` sintético `"auto_fechado":true` e avisa no stderr.
+#                    Checkpoint com `--kv paralelo=true` (t59, 4.1b × 4.5) abre janela SEM
+#                    fechar as outras — modelo completo em janelas_abertas().
 #   vocabulário    — validado NA ESCRITA (PC-2: eventos antigos no mesmo arquivo são
 #                    tolerados na leitura). A etapa DEVE começar com o ID canônico da
 #                    numeração nova: `0` abertura · `1` intencao · `1.5` contratos ·
@@ -238,6 +242,64 @@ if [ "$1" = "--selftest" ]; then
     && bad "FM-02GAT: checkpoint 4.1b re-review rejeitado pelo vocabulário" \
     || ok "FM-02GAT: checkpoint 4.1b re-review aceito no vocabulário canônico"
 
+  # t59 (FM-F27INS-01GAT): janelas paralelas — o caso real da F27 INS (seq 355–360): o 4.4 aberto,
+  # o 4.1b abre, o 4.5 abre em paralelo; antes, cada checkpoint fechava o anterior (4.1b vazio).
+  D5="$TMP/.planning/phases/95-teste"; F5="$D5/95-RUN-LOG.jsonl"
+  aud5() { bash "$SELF" "$D5" 95 audit | sed -n 's/.*janelas_abertas=\([0-9]*\).*/\1/p'; }
+  bash "$SELF" "$D5" 95 checkpoint "4.4 secure" 100000 25 "" 400000 >/dev/null 2>&1
+  bash "$SELF" "$D5" 95 checkpoint "4.1b re-review" 101000 25 "" 400000 --kv paralelo=true >/dev/null 2>&1
+  bash "$SELF" "$D5" 95 checkpoint "4.5 validate" 102000 25 "" 400000 --kv paralelo=true >/dev/null 2>&1
+  grep -q '"auto_fechado":true' "$F5" \
+    && bad "paralelo: abrir 4.1b/4.5 fechou janela" "$(grep auto_fechado "$F5")" \
+    || ok "paralelo: abrir 4.1b e 4.5 em paralelo não fecha o 4.4 nem o 4.1b"
+  grep -q '"etapa":"4.5 validate".*"paralelo":true' "$F5" \
+    && ok "paralelo: o checkpoint grava \"paralelo\":true" || bad "paralelo: campo ausente no checkpoint"
+  [ "$(aud5)" = 3 ] && ok "paralelo: audit vê 3 janelas abertas" || bad "paralelo: audit ($(aud5) abertas, esperado 3)"
+  bash "$SELF" "$D5" 95 end "4.2 ui-review" >/dev/null 2>&1
+  [ "$(aud5)" = 3 ] && ok "paralelo: end de outra etapa com 2+ janelas abertas não fecha nenhuma" \
+    || bad "paralelo: end sem casamento fechou janela ($(aud5) abertas)"
+  bash "$SELF" "$D5" 95 end "4.5 validate" --kv veredito=pass >/dev/null 2>&1
+  bash "$SELF" "$D5" 95 end "4.1b re-review" --kv veredito=pass >/dev/null 2>&1
+  out=$(bash "$SELF" "$D5" 95 audit)
+  echo "$out" | grep -q 'janelas_abertas=1' && echo "$out" | grep -q 'JANELA ABERTA.*4.4 secure' \
+    && ok "paralelo: cada end fecha a janela do próprio ID (sobra o 4.4)" || bad "paralelo: end fechou a janela errada" "$out"
+  bash "$SELF" "$D5" 95 end "4.4 secure" --kv veredito=pass >/dev/null 2>&1
+  [ "$(aud5)" = 0 ] && ! grep -q '"substitui"' "$F5" \
+    && ok "paralelo: 3 ends, grade fechada, nenhum substitui" || bad "paralelo: grade ($(aud5) abertas) ou substitui indevido"
+  # reabrir o MESMO ID em paralelo aposenta a janela antiga dele (só ela)
+  bash "$SELF" "$D5" 95 checkpoint "4.1b re-review" 103000 25 "" 400000 --kv paralelo=true >/dev/null 2>&1
+  bash "$SELF" "$D5" 95 checkpoint "4.5 validate" 104000 26 "" 400000 --kv paralelo=true >/dev/null 2>&1
+  bash "$SELF" "$D5" 95 checkpoint "4.1b re-review" 105000 26 "" 400000 --kv paralelo=true >/dev/null 2>&1
+  [ "$(grep -c '"auto_fechado":true' "$F5")" = 1 ] && grep -q '"etapa":"4.1b re-review","auto_fechado":true' "$F5" \
+    && [ "$(aud5)" = 2 ] && ok "paralelo: reabrir o 4.1b fecha só o 4.1b antigo" || bad "paralelo: reabertura do mesmo ID" "$(grep auto_fechado "$F5")"
+  # checkpoint COMUM fecha todas as abertas, uma a uma
+  bash "$SELF" "$D5" 95 checkpoint "5 uat" 106000 26 "" 400000 >/dev/null 2>&1
+  [ "$(grep -c '"auto_fechado":true' "$F5")" = 3 ] && [ "$(aud5)" = 1 ] \
+    && ok "paralelo: checkpoint comum fecha as 2 janelas abertas (2 ends sintéticos)" \
+    || bad "paralelo: checkpoint comum ($(grep -c auto_fechado "$F5") auto_fechado, $(aud5) abertas)"
+  bash "$SELF" "$D5" 95 stop "pausa" 107000 27 "" 400000 "" "fim do teste" >/dev/null 2>&1
+  [ "$(aud5)" = 0 ] && ok "paralelo: stop fecha todas" || bad "paralelo: stop deixou janela aberta"
+  bash "$SELF" "$D5" 95 checkpoint "4.1b re-review" 100 0 "" 400000 --kv paralelo=true >/dev/null 2>&1
+  bash "$SELF" "$D5" 95 checkpoint "4.5 validate" 100 0 "" 400000 --kv paralelo=true >/dev/null 2>&1
+  out=$(bash "$SELF" "$D5" 95 abertas | cut -f2 | tr '\n' '|')
+  [ "$out" = "4.1b re-review|4.5 validate|" ] && ok "abertas: lista as janelas abertas da sessão atual, em ordem" \
+    || bad "abertas: saída [$out]"
+  [ -z "$(bash "$SELF" "$D5" 95 abertas --sessao outra000)" ] && ok "abertas: sessão sem janela → vazio" \
+    || bad "abertas: sessão alheia devolveu janela"
+  bash "$SELF" "$D5" 95 stop "pausa" 100 0 "" 400000 "" "fim" >/dev/null 2>&1
+  # close administrativo fecha TODAS as janelas da sessão morta (paralelas incluídas)
+  export CLAUDE_CODE_SESSION_ID="morta2000-0000"
+  bash "$SELF" "$D5" 95 checkpoint "4.1b re-review" 100 0 "" 400000 --kv paralelo=true >/dev/null 2>&1
+  bash "$SELF" "$D5" 95 checkpoint "4.5 validate" 100 0 "" 400000 --kv paralelo=true >/dev/null 2>&1
+  export CLAUDE_CODE_SESSION_ID="selftest0-0000-0000"
+  bash "$SELF" "$D5" 95 close --sessao morta2000 "teste" >/dev/null
+  [ "$(grep -c '"fechado_admin":true' "$F5")" = 2 ] && [ "$(aud5)" = 0 ] \
+    && ok "close: fecha as 2 janelas paralelas da sessão morta" || bad "close: janelas paralelas ($(grep -c fechado_admin "$F5") fechadas)"
+  python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1]) if l.strip()]' "$F5" 2>/dev/null \
+    && ok "paralelo: linhas do run-log com escrita múltipla são JSON válido" || bad "paralelo: linha JSON inválida em $F5"
+  sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$F5" | awk 'NR>1 && $1!=p+1{exit 1} {p=$1}' \
+    && ok "paralelo: seq monotônico com ends sintéticos/admin em lote" || bad "paralelo: seq quebrado em $F5"
+
   seqs=$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$F" | tr '\n' ' ')
   python3 - "$F" <<'EOF' >/dev/null 2>&1 && ok "todas as linhas são JSON válido" || bad "linha JSON inválida"
 import json,sys
@@ -308,6 +370,46 @@ trava() {
   return 0
 }
 
+# ───────────────────────────── janelas abertas (modelo de janelas) ─────────────────────────────
+# t59 (FM-F27INS-01GAT): uma sessão pode ter MAIS DE UMA janela aberta — o workflow manda o 4.1b
+# rodar em paralelo com o 4.5 (MGTm-01GAT), e na F27 INS abrir o 4.5 fechou o 4.1b vazio no mesmo
+# segundo. O checkpoint que abre uma janela paralela leva `"paralelo":true` (--kv paralelo=true).
+# Leitura, evento a evento da sessão, em ordem:
+#   checkpoint sem paralelo → aposenta toda janela anterior (é o legado «só o último checkpoint
+#                             conta»: run-log antigo lê igual) e abre a sua;
+#   checkpoint paralelo     → abre a sua sem fechar as outras (só aposenta a do MESMO ID: reabrir);
+#   end/skip                → fecha a janela aberta do MESMO ID (`etapa` até o 1º espaço); sem
+#                             casamento, fecha a única janela aberta (legado); com 2+ abertas e
+#                             nenhuma do mesmo ID, não fecha nada;
+#   stop                    → fecha todas.
+# Uso: janelas_abertas <arquivo> <sessao8> → "linha<TAB>etapa<TAB>ts" por janela aberta, em ordem.
+janelas_abertas() {
+  [ -f "$1" ] || return 0
+  awk -v s="\"sessao\":\"$2\"" '
+    function campo(k,   r) {
+      if (match($0, "\"" k "\":\"[^\"]*\"")) {
+        r = substr($0, RSTART, RLENGTH); sub("^\"" k "\":\"", "", r); sub("\"$", "", r); return r
+      }
+      return ""
+    }
+    function tira(k,   i) { for (i = k; i < n; i++) { L[i]=L[i+1]; E[i]=E[i+1]; T[i]=T[i+1]; I[i]=I[i+1] } n-- }
+    index($0, s) == 0 { next }
+    { ev = campo("evento"); et = campo("etapa"); id = et; sub(/ .*/, "", id) }
+    ev == "checkpoint" {
+      if (index($0, "\"paralelo\":true") == 0) n = 0
+      else { for (i = n; i >= 1; i--) if (I[i] == id) tira(i) }
+      n++; L[n] = NR; E[n] = et; T[n] = campo("ts"); I[n] = id; next
+    }
+    ev == "stop" { n = 0; next }
+    ev == "end" || ev == "skip" {
+      k = 0; for (i = n; i >= 1; i--) if (I[i] == id) { k = i; break }
+      if (k == 0 && n == 1) k = 1
+      if (k > 0) tira(k)
+      next
+    }
+    END { for (i = 1; i <= n; i++) printf "%d\t%s\t%s\n", L[i], E[i], T[i] }' "$1"
+}
+
 # ───────────────────────────── modo close (administrativo) ─────────────────────────────
 # Fecha de fora a janela aberta de uma sessão que morreu (API 500, kill etc.): grava um
 # `end` sintético com "fechado_admin":true NA SESSÃO MORTA. Só age se a janela existe e
@@ -335,24 +437,43 @@ if [ "$3" = "close" ]; then
       echo "close: $alvo é a SESSÃO ATUAL — feche a janela pelo caminho normal (end/skip/stop)"; exit 0
     fi
     trava "$f"
-    ln=$(grep -n "\"sessao\":\"$alvo\"" "$f" | grep '"evento":"checkpoint"' | tail -n1 | cut -d: -f1)
-    [ -n "$ln" ] || { echo "close: nenhuma janela da sessão $alvo neste run-log"; exit 0; }
-    closed=$(tail -n +"$((ln+1))" "$f" | grep "\"sessao\":\"$alvo\"" | grep -c '"evento":"\(end\|skip\|stop\)"')
-    if [ "$closed" -gt 0 ] 2>/dev/null; then
-      echo "close: a janela da sessão $alvo já está fechada — nada a fazer"; exit 0
-    fi
-    et=$(sed -n "${ln}p" "$f" | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
-    ts=$(date -Is 2>/dev/null || date +%s)
-    last_seq=$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$f" 2>/dev/null | tail -n1)
-    case "$last_seq" in (''|*[!0-9]*) last_seq=0 ;; esac
-    seq=$((last_seq+1))
+    grep "\"sessao\":\"$alvo\"" "$f" | grep -q '"evento":"checkpoint"' \
+      || { echo "close: nenhuma janela da sessão $alvo neste run-log"; exit 0; }
+    # t59 (FM-F27INS-01GAT): TODAS as janelas abertas da sessão morta (paralelas incluídas)
+    _abertas=$(janelas_abertas "$f" "$alvo")
+    [ -n "$_abertas" ] || { echo "close: a janela da sessão $alvo já está fechada — nada a fazer"; exit 0; }
     motivo=$(printf '%s' "$motivo" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n\r\t')
-    linha="{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$alvo\",\"evento\":\"end\",\"etapa\":\"$et\",\"fechado_admin\":true,\"fechado_por\":\"${cur:0:8}\""
-    [ -n "$motivo" ] && linha="$linha,\"motivo\":\"$motivo\""
-    linha="$linha}"
-    printf '%s\n' "$linha" >> "$f"
-    espelha "$dir" "$nn" "$linha"
-    echo "close: janela da sessão $alvo (etapa \"$et\") fechada administrativamente — o custo de subagentes dela NÃO foi registrado (anote se souber)"
+    while IFS=$'\t' read -r _ln et _ts; do
+      [ -n "$_ln" ] || continue
+      ts=$(date -Is 2>/dev/null || date +%s)
+      last_seq=$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$f" 2>/dev/null | tail -n1)
+      case "$last_seq" in (''|*[!0-9]*) last_seq=0 ;; esac
+      seq=$((last_seq+1))
+      linha="{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$alvo\",\"evento\":\"end\",\"etapa\":\"$et\",\"fechado_admin\":true,\"fechado_por\":\"${cur:0:8}\""
+      [ -n "$motivo" ] && linha="$linha,\"motivo\":\"$motivo\""
+      linha="$linha}"
+      printf '%s\n' "$linha" >> "$f"
+      espelha "$dir" "$nn" "$linha"
+      echo "close: janela da sessão $alvo (etapa \"$et\") fechada administrativamente — o custo de subagentes dela NÃO foi registrado (anote se souber)"
+    done <<<"$_abertas"
+  } 2>/dev/null
+  exit 0
+fi
+
+# ───────────────────────────── modo abertas (consulta) ─────────────────────────────
+# t59 (FM-F27INS-01GAT): as janelas abertas de UMA sessão (default: a atual), pelo mesmo modelo
+# do auto-fechamento/audit/close — fonte única para o pre-despacho.sh (paralelo automático com o
+# 4.1b aberto) e o confere-etapa.sh (rótulo do 4.1b). Não muta. Saída: "linha<TAB>etapa<TAB>ts".
+if [ "$3" = "abertas" ]; then
+  {
+    dir="$1"; nn="$2"; shift 3
+    alvo="${CLAUDE_CODE_SESSION_ID:-}"
+    [ "${1:-}" = "--sessao" ] && alvo="${2:-}"
+    case "$dir" in
+      /*) ;;
+      *) _root=$(git rev-parse --show-toplevel 2>/dev/null) && [ -n "$_root" ] && dir="$_root/$dir" ;;
+    esac
+    [ -n "$alvo" ] && janelas_abertas "$dir/$nn-RUN-LOG.jsonl" "${alvo:0:8}"
   } 2>/dev/null
   exit 0
 fi
@@ -369,18 +490,16 @@ if [ "$3" = "audit" ]; then
     if [ ! -f "$f" ]; then echo "audit: run-log inexistente ($f)"; exit 0; fi
     abertas=0
     for s in $(sed -n 's/.*"sessao":"\([^"]*\)".*/\1/p' "$f" | sort -u); do
-      ln=$(grep -n "\"sessao\":\"$s\"" "$f" | grep '"evento":"checkpoint"' | tail -n1 | cut -d: -f1)
-      [ -n "$ln" ] || continue
-      closed=$(tail -n +"$((ln+1))" "$f" | grep "\"sessao\":\"$s\"" | grep -c '"evento":"\(end\|skip\|stop\)"')
-      if [ "$closed" -eq 0 ] 2>/dev/null; then
-        et=$(sed -n "${ln}p" "$f" | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
+      # t59 (FM-F27INS-01GAT): uma linha por janela aberta — a sessão pode ter janelas paralelas
+      while IFS=$'\t' read -r ln et _ts; do
+        [ -n "$ln" ] || continue
         if [ "$s" = "${CLAUDE_CODE_SESSION_ID:0:8}" ]; then
           echo "audit: JANELA ABERTA na sessão $s — etapa \"$et\" sem end/skip/stop (feche-a antes do stop)"
         else
           echo "audit: JANELA ABERTA na sessão $s — etapa \"$et\" sem end/skip/stop; sessão NÃO é a atual (morreu?) → feche com: run-log.sh <dir> <NN> close --sessao $s \"motivo\""
         fi
         abertas=$((abertas+1))
-      fi
+      done < <(janelas_abertas "$f" "$s")
     done
     echo "audit: linhas=$(wc -l < "$f" | tr -d ' ') run=$(grep -c '"evento":"run"' "$f") checkpoint=$(grep -c '"evento":"checkpoint"' "$f") end=$(grep -c '"evento":"end"' "$f") despacho=$(grep -c '"evento":"despacho"' "$f") retorno=$(grep -c '"evento":"retorno"' "$f") script=$(grep -c '"evento":"script"' "$f") skip=$(grep -c '"evento":"skip"' "$f") stop=$(grep -c '"evento":"stop"' "$f") compact=$(grep -c '"evento":"compact"' "$f") janelas_abertas=$abertas"
     echo "audit: lembrete — todo passo que TERIA rodado e não rodou precisa de um evento skip (UI/AI/eval/secure com gate off etc.); o script não adivinha o que devia rodar, só cobra o que ficou aberto"
@@ -551,13 +670,16 @@ fi
   # Auto-fechamento de janela: checkpoint novo com o checkpoint anterior da MESMA sessão
   # ainda sem end/skip/stop → end sintético auto_fechado (fechamento não pode depender de
   # disciplina — caso real F20: a 3.4 rodou e ficou sem janela; o custo caiu na etapa vizinha)
+  # t59 (FM-F27INS-01GAT): checkpoint com `--kv paralelo=true` abre janela SEM fechar as outras
+  # (4.1b × 4.5, MGTm-01GAT) — só reabre a do MESMO ID; checkpoint comum fecha TODAS as abertas
+  # da sessão, uma a uma, cada uma medida desde o próprio checkpoint (modelo em janelas_abertas).
+  _paralelo=0
+  for _kv in ${kvs[@]+"${kvs[@]}"}; do [ "$_kv" = "paralelo=true" ] && _paralelo=1; done
   if [ "$evento" = "checkpoint" ] && [ -f "$f" ] && [ "$sess" != "desconhe" ]; then
-    ln=$(grep -n "\"sessao\":\"$sess\"" "$f" | grep '"evento":"checkpoint"' | tail -n1 | cut -d: -f1)
-    if [ -n "$ln" ]; then
-      closed=$(tail -n +"$((ln+1))" "$f" | grep "\"sessao\":\"$sess\"" | grep -c '"evento":"\(end\|skip\|stop\)"')
-      if [ "$closed" -eq 0 ] 2>/dev/null; then
-        prev_etapa=$(sed -n "${ln}p" "$f" | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
-        prev_ts=$(sed -n "${ln}p" "$f" | sed -n 's/.*"ts":"\([^"]*\)".*/\1/p')
+    while IFS=$'\t' read -r ln prev_etapa prev_ts; do
+      [ -n "$ln" ] || continue
+      if [ "$_paralelo" = 1 ] && [ "${prev_etapa%% *}" != "${etapa%% *}" ]; then continue; fi
+      {
         # v2.1.9 (F24.3 falha 2): a janela órfã é MEDIDA pelo mede-tokens.py (do checkpoint
         # até agora) em vez de nascer sem tokens — a construção da S2 (7,05M tokens_reais)
         # saiu do run-log sem custo e o "end corretivo" à mão gravou o contexto da camada 0
@@ -566,7 +688,7 @@ fi
         _mt="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)/mede-tokens.py"
         if [ -n "$prev_ts" ] && [ -f "$_mt" ] && [ -z "${RUNLOG_SEM_MEDICAO:-}" ]; then
           _med=$(python3 "$_mt" --sessao "${CLAUDE_CODE_SESSION_ID}" --desde "$prev_ts" \
-                 --ate "$ts" --sem-espelho 2>/dev/null || echo '{"status":"sem_medicao","reason":"mede-tokens falhou"}')
+                 --ate "$ts" --sem-espelho 2>/dev/null </dev/null || echo '{"status":"sem_medicao","reason":"mede-tokens falhou"}')
         fi
         _linha_auto="{\"ts\":\"$ts\",\"seq\":$seq,\"sessao\":\"$sess\",\"evento\":\"end\",\"etapa\":\"$prev_etapa\",\"auto_fechado\":true"
         if [ "$(printf '%s' "$_med" | sed -n 's/.*"status": *"\([a-z_]*\)".*/\1/p' | head -1)" = ok ]; then
@@ -587,8 +709,8 @@ fi
         # campo `janela_fechada_automaticamente` no JSON de quem chama.
         echo >&2 "janela-fechada-automaticamente: etapa \"$prev_etapa\" estava sem end/skip — end sintético gravado COM medição do mede-tokens.py quando disponível; NÃO grave um 'end corretivo' com número do harness (contexto ≠ custo)"
         seq=$((seq+1))
-      fi
-    fi
+      }
+    done < <(janelas_abertas "$f" "$sess")
   fi
 
   # Detector mecânico de auto-compact (ver cabeçalho): só em checkpoint com tokens > 0
