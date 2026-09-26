@@ -52,7 +52,8 @@
 # (`subprocess.run(["git"…])`, `os.system("… git …")`, `sh -c "… git …"`) grava `incidente`
 # no run-log e SEGUE. Na F24.5 três executores commitaram por esse caminho sem deixar
 # rastro no hook. Negar quebraria script de medição honesto — o que se quer é que o
-# contorno deixe de ser silencioso.
+# contorno deixe de ser silencioso. `git` conta só como comando (nua ou `/usr/bin/git`),
+# nunca dentro de caminho como `.git/` (t59, FM-F27INS-05EXE).
 # O corpo entre aspas de `bash -c "…"`, `sh -c '…'`, `bash -lc` e `eval "…"` passa pelas
 # mesmas regras (um nível): `bash -c "uv run pytest &"` é a evasão seguinte ao `nohup`
 # e custa uma linha (P21, D1).
@@ -207,10 +208,16 @@ def destinos_de_escrita(texto):
 
 
 # ── 45n: rastro (não negativa) de `git` chamado por dentro de Python ──────────────────
+# t59 (FM-F27INS-05EXE): `git` só conta como COMANDO — nua ou por caminho (`/usr/bin/git`,
+# `$HOME/bin/git`) — e nunca como pedaço de caminho: `\bgit\b` casava `.git/` e os waiters
+# `bash -c 'until [ -s .git/gad-suite/…/rc ]…'` viravam incidente falso. Antes: início da
+# string, espaço, `;`, `&`, `|`, `(` ou crase. Depois: nem letra/dígito, nem `.`, nem `/`
+# (`/srv/git/repo` é diretório). `-` segue aceito: `git-lfs` continua contando, como antes.
+GIT_CMD = r"(?:(?:\$\{?\w+\}?|~)?(?:/[\w.+-]+)*/)?git(?![\w./])"
 GIT_INDIRETO = (
-    re.compile(r"subprocess\.(?:run|Popen|check_output|check_call|call)\s*\(\s*\[?\s*[\"']git\b"),
-    re.compile(r"os\.system\s*\([^)]*\bgit\b"),
-    re.compile(r"sh\s+-c\s+[\"'][^\"']*\bgit\b"),
+    re.compile(r"subprocess\.(?:run|Popen|check_output|check_call|call)\s*\(\s*\[?\s*[\"']" + GIT_CMD),
+    re.compile(r"os\.system\s*\([^)]*?[\s;&|(`\"']" + GIT_CMD),
+    re.compile(r"sh\s+-c\s+[\"'](?:[^\"']*[\s;&|(`])?" + GIT_CMD),
 )
 
 

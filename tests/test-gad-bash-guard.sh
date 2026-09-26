@@ -277,6 +277,27 @@ verifica_rastro "heredoc com subprocess.run([\"git\"…]) → allow + 1 incident
   "$(printf 'python3 - <<%s\nimport subprocess\nsubprocess.run(["git","log"])\nPY' "'PY'")" allow 1
 verifica_rastro "negado pelo P-11 E com rastro → deny + 2 eventos" \
   "sh -c \"git log > \$HOME/.claude/skills/go-and-do/scripts/x.sh\"" deny 2
+echo "── t59 FM-F27INS-05EXE: \`git\` só como comando (nua ou /usr/bin/git), nunca dentro de .git/"
+# os 4 waiters literais do gad-execute na F27 INS (run-log seq 265–269 eram falsos)
+WAIT27="$AQUI/fixtures/gad-bash-guard/waiters-f27.json"
+nw=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$WAIT27")
+for k in $(seq 0 $((nw-1))); do
+  c=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[int(sys.argv[2])]["tool_input"]["command"], end="")' "$WAIT27" "$k")
+  verifica_rastro "waiter literal F27 #$((k+1)) (.git/gad-suite) → allow, sem rastro" "$c" allow 0
+done
+verifica_rastro "sh -c '/usr/bin/git status' → allow + 1 incidente" "sh -c '/usr/bin/git status'" allow 1
+verifica_rastro "subprocess.run([\"/usr/bin/git\",…]) → allow + 1 incidente" \
+  "python3 -c \"import subprocess; subprocess.run(['/usr/bin/git','add','-A'])\"" allow 1
+verifica_rastro "os.system(\"/usr/local/bin/git log\") → allow + 1 incidente" \
+  "python3 -c 'import os; os.system(\"/usr/local/bin/git log\")'" allow 1
+verifica_rastro "sh -c \"cd x && git status\" → allow + 1 incidente" 'sh -c "cd x && git status"' allow 1
+verifica_rastro "sh -c \"\$HOME/bin/git log\" → allow + 1 incidente" 'sh -c "$HOME/bin/git log"' allow 1
+verifica_rastro "sh -c \"git-lfs pull\" → allow + 1 incidente (git-lfs segue contando)" 'sh -c "git-lfs pull"' allow 1
+verifica_rastro "os.system(\"cat .git/HEAD\") → allow, sem rastro" \
+  "python3 -c 'import os; os.system(\"cat .git/HEAD\")'" allow 0
+verifica_rastro "sh -c \"ls /home/u/p/.git/objects\" → allow, sem rastro" 'sh -c "ls /home/u/p/.git/objects"' allow 0
+verifica_rastro "sh -c \"ls /srv/git/repo\" → allow, sem rastro (diretório chamado git)" 'sh -c "ls /srv/git/repo"' allow 0
+verifica_rastro "sh -c \"cat .gitignore\" → allow, sem rastro" 'sh -c "cat .gitignore"' allow 0
 # o incidente traz o motivo canônico
 tail -n5 "$RL" | grep -q '"motivo":"git_por_subprocess"' \
   && ok "incidente do rastro com motivo=git_por_subprocess" || bad "motivo do rastro" "$(tail -n1 "$RL")"
