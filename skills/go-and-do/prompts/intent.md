@@ -371,7 +371,7 @@ foi feito de memória, no fim, e não no ato.
    M2), não sino a corrigir; o `briefing-build.sh` a ignora na guarda anti-cegueira.
    Depois grave `.gad/intent/c0/ciclo.json` — schema exigido pelo `briefing-build.sh`:
    `{"v":1, "sinos":[{"id":"c0-01","origem":"spec|discuss","disposicao":"corrigido|
-   descartado|aberto","correcao_id":"c0-01"}], "correcoes":[{"id":"c0-01","hash":"<copiado
+   descartado|aberto|levado_aos_consultores","correcao_id":"c0-01"}], "correcoes":[{"id":"c0-01","hash":"<copiado
    verbatim de intent/c0/correcoes.aplicado>"}],
    "releitura":<o objeto INTEIRO da rodada mais recente do ciclo 0, com "v":2 e o veredito>}`
    Copie o objeto de releitura inteiro (`jq .` sobre o `.gad/intent/c0<letra>/releitura.json`
@@ -384,10 +384,18 @@ foi feito de memória, no fim, e não no ato.
    `hash_ausente[]`), e o gate do briefing c1 compara os dois lados — valor divergente sai
    como "`c0/ciclo.json`.correcoes != `.aplicado`.correcoes".
    Arrays vazios **explícitos** (`{}` ou chave faltando → exit 4); `corrigido` exige um
-   `correcao_id` existente no `c0/correcoes.aplicado`, `descartado`/`aberto` proíbem o
-   campo. **Nenhum sino some:** cada correção c0 volta ao consultor na seção "Revalidação
+   `correcao_id` existente no `c0/correcoes.aplicado`, os outros três estados proíbem o
+   campo. **Sino que não foi corrigido nem descartado no ciclo 0 vai à consultoria:** grave-o
+   já aqui como `levado_aos_consultores`, com o campo `destino` (obrigatório nesse estado e
+   proibido nos outros) = o próprio id do sino (`"destino":"c0-02"`) — o achado ou a dívida
+   em que ele virar fica na linha dele no INTENT-REVIEW. Não use `aberto` para isso: este
+   arquivo não se edita depois que o gate do c1 o leu (passo 8, FJ-05INT), e o fiscal do
+   fecho (`confere-sinos.sh`) reprova todo `aberto`; `levado_aos_consultores` é o estado
+   final que ele aceita, desde que o `destino` apareça no INTENT-REVIEW ou nos vereditos
+   (FM-09INT). **Nenhum sino some:** cada correção c0 volta ao consultor na seção "Revalidação
    dirigida (ciclo 0)" do briefing c1 (montada do `c0/ciclo.json` — o consultor pode derrubar
-   a sua correção), e o INTENT-REVIEW ganha `c0-NN | <sino> | corrigido|aberto`.
+   a sua correção), e o INTENT-REVIEW ganha `c0-NN | <sino> | corrigido|descartado|
+   levado_aos_consultores → <achado ou dívida em que virou>`.
 3. **Monte o briefing por script:**
    ```bash
    $HOME/.claude/skills/go-and-do/scripts/briefing-build.sh "<phase_dir>" "<NN>" <C> \
@@ -723,7 +731,9 @@ foi feito de memória, no fim, e não no ato.
    corpo: a contagem de novos confirmados POR CICLO (com a categoria) e a tabela de achados —
    id → alegação → fontes → veredito → destino → ação tomada → `proposicao` (T3), enumerando **100% dos
    achados brutos** (fundidos com `fontes:`; "já cobertos"/"reformulados" com os ponteiros
-   do filho), mais as linhas do ciclo 0 (`c0-NN | <sino> | corrigido|aberto`). Para montar
+   do filho), mais as linhas do ciclo 0 (`c0-NN | <sino> | <disposicao> → <destino>`, com a
+   `disposicao` do `c0/ciclo.json` e, para `levado_aos_consultores`, o achado ou a dívida em
+   que o sino virou). Para montar
    isto, leia o `achados_json` (`achados-verificados.json`) de CADA ciclo — o caminho
    absoluto que o verificador daquele ciclo devolveu (48d/E4) — não reescreva de memória.
    **Gere a tabela em vez de redigi-la (FJ-06INT).** Antes de escrever o arquivo:
@@ -842,14 +852,12 @@ foi feito de memória, no fim, e não no ato.
    depois de usado, nem para trocar `disposicao` (`aberto`→`descartado`) e agradar o
    fiscal: o destino verdadeiro do sino fica, mesmo que o fiscal reprove por isso (nunca
    escreva você mesmo o `fences/1.ok` — é o recibo do fiscal, só ele grava, e reescrevê-lo
-   seria exatamente o «não invente o veredito» do parágrafo acima). Sino do ciclo 0
-   `aberto` que já virou achado corrigido ou dívida registrada é um gap de formato
-   conhecido (o ciclo 0 só tem `corrigido|descartado|aberto`, e o fiscal reprova todo
-   `aberto` — sem estado para «foi à consultoria e virou X»): a correção do formato é
-   `FM-09INT` (`confere-sinos.sh` + `c0/ciclo.json`, fora desta lane). Enquanto ela não
-   chega, registre o conflito como `incidente` (`origem=intent-fecho`,
-   `detalhe=sino c0 aberto já resolvido em <achado/dívida> — gap FM-09INT`) e trate como
-   qualquer outra `FALHA` do fiscal: você **não devolve `done`** só por isto — devolva
+   seria exatamente o «não invente o veredito» do parágrafo acima). O estado certo para o
+   sino que foi à consultoria é `levado_aos_consultores` + `destino`, gravado no passo 2
+   antes do gate do c1 (FM-09INT). Sino do ciclo 0 que ficou `aberto` no `c0/ciclo.json`
+   não tem conserto no fecho: o fiscal reprova, e isso é uma `FALHA` como qualquer outra —
+   registre um `incidente` (`origem=intent-fecho`, `detalhe=sino c0 aberto no ciclo.json —
+   <achado/dívida em que virou>`) e você **não devolve `done`** só por isto — devolva
    `estado: falha` com o `motivo:` literal (não force `FENCE-OK`), a menos que o achado que
    consumiu o sino já esteja coberto por uma ressalva do passo 7 (`ressalva_dividas`), caso
    em que `aprovado_com_ressalva` é a saída honesta.
