@@ -53,6 +53,19 @@ em tudo. A camada 0 já confirmou que não existe `<phase_dir>/NN-VALIDATION.md`
    git diff --cached --quiet 2>/dev/null || \
      git commit -m "docs(fase NN): validação Nyquist — partial, estratégia decidida" >/dev/null
    ```
+5b. **Fecho: incidentes primeiro, evidência por último (FM-F27INS-06INT · FM-F27INS-02PLAN,
+   que cobre o FM-F27INS-04GAT).** Todo desvio entra no run-log no turno em que acontece
+   (`run-log.sh "<phase_dir>" "<NN>" incidente "4.5 validate" --kv origem=validate --kv
+   detalhe=…`), e antes de devolver confira que todo item de `incidentes:` já está lá — falta
+   algum, grave agora, um evento por item: depois que você devolve, a camada 0 roda o fiscal,
+   que grava o `end`, e incidente com horário posterior ao `end` reprova o gate. Só então, como
+   **último passo** (depois do commit do passo 5, se houve), commite a evidência:
+   ```bash
+   cd "<project_root>"
+   $HOME/.claude/skills/go-and-do/scripts/commita-artefatos.sh "<phase_dir>" "<NN>" evidencia
+   ```
+   Na F27 INS o fiscal do 4.5 reprovou `evidencia_fora_do_git` porque a evidência da rodada
+   não estava commitada; a camada 0 commitou e rodou de novo.
 6. Devolva pelo `<return_contract>`. O comando falhou de ponta a ponta (nenhum
    VALIDATION escrito) → `estado: blocked` com o motivo.
 </mission>

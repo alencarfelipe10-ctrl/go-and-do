@@ -70,7 +70,10 @@ next to it, committed. `confere-etapa.sh 3` accepts the declaration and reports 
 
 **One `incidente` per item, at the time of the fact.** The execution host now writes each
 incident to the run-log when it happens. When its return arrives, log only the items that are
-**not** already in the run-log (match by `detalhe`), so the count is not inflated.
+**not** already in the run-log (match by `detalhe`), so the count is not inflated — and log them
+**before** your `confere-etapa.sh 3`, which is what writes the stage's `end`. An `incidente`
+stamped after that `end` fails the stage (`incidente_tardio`, FM-F27INS-06INT); on F27 INS the 5
+relayed items landed 23 s after the `end` (FM-F27INS-07EXE).
 
 **3.4 — Crossroads.** Completeness first: `gsd_run query phase-plan-index N` (lib of
 Sub-rotina E) — a plan without `SUMMARY.md` → execution incomplete, blocked → Sub-rotina D with

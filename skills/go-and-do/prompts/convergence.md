@@ -191,7 +191,20 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
      --ciclos <n> --revisores "<efetivos>" [--sinos "<a;b>"] [--corpo <arquivo com 1 linha por correção>]
    ```
    (frontmatter `convergence: done` + commit best-effort — é o que a retomada checa.)
-6. Devolva pelo `<return_contract>`:
+6. **Fecho: incidentes primeiro, evidência por último (FM-F27INS-06INT · FM-F27INS-02PLAN).**
+   Vale para `convergiu` e para `escalou`. Todo item que vai em `incidentes:` já tem de estar no
+   run-log (gravado na hora — ver o `<environment>`). Falta algum? Grave agora, um evento por
+   item (`run-log.sh "<phase_dir>" "<NN>" incidente "2.5 convergencia" --kv origem=convergencia
+   --kv detalhe=…`): depois que você devolve, a camada 0 roda a cerca, que grava o `end` —
+   incidente com horário posterior ao `end` reprova a etapa. Só então, como **último passo**,
+   commite a evidência (JSONs das lanes, trilha do ciclo, run-log):
+   ```bash
+   cd "<project_root>"
+   $HOME/.claude/skills/go-and-do/scripts/commita-artefatos.sh "<phase_dir>" "<NN>" evidencia
+   ```
+   Na F27 INS a cerca da 2.5 reprovou pelos JSONs das lanes e pelo recibo da etapa 2 fora do
+   git, e a camada 0 teve de commitar e rodar de novo.
+7. Devolva pelo `<return_contract>`:
    - convergiu → `veredito: convergiu` (marcador já no disco).
    - estourou o teto ou estagnou sem convergir → `veredito: escalou`, com o impasse
      mastigado (posições + o que trava). NÃO grave o marcador (re-tentativa é

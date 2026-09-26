@@ -189,6 +189,14 @@ def trava_caminhos(pd, etapa):
     return [trava_caminho(pd, etapa), caminho(pd, f"gates/{etapa}.json")]
 
 
+def pasta_suja_caminho(pd, etapa):
+    """Lista inteira da pasta da fase fora de commit (t59 · L10), gravada pelo confere-etapa.sh:
+    <root>/.planning/.gad/pasta-suja/<nome da pasta da fase>/<etapa>.txt (espaço e `/` viram `_`)."""
+    pd = pd.rstrip("/")
+    et = str(etapa).replace(" ", "_").replace("/", "_")
+    return os.path.join(estado_dir(_raiz_da_fase(pd)), "pasta-suja", os.path.basename(pd), f"{et}.txt")
+
+
 def arq_da_base(base, rel):
     """Arquivo pelo nome novo a partir de uma base de trabalho; base avulsa → nome antigo nela."""
     b = base.rstrip("/")

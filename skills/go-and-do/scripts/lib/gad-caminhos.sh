@@ -115,6 +115,19 @@ gad_trava_caminhos() { # <pd> <id>
   gad_fase_caminho "$1" "gates/${2:-}.json"; printf '\n'
 }
 
+# ── LISTA DA PASTA SUJA (t59 · L10) ───────────────────────────────────────────
+# O fiscal (confere-etapa.sh, bloco FM-06INT) cortava a lista de arquivos da fase fora de
+# commit em 350 caracteres no `detalhe`; a lista inteira passa a morar no estado ignorado da
+# rodada, por fase e por etapa, para o banner da §6.5 listar tudo:
+#   <root>/.planning/.gad/pasta-suja/<nome da pasta da fase>/<etapa>.txt
+# (<etapa> = o argumento do fiscal — `5`, `4-code-review`…; espaço e `/` viram `_`).
+#   gad_pasta_suja_caminho <pd> <etapa>
+gad_pasta_suja_caminho() { # <pd> <etapa>
+  local pd="${1%/}" et="${2:-}"
+  et="${et// /_}"; et="${et//\//_}"
+  printf '%s/pasta-suja/%s/%s.txt' "$(gad_estado_dir "$(_gad_raiz_da_fase "$pd")")" "$(basename -- "$pd")" "$et"
+}
+
 # ── EVIDÊNCIA DO UAT CITADA EM CENÁRIO (t59 · FM-F27INS-01UAT) ────────────────
 # Fase sem tela prova com a saída de um comando, gravada em texto (`cenario-10.txt`); o modo
 # uat do commita-artefatos só reconhecia .pdf/.png e a prova ficou fora do git (F27 INS).

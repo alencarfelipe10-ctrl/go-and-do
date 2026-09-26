@@ -34,6 +34,16 @@ artefatos pendentes — a árvore deve estar limpa para o preflight do ship.
    prova, não 47 min antes. E se algum `NN-*-SUMMARY.md` marca um AC como
    PARCIAL/bloqueador, esse AC não pode estar `passed` no VERIFICATION: meça-o ou
    devolva `needs_decision`.
+0b. **Evidência commitada ANTES do ship, não no fim (FM-F27INS-02PLAN, adaptado).** Nos outros
+   hospedeiros o commit da evidência é o último passo; aqui ele vem antes do passo 1, porque
+   depois do merge (`--delete-branch`) você está na branch principal e um commit ali fica
+   local, à frente do remoto (FM-02ENC). Grave antes os incidentes que já houver (passo 5b) e
+   rode:
+   ```bash
+   cd "<project_root>"
+   $HOME/.claude/skills/go-and-do/scripts/commita-artefatos.sh "<phase_dir>" "<NN>" evidencia
+   ```
+   O que o fecho produzir depois do ship é da camada 0 (6.5, `commita-artefatos.sh … runlog`).
 1. Invoque `Skill` → `close-phase` com args `N`.
 2. Deixe a skill trabalhar (ela é resumível por si — re-invocá-la continua de onde
    parou). Dois prompts herdados, tratamentos DIFERENTES:
@@ -70,6 +80,12 @@ artefatos pendentes — a árvore deve estar limpa para o preflight do ship.
    recorre = merge na existente com origem composta `[FNN+FMM]`; lista cheia → sai a
    mais antiga sem recorrência. Commite em commit próprio
    (`docs(fase NN): lições de intenção`).
+5b. **Incidente se grava na hora (FM-F27INS-06INT).** Todo desvio entra no run-log no turno em
+   que acontece (`run-log.sh "<phase_dir>" "<NN>" incidente "6 encerramento" --kv origem=close
+   --kv detalhe=…`), nunca num lote no fim. Antes de devolver, confira que todo item de
+   `incidentes:` já está lá — falta algum, grave agora, um evento por item: depois que você
+   devolve, a camada 0 roda o fiscal, que grava o `end`, e incidente com horário posterior ao
+   `end` reprova a etapa. Não commite a evidência de novo aqui (passo 0b).
 6. Devolva pelo `<return_contract>`.
 </mission>
 

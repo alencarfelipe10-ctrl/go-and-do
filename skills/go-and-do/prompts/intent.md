@@ -297,9 +297,9 @@ são artefatos commitados; o trabalho do ciclo vive em `.gad/intent/`).
 
 **Incidente se grava na hora (FM-07INT).** Todo desvio entra no run-log NO TURNO em que
 acontece — `run-log.sh "<phase_dir>" "<NN>" incidente "1 intencao" --kv origem=… --kv
-detalhe=…` —, nunca junto no fecho do ciclo. O fiscal reprova (nesta versão, AVISO) lote de
-incidentes gravados depois do `end` da etapa, ou vários no mesmo segundo: os dois são sinal de
-que o registro foi feito de memória, no fim, e não no ato.
+detalhe=…` —, nunca junto no fecho do ciclo. O fiscal reprova incidente gravado depois do
+`end` da etapa e avisa quando vários caem no mesmo segundo: os dois são sinal de que o registro
+foi feito de memória, no fim, e não no ato.
 
 1. **Leia a intenção UMA vez** (`NN-SPEC.md` + `NN-CONTEXT.md`). Do ciclo 2 em diante não
    releia os artefatos inteiros: o "o que mudou" vem da sua triagem + `git diff`; trecho
@@ -784,10 +784,23 @@ que o registro foi feito de memória, no fim, e não no ato.
    nomes que o `caminho-fase.sh` traduz). Fora de `.gad/intent/`, o
    `<phase_dir>/.gad/fences/*.ok` (recibo do fiscal) também não se apaga — a lista está aqui
    justamente para ninguém alargar o glob até `<phase_dir>`.
-   Siga ao passo 8. Exit 1 → **você não devolve `done`**: `SEM-TABELA` → gere a tabela do
+   Siga ao passo 7c. Exit 1 → **você não devolve `done`**: `SEM-TABELA` → gere a tabela do
    ciclo; `VIOLACAO` → despache um `gad-verificador` retroativo sobre os pareceres daquele
    ciclo e incorpore o resultado; `VIOLACAO-INVERSA` → verifique inline o que faltar e
    corrija a `c<C>/rota-verificacao.json`. Em todos: `incidentes` + re-rode o gate.
+7c. **Fecho: incidentes primeiro, evidência depois — os dois ANTES do fiscal do passo 8
+   (FM-F27INS-06INT · FM-F27INS-02PLAN).** Todo item que vai em `incidentes:` já tem de estar
+   no run-log (gravado na hora — parágrafo «Incidente se grava na hora» acima). Falta algum?
+   Grave agora, um evento por item: depois que você devolve, a camada 0 roda a cerca, que grava
+   o `end` — na F27 INS os 4 incidentes da etapa entraram 8 s depois do `end`, com horário
+   falso, e incidente posterior ao `end` agora reprova a etapa. Então, com a limpeza do 7b já
+   feita (commitar antes dela deixaria exclusões sujas), commite a evidência da etapa — o que
+   sobrou em `.gad/intent/`, os pareceres e o run-log:
+   ```bash
+   cd "<project_root>"
+   $HOME/.claude/skills/go-and-do/scripts/commita-artefatos.sh "<phase_dir>" "<NN>" evidencia
+   ```
+   Só depois o fiscal: o recibo vale para o HEAD que ele conferiu.
 8. **Recibo do fiscal, antes de devolver `done`.** Rode o fiscal você mesmo e leia o recibo:
    ```bash
    cd "<project_root>"

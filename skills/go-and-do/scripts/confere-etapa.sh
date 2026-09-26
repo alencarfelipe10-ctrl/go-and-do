@@ -1496,7 +1496,10 @@ def da_etapa(et):
     b = (et or "").split()[0] if (et or "").split() else (et or "")
     return a == b
 
-ends, eventos = {}, []
+def chave(et):
+    return et.split()[0] if et.split() else et
+
+ends, eventos, cps = {}, [], {}
 for linha in open(sys.argv[1], encoding="utf-8", errors="replace"):
     linha = linha.strip()
     if not linha: continue
@@ -1507,13 +1510,22 @@ for linha in open(sys.argv[1], encoding="utf-8", errors="replace"):
     if e.get("evento") == "end" and t is not None and et:
         # `substitui`: um `end` re-emitido aposenta o anterior — fica o mais recente
         ends[et] = max(ends.get(et, 0.0), t)
+    if e.get("evento") == "checkpoint" and t is not None and et:
+        cps.setdefault(chave(et), []).append(t)
     if e.get("evento") == "incidente" and da_etapa(et):
         eventos.append((t, et, (e.get("detalhe") or e.get("kv", {}).get("detalhe") or "")[:70]))
 
+# t59 (L10): a etapa que roda a cerca mais de uma vez com o MESMO rótulo (5.4 → 5.5
+# --fix-cycle / 5.6 --reuat; 3 → 3.5; 4.1 iteração 2+) abre uma janela nova pelo
+# `checkpoint` do pre-despacho.sh. Incidente gravado na hora DENTRO dessa janela nova é
+# posterior ao `end` da passada anterior e não é tardio: só conta como tardio o que não
+# tem checkpoint da mesma etapa entre o `end` e ele.
 tardios, rajadas = [], []
 for t, et, det in eventos:
     fim = ends.get(et)
     if t is not None and fim is not None and t > fim + 1:
+        if any(fim < c <= t for c in cps.get(chave(et), [])):
+            continue
         tardios.append("%s (+%ds do end)" % (det or et, int(t - fim)))
 
 por_segundo = collections.Counter(int(t) for t, _, _ in eventos if t is not None)
@@ -1526,15 +1538,20 @@ PYTARDIO
 ) || TARDIOS=""
   jq -e . >/dev/null 2>&1 <<<"$TARDIOS" || TARDIOS='{"tardios":[],"rajadas":[]}'
   n_tard=$(jq '.tardios|length' <<<"$TARDIOS"); n_raj=$(jq '.rajadas|length' <<<"$TARDIOS")
-  if [ "${n_tard:-0}" -gt 0 ] || [ "${n_raj:-0}" -gt 0 ]; then
-    # AVISO nesta release, por DECISÃO DO DONO (21/09): medido em modo seco, o assert
-    # reprova quase toda etapa das 3 fases reais (RLR F3/F4, inspired F24.5) — não por
-    # artefato da regra, mas porque a prática de escrever incidente no fecho é real e
-    # ainda não passou por uma fase com os prompts novos («incidente na hora», C1–C4).
-    # Fica DURA na release seguinte, depois de uma fase real com esses prompts.
-    # As duas metades (posterior ao `end` e rajada no mesmo segundo) foram rebaixadas
-    # juntas: o assert é um só e o dono nomeou o assert.
-    RES=$(jq -c --arg d "AVISO: incidente escrito fora da hora do fato: $(jq -r '(.tardios + .rajadas)|join(" · ")' <<<"$TARDIOS" | cut -c1-400)" \
+  if [ "${n_tard:-0}" -gt 0 ]; then
+    # FALHA DURA desde a t59 (DECISÃO DO DONO, 26/09). Em 21/09 o dono a deixara em AVISO
+    # «até uma fase real rodar com os prompts novos» (incidente na hora, C1–C4); o gatilho
+    # disparou na F27 INS: com os prompts novos, 4 etapas ainda gravaram o lote DEPOIS do
+    # `end` (FM-F27INS-06INT, 05PLAN, 07EXE, 04UAT — a camada 0 relatando o retorno do
+    # hospedeiro). Os prompts e o workflow agora mandam gravar antes da cerca.
+    # A RAJADA (>= 3 no mesmo segundo) sozinha segue AVISO, de propósito: o conserto
+    # prescrito (camada 0 grava a lista `incidentes` do condutor no retorno, um evento por
+    # item — workflow-etapa-5.md §5.4) produz rajada por construção, com o `ts` de 1 s do
+    # run-log.sh. Tardio + rajada → FALHA (o detalhe cita as duas).
+    RES=$(jq -c --arg d "incidente escrito depois do end da etapa (grave antes da cerca): $(jq -r '(.tardios + .rajadas)|join(" · ")' <<<"$TARDIOS" | cut -c1-400)" \
+      '. + [{id:"incidente_tardio", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+  elif [ "${n_raj:-0}" -gt 0 ]; then
+    RES=$(jq -c --arg d "AVISO: incidentes gravados em rajada (vários no mesmo segundo) — relato do retorno é legítimo; lote de memória no fecho, não: $(jq -r '.rajadas|join(" · ")' <<<"$TARDIOS" | cut -c1-400)" \
       '. + [{id:"incidente_tardio", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
   fi
   EXTRAI=$(jq -c --argjson t "$TARDIOS" '. + {incidente_tardio: $t}' <<<"$EXTRAI")
@@ -1551,26 +1568,26 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     | sed 's/^...//' \
     | grep -vE '^\.planning/\.gad(/|-)|(^|/)\.gad-[a-z-]*$|(^|/)\.correcoes-c[0-9a-z]*\.(tmp|pre-[0-9]+\.patch)$|/\.gad/intent/c[0-9a-z]+/correcoes\.(tmp|pre-[0-9]+\.patch)$' \
     | grep -vE '\.(tmp|swp|err|log|pyc)$|(^|/)__pycache__/|(^|/)\.DS_Store$' \
-    | head -40; } || true )
+    | head -2000; } || true )
+  # t59 (L10): o teto era 40 — a lista inteira nunca chegava a ninguém (a F4 teve 160). 2000
+  # é só guarda contra pasta patológica; a lista completa vai para o arquivo de estado abaixo.
   # t59 (FM-F27INS-01UAT): o NN-POS-SHIP.md (trava a fase seguinte) e a evidência que um
   # cenário do NN-UAT.md CITA também são obrigatórios — na F27 INS os dois ficaram fora do
   # git e a cerca 5 deu pass duas vezes com aviso. Classe DURA:
   #   • NN-POS-SHIP.md — etapas 5 e 6. Ele nasce no passo 4 da 5.6, que commita
   #     (`commita-artefatos.sh … uat`) ANTES de re-rodar esta cerca;
-  #   • evidência citada — da etapa 6 em diante. Na etapa 5 segue AVISO: a cerca da 5.4
-  #     roda ANTES do commit do resultado (5.4 passo 3), e cobrar ali seria o impasse que a
-  #     decisão de 21/09 (abaixo) evitou. O 6.3b commita tudo antes da cerca 6.
+  #   • evidência citada — etapas 5 e 6 (t59, decisão do dono 26/09: a isenção da etapa 5
+  #     caiu junto com a inversão da ordem no workflow — 5.4 passo 3 e 5.5 passo 6 commitam
+  #     o resultado ANTES desta cerca; o 6.3b commita tudo antes da cerca 6).
   # Lista de citados = gad_uat_evidencias_citadas (a MESMA do commita-artefatos, modo uat).
   UAT_OBRIG=""
   case "${ETAPA%% *}" in
     5|6|6.*)
       _raiz_p="$(cd -P -- "$ROOT" 2>/dev/null && pwd)" || _raiz_p="$ROOT"
       UAT_OBRIG="$(realpath -m --relative-to="$_raiz_p" "$PHASE_DIR/$NN-POS-SHIP.md" 2>/dev/null)"$'\n'
-      if [ "${ETAPA%% *}" != 5 ]; then
-        while IFS= read -r _c; do
-          [ -n "$_c" ] && UAT_OBRIG="$UAT_OBRIG$(realpath -m --relative-to="$_raiz_p" "$_c" 2>/dev/null)"$'\n'
-        done < <(gad_uat_evidencias_citadas "$PHASE_DIR" "$NN")
-      fi ;;
+      while IFS= read -r _c; do
+        [ -n "$_c" ] && UAT_OBRIG="$UAT_OBRIG$(realpath -m --relative-to="$_raiz_p" "$_c" 2>/dev/null)"$'\n'
+      done < <(gad_uat_evidencias_citadas "$PHASE_DIR" "$NN") ;;
   esac
   # O filtro de ruído acima (.log/.err/.tmp…) esconderia uma evidência CITADA com essa
   # extensão (ex.: `sondagem.log`), que o commita-artefatos (modo uat) commita: ela volta.
@@ -1586,7 +1603,9 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     # O workflow (`workflow-etapa-5.md`/`-6.md`) roda o fiscal ANTES do `commita-artefatos.sh`, então cobrar árvore
     # limpa de TUDO deixaria a etapa em impasse (o `NN-UAT.md` que o próprio fiscal
     # escreve sujaria a etapa 5; o run-log é reescrito por toda etapa antes de qualquer
-    # fiscal). O dono decidiu, sem inverter a ordem do workflow:
+    # fiscal). O dono decidiu, sem inverter a ordem do workflow (t59, 26/09: a ordem da
+    # etapa 5 FOI invertida — commit do resultado antes da cerca, 5.4 passo 3 / 5.5 passo 6 —
+    # e a evidência citada virou DURA também nela, acima; o resto desta regra segue):
     #   • FALHA DURA só para a EVIDÊNCIA DURA — `.intent/`, `pareceres/` e os atestados
     #     (`.fence-*.ok`) —, que é o alvo real da FM-06INT (160 arquivos fora do git na
     #     F4, incluindo os selos dos ciclos 2/3/4 e os vereditos);
@@ -1618,23 +1637,55 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
            else RESTO="$RESTO $arq"; fi ;;
       esac
     done <<<"$SUJOS"
+    # ── t59 (L10, decisão do dono 26/09): a lista INTEIRA vai para um arquivo no estado
+    # ignorado da rodada (`gad_pasta_suja_caminho`), com as três classes; o `detalhe` de cada
+    # assert fica com o resumo (os primeiros nomes) + o caminho — o banner da §6.5 lê o
+    # arquivo em vez do trecho cortado. Em --dry-run nada é gravado: a lista inteira sai
+    # também em `extrai.pasta_suja` (JSON), que serve nos dois modos.
+    LISTA_SUJA=""; _cauda=""
+    if [ "$DRY" = 0 ]; then
+      LISTA_SUJA="$(gad_pasta_suja_caminho "$PHASE_DIR" "$ETAPA")"
+      if mkdir -p "$(dirname -- "$LISTA_SUJA")" 2>/dev/null && gad_estado_garante "$(_gad_raiz_da_fase "$PHASE_DIR")"; then
+        { printf '# pasta da fase fora de commit — etapa %s — %s arquivo(s)\n' "$ETAPA" "${n_sujos:-0}"
+          printf '## DURA — evidencia_fora_do_git (commita-artefatos.sh <fase> <NN> evidencia)\n'
+          printf '%s\n' $DURA
+          printf '## DURA — uat_fora_do_git (commita-artefatos.sh <fase> <NN> uat)\n'
+          printf '%s\n' $DURA_UAT
+          printf '## AVISO — pasta_da_fase_suja\n'
+          printf '%s\n' $RESTO; } 2>/dev/null | grep -v '^$' > "$LISTA_SUJA" 2>/dev/null || LISTA_SUJA=""
+      else LISTA_SUJA=""; fi
+    fi
+    _resumo_suja() { # <lista separada por espaço> → os primeiros nomes (até 350 chars) + onde está o resto
+      local l; l="$(printf '%s ' $1)"
+      if [ "${#l}" -gt 350 ]; then printf '%s…' "${l:0:350}"; else printf '%s' "${l% }"; fi
+      if [ -n "$LISTA_SUJA" ]; then printf ' — lista inteira: %s' "$LISTA_SUJA"
+      elif [ "${#l}" -gt 350 ]; then printf ' — lista inteira: extrai.pasta_suja'; fi
+    }
     if [ -n "$DURA_UAT" ]; then
       n_du=$( { printf '%s\n' $DURA_UAT | grep -c . || true; } )
-      RES=$(jq -c --arg d "resultado do UAT fora de commit na etapa $ETAPA — $n_du arquivo(s): NN-POS-SHIP.md e/ou evidência citada por cenário do NN-UAT.md (rode: commita-artefatos.sh <fase> <NN> uat): $(printf '%s ' $DURA_UAT | cut -c1-350)" \
+      RES=$(jq -c --arg d "resultado do UAT fora de commit na etapa $ETAPA — $n_du arquivo(s): NN-POS-SHIP.md e/ou evidência citada por cenário do NN-UAT.md (rode: commita-artefatos.sh <fase> <NN> uat): $(_resumo_suja "$DURA_UAT")" \
         '. + [{id:"uat_fora_do_git", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
     if [ -n "$DURA" ]; then
       n_dura=$( { printf '%s\n' $DURA | grep -c . || true; } )
-      RES=$(jq -c --arg d "evidência da fase fora de commit na etapa $ETAPA — $n_dura arquivo(s) de .intent/, pareceres/ ou atestado (rode: commita-artefatos.sh <fase> <NN> evidencia): $(printf '%s ' $DURA | cut -c1-350)" \
+      RES=$(jq -c --arg d "evidência da fase fora de commit na etapa $ETAPA — $n_dura arquivo(s) de .intent/, pareceres/ ou atestado (rode: commita-artefatos.sh <fase> <NN> evidencia): $(_resumo_suja "$DURA")" \
         '. + [{id:"evidencia_fora_do_git", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
     if [ -n "$RESTO" ]; then
       n_resto=$( { printf '%s\n' $RESTO | grep -c . || true; } )
-      RES=$(jq -c --arg d "AVISO: pasta da fase com $n_resto arquivo(s) fora de commit na etapa $ETAPA (rode commita-artefatos.sh antes de fechar): $(printf '%s ' $RESTO | cut -c1-350)" \
+      RES=$(jq -c --arg d "AVISO: pasta da fase com $n_resto arquivo(s) fora de commit na etapa $ETAPA (rode commita-artefatos.sh antes de fechar): $(_resumo_suja "$RESTO")" \
         '. + [{id:"pasta_da_fase_suja", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
     fi
+    # superconjunto: `total` e `evidencia_dura` (string) como antes + as três listas e o arquivo
     EXTRAI=$(jq -c --argjson n "${n_sujos:-0}" --arg du "$(printf '%s ' $DURA)" \
-      '. + {pasta_suja: {total:$n, evidencia_dura:($du|ltrimstr(" ")|rtrimstr(" "))}}' <<<"$EXTRAI")
+      --arg ua "$(printf '%s ' $DURA_UAT)" --arg re "$(printf '%s ' $RESTO)" --arg li "$LISTA_SUJA" \
+      'def l: split(" ")|map(select(length>0));
+       . + {pasta_suja: {total:$n, evidencia_dura:($du|ltrimstr(" ")|rtrimstr(" ")),
+                         dura:($du|l), dura_uat:($ua|l), aviso:($re|l),
+                         lista:(if $li == "" then null else $li end)}}' <<<"$EXTRAI")
+  elif [ "$DRY" = 0 ]; then
+    # pasta limpa: a lista de uma rodada anterior desta etapa não pode sobrar para o banner
+    rm -f -- "$(gad_pasta_suja_caminho "$PHASE_DIR" "$ETAPA")" 2>/dev/null || true
   fi
 fi
 

@@ -107,6 +107,14 @@ PYT=$(python3 -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import gad_cam
 eq  "[py] trava_caminhos = novo e antigo, nessa ordem"          "$PYT" "$RN/.planning/.gad/gates/99-bancada/5.json|$PDN/.gad/gates/5.json"
 SHT=$(bash -c '. "$1/lib/gad-caminhos.sh"; gad_trava_caminhos "$2" 5 | paste -sd"|"' _ "$SC" "$PDN")
 eq  "[sh] gad_trava_caminhos = o mesmo que o gêmeo Python"      "$SHT" "$PYT"
+# t59 (L10): a lista inteira da pasta suja mora no estado ignorado da rodada — gêmeos sh×py
+PYS=$(python3 -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import gad_caminhos as g; print(g.pasta_suja_caminho(sys.argv[2], "4-code-review"))' "$SC/lib" "$PDN")
+eq  "[py] pasta_suja_caminho = .planning/.gad/pasta-suja/<fase>/<etapa>.txt" "$PYS" "$RN/.planning/.gad/pasta-suja/99-bancada/4-code-review.txt"
+SHS=$(bash -c '. "$1/lib/gad-caminhos.sh"; gad_pasta_suja_caminho "$2" "4-code-review"' _ "$SC" "$PDN")
+eq  "[sh] gad_pasta_suja_caminho = o mesmo que o gêmeo Python"  "$SHS" "$PYS"
+SHE=$(bash -c '. "$1/lib/gad-caminhos.sh"; gad_pasta_suja_caminho "$2" "5 uat"' _ "$SC" "$PDN")
+PYE=$(python3 -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import gad_caminhos as g; print(g.pasta_suja_caminho(sys.argv[2], "5 uat"))' "$SC/lib" "$PDN")
+eq  "[sh×py] etapa com espaço vira _ nos dois"                   "$SHE|$PYE" "$RN/.planning/.gad/pasta-suja/99-bancada/5_uat.txt|$RN/.planning/.gad/pasta-suja/99-bancada/5_uat.txt"
 
 echo "── ciclo de lanes inteiro no formato novo (dublês) ──"
 export GAD_LANES_DIR="$RAIZ/tests/fixtures/roda-lanes/stub" GAD_ESPERAR_PASSO=1
