@@ -184,7 +184,8 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
 
 **Incidente se grava na hora** (mesmo contrato de C1/C3): todo desvio entra no run-log no
 turno em que acontece, não junto no fim — `run-log.sh "<phase_dir>" "<NN>" incidente
-"4.1 code-review" --kv origem=… --kv detalhe=…`.
+"4.1 code-review" --kv origem=… --kv detalhe=…` (no re-review do gate 4.1b, o rótulo é
+"4.1b re-review").
 </mission>
 
 <environment>

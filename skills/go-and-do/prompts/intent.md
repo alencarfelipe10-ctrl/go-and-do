@@ -720,11 +720,23 @@ foi feito de memória, no fim, e não no ato.
    `achados_dispensados: N` (os `confirmado_irrelevante`, somados dos `dispensados` do
    `decide-ciclo.sh`) · `pausas_de_negocio: N` · `transparencia:` (lista do 3º destino). No
    corpo: a contagem de novos confirmados POR CICLO (com a categoria) e a tabela de achados —
-   alegação → veredito → destino → ação tomada → `proposicao` (T3), enumerando **100% dos
+   id → alegação → fontes → veredito → destino → ação tomada → `proposicao` (T3), enumerando **100% dos
    achados brutos** (fundidos com `fontes:`; "já cobertos"/"reformulados" com os ponteiros
    do filho), mais as linhas do ciclo 0 (`c0-NN | <sino> | corrigido|aberto`). Para montar
    isto, leia o `achados_json` (`achados-verificados.json`) de CADA ciclo — o caminho
    absoluto que o verificador daquele ciclo devolveu (48d/E4) — não reescreva de memória.
+   **Gere a tabela em vez de redigi-la (FJ-06INT).** Antes de escrever o arquivo:
+   ```bash
+   $HOME/.claude/skills/go-and-do/scripts/gera-intent-review.sh "<phase_dir>" "<NN>"
+   ```
+   Cole como vieram as contagens (`achados_*` do frontmatter), a «## Tabela de achados» e as linhas da
+   «## Dívidas registradas». Você escreve só a coluna «ação tomada» e dono/destino das dívidas (onde
+   está `«preencher»`) e acrescenta à mão as linhas do ciclo 0 e as dívidas que você decidiu (sino do
+   c0, J5). Não mude veredito, contagem nem proposição. Exit 1 → a seção «## Divergências dos
+   arquivos do verificador» lista o que os arquivos do verificador não concordam ou o que o gerador
+   não derivou (`PENDENTE`): decida cada item, registre em `transparencia` ou como incidente, e
+   complete a proposição pendente pelo contrato T3 do passo 5 — nunca cole a tabela com `PENDENTE`.
+   Exit 2 → sem `vereditos.txt` no disco; complete a rota do passo 5 antes.
    **Seção `## Dívidas registradas`, antes do commit** — uma linha por achado
    `confirmado_irrelevante` ou `confirmado` com `vinculo_goal: nenhum`:
    `id | alegação | evidência | dono | destino`, com `destino ∈ plan-phase | code-review |

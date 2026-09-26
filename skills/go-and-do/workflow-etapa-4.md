@@ -27,8 +27,9 @@
 - **Fixer briefing extends past 4.1b (FJ-F27INS-02GAT).** The "what else reads or writes this
   state" ask two bullets below is not 4.1b-only anymore: `code-review.md` §2b now carries the
   same line for every finding the HOST itself drafts a fix suggestion for (the Codex merge,
-  the dedup). The native reviewer's own iteration-1 findings stay out of reach — their fixer
-  briefing is built inside `gsd-code-review --fix`, upstream, not by this prompt.
+  the dedup). The native reviewer's own iteration-1 findings are covered by the fork: since
+  t59/L14 the `gsd-code-fixer` in `gen5-patches/nossos/` carries the same ask in its `apply_fixes`
+  step (valid once the fork is installed by `instalar.sh`).
 - **Gate 4.1b is its own re-dispatch of 4.1, not a footnote of it** (FM-02GAT,
   FM-F27INS-01GAT): `pre-despacho.sh 4-code-review --rereview` is the only writer of its
   checkpoint — label **"4.1b re-review"**, no resume «pular», parallel window (does not close

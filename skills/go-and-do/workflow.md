@@ -442,7 +442,7 @@ return is routing data; the body lives on disk):
 
 - `done` — verdict, paths, counts. Section `incidentes:` mandatory: every deviation between
   the announced and the executed, or literally `nenhum`. Absent → return outside the contract
-  (reconcile); item ≠ `nenhum` → ONE `incidente` event in the run-log PER ITEM (`--kv origem=<etapa/agente> --kv detalhe="<o item>"`; never aggregate) — in Etapa 3, only the
+  (reconcile); item ≠ `nenhum` → ONE `incidente` event in the run-log PER ITEM (`--kv origem=<etapa/agente> --kv detalhe="<o item>"`; never aggregate), logged **before** the stage fence (it writes the `end`), skipping items already in the run-log (match by `detalhe`) — in Etapa 3, only the
   items the execution host has not already logged itself (see `workflow-etapa-3.md` §3.3, *One `incidente` per item*) —
   + hand it to the
   Sub-rotina F dispatch (the resumo narrates them).
