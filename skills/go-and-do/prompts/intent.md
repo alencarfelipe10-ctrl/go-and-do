@@ -543,7 +543,8 @@ foi feito de memória, no fim, e não no ato.
      registrada**: linha em `## Dívidas registradas` do INTENT-REVIEW com o motivo do
      verificador (a linha `vinculo_goal: nenhum — …` dele) e o destino (`plan-phase`,
      `code-review`, `deferred` ou `dono`), e entrada em `<phase_dir>/deferred-items.md`
-     quando a categoria for `A-produto` ou `B-viabilidade`. **Destino `deferred` (fora de
+     em qualquer categoria (A, B, C ou D — FM-07INT: o fiscal reprova dívida com id que
+     falte lá). **Destino `deferred` (fora de
      escopo desta fase) leva o rótulo literal `Out of scope`** no bullet do
      `deferred-items.md` (48b/S-2): é o que o `confere-reconciliacao.sh` casa
      (case-insensitive) com o id do achado, no MESMO bloco, para reconhecer a dispensa como
@@ -740,12 +741,15 @@ foi feito de memória, no fim, e não no ato.
    **Seção `## Dívidas registradas`, antes do commit** — uma linha por achado
    `confirmado_irrelevante` ou `confirmado` com `vinculo_goal: nenhum`:
    `id | alegação | evidência | dono | destino`, com `destino ∈ plan-phase | code-review |
-   deferred | dono`. Achado de categoria `A-produto` ou `B-viabilidade` vai também a
-   `<phase_dir>/deferred-items.md`, na convenção do GSD (um heading por item, campos como
+   deferred | dono`. **Toda dívida com id da seção vai também a
+   `<phase_dir>/deferred-items.md`** — qualquer categoria (A, B, C ou D), e também as linhas
+   do ciclo 0 que você acrescentou à mão —, na convenção do GSD (um heading por item, campos como
    bullets `- **Campo:** …`, fechado por `status: resolved`): é o único registro que a
    verificação de trabalho (`uat.cjs`) e o check 7 da auditoria forense leem, e o que morde
    em produção precisa de um leitor mecânico. `destino: deferred` leva o bullet
-   `- **Status:** Out of scope` (48b/S-2, rótulo literal — ver passo 5). Achado C/D vai só à seção. Nenhuma dívida,
+   `- **Status:** Out of scope` (48b/S-2, rótulo literal — ver passo 5). O fiscal
+   (`cardinalidade_etapa_1`, FM-07INT) reprova a etapa quando um id da seção falta no
+   `deferred-items.md` — a categoria não isenta. Nenhuma dívida,
    nenhuma seção vazia: escreva `## Dívidas registradas` com «nenhuma» — a seção é lida pelo
    planner e pelo code-reviewer rio abaixo.
    **Sinos estruturados, verbatim no corpo:** os literais `req_ausente: <id>`,
