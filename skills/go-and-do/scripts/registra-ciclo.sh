@@ -107,21 +107,33 @@ conta_achados_numerados() {
   fi
 }
 
-BRUTOS=""
+# TOTAL_TABELA: o número que o confere-ciclo.sh calculou (formato de sempre), sempre que
+# a tabela existir — independente de qual dos dois vira BRUTOS abaixo. É o que evita os
+# «dois números para o mesmo ciclo» que o R8/E4 (comentário no topo do arquivo) veio
+# impedir: quando a contagem própria (FM-F27INS-01CONV) diverge dela, o apêndice mostra
+# as duas, rotuladas, em vez de esconder uma.
+TOTAL_TABELA=""
+if [ -f "$TABELA" ]; then
+  TOTAL_TABELA=$(sed -n 's/^achados_estruturais_total: *//p' "$TABELA" | head -1 | tr -cd '0-9')
+  [ -n "$TOTAL_TABELA" ] || TOTAL_TABELA=$( { grep -cE '^\| [^|]+ \| L?[0-9]+ \|' "$TABELA" || true; } | head -1 )
+fi
+
+BRUTOS=""; PROPRIA=0; SEM_CABECALHO_ARQS=()
 if [ ${#FLAGS_TAB[@]} -eq 0 ]; then
+  PROPRIA=1
   BRUTOS=0
   for f in ${PARECERES[@]+"${PARECERES[@]}"}; do
     read -r n status < <(conta_achados_numerados "$f")
     BRUTOS=$((BRUTOS + n))
-    [ "$status" = sem_cabecalho ] && \
+    if [ "$status" = sem_cabecalho ]; then
+      SEM_CABECALHO_ARQS+=("$f")
       echo "AVISO: $f sem cabeçalho «### Achado N» reconhecível (nem «Achado 0») — contagem 0 não é medição, achado em prosa fica indetectável aqui" >&2
+    fi
   done
-elif [ -f "$TABELA" ]; then
-  # contagem pela linha-total do próprio confere-ciclo (o grep antigo exigia lane
-  # [a-z]+ pura e zerava quando a lane vinha com dígitos/hífens — guarda cega)
-  BRUTOS=$(sed -n 's/^achados_estruturais_total: *//p' "$TABELA" | head -1 | tr -cd '0-9')
-  [ -n "$BRUTOS" ] || BRUTOS=$( { grep -cE '^\| [^|]+ \| L?[0-9]+ \|' "$TABELA" || true; } | head -1 )
+else
+  BRUTOS="$TOTAL_TABELA"
 fi
+: "${TOTAL_TABELA:=}"
 : "${BRUTOS:=0}"
 # guarda anti-cega: registrar um ciclo SEM parecer legível não pode parecer verde
 if [ ${#PARECERES[@]} -eq 0 ]; then
@@ -189,6 +201,15 @@ SEM_CITACAO=()
   done
   if [ ${#PARECERES[@]} -eq 0 ]; then
     echo "- brutos na tabela do ciclo: **SEM MEDIÇÃO** (nenhum parecer legível — guarda não conta o que não leu)"
+  elif [ "$PROPRIA" -eq 1 ]; then
+    if [ -n "$TOTAL_TABELA" ] && [ "$TOTAL_TABELA" != "$BRUTOS" ]; then
+      echo "- brutos por cabeçalho \`### Achado N\`: $BRUTOS · total da tabela do confere-ciclo.sh (\`${TABELA#"$PD"/}\`): $TOTAL_TABELA (a tabela conta cabeçalho de seção/item de lista como achado — FM-F27INS-01CONV; o número que vale é o primeiro)"
+    else
+      echo "- brutos na tabela do ciclo: $BRUTOS (\`${TABELA#"$PD"/}\`)"
+    fi
+    if [ ${#SEM_CABECALHO_ARQS[@]} -gt 0 ]; then
+      echo "- ⚠️ sem cabeçalho \`### Achado N\` reconhecível (contagem 0 não é medição, achado em prosa fica indetectável aqui): $(printf '%s, ' "${SEM_CABECALHO_ARQS[@]#"$PD"/}" | sed 's/, $//')"
+    fi
   else
     echo "- brutos na tabela do ciclo: $BRUTOS (\`${TABELA#"$PD"/}\`)"
   fi

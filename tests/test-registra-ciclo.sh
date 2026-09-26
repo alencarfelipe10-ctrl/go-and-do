@@ -22,7 +22,15 @@ falhas=0
 ok()   { echo "  ok   — $1"; }
 erro() { echo "  FALHA — $1"; [ $# -lt 2 ] || echo "$2" | sed 's/^/         /'; falhas=$((falhas+1)); }
 
-brutos_do_apendice() { sed -n 's/^- brutos na tabela do ciclo: \([0-9]*\).*/\1/p' "$1" | tail -1; }
+# o número que VALE é o primeiro rótulo que aparecer: «brutos por cabeçalho ...: N»
+# (FM-F27INS-01CONV, quando a contagem própria diverge da tabela antiga) tem prioridade
+# sobre «brutos na tabela do ciclo: N» (formato de sempre, os dois números coincidem).
+brutos_do_apendice() {
+  local v
+  v=$(sed -n 's/^- brutos por cabeçalho `### Achado N`: \([0-9]*\).*/\1/p' "$1" | tail -1)
+  [ -n "$v" ] && { printf '%s' "$v"; return; }
+  sed -n 's/^- brutos na tabela do ciclo: \([0-9]*\).*/\1/p' "$1" | tail -1
+}
 total_tabela()       { sed -n 's/^achados_estruturais_total: *//p' "$1" | head -1; }
 
 monta() { # <phase_dir> <familia: intencao|convergencia>
@@ -79,6 +87,12 @@ PDC="$TMP/24-conv"; monta "$PDC" convergencia
 GOTC=$(brutos_do_apendice "$PDC/24.3-REVIEWS.md")
 [ "$GOTC" = "$PROPRIA" ] && ok "brutos do apêndice = $PROPRIA (não o $SEM da tabela antiga)" \
   || erro "apêndice contou $GOTC (esperado $PROPRIA)" "$(cat "$PDC/24.3-REVIEWS.md")"
+grep -qF "total da tabela do confere-ciclo.sh (\`pareceres/.tabela-c1.txt\`): $SEM" "$PDC/24.3-REVIEWS.md" \
+  && ok "o apêndice também mostra o $SEM da tabela antiga, rotulado — nunca dois números escondidos" \
+  || erro "faltou o segundo número (rotulado) no apêndice — dois números, um escondido" "$(cat "$PDC/24.3-REVIEWS.md")"
+grep -qF "sem cabeçalho \`### Achado N\` reconhecível" "$PDC/24.3-REVIEWS.md" \
+  && ok "o aviso de 'sem cabeçalho' também fica DURÁVEL no apêndice (não só em stderr)" \
+  || erro "o aviso de 'sem cabeçalho' devia estar gravado no apêndice" "$(cat "$PDC/24.3-REVIEWS.md")"
 
 echo "== sem os arquivos novos: sem dirigida a somar → mesma conta própria, exit 0"
 PDV="$TMP/24-velha"; mkdir -p "$PDV/pareceres"
