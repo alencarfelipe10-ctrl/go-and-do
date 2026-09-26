@@ -2,7 +2,7 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
-## [Não lançada]
+## [2.11.0] - 2026-09-26
 
 Tarefa 59 (26/09): as 50 sugestões aprovadas da auditoria por etapa da F27 INS (grupo-inspired), em 15 lanes
 paralelas + revisor cético + consertos do revisor. Suíte 52/52. O fork do GSD (`gen5-patches`) foi reinstalado junto (VERSION 1.14.0).
