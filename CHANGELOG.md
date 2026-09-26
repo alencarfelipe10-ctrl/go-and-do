@@ -50,7 +50,11 @@ paralelas + revisor cético. Suíte 51/51. O fork do GSD (`gen5-patches`) foi re
 - `registra-ciclo.sh` conta só «### Achado N» e mantém o aviso quando o parecer não tem nenhum (e3).
 - O briefing do executor diz onde gravar a evidência RED, por task (f3).
 - Fork: `roda-suite.sh` confere a assinatura das planilhas de teste antes da suíte (`--aceitar-assinatura`
-  para aceitar de propósito); o UAT usa uma cópia da planilha (f1).
+  para aceitar de propósito); o UAT usa uma cópia da planilha (f1). **Vem desligado:** para ligar num
+  projeto, ponha em `.planning/config.json` → `workflow.suite_planilhas_glob` a lista de globs (relativos à
+  raiz) das planilhas que a suíte lê — ex.: `["initial-data/*.xlsx"]` — e rode uma vez
+  `roda-suite.sh --aceitar-assinatura --dir <raiz>` (grava a referência sem rodar suíte; depois, toda suíte
+  verde a renova).
 
 ### Gates
 
@@ -74,6 +78,15 @@ paralelas + revisor cético. Suíte 51/51. O fork do GSD (`gen5-patches`) foi re
 - `pos-ship.py move` anexa a linha nas lacunas e na data do `NN-UAT.md` e leva a prova do cético (h1); o
   gerador do UAT não roda prova nem decide balde (h2); `numeros-da-fase.sh --conferir` cobra sobras
   desejáveis e o «como desfazer» no resumo (h3).
+
+### Consertos do revisor cético (L12 → L16)
+
+- A intenção manda toda dívida, de qualquer categoria (A–D), também para o `deferred-items.md` — o texto
+  antigo («C/D só na seção») travaria a primeira fase real com a regra nova (A3).
+- `all_fixed_com_skipped` voltou a reprovar conserto com item pulado mesmo quando há re-revisão depois
+  (regressão do g2; lê `ultima_correcao`) (A1).
+- O prompt da intenção dá o sino do ciclo 0 com os 4 estados (inclui `levado_aos_consultores`) e sai o
+  contorno do «gap FM-09INT» (A2). Textos velhos do `.aplicado` e do lugar da trava alinhados.
 
 ### /audit-gad
 
