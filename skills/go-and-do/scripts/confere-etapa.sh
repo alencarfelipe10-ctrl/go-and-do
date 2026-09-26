@@ -1559,7 +1559,27 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     #     quem produz o seu `.fence-N.ok` (gravado adiante, neste mesmo script);
     #   • AVISO para todo o resto (`NN-UAT.md`, SUMMARY, run-log, …).
     # Quem commita a evidência dura é `commita-artefatos.sh … evidencia` — uma fonte só.
-    DURA=""; RESTO=""
+    DURA=""; RESTO=""; DURA_UAT=""
+    # t59 (FM-F27INS-01UAT): o NN-POS-SHIP.md (trava a fase seguinte) e a evidência que um
+    # cenário do NN-UAT.md CITA também são obrigatórios — na F27 INS os dois ficaram fora do
+    # git e a cerca 5 deu pass duas vezes com aviso. Classe DURA:
+    #   • NN-POS-SHIP.md — etapas 5 e 6. Ele nasce no passo 4 da 5.6, que commita
+    #     (`commita-artefatos.sh … uat`) ANTES de re-rodar esta cerca;
+    #   • evidência citada — da etapa 6 em diante. Na etapa 5 segue AVISO: a cerca da 5.4
+    #     roda ANTES do commit do resultado (5.4 passo 3), e cobrar ali seria o impasse que a
+    #     decisão de 21/09 acima evitou. O 6.3b commita tudo antes da cerca 6.
+    # Lista de citados = gad_uat_evidencias_citadas (a MESMA do commita-artefatos, modo uat).
+    UAT_OBRIG=""
+    case "${ETAPA%% *}" in
+      5|6|6.*)
+        _raiz_p="$(cd -P -- "$ROOT" 2>/dev/null && pwd)"
+        UAT_OBRIG="$(realpath -m --relative-to="$_raiz_p" "$PHASE_DIR/$NN-POS-SHIP.md" 2>/dev/null)"$'\n'
+        if [ "${ETAPA%% *}" != 5 ]; then
+          while IFS= read -r _c; do
+            [ -n "$_c" ] && UAT_OBRIG="$UAT_OBRIG$(realpath -m --relative-to="$_raiz_p" "$_c" 2>/dev/null)"$'\n'
+          done < <(gad_uat_evidencias_citadas "$PHASE_DIR" "$NN")
+        fi ;;
+    esac
     while IFS= read -r arq; do
       [ -n "$arq" ] || continue
       # v2.10.1 (57): os dois formatos, braço a braço — formato novo `.gad/intent/` e
@@ -1577,9 +1597,16 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
         *"/.gad/fences/"*".ok")
           if [ "$arq" = "${arq%/.gad/fences/${ETAPA%% *}.ok}" ]; then DURA="$DURA $arq"
           else RESTO="$RESTO $arq"; fi ;;
-        *) RESTO="$RESTO $arq" ;;
+        *) if [ -n "$UAT_OBRIG" ] && printf '%s' "$UAT_OBRIG" | grep -qxF -- "$arq"; then
+             DURA_UAT="$DURA_UAT $arq"
+           else RESTO="$RESTO $arq"; fi ;;
       esac
     done <<<"$SUJOS"
+    if [ -n "$DURA_UAT" ]; then
+      n_du=$( { printf '%s\n' $DURA_UAT | grep -c . || true; } )
+      RES=$(jq -c --arg d "resultado do UAT fora de commit na etapa $ETAPA — $n_du arquivo(s): NN-POS-SHIP.md e/ou evidência citada por cenário do NN-UAT.md (rode: commita-artefatos.sh <fase> <NN> uat): $(printf '%s ' $DURA_UAT | cut -c1-350)" \
+        '. + [{id:"uat_fora_do_git", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
     if [ -n "$DURA" ]; then
       n_dura=$( { printf '%s\n' $DURA | grep -c . || true; } )
       RES=$(jq -c --arg d "evidência da fase fora de commit na etapa $ETAPA — $n_dura arquivo(s) de .intent/, pareceres/ ou atestado (rode: commita-artefatos.sh <fase> <NN> evidencia): $(printf '%s ' $DURA | cut -c1-350)" \

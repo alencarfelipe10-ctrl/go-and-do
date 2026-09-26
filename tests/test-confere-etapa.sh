@@ -823,6 +823,34 @@ eq "atestado de OUTRA etapa fora de commit → FALHA dura" \
    "$(assert_de "$J2" evidencia_fora_do_git)" "FALHA"
 rm -f "$PD/.fence-1.ok"
 
+# — t59 FM-F27INS-01UAT: NN-POS-SHIP.md e a evidência CITADA por cenário são DUROS
+mkdir -p "$PD/uat-evidencia"
+printf '### 10. cli\ntype: cli\nresult: pass\nevidencia: uat-evidencia/cenario-10.txt\n' > "$PD/99-UAT.md"
+( cd "$R" && git add "$PD/99-UAT.md" && git -c user.name=t -c user.email=t@t.io \
+    -c commit.gpgsign=false commit -qm uat >/dev/null 2>&1 )
+echo '$ pytest -q' > "$PD/uat-evidencia/cenario-10.txt"
+echo 'rascunho'    > "$PD/uat-evidencia/nao-citado.txt"
+J5="$(bash "$C" 5 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 5: evidência citada fora de commit ainda é AVISO (a cerca da 5.4 roda antes do commit)" \
+   "$(assert_de "$J5" uat_fora_do_git)" "<ausente>"
+J6="$(bash "$C" 6 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 6: evidência citada fora de commit → FALHA dura (uat_fora_do_git)" \
+   "$(assert_de "$J6" uat_fora_do_git)" "FALHA"
+casa "…nomeia o arquivo citado e o modo uat" "$J6" 'commita-artefatos\.sh <fase> <NN> uat.*cenario-10\.txt'
+printf '%s' "$J6" | jq -r '.asserts[]|select(.id=="uat_fora_do_git")|.detalhe' | grep -q 'nao-citado' \
+  && falha "evidência NÃO citada virou dura" "$J6" || ok "evidência não citada segue só no aviso"
+echo '- id: 99-01' > "$PD/99-POS-SHIP.md"
+J5="$(bash "$C" 5 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 5: NN-POS-SHIP.md fora de commit → FALHA dura (uat_fora_do_git)" \
+   "$(assert_de "$J5" uat_fora_do_git)" "FALHA"
+J3="$(bash "$C" 3 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 3: a regra do UAT não se aplica" "$(assert_de "$J3" uat_fora_do_git)" "<ausente>"
+( cd "$R" && git add -f "$PD/99-POS-SHIP.md" "$PD/uat-evidencia/cenario-10.txt" && git -c user.name=t \
+    -c user.email=t@t.io -c commit.gpgsign=false commit -qm pos >/dev/null 2>&1 )
+J6="$(bash "$C" 6 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 6: tudo commitado → sem uat_fora_do_git" "$(assert_de "$J6" uat_fora_do_git)" "<ausente>"
+rm -rf "$PD/uat-evidencia/nao-citado.txt"
+
 # — FM-01GAT: recibo do 4.1 vencido por commit de CÓDIGO posterior ao head aprovado
 IFS='|' read -r R PD <<<"$(monta recibo 99)"
 gitq() { git -C "$R" -c user.name=t -c user.email=t@t.io -c commit.gpgsign=false "$@" >/dev/null 2>&1; }

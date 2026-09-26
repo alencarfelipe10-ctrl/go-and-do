@@ -115,6 +115,35 @@ gad_trava_caminhos() { # <pd> <id>
   gad_fase_caminho "$1" "gates/${2:-}.json"; printf '\n'
 }
 
+# ── EVIDÊNCIA DO UAT CITADA EM CENÁRIO (t59 · FM-F27INS-01UAT) ────────────────
+# Fase sem tela prova com a saída de um comando, gravada em texto (`cenario-10.txt`); o modo
+# uat do commita-artefatos só reconhecia .pdf/.png e a prova ficou fora do git (F27 INS).
+# Fonte única de «qual arquivo de uat-evidencia/ o NN-UAT.md cita» — o commita-artefatos
+# (modo uat) e o confere-etapa.sh (classe DURA) leem daqui. Cita = campo `evidencia:` ou
+# qualquer menção `uat-evidencia/<nome>` no NN-UAT.md. Só entra arquivo regular, visível,
+# que exista DENTRO de <pd>/uat-evidencia/ (o campo pode apontar para fora do git com o
+# motivo — workflow-etapa-6.md 6.3b; esse não é cobrado). Qualquer extensão: a citação é a
+# seleção explícita, e é ela que limita o volume (risco anotado no FM-F27INS-01UAT).
+#   gad_uat_evidencias_citadas <pd> <NN> → caminhos absolutos, 1 por linha, sem repetição
+gad_uat_evidencias_citadas() { # <pd> <NN>
+  local pd="${1%/}" nn="${2:-}" uat c abs ev
+  uat="$pd/$nn-UAT.md"
+  [ -f "$uat" ] && [ -d "$pd/uat-evidencia" ] || return 0
+  ev="$(cd -P -- "$pd/uat-evidencia" 2>/dev/null && pwd)" || return 0
+  { sed -n 's/^[[:space:]]*evidencia:[[:space:]]*//p' "$uat"
+    grep -oE 'uat-evidencia/[^][:space:]`"'"'"'()<>|,;]+' "$uat" || true
+  } | while IFS= read -r c; do
+    c="${c%%[[:space:]]*}"; c="${c#[\`\"\']}"; c="${c%[\`\"\'.:]}"
+    [ -n "$c" ] || continue
+    case "$c" in /*) abs="$c" ;; *) abs="$pd/$c" ;; esac
+    [ -f "$abs" ] || continue
+    abs="$(cd -P -- "$(dirname -- "$abs")" 2>/dev/null && pwd)/$(basename -- "$abs")" || continue
+    case "$abs" in "$ev"/*) : ;; *) continue ;; esac
+    case "$(basename -- "$abs")" in .*) continue ;; esac
+    printf '%s\n' "$abs"
+  done | LC_ALL=C sort -u
+}
+
 gad_rastreado() { # <root> <arquivo>
   git -C "$1" ls-files --error-unmatch -- "$2" >/dev/null 2>&1
 }

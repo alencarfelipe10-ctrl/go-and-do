@@ -4,13 +4,15 @@
 # commita, modelo não digita git).
 #
 # Uso: commita-artefatos.sh <phase_dir> <NN> <uat|runlog|intencao>
-#   uat    — NN-UAT.md + uat-evidencia/ (árvore limpa pro preflight do ship; caminhos
+#   uat    — NN-UAT.md + NN-POS-SHIP.md + uat-evidencia/ (árvore limpa pro preflight do ship; caminhos
 #            explícitos — NUNCA git add de diretório .planning inteiro nem .err/.log).
 #            Em uat-evidencia/, a seleção é EXPLÍCITA por extensão de evidência
 #            legítima de UAT (conferido contra uat-playbook.md: browser_save_pdf
 #            grava .pdf, browser_screenshot grava .png — nenhum outro artefato do
 #            playbook é gravado nesse diretório). Arquivos ocultos e qualquer outra
-#            extensão (.err/.log/.jsonl/.tmp/…) nunca entram. Teto de segurança: mais
+#            extensão (.err/.log/.jsonl/.tmp/…) nunca entram — SALVO o arquivo que um
+#            cenário do NN-UAT.md CITA (`evidencia:` ou `uat-evidencia/<nome>`; t59,
+#            FM-F27INS-01UAT: fase sem tela prova com texto). Teto de segurança: mais
 #            de 20 arquivos na seleção → RECUSA, nada é adicionado, exit 1 (C4 —
 #            é melhor falhar visível do que arrastar centenas de arquivos em silêncio).
 #   runlog — NN-RUN-LOG.jsonl + NN-DECISOES.md (fecho da rodada, 6.5) + evidência dura
@@ -100,6 +102,15 @@ case "$MODO" in
     if [ -d "$PD/uat-evidencia" ]; then
       mapfile -d '' -t EVID < <(find "$PD/uat-evidencia" -maxdepth 1 -type f \
         \( -iname '*.pdf' -o -iname '*.png' \) ! -name '.*' -print0)
+      # t59 (FM-F27INS-01UAT): + a evidência CITADA por cenário no NN-UAT.md, de qualquer
+      # extensão (fase sem tela prova com texto: cenario-10.txt, saída do pytest). Conta no
+      # mesmo teto de 20. Fonte única: gad_uat_evidencias_citadas (lib/gad-caminhos.sh).
+      mapfile -t _CIT < <(gad_uat_evidencias_citadas "$PD" "$NN")
+      for f in ${_CIT[@]+"${_CIT[@]}"}; do
+        _dup=0; for g in ${EVID[@]+"${EVID[@]}"}; do
+          [ "$(realpath -- "$g" 2>/dev/null)" = "$f" ] && { _dup=1; break; }; done
+        [ "$_dup" = 1 ] || EVID+=("$f")
+      done
     fi
     N=${#EVID[@]}
     if [ "$N" -gt 20 ]; then
@@ -110,10 +121,13 @@ case "$MODO" in
       exit 1
     fi
     git add "$PD/$NN-UAT.md" 2>/dev/null || true
+    # t59 (FM-F27INS-01UAT): o NN-POS-SHIP.md (5.6, pos-ship.py move) trava a fase seguinte
+    # e ninguém o commitava — o modo uat é o escritor único dele.
+    [ -f "$PD/$NN-POS-SHIP.md" ] && { git add -f -- "$PD/$NN-POS-SHIP.md" 2>/dev/null || true; }
     if [ "$N" -gt 0 ]; then
       git add -- "${EVID[@]}" 2>/dev/null || true
     fi
-    MSG="docs(fase $NN): artefatos do UAT (resultado + evidências)" ;;
+    MSG="docs(fase $NN): artefatos do UAT (resultado + evidências + pós-ship)" ;;
   runlog)
     git add "$PD/$NN-RUN-LOG.jsonl" 2>/dev/null || true
     [ -f "$PD/$NN-DECISOES.md" ] && git add "$PD/$NN-DECISOES.md" 2>/dev/null || true

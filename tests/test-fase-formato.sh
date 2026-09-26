@@ -103,7 +103,7 @@ OUT=$(bash "$SC/run-log.sh" "$PDN" 99 end "2 planejamento" --kv veredito=pass 2>
 case "$OUT" in *GATE-EM-FAIL*) ok "[novo] run-log recusa o end com a trava ANTIGA viva (leitura dupla)" ;;
   *) falha "[novo] run-log recusa o end com a trava antiga viva" "$OUT" ;; esac
 rm -f "$PDN/.gad/gates/2.json"
-PYT=$(python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import gad_caminhos as g; print("|".join(g.trava_caminhos(sys.argv[2], "5")))' "$SC/lib" "$PDN")
+PYT=$(python3 -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import gad_caminhos as g; print("|".join(g.trava_caminhos(sys.argv[2], "5")))' "$SC/lib" "$PDN")
 eq  "[py] trava_caminhos = novo e antigo, nessa ordem"          "$PYT" "$RN/.planning/.gad/gates/99-bancada/5.json|$PDN/.gad/gates/5.json"
 SHT=$(bash -c '. "$1/lib/gad-caminhos.sh"; gad_trava_caminhos "$2" 5 | paste -sd"|"' _ "$SC" "$PDN")
 eq  "[sh] gad_trava_caminhos = o mesmo que o gêmeo Python"      "$SHT" "$PYT"

@@ -90,6 +90,36 @@ esperado=$(printf 'fase/24-UAT.md\nfase/uat-evidencia/cenario-1.pdf')
 [ "$commitado" = "$esperado" ] && ok "só o .pdf visível entrou; oculto/.jsonl/.tmp ficaram de fora" \
   || erro "seleção incorreta" "commitado=[$commitado] esperado=[$esperado]"
 
+echo "== t59 FM-F27INS-01UAT — modo uat leva o NN-POS-SHIP.md e a evidência de texto CITADA"
+D="$TMP/ps"; repo_de_mentira "$D"
+mkdir -p "$D/fase/uat-evidencia"
+printf '### 10. cli\nresult: pass\nevidencia: uat-evidencia/cenario-10.txt\nnota: ver uat-evidencia/sondagem.log\n' > "$D/fase/27-UAT.md"
+echo '- id: 27-01' > "$D/fase/27-POS-SHIP.md"
+echo '$ pytest -q'  > "$D/fase/uat-evidencia/cenario-10.txt"
+echo '$ curl'       > "$D/fase/uat-evidencia/sondagem.log"
+echo 'rascunho'     > "$D/fase/uat-evidencia/nao-citado.txt"
+: > "$D/fase/uat-evidencia/cenario-2.pdf"
+echo "sujeira do usuario" > "$D/outro.txt"
+saida=$(cd "$D" && bash "$SCRIPT" "$D/fase" 27 uat 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "exit 0" || erro "esperado exit 0, veio $rc" "$saida"
+commitado=$(git -C "$D" show --name-only --format= HEAD | grep . | sort)
+esperado=$(printf 'fase/27-POS-SHIP.md\nfase/27-UAT.md\nfase/uat-evidencia/cenario-10.txt\nfase/uat-evidencia/cenario-2.pdf\nfase/uat-evidencia/sondagem.log' | sort)
+[ "$commitado" = "$esperado" ] && ok "commit leva UAT + POS-SHIP + .pdf + as duas evidências citadas (e só)" \
+  || erro "seleção divergente" "commitado=[$commitado] esperado=[$esperado]"
+git -C "$D" ls-files | grep -q 'nao-citado' && erro "evidência NÃO citada entrou" || ok "texto não citado fica de fora"
+
+echo "== t59 FM-F27INS-01UAT — a evidência citada conta no teto de 20"
+D="$TMP/teto"; repo_de_mentira "$D"
+mkdir -p "$D/fase/uat-evidencia"
+: > "$D/fase/27-UAT.md"
+i=1
+while [ "$i" -le 15 ]; do : > "$D/fase/uat-evidencia/c-$i.pdf"; i=$((i+1)); done
+i=1
+while [ "$i" -le 6 ]; do echo x > "$D/fase/uat-evidencia/s-$i.txt"; echo "evidencia: uat-evidencia/s-$i.txt" >> "$D/fase/27-UAT.md"; i=$((i+1)); done
+saida=$(cd "$D" && bash "$SCRIPT" "$D/fase" 27 uat 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "RECUSA: uat-evidencia com 21 arquivos" && [ "$rc" != 0 ] \
+  && ok "15 .pdf + 6 citados = 21 → RECUSA" || erro "teto não contou os citados" "rc=$rc $saida"
+
 echo "== M6 (46 j) — modo `intencao`: aceita parecer NOVO e não absorve worktree sujo"
 D="$TMP/m6"; repo_de_mentira "$D"
 mkdir -p "$D/fase/pareceres"
