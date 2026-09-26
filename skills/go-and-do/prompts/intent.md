@@ -620,6 +620,22 @@ que o registro foi feito de memória, no fim, e não no ato.
       Sem essa declaração o script grava `hash: ""` e lista os ids em `hash_ausente[]` no
       `c<C>/correcoes.aplicado`: a ausência fica auditável, mas a releitura perde a âncora
       por correção. Com um só arquivo no ciclo, a forma só-ids basta.
+      **Tocou o CONTEXT? Re-rode a guarda estrutural, sempre com `--spec` (FJ-04INT):**
+      ```bash
+      if [ -f "<phase_dir>/.discuss-guard-args" ]; then
+        xargs -a "<phase_dir>/.discuss-guard-args" \
+          bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/context-guard.sh" \
+          "<CONTEXT>" --root .
+      else
+        bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/context-guard.sh" "<CONTEXT>" \
+          --spec "<SPEC>" --reqs "<REQ_IDS>" --root .
+      fi
+      ```
+      O `.discuss-guard-args` (escrito pelo `discuss-finalize.sh` no passo 5 do CONTEXT) já
+      carrega o `--spec`/`--reqs` certos — use-o em vez de remontar os requisitos à mão.
+      Sem ele (CONTEXT anterior a este fork), monte `--spec`/`--reqs` você mesmo. Rodar a
+      guarda **sem `--spec`** é o que gerou `[guard] FAIL: <spec_lock> present without
+      SPEC` na F27-INS: reprovação falsa, 1 turno de leitura do uso.
       Ciclo sem correção → `correcoes-commit.sh "<phase_dir>" <C> --vazio` (marcador
       explícito; ausência não vale). Exit 3 = **nada promovido**: leia a razão, conserte e
       re-rode — nunca contorne com `git` na mão.
@@ -647,8 +663,10 @@ que o registro foi feito de memória, no fim, e não no ato.
    par em `consistencia`) → corrija **no mesmo turno, todos juntos** (bloqueante e
    documental na MESMA correção — nunca uma rodada por categoria) (rodada `c<C>b`: novo
    script, `--inicio` e `--ids` de novo — o `.aplicado` é sobrescrito in-place; uma `D-NN`
-   desatualizada se emenda no CONTEXT ou ganha a tag `superada-c<C>` no bullet, com
-   `context-guard.sh` re-rodado) e **despache uma releitura nova** — a segunda lista o
+   desatualizada se emenda no CONTEXT ou ganha a tag `superada-c<C>` no bullet, com a
+   guarda re-rodada como no item 2 do passo 5 (**sempre com `--spec`, via
+   `.discuss-guard-args` ou à mão — FJ-04INT**) e **despache uma releitura nova** — a
+   segunda lista o
    conjunto de caminhos do `.aplicado` vigente, que pode ser maior que o da primeira.
    **A partir desta rodada (`c<C>b` em diante) só `contradiz`/`prescreve_mecanismo` abrem
    outra rodada** (`c<C>c`): o filho já devolve o documental (`omissoes_novas`/
