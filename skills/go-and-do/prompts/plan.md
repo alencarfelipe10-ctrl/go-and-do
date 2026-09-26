@@ -194,7 +194,20 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    `$HOME/.claude/skills/go-and-do/scripts/confere-ponteiros-plano.sh "<phase_dir>"` e devolva
    a lista dele ao planner (o script só avisa — quem decide trocar `linhas X-Y` por símbolo é
    o planner, não você).
-6. Devolva pelo `<return_contract>`. Falha de ponta a ponta → `blocked` com motivo.
+6. **Fecho: incidentes primeiro, evidência por último (FM-F27INS-06INT · FM-F27INS-02PLAN).**
+   Todo item que vai em `incidentes:` já tem de estar no run-log (gravado na hora — ver o
+   `<environment>`). Falta algum? Grave agora, um evento por item
+   (`run-log.sh "<phase_dir>" "<NN>" incidente "2 planejamento" --kv origem=plan --kv detalhe=…`):
+   depois que você devolve, a camada 0 roda a cerca, que grava o `end` — incidente com horário
+   posterior ao `end` reprova a etapa. Só então, como **último passo**, commite a evidência:
+   ```bash
+   cd "<project_root>"
+   $HOME/.claude/skills/go-and-do/scripts/commita-artefatos.sh "<phase_dir>" "<NN>" evidencia
+   ```
+   A cerca reprova evidência da fase fora do git (`evidencia_fora_do_git`); sem este passo ela
+   reprovava sempre e a camada 0 commitava por você (F27 INS: as cercas da 2 e da 2.5). Vem
+   depois dos incidentes porque o run-log entra no mesmo commit.
+7. Devolva pelo `<return_contract>`. Falha de ponta a ponta → `blocked` com motivo.
 </mission>
 
 <environment>

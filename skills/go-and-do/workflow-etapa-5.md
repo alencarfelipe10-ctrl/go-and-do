@@ -83,13 +83,30 @@ of treating either as orphaned.
    só por ela.] Classifique nos 4 baldes, aplique `<push_on_it>` no balde 1, escreva
    results/Gaps/evidências no `NN-UAT.md`. Devolva só o qualitativo do `<return_contract>` —
    números são contados por script."
-3. Fence: `confere-etapa.sh 5` — reconciles baskets/probes/evidence from disk, lints the
-   gap-YAML, runs the native `uat-passed` predicate, scans for SECRETS (gitleaks-style
-   patterns, never generic PII) and, on pass, promotes `pre_uat: executed` (single writer —
-   5.C/5.E). Exit 1 → back to the SAME subagent. Do not ingest `NN-UAT.md`. **Fence passed →
-   commit now** (`commita-artefatos.sh <phase_dir> <NN> uat`, FM-03UAT): whatever exit stage 5
-   takes next (5.5, 5.6, straight to Etapa 6), the UAT result the subagent just wrote is
-   already durable, instead of riding on whichever later step happens to commit next.
+3. Return → incidents → commit → fence → commit (FM-F27INS-04UAT · FM-F27INS-01UAT).
+   - **Incidents first.** The conductor's return carries the mandatory `incidentes` list: log
+     it to the run-log as soon as it arrives, one `incidente` event per item
+     (`--kv origem=5.4/uat-conductor`), skipping items already there (match by `detalhe`) —
+     before the fence, which writes the stage's `end`; an incident stamped after that `end`
+     fails the stage (`incidente_tardio`). On F27 INS the conductor's incident waited 9 min and
+     landed in the skeptic's window.
+   - **Commit the result** the conductor just wrote (`commita-artefatos.sh <phase_dir> <NN>
+     uat`, FM-03UAT): `NN-UAT.md` plus the `uat-evidencia/` files a scenario cites. Its exit 1
+     is the 20-file ceiling refusal — an environment block for you (relay the `RECUSA:` line
+     to the owner, as in 6.3b), never a reason to re-dispatch the subagent.
+   - **Fence:** `confere-etapa.sh 5` — reconciles baskets/probes/evidence from disk, lints the
+     gap-YAML, runs the native `uat-passed` predicate, scans for SECRETS (gitleaks-style
+     patterns, never generic PII) and, on pass, promotes `pre_uat: executed` (single writer —
+     5.C/5.E). Cited evidence outside git fails it (`uat_fora_do_git`); the commit above is
+     what prevents that, and if it still fires the fix is yours (commit), not the subagent's.
+     Any other exit 1 → back to the SAME subagent, and after its fix the same order again. Do
+     not ingest `NN-UAT.md`.
+   - **Fence passed → commit again** (same command; it picks up the `pre_uat: executed` stamp
+     the fence just wrote): whatever exit stage 5 takes next (5.5, 5.6, straight to Etapa 6),
+     the UAT result is already durable, instead of riding on whichever later step happens to
+     commit next.
+   This order holds for every stage-5 fence that follows a conductor dispatch — 5.5 step 6 and
+   the 5.6 re-run (`--reuat`) included.
 
 > Cardinal rule of the playbook: never `pass` on the ambiguous — uncertainty → basket 3 (the
 > real basket 3 is a login/2FA wall).
@@ -103,8 +120,10 @@ of treating either as orphaned.
    the new code).
 5. Re-UAT only on the `issue` scenarios — same server-owning window, which brings up the NEW
    server (post-fix code; built surface → re-run the build first).
-6. `confere-etapa.sh 5 --fix-cycle` validates and stamps `pre_uat_fix_cycle: done` (single
-   writer — 5.1 uses it to never fire a 2nd cycle).
+6. Same order as 5.4 step 3: log the re-UAT conductor's `incidentes`, commit its result
+   (`commita-artefatos.sh <phase_dir> <NN> uat`), and only then `confere-etapa.sh 5
+   --fix-cycle`, which validates and stamps `pre_uat_fix_cycle: done` (single writer — 5.1
+   uses it to never fire a 2nd cycle). Passed → commit again (the stamp).
 - Closed → Etapa 6. Persisted → Sub-rotina D (`bug de UAT persistente`).
 
 **5.6 — Basket 3: post-ship triage + re-UAT (1× only).** Runs when 5.4 (or a resumed round)

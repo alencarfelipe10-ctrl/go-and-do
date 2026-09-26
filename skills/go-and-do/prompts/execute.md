@@ -132,6 +132,22 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
    com o handoff gracioso (é o fluxo 3.4 → pause-work dela). Todo o progresso já é
    durável por construção (commits atômicos + `SUMMARY.md` por plano) — não há nada
    extra a gravar antes de devolver.
+3b. **Fecho: incidentes primeiro, evidência depois — os dois ANTES do fiscal do passo 4
+   (FM-F27INS-06INT · FM-F27INS-02PLAN).** Vale para todo retorno `done`, `incompleto`
+   inclusive. Todo item que vai em `incidentes:` já tem de estar no run-log (gravado na hora —
+   «Incidente se grava na hora» no `<environment>`). Falta algum? Grave agora, um evento por
+   item, com o mesmo comando de lá: depois que você devolve, a camada 0 roda a cerca, que grava
+   o `end`, e incidente com horário posterior ao `end` reprova a etapa. Então commite a
+   evidência da fase — inclusive o registro do teste vermelho de cada task, no caminho que o
+   passo 1f resolveu (`intent/red-<NN>-<PP>-t<índice da task>.json` pelo `caminho-fase.sh`, nos
+   dois formatos de fase):
+   ```bash
+   cd "<project_root>"
+   $HOME/.claude/skills/go-and-do/scripts/commita-artefatos.sh "<phase_dir>" "<NN>" evidencia
+   ```
+   A ordem importa: evidência dura fora do git reprova o próprio fiscal
+   (`evidencia_fora_do_git`), e o recibo dele vale para o HEAD que ele conferiu — commit depois
+   do `FENCE-OK` deixa o recibo vencido.
 4. Antes de devolver `done`, rode você mesmo o fiscal e confira o recibo:
    ```bash
    bash "$HOME/.claude/skills/go-and-do/scripts/confere-etapa.sh" 3 \

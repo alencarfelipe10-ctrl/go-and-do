@@ -751,11 +751,11 @@ RL="$PD/99-RUN-LOG.jsonl"
   rl_linha end       "1 intencao" 2000
   rl_linha incidente "1 intencao" 2500 "escrito no fecho, de memoria"; } > "$RL"
 J="$(confere "$R" 99)"
-# DECISÃO DO DONO (21/09): AVISO nesta release, dura na seguinte — medido em modo seco,
-# o assert reprova quase toda etapa das 3 fases reais porque a prática de escrever
-# incidente no fecho é real e ainda não passou por uma fase com os prompts novos.
-eq "incidente depois do end da etapa → AVISO (dura na release seguinte)" "$(assert_de "$J" incidente_tardio)" "AVISO"
-casa "o aviso diz quantos segundos depois" "$J" '\+500s do end'
+# t59 (DECISÃO DO DONO, 26/09): FALHA DURA — o gatilho da decisão de 21/09 (AVISO até
+# uma fase real com os prompts novos) disparou na F27 INS (FM-F27INS-06INT).
+eq "incidente depois do end da etapa → FALHA dura (t59)" "$(assert_de "$J" incidente_tardio)" "FALHA"
+casa "a falha diz quantos segundos depois" "$J" '\+500s do end'
+eq "…e reprova a etapa" "$(jq -r '.veredito' <<<"$J")" "fail"
 
 # — incidente de OUTRA etapa não reprova esta (recorte medido em 21/09)
 IFS='|' read -r R PD <<<"$(monta tardio_outra 99)"
@@ -772,9 +772,20 @@ RL="$PD/99-RUN-LOG.jsonl"
 { rl_linha incidente "1 intencao" 1500 a; rl_linha incidente "1 intencao" 1500 b
   rl_linha incidente "1 intencao" 1500 c; } > "$RL"
 J="$(confere "$R" 99)"
-# A rajada foi rebaixada junto: o assert é um só e o dono nomeou o assert.
-eq "3 incidentes no mesmo segundo → AVISO" "$(assert_de "$J" incidente_tardio)" "AVISO"
+# A rajada SOZINHA segue AVISO (t59): a camada 0 gravando a lista `incidentes` do retorno,
+# um evento por item (workflow-etapa-5.md §5.4), produz rajada por construção.
+eq "3 incidentes no mesmo segundo (antes de qualquer end) → AVISO" "$(assert_de "$J" incidente_tardio)" "AVISO"
 casa "o aviso nomeia a rajada" "$J" 'incidentes no mesmo segundo'
+
+# — tardio + rajada: a metade tardia manda → FALHA
+IFS='|' read -r R PD <<<"$(monta tardio_rajada 99)"
+RL="$PD/99-RUN-LOG.jsonl"
+{ rl_linha end       "1 intencao" 2000
+  rl_linha incidente "1 intencao" 2008 a; rl_linha incidente "1 intencao" 2008 b
+  rl_linha incidente "1 intencao" 2008 c; } > "$RL"
+J="$(confere "$R" 99)"
+eq "lote no mesmo segundo DEPOIS do end (caso F27 INS) → FALHA" "$(assert_de "$J" incidente_tardio)" "FALHA"
+casa "…o detalhe cita também a rajada" "$J" 'incidentes no mesmo segundo'
 
 # — run-log sadio não acusa nada
 IFS='|' read -r R PD <<<"$(monta sadio 99)"
@@ -831,8 +842,20 @@ printf '### 10. cli\ntype: cli\nresult: pass\nevidencia: uat-evidencia/cenario-1
 echo '$ pytest -q' > "$PD/uat-evidencia/cenario-10.txt"
 echo 'rascunho'    > "$PD/uat-evidencia/nao-citado.txt"
 J5="$(bash "$C" 5 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
-eq "etapa 5: evidência citada fora de commit ainda é AVISO (a cerca da 5.4 roda antes do commit)" \
+# t59 (resto do d2, decisão do dono 26/09): a 5.4 passo 3 / 5.5 passo 6 commitam o resultado
+# ANTES da cerca 5 — a isenção da etapa 5 caiu.
+eq "etapa 5: evidência citada fora de commit → FALHA dura (uat_fora_do_git)" \
+   "$(assert_de "$J5" uat_fora_do_git)" "FALHA"
+casa "…etapa 5 nomeia o arquivo citado" "$J5" 'uat_fora_do_git[^}]*cenario-10\.txt'
+printf '%s' "$J5" | jq -r '.asserts[]|select(.id=="uat_fora_do_git")|.detalhe' | grep -q 'nao-citado' \
+  && falha "etapa 5: evidência NÃO citada virou dura" "$J5" || ok "etapa 5: evidência não citada segue só no aviso"
+( cd "$R" && git add -f "$PD/uat-evidencia/cenario-10.txt" && git -c user.name=t -c user.email=t@t.io \
+    -c commit.gpgsign=false commit -qm ev10 >/dev/null 2>&1 )
+J5="$(bash "$C" 5 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 5: evidência citada commitada antes da cerca → sem uat_fora_do_git" \
    "$(assert_de "$J5" uat_fora_do_git)" "<ausente>"
+( cd "$R" && git rm -q --cached "$PD/uat-evidencia/cenario-10.txt" && git -c user.name=t -c user.email=t@t.io \
+    -c commit.gpgsign=false commit -qm des-ev10 >/dev/null 2>&1 )
 J6="$(bash "$C" 6 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
 eq "etapa 6: evidência citada fora de commit → FALHA dura (uat_fora_do_git)" \
    "$(assert_de "$J6" uat_fora_do_git)" "FALHA"

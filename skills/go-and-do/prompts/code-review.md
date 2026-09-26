@@ -166,6 +166,18 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
    silenciosamente pulado — devolva `estado: needs_decision` com a alegação e as opções
    (a recomendação primeiro); a camada 0 pergunta, o conserto roda DENTRO deste gate, e só
    depois disso vêm o fiscal, o `end` e o recibo (FJ-01GAT).
+3b. **Fecho: incidentes primeiro, evidência por último (FM-F27INS-06INT · FM-F27INS-02PLAN,
+   que cobre o FM-F27INS-04GAT).** Todo item que vai em `incidentes:` já tem de estar no run-log
+   (gravado na hora — parágrafo «Incidente se grava na hora» abaixo, com o mesmo rótulo). Falta
+   algum? Grave agora, um evento por item: depois que você devolve, a camada 0 roda o fiscal,
+   que grava o `end` — incidente com horário posterior ao `end` reprova o gate. Só então, como
+   **último passo**, commite a evidência:
+   ```bash
+   cd "<project_root>"
+   $HOME/.claude/skills/go-and-do/scripts/commita-artefatos.sh "<phase_dir>" "<NN>" evidencia
+   ```
+   Na F27 INS o fiscal reprovou `evidencia_fora_do_git` no 4.1 e no 4.5 porque a evidência da
+   rodada não estava commitada; commitar e rodar de novo resolveu em segundos — agora vem antes.
 4. Devolva pelo `<return_contract>`. O comando falhou de ponta a ponta (nenhum review
    escrito) → `estado: blocked` com o motivo.
 

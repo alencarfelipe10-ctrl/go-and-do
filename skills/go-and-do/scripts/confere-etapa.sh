@@ -1526,15 +1526,20 @@ PYTARDIO
 ) || TARDIOS=""
   jq -e . >/dev/null 2>&1 <<<"$TARDIOS" || TARDIOS='{"tardios":[],"rajadas":[]}'
   n_tard=$(jq '.tardios|length' <<<"$TARDIOS"); n_raj=$(jq '.rajadas|length' <<<"$TARDIOS")
-  if [ "${n_tard:-0}" -gt 0 ] || [ "${n_raj:-0}" -gt 0 ]; then
-    # AVISO nesta release, por DECISÃO DO DONO (21/09): medido em modo seco, o assert
-    # reprova quase toda etapa das 3 fases reais (RLR F3/F4, inspired F24.5) — não por
-    # artefato da regra, mas porque a prática de escrever incidente no fecho é real e
-    # ainda não passou por uma fase com os prompts novos («incidente na hora», C1–C4).
-    # Fica DURA na release seguinte, depois de uma fase real com esses prompts.
-    # As duas metades (posterior ao `end` e rajada no mesmo segundo) foram rebaixadas
-    # juntas: o assert é um só e o dono nomeou o assert.
-    RES=$(jq -c --arg d "AVISO: incidente escrito fora da hora do fato: $(jq -r '(.tardios + .rajadas)|join(" · ")' <<<"$TARDIOS" | cut -c1-400)" \
+  if [ "${n_tard:-0}" -gt 0 ]; then
+    # FALHA DURA desde a t59 (DECISÃO DO DONO, 26/09). Em 21/09 o dono a deixara em AVISO
+    # «até uma fase real rodar com os prompts novos» (incidente na hora, C1–C4); o gatilho
+    # disparou na F27 INS: com os prompts novos, 4 etapas ainda gravaram o lote DEPOIS do
+    # `end` (FM-F27INS-06INT, 05PLAN, 07EXE, 04UAT — a camada 0 relatando o retorno do
+    # hospedeiro). Os prompts e o workflow agora mandam gravar antes da cerca.
+    # A RAJADA (>= 3 no mesmo segundo) sozinha segue AVISO, de propósito: o conserto
+    # prescrito (camada 0 grava a lista `incidentes` do condutor no retorno, um evento por
+    # item — workflow-etapa-5.md §5.4) produz rajada por construção, com o `ts` de 1 s do
+    # run-log.sh. Tardio + rajada → FALHA (o detalhe cita as duas).
+    RES=$(jq -c --arg d "incidente escrito depois do end da etapa (grave antes da cerca): $(jq -r '(.tardios + .rajadas)|join(" · ")' <<<"$TARDIOS" | cut -c1-400)" \
+      '. + [{id:"incidente_tardio", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+  elif [ "${n_raj:-0}" -gt 0 ]; then
+    RES=$(jq -c --arg d "AVISO: incidentes gravados em rajada (vários no mesmo segundo) — relato do retorno é legítimo; lote de memória no fecho, não: $(jq -r '.rajadas|join(" · ")' <<<"$TARDIOS" | cut -c1-400)" \
       '. + [{id:"incidente_tardio", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
   fi
   EXTRAI=$(jq -c --argjson t "$TARDIOS" '. + {incidente_tardio: $t}' <<<"$EXTRAI")
@@ -1557,20 +1562,18 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
   # git e a cerca 5 deu pass duas vezes com aviso. Classe DURA:
   #   • NN-POS-SHIP.md — etapas 5 e 6. Ele nasce no passo 4 da 5.6, que commita
   #     (`commita-artefatos.sh … uat`) ANTES de re-rodar esta cerca;
-  #   • evidência citada — da etapa 6 em diante. Na etapa 5 segue AVISO: a cerca da 5.4
-  #     roda ANTES do commit do resultado (5.4 passo 3), e cobrar ali seria o impasse que a
-  #     decisão de 21/09 (abaixo) evitou. O 6.3b commita tudo antes da cerca 6.
+  #   • evidência citada — etapas 5 e 6 (t59, decisão do dono 26/09: a isenção da etapa 5
+  #     caiu junto com a inversão da ordem no workflow — 5.4 passo 3 e 5.5 passo 6 commitam
+  #     o resultado ANTES desta cerca; o 6.3b commita tudo antes da cerca 6).
   # Lista de citados = gad_uat_evidencias_citadas (a MESMA do commita-artefatos, modo uat).
   UAT_OBRIG=""
   case "${ETAPA%% *}" in
     5|6|6.*)
       _raiz_p="$(cd -P -- "$ROOT" 2>/dev/null && pwd)" || _raiz_p="$ROOT"
       UAT_OBRIG="$(realpath -m --relative-to="$_raiz_p" "$PHASE_DIR/$NN-POS-SHIP.md" 2>/dev/null)"$'\n'
-      if [ "${ETAPA%% *}" != 5 ]; then
-        while IFS= read -r _c; do
-          [ -n "$_c" ] && UAT_OBRIG="$UAT_OBRIG$(realpath -m --relative-to="$_raiz_p" "$_c" 2>/dev/null)"$'\n'
-        done < <(gad_uat_evidencias_citadas "$PHASE_DIR" "$NN")
-      fi ;;
+      while IFS= read -r _c; do
+        [ -n "$_c" ] && UAT_OBRIG="$UAT_OBRIG$(realpath -m --relative-to="$_raiz_p" "$_c" 2>/dev/null)"$'\n'
+      done < <(gad_uat_evidencias_citadas "$PHASE_DIR" "$NN") ;;
   esac
   # O filtro de ruído acima (.log/.err/.tmp…) esconderia uma evidência CITADA com essa
   # extensão (ex.: `sondagem.log`), que o commita-artefatos (modo uat) commita: ela volta.
@@ -1586,7 +1589,9 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     # O workflow (`workflow-etapa-5.md`/`-6.md`) roda o fiscal ANTES do `commita-artefatos.sh`, então cobrar árvore
     # limpa de TUDO deixaria a etapa em impasse (o `NN-UAT.md` que o próprio fiscal
     # escreve sujaria a etapa 5; o run-log é reescrito por toda etapa antes de qualquer
-    # fiscal). O dono decidiu, sem inverter a ordem do workflow:
+    # fiscal). O dono decidiu, sem inverter a ordem do workflow (t59, 26/09: a ordem da
+    # etapa 5 FOI invertida — commit do resultado antes da cerca, 5.4 passo 3 / 5.5 passo 6 —
+    # e a evidência citada virou DURA também nela, acima; o resto desta regra segue):
     #   • FALHA DURA só para a EVIDÊNCIA DURA — `.intent/`, `pareceres/` e os atestados
     #     (`.fence-*.ok`) —, que é o alvo real da FM-06INT (160 arquivos fora do git na
     #     F4, incluindo os selos dos ciclos 2/3/4 e os vereditos);
