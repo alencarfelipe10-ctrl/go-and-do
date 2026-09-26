@@ -139,6 +139,18 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
 2c. *(Experimento 4.C-c, a validar em fase real:)* quando o model profile do GSD
    permitir, rode o fixer em Sonnet e registre `fixer=sonnet (experimento)` em
    `sinos` — nunca em silêncio.
+2d. **Fecho do loop — gate real quando o conserto toca arquivo publicado (FM-F27INS-03GAT):**
+   antes do passo 3, confira se algum commit do fixer (desta rodada) tocou um arquivo que a
+   fase leva a publicação/espelho (o que o `SUMMARY.md`/`CONTEXT.md` da fase declara como
+   destino de publicação). Se sim, rode a checagem REAL do projeto para esse escopo — a que
+   fica desligada por padrão porque é lenta (a variável/flag que o projeto documenta para
+   ligá-la; nunca invente um nome de variável que o projeto não declarou) — uma vez, agora,
+   em vez de deixar o gate 4.4/o 4.1b acusar depois. Achado novo dela é achado deste loop:
+   mais uma passada do fixer AQUI, não allowlist de emergência no fecho nem pergunta ao
+   dono adiada para outro gate (caso real F27-INS: 2 falsos positivos de PII escaparam do
+   4.1 porque o teste do clean-room pulou essa checagem sem a variável, e só o 4.4 viu —
+   1 pergunta ao dono, 1 commit de allowlist e 1 reprovação do fiscal do 4.4 depois).
+   Custa 2–4 min nas fases que publicam arquivo; fase sem arquivo publicado não paga nada.
 3. Ao final, colha do `NN-REVIEW.md` (e do output do comando) os números do retorno:
    achados por severidade (encontrados / corrigidos / restantes), o veredito
    (`clean` quando não sobrou Critical), e a lista compacta dos itens
