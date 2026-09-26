@@ -134,6 +134,49 @@ printf '# R\n\nO relatório tem 8 linhas no total e nada mais.\n\n- a\n- b\n' > 
 OUT="$(bash "$S" "$PD" 95 --conferir "$BASE/prosa.md" 2>&1)"
 eq "número em prosa sem dois-pontos → sem acusação" "$(printf '%s' "$OUT" | grep -c CONTAGEM-x-ENUMERACAO)" "0"
 
+echo "── FJ-02ENC: sobras desejáveis (por código) + «como desfazer» das decisões ──"
+cat > "$PD/95-VERIFICATION.md" <<'EOF'
+## Desejáveis pendentes
+
+AC-08, AC-10 e AC-12 seguem pendentes no Windows real (plano 95-06).
+EOF
+cat > "$PD/95-DECISOES.md" <<'EOF'
+## Decisões automáticas da Etapa 3
+
+- `[auto]` baseRef: aplicado.
+  Desfazer: remover a chave X.
+EOF
+printf -- '---\ngo_and_do_resumo: final\n---\n\nForam 3 planos em 2 ondas.\n' > "$PD/95-RESUMO-EXECUTIVO.md"
+OUT="$(bash "$S" "$PD" 95 --conferir "$PD/95-RESUMO-EXECUTIVO.md" 2>&1)"; RC=$?
+eq "AC pendente + Desfazer ausentes → exit 1" "$RC" "1"
+casa "…nomeia AC-08"             "$OUT" 'SOBRA-AUSENTE: AC-08'
+casa "…nomeia AC-10"             "$OUT" 'SOBRA-AUSENTE: AC-10'
+casa "…nomeia AC-12"             "$OUT" 'SOBRA-AUSENTE: AC-12'
+casa "…nomeia o desfazer ausente" "$OUT" 'DESFAZER-AUSENTE'
+printf 'Sobras: AC-08, AC-10, AC-12 (plano 95-06). Como desfazer: remova a chave X.\n' >> "$PD/95-RESUMO-EXECUTIVO.md"
+OUT="$(bash "$S" "$PD" 95 --conferir "$PD/95-RESUMO-EXECUTIVO.md" 2>&1)"
+eq "citado por código + desfazer → sem SOBRA-AUSENTE"    "$(printf '%s' "$OUT" | grep -c SOBRA-AUSENTE)"    "0"
+eq "citado por código + desfazer → sem DESFAZER-AUSENTE" "$(printf '%s' "$OUT" | grep -c DESFAZER-AUSENTE)" "0"
+# «Nenhum desejável pendente»: os AC citados na prosa (já atendidos) não disparam a régua
+cat > "$PD/95-VERIFICATION.md" <<'EOF'
+## Desejáveis pendentes
+
+Nenhum desejável pendente. AC-06 e AC-14 seguem com teste nomeado.
+EOF
+OUT="$(bash "$S" "$PD" 95 --conferir "$PD/95-RESUMO-EXECUTIVO.md" 2>&1)"
+eq "Nenhum desejável pendente → sem SOBRA-AUSENTE" "$(printf '%s' "$OUT" | grep -c SOBRA-AUSENTE)" "0"
+# alvo que NÃO é o resumo (mesma bancada 46b) não entra nesta régua nova, mesmo com as
+# mesmas pendências no disco
+rm -f "$PD/95-RESUMO-EXECUTIVO.md"
+cat > "$PD/95-VERIFICATION.md" <<'EOF'
+## Desejáveis pendentes
+
+AC-08 segue pendente (plano 95-06).
+EOF
+OUT="$(bash "$S" "$PD" 95 --conferir "$BASE/bom.md" 2>&1)"
+eq "alvo não é *-RESUMO-EXECUTIVO.md → régua nova não roda" "$(printf '%s' "$OUT" | grep -c 'SOBRA-AUSENTE\|DESFAZER-AUSENTE')" "0"
+rm -f "$PD/95-VERIFICATION.md" "$PD/95-DECISOES.md"
+
 echo "── --executores: insumo ausente ──"
 OUT="$(HOME="$BASE/semhome" bash "$S" "$PD" 95 --executores 2>&1)"; RC=$?
 eq "sem ~/.claude/projects do projeto → exit 0" "$RC" "0"

@@ -112,8 +112,14 @@ para mostrar.
     que algo foi pulado.
   - `riscos_aceitos` → "**Riscos que você aceitou**" — cada um com onde a decisão foi
     tomada. É assinatura do dono: ele revê aqui, não descobre no código.
+  - `NN-VERIFICATION.md` tem `## Desejáveis pendentes` sem ser "Nenhum desejável
+    pendente" → "**Sobras desejáveis desta fase**" — uma linha por critério, citando o
+    **código** (`AC-nn`, verbatim — o `numeros-da-fase.sh --conferir` confere que cada
+    código da seção aparece aqui) e o plano em que ficou. Descrever a sobra sem citar o
+    código não basta — o conferidor procura o código.
   - existe `NN-DECISOES.md` → "**Decisões que tomei por você (sem parar a fase)**" —
-    o quê, por quê e **como desfazer**. Nunca omita uma decisão registrada.
+    o quê, por quê e **como desfazer** (a palavra "desfazer" tem de aparecer — o
+    conferidor procura por ela). Nunca omita uma decisão registrada.
   - incidentes repassados pelo despacho → "**Incidentes da rodada**".
 </transparencia>
 
