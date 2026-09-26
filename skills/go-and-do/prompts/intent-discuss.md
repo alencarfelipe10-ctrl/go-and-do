@@ -107,6 +107,23 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
      _GSD_SHIM_NAME="gsd-tools.cjs"; _GSD_RUNTIME_ROOT="${RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GSD_TOOLS="${_GSD_RUNTIME_ROOT}/gsd-core/bin/${_GSD_SHIM_NAME}"; if [ -f "$GSD_TOOLS" ]; then gsd_run() { node "$GSD_TOOLS" "$@"; }; elif [ -f "${_GSD_RUNTIME_ROOT}/.claude/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="${_GSD_RUNTIME_ROOT}/.claude/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; elif command -v gsd-tools >/dev/null 2>&1; then GSD_TOOLS="$(command -v gsd-tools)"; gsd_run() { "$GSD_TOOLS" "$@"; }; elif [ -f "$HOME/.claude/gsd-core/bin/${_GSD_SHIM_NAME}" ]; then GSD_TOOLS="$HOME/.claude/gsd-core/bin/${_GSD_SHIM_NAME}"; gsd_run() { node "$GSD_TOOLS" "$@"; }; else echo "ERROR: gsd-tools.cjs not found" >&2; exit 1; fi
      gsd_run query config-set workflow._auto_chain_active false
      ```
+4b. **Duas checagens antes do hand-back, na mesma ordem.**
+   - **Árvore limpa fora da fase (FM-11INT).** `git status --porcelain` no `<project_root>`:
+     qualquer arquivo modificado que não seja o `NN-CONTEXT.md`/`DECISIONS-INDEX.md`/
+     for-humans/STATE desta fase (ex.: `.planning/config.json`, que o workflow do GSD às
+     vezes toca) sai do hand-back **comitado** (com o motivo na mensagem, num commit novo
+     — nunca no commit do CONTEXT) **ou revertido** — nunca deixado sujo para a etapa
+     seguinte herdar em silêncio. Isto **não é sino** (não entra em `.sinos-discuss.txt`,
+     que só conta o que o coordenador tria no ciclo 0): declare no retorno, no campo
+     `arvore_extra` (abaixo).
+   - **Contradição entre as próprias decisões (FJ-02INT).** Antes de commitar o CONTEXT no
+     passo 2, liste os pares de decisões que ele grava e que tocam o mesmo arquivo/
+     mecanismo (aqui dois `D-nn` que citam o mesmo caminho, ex. `pyproject.toml`) e confira
+     se uma nega a outra. Contradição encontrada não vai para o hand-back como observação à
+     parte — reconcilie as duas decisões agora, com uma exceção explícita registrada em
+     ambas (ou na que sobrevive), e comite a emenda como no passo 3 (`--amend` se o commit
+     ainda for o do próprio workflow, senão num commit novo). Não deixe a consultoria achar
+     depois o que você mesmo já tinha percebido.
 5. **Selagem do artefato (T3), última ação antes do retorno.** Depois de *todas* as
    edições (inclusive a dedup do passo 3 e o `--amend`) e do commit final — nada pode
    tocar o CONTEXT depois disto:
@@ -182,6 +199,7 @@ base_context: <blob do .base-CONTEXT.txt; nao_gravado + porquê se o CONTEXT nã
 dedup_aplicada: <n parágrafos substituídos por ponteiro; 0 se o passe já saiu limpo>
 leituras_proprias: <n arquivos do projeto que você abriu além do explore; 0 é o esperado>
 criterios_nao_fecham: <n; 0 quando nenhum>
+arvore_extra: <arquivo — comitado|revertido — porquê; nenhum é o esperado (FM-11INT)>
 sinos: [<um item por linha; ausente se vazio — grave também em <phase_dir>/.gad/intent/sinos-discuss.txt (1 por linha): o briefing do revisor lê do arquivo, não do retorno>]
 pergunta: <só no estado pausa — a decisão pendente com opções e sua recomendação primeiro>
 ```

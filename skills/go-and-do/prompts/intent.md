@@ -594,17 +594,48 @@ que o registro foi feito de memória, no fim, e não no ato.
    desambiguar com `(achado)` à mão). A garantia de verdade é o script (FM-04): id inventado ou
    achado confirmado sem destino é recusado — este parágrafo só evita o turno perdido de recusa.
 
+   **Antes de escrever `correcoes.py`, procure o mesmo ponto nos dois artefatos
+   (FJ-01INT).** Para cada achado confirmado, `grep` a âncora ou o trecho citado
+   (`D-nn`, `AC-n`, `ship.py:541` etc.) no `NN-SPEC.md` **e** no `NN-CONTEXT.md` — não só
+   no artefato onde a `proposicao` apontou. Achado que cita um ponto que os dois citam
+   (ex.: uma decisão do CONTEXT que remete a uma tabela do SPEC) corrige os dois no mesmo
+   lote. Pular esta busca é como a c1-03 da F27-INS aconteceu: corrigida no CONTEXT,
+   esquecida na tabela do SPEC que a própria decisão citava como origem — a releitura
+   pegou a omissão e abriu uma rodada `c1b` inteira (≈ 59 mil tokens de releitura, 5
+   turnos). O script (FM-04) não garante isto: ele só confere id, não cobertura.
+
    **As correções do ciclo: um script, um turno.**
    1. ANTES de editar qualquer artefato:
       ```bash
       $HOME/.claude/skills/go-and-do/scripts/correcoes-commit.sh "<phase_dir>" <C> --inicio \
-        --artefatos "<SPEC>" "<CONTEXT>" "<INTENT-REVIEW>" \
+        --artefatos "<SPEC>" "<CONTEXT>" \
         [--docs .planning/ROADMAP.md .planning/REQUIREMENTS.md]
       ```
+      **Não liste `<INTENT-REVIEW>` aqui (FM-03INT).** Ele só nasce no passo 7, depois que o
+      loop de ciclos termina — em nenhum ciclo (0, 1, 2…) ele existe no momento do
+      `--inicio`, então listá-lo aqui faz o script recusar por alvo inexistente todo ciclo
+      da fase. O `--ids` do fecho de cada ciclo (item 3 abaixo) pode continuar listando-o:
+      esse modo já tolera alvo ausente desde a M4.
       `--docs` **só** quando o ciclo resolve issue R6 ou reconcilia o Goal — neles o
       script comita só o delta do ciclo, mesmo se já estavam sujos.
    2. Escreva **um** `.gad/intent/c<C>/correcoes.py|.sh` com TODAS as correções factuais do
       ciclo e execute-o **no mesmo turno**. Uma edição por achado, id `c<C>-NN`.
+      **Tocou o CONTEXT? Re-rode a guarda estrutural, sempre com `--spec` (FJ-04INT):**
+      ```bash
+      if [ -f "<phase_dir>/.discuss-guard-args" ]; then
+        xargs -a "<phase_dir>/.discuss-guard-args" \
+          bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/context-guard.sh" \
+          "<CONTEXT>" --root .
+      else
+        bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gsd-core/bin/nosso/context-guard.sh" "<CONTEXT>" \
+          --spec "<SPEC>" --reqs "<REQ_IDS>" --root .
+      fi
+      ```
+      O `.discuss-guard-args` (escrito pelo `discuss-finalize.sh` no passo 5 do CONTEXT) já
+      carrega o `--spec`/`--reqs` certos — use-o em vez de remontar os requisitos à mão.
+      Sem ele (CONTEXT anterior a este fork), monte `--spec`/`--reqs` você mesmo. Rodar a
+      guarda **sem `--spec`** é o que gerou `[guard] FAIL: <spec_lock> present without
+      SPEC` na F27-INS: reprovação falsa, 1 turno de leitura do uso.
    3. Feche:
       ```bash
       …  correcoes-commit.sh "<phase_dir>" <C> --ids "c<C>-01,c<C>-02" \
@@ -647,8 +678,10 @@ que o registro foi feito de memória, no fim, e não no ato.
    par em `consistencia`) → corrija **no mesmo turno, todos juntos** (bloqueante e
    documental na MESMA correção — nunca uma rodada por categoria) (rodada `c<C>b`: novo
    script, `--inicio` e `--ids` de novo — o `.aplicado` é sobrescrito in-place; uma `D-NN`
-   desatualizada se emenda no CONTEXT ou ganha a tag `superada-c<C>` no bullet, com
-   `context-guard.sh` re-rodado) e **despache uma releitura nova** — a segunda lista o
+   desatualizada se emenda no CONTEXT ou ganha a tag `superada-c<C>` no bullet, com a
+   guarda re-rodada como no item 2 do passo 5 (**sempre com `--spec`, via
+   `.discuss-guard-args` ou à mão — FJ-04INT**) e **despache uma releitura nova** — a
+   segunda lista o
    conjunto de caminhos do `.aplicado` vigente, que pode ser maior que o da primeira.
    **A partir desta rodada (`c<C>b` em diante) só `contradiz`/`prescreve_mecanismo` abrem
    outra rodada** (`c<C>c`): o filho já devolve o documental (`omissoes_novas`/
@@ -737,11 +770,12 @@ que o registro foi feito de memória, no fim, e não no ato.
    pre_spec_sem_bloco'`): a partir do `rm` eles só existem lá, e é lá que o
    `confere-etapa.sh 1` da camada 0 vai procurá-los. Só então a limpeza (política 1.5):
    ```bash
-   setopt nullglob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
-   G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
-   rm -f $(G 'intent/sinos-*.txt') $(G 'intent/c*/briefing*.md') \
-         $(G intent/varredura.md) $(G 'intent/c*/mudancas.md')
+   $HOME/.claude/skills/go-and-do/scripts/limpa-intencao.sh "<phase_dir>"
    ```
+   Um argumento só; o script resolve os dois formatos de fase pelo `caminho-fase.sh` e apaga
+   exatamente os 4 alvos de hoje, sem depender do glob do shell que chama. Nada casou → exit
+   0 em silêncio; `<phase_dir>` inexistente → exit 2 com mensagem (trate como falha, não
+   como "nada a limpar").
    **Não alargue esses globs.** SOBREVIVEM, por serem insumo da `/audit-gad` e dos gates:
    `c*/runs/`, `c*/status-*`, `c*/tabela.txt`, `c*/vereditos.txt`, `c*/prova-leitura.txt`,
    `c*/rota-verificacao.json`, `c*/correcoes.aplicado|.vazio`, `c*/releitura.*`,
@@ -773,6 +807,23 @@ que o registro foi feito de memória, no fim, e não no ato.
    ele conferiu. Não invente o veredito e não descreva o que «deve» ter passado: na F24.5 a etapa
    foi declarada pronta às 12:10:20 e o fiscal reprovou 1 min depois, por três correções sem
    veredito; custou 4 turnos de engenharia reversa do script.
+   **Nunca conserte uma `FALHA` reescrevendo evidência de ciclo já consumida (FJ-05INT).**
+   Arquivo de ciclo que um gate anterior já leu — `c<C>/ciclo.json` (o gate do briefing c1
+   lê o `c0/ciclo.json`), `c<C>/releitura.json`, `c<C>/correcoes.aplicado` — não se edita
+   depois de usado, nem para trocar `disposicao` (`aberto`→`descartado`) e agradar o
+   fiscal: o destino verdadeiro do sino fica, mesmo que o fiscal reprove por isso (nunca
+   escreva você mesmo o `fences/1.ok` — é o recibo do fiscal, só ele grava, e reescrevê-lo
+   seria exatamente o «não invente o veredito» do parágrafo acima). Sino do ciclo 0
+   `aberto` que já virou achado corrigido ou dívida registrada é um gap de formato
+   conhecido (o ciclo 0 só tem `corrigido|descartado|aberto`, e o fiscal reprova todo
+   `aberto` — sem estado para «foi à consultoria e virou X»): a correção do formato é
+   `FM-09INT` (`confere-sinos.sh` + `c0/ciclo.json`, fora desta lane). Enquanto ela não
+   chega, registre o conflito como `incidente` (`origem=intent-fecho`,
+   `detalhe=sino c0 aberto já resolvido em <achado/dívida> — gap FM-09INT`) e trate como
+   qualquer outra `FALHA` do fiscal: você **não devolve `done`** só por isto — devolva
+   `estado: falha` com o `motivo:` literal (não force `FENCE-OK`), a menos que o achado que
+   consumiu o sino já esteja coberto por uma ressalva do passo 7 (`ressalva_dividas`), caso
+   em que `aprovado_com_ressalva` é a saída honesta.
 9. **Relato de turnos: a saída do medidor, verbatim.** Antes do retorno, rode
    ```bash
    python3 $HOME/.claude/skills/audit-gad/scripts/turnos-por-ciclo.py \
