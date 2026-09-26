@@ -23,6 +23,29 @@
 #   documento; M conta alvos distintos após a normalização). Exit 0 sempre — é
 #   ferramenta de relato; o julgamento do que fazer com um ponteiro quebrado é do modelo.
 #
+#   [t59/L13, 26/09, FM-F27INS-03PLAN] Checagem de LIMITE (existe o arquivo? existe a
+#   linha?) não vê DESLOCAMENTO — a linha citada existe, só o conteúdo mudou (3 casos
+#   reais da F27-INS: `ship.py:502→503`, `conftest.py:57→59`,
+#   `test_bat_commands.py:23-25→25-26`, achados só pelo escrivão da convergência em
+#   `27-REVIEWS.md`, nunca por este script). Quando a MESMA CÉLULA DE TABELA (linha
+#   que começa com `|`, formato real do "source-grounding pass" da convergência) traz
+#   a citação `caminho:linha` **e** um trecho literal entre crases ou aspas duplas
+#   (≥4 caracteres, que não seja ele mesmo outra citação) descrevendo o conteúdo
+#   esperado, o script confere se esse literal aparece no trecho citado do arquivo
+#   real. Fora de tabela (prosa, parágrafo) o script NÃO tenta — testado contra o
+#   corpus real: "mesma linha" em prosa longa com vários links pega literal de OUTRA
+#   citação da mesma frase e vira falso positivo; melhor silêncio do que aviso ruim.
+#   Se não aparece ALI mas aparece numa janela de
+#   ±`SPOT_CHECK_JANELA` linhas (padrão 10, busca da mais próxima para a mais longe),
+#   emite `DESLOCADO caminho:N -> linha real M ("literal")` e o sumário ganha
+#   `· deslocados=K` (só quando K>0; sem deslocamento, o sumário não muda). Se nenhum
+#   literal casa nem na janela, o script fica em silêncio: não inventa categoria para
+#   o que não pode confirmar (é o caso da citação parafraseada — não literal — do
+#   `test_bat_commands.py`, que por isso continua sem aviso; ver
+#   `t59-plano/relatorio-L13.md`). Citação com dois-pontos soltos no mesmo trecho
+#   (`arquivo:57 e :88`) reaproveita o caminho da citação anterior na MESMA célula —
+#   é o formato real do `27-REVIEWS.md`.
+#
 # Régua da skill: verificação vira script; julgamento fica no modelo.
 
 set -u
@@ -148,6 +171,131 @@ while read -r ptr; do
 done < "$TMP/alvos" > "$TMP/out"
 
 broken=$(wc -l < "$TMP/out")
+
+# [t59/L13, FM-F27INS-03PLAN] Segundo passe: DESLOCAMENTO de conteúdo (a linha existe,
+# o texto mudou). Só olha citação + literal que convivem na mesma célula/linha do
+# documento — não inventa literal, não afrouxa casamento (ver comentário no topo).
+JANELA="${SPOT_CHECK_JANELA:-10}"
+python3 - "$DOC" "$JANELA" "${ROOTS[@]}" > "$TMP/deslocados" <<'PY'
+import re, sys, os
+
+doc = sys.argv[1]
+janela = int(sys.argv[2])
+roots = sys.argv[3:]
+
+linhas_doc = open(doc, encoding="utf-8", errors="replace").read().splitlines()
+
+# path:N ou path:N-M abre um "caminho atual" na célula; "e :M" ou "e :M-P" soltos
+# reaproveitam o caminho aberto por ele (formato real: `conftest.py:57 e :88`).
+COMBINED = re.compile(
+    r'(?P<path>[A-Za-z0-9_./-]+\.[A-Za-z0-9_]+):(?P<n1>[0-9]+)(?:-(?P<m1>[0-9]+))?'
+    r'|(?<!\w)e\s+:(?P<n2>[0-9]+)(?:-(?P<m2>[0-9]+))?'
+)
+BACKTICK = re.compile(r'`([^`]+)`')
+QUOTE = re.compile(r'"([^"]{4,})"')
+PTR_DENTRO = re.compile(r'\.[A-Za-z0-9_]+:[0-9]+')
+SO_CAMINHO = re.compile(r'^[\w./-]+\.[A-Za-z0-9_]+$')
+
+_cache = {}
+
+def resolve(caminho):
+    if caminho in _cache:
+        return _cache[caminho]
+    candidatos = [caminho] if caminho.startswith("/") else [os.path.join(r, caminho) for r in roots]
+    achado = None
+    for c in candidatos:
+        if os.path.isfile(c):
+            with open(c, encoding="utf-8", errors="replace") as fh:
+                achado = fh.read().splitlines()
+            break
+    _cache[caminho] = achado
+    return achado
+
+def literais_da_celula(cel):
+    saida = []
+    for rgx in (BACKTICK, QUOTE):
+        for m in rgx.finditer(cel):
+            s = m.group(1).strip()
+            if len(s) < 4 or PTR_DENTRO.search(s) or SO_CAMINHO.match(s):
+                continue
+            saida.append(s)
+    return saida
+
+def pontos_da_celula(cel):
+    pontos = []
+    caminho_atual = None
+    for m in COMBINED.finditer(cel):
+        if m.group("path"):
+            caminho_atual = m.group("path")
+            n = int(m.group("n1"))
+            mm = int(m.group("m1")) if m.group("m1") else n
+            pontos.append((caminho_atual, n, mm))
+        elif caminho_atual is not None and m.group("n2"):
+            n = int(m.group("n2"))
+            mm = int(m.group("m2")) if m.group("m2") else n
+            pontos.append((caminho_atual, n, mm))
+    return pontos
+
+def bate(linhas, n, m, literais):
+    if n < 1 or m > len(linhas):
+        return False
+    trecho = "\n".join(linhas[n - 1:m])
+    return any(lit in trecho for lit in literais)
+
+def busca_deslocado(linhas, n, m, literais, janela):
+    largura = m - n
+    for d in range(1, janela + 1):
+        # Desloca a FAIXA inteira (preserva largura) para trás (n-d) ou para
+        # frente (n+d) — nunca só uma ponta, senão faixa (`:23-25`) buscaria
+        # `[m+d, m+d+largura]` em vez de `[n+d, m+d]` (achado pós-revisão, t59/L13).
+        for inicio in (n - d, n + d):
+            fim = inicio + largura
+            if inicio < 1 or fim > len(linhas):
+                continue
+            trecho = "\n".join(linhas[inicio - 1:fim])
+            for lit in literais:
+                if lit in trecho:
+                    return inicio, fim, lit
+    return None
+
+vistos = set()
+for linha in linhas_doc:
+    # Só linha de TABELA (célula = unidade citação+literal, do formato real do
+    # source-grounding pass). Testado contra o corpus real: em prosa/parágrafo — texto
+    # longo com vários links markdown na mesma frase — o "mesmo trecho" pega literal de
+    # OUTRA citação da frase e gera falso positivo (ex.: `27-02-PLAN.md:174-177` casando
+    # com `rtk proxy`, texto de uma citação vizinha, não da citada). Fora de tabela, a
+    # granularidade de "mesma linha" é grosseira demais — melhor ficar em silêncio.
+    if not linha.strip().startswith("|"):
+        continue
+    celulas = linha.split("|")
+    for cel in celulas:
+        literais = literais_da_celula(cel)
+        if not literais:
+            continue
+        for caminho, n, m in pontos_da_celula(cel):
+            conteudo = resolve(caminho)
+            if conteudo is None or bate(conteudo, n, m, literais):
+                continue
+            achou = busca_deslocado(conteudo, n, m, literais, janela)
+            if not achou:
+                continue
+            inicio, fim, lit = achou
+            alvo = f"{caminho}:{n}" if n == m else f"{caminho}:{n}-{m}"
+            real = str(inicio) if inicio == fim else f"{inicio}-{fim}"
+            chave = (alvo, real)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            print(f'DESLOCADO {alvo} -> linha real {real} ("{lit}")')
+PY
+
+deslocados=$(wc -l < "$TMP/deslocados")
 cat "$TMP/out"
-echo "referencias_vistas=$vistas · alvos_unicos=$total · OK $((total - broken))/$total"
+cat "$TMP/deslocados"
+if [ "$deslocados" -gt 0 ]; then
+  echo "referencias_vistas=$vistas · alvos_unicos=$total · OK $((total - broken))/$total · deslocados=$deslocados"
+else
+  echo "referencias_vistas=$vistas · alvos_unicos=$total · OK $((total - broken))/$total"
+fi
 exit 0
