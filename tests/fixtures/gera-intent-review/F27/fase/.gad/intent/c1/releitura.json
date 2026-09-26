@@ -1,0 +1,13 @@
+{"v": 2, "ciclo": 1, "commit": "5d270b2ed87d4e49b13fefea4a2d9a87301fa950",
+ "artefatos": [
+   {"path": ".planning/phases/INS-27-executavel-windows/27-CONTEXT.md", "blob": "019131a6375b4beffc99eb7778b69d84f580678f"},
+   {"path": ".planning/DECISIONS-INDEX.md", "blob": "f075da77db764bd3710984f9c53fc66ecf28b224"}
+ ],
+ "contradiz": [],
+ "prescreve_mecanismo": [],
+ "omissoes_novas": [{"path": ".planning/phases/INS-27-executavel-windows/27-CONTEXT.md", "o_que": "D-23 declara 'Tabela de origem: 27-SPEC.md §Regression Surface' e a correção c1-03 acrescenta 'a limpeza de revert_clean (git clean -fd src tests, :541, literal fora de MIRROR_DIRS)' ao conjunto que precisa ser re-ancorado — mas a tabela do 27-SPEC.md §Regression Surface (linha 'clean-room/ship.py:61') só enumera :61, :226, :271, :411 e :552; não há linha para :541/revert_clean (grep -n '541\\|revert_clean' 27-SPEC.md não acha nada). A emenda também torna falsa a opção escolhida do próprio D-23 ('re-ancorar só os usos de MIRROR_DIRS em ship.py'), já que :541 é literal, não uso de MIRROR_DIRS.", "porque": "a correção mudou o que a decisão exige re-ancorar em CONTEXT/DECISIONS-INDEX e não propagou o mesmo ponto para a tabela do SPEC que a própria D-23 cita como origem — SPEC não foi tocado neste ciclo."}],
+ "cardinalidade": [],
+ "unicidade": [],
+ "consistencia": "não_disponível",
+ "ok": false,
+ "observacao": "D-19 (c1-01) atribui 'ficam sem diff' de pyproject.toml/uv.lock/.gitattributes à D-22, mas D-22 nunca menciona .gitattributes e a própria c1-02 (no mesmo commit) passou a permitir diff em pyproject.toml sob exceção — citação imprecisa, não achado de escopo."}

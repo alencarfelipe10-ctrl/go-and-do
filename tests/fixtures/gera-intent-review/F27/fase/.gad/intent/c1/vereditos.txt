@@ -1,0 +1,7 @@
+c1-01 | novo | confirmado | B-viabilidade
+c1-02 | novo | confirmado | B-viabilidade
+c1-03 | novo | confirmado | B-viabilidade
+c1-04 | novo | confirmado_irrelevante | D-documental
+c1-05 | novo | confirmado_irrelevante | D-documental
+c1-06 | novo | confirmado_irrelevante | D-documental
+c1-07 | releitura | confirmado | omissoes_novas
