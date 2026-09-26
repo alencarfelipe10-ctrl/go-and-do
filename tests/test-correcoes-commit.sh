@@ -78,12 +78,20 @@ if [ $rc -ne 0 ]; then erro "commit do ciclo falhou (rc=$rc)" "$saida"; else
     && ok '>1 caminho sem declaração → hash vazio E id em hash_ausente[]' \
     || erro "hash_ausente" "vazias=$vaz ausentes=$aus"
   # FM-05INT: o assunto do commit sai da LISTA DE ARQUIVOS DO DIFF, não dos ids
+  # t59 b2 (FM-F27INS-04INT): o assunto traz os IDS (forma documentada); a lista de arquivos
+  # do diff — que continua saindo do diff, não do que o coordenador digitou — vai ao corpo
   msg=$(G log -1 --pretty=%s)
-  [ "$msg" = "docs(fase 24.3): correções do ciclo 1 — .planning/phases/24.3-fase/24.3-SPEC.md, .planning/ROADMAP.md" ] \
-    && ok "assunto do commit = arquivos do diff" || erro "mensagem" "$msg"
+  [ "$msg" = "docs(fase 24.3): correções do ciclo 1 — c1-01, c1-02" ] \
+    && ok "assunto do commit = ids da rodada" || erro "mensagem" "$msg"
   body=$(G log -1 --pretty=%b)
+  case "$body" in *"caminhos: .planning/phases/24.3-fase/24.3-SPEC.md, .planning/ROADMAP.md"*)
+    ok "corpo do commit = arquivos do diff" ;; *) erro "corpo sem os caminhos do diff" "$body" ;; esac
   case "$body" in *"ids: c1-01,c1-02"*) ok "corpo do commit registra os ids" ;;
     *) erro "corpo sem os ids" "$body" ;; esac
+  [ "$(jq -c '.commits' "$apl")" = "[\"$(G rev-parse HEAD)\"]" ] && ok "commits = [o commit do ciclo]" \
+    || erro "commits" "$(jq -c '.commits' "$apl")"
+  [ "$(jq -r '.rodadas|length' "$apl"):$(jq -r '.rodadas[0].rodada' "$apl")" = "1:c1" ] \
+    && ok "rodadas = 1 (c1)" || erro "rodadas" "$(jq -c '.rodadas' "$apl")"
 fi
 limpa
 
@@ -437,6 +445,138 @@ esp="$(git -C "$REPO" rev-parse --path-format=absolute --git-path gad-cache)/las
 n=$(jq -r '.revalida_avisos // "ausente"' "$esp" 2>/dev/null)
 { [ -n "$n" ] && [ "$n" != ausente ] && [ "$n" -gt 0 ]; } \
   && ok "revalida_avisos=$n no JSON de saída" || erro "revalida_avisos" "$n"
+limpa
+
+# ════════════════════════════════════════════════════════════════════════════
+# t59 b2+b3 (FM-F27INS-04INT + FJ-F27INS-03INT) — rodadas do mesmo ciclo: o .aplicado
+# acumula os commits, e a rodada «b» aceita só os ids novos, herdando o resto do
+# .aplicado anterior CONFERIDO contra o git.
+# ════════════════════════════════════════════════════════════════════════════
+APL1() { printf '%s' "$PD/.intent/.correcoes-c1.aplicado"; }
+rodada_a() { # ciclo 1, rodada a: c1-01 e c1-02 confirmados, corrigidos na SPEC
+  monta_repo; set_alvos
+  vereditos 1 "c1-01 | bug | confirmado | codigo" "c1-02 | bug | confirmado | codigo"
+  RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1 || erro "--inicio (a) falhou"
+  echo "spec corrigida na rodada a" >> "$PD/24.3-SPEC.md"
+  RUN "$PD" 1 --ids "c1-01,c1-02" "${ALVOS[@]}" >/dev/null 2>&1 || erro "fecho da rodada a falhou"
+  CA=$(G rev-parse HEAD)
+  HASH_A=$(jq -r '.correcoes[]|select(.id=="c1-01")|.hash' "$(APL1)")
+}
+rodada_b_inicio() { # c1-07 confirmado tarde (caso F27), --inicio da rodada b, emenda no CONTEXT
+  vereditos 1 "c1-01 | bug | confirmado | codigo" "c1-02 | bug | confirmado | codigo" \
+              "c1-07 | bug | confirmado | codigo"
+  RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1 || erro "--inicio (b) falhou"
+  echo "context corrigido na rodada b" >> "$PD/24.3-CONTEXT.md"
+}
+
+echo "== t59 b3 — rodada b só com o id novo é ACEITA (antes: recusa «confirmado sem destino»)"
+rodada_a; rodada_b_inicio
+saida=$(RUN "$PD" 1 --ids "c1-07" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "rodada b com --ids c1-07 → exit 0" || erro "esperava exit 0, veio $rc" "$saida"
+case "$saida" in *"herdados do .aplicado (conferido contra o git): ids c1-01,c1-02"*) ok "a herança é declarada no stderr" ;;
+  *) erro "herança não declarada" "$saida" ;; esac
+CB=$(G rev-parse HEAD); A="$(APL1)"
+echo "== t59 b2 — o .aplicado registra TODOS os commits do ciclo"
+[ "$(jq -c '.commits' "$A")" = "[\"$CA\",\"$CB\"]" ] && ok "commits = [rodada a, rodada b]" || erro "commits" "$(jq -c '.commits' "$A")"
+[ "$(jq -r '.commit' "$A")" = "$CB" ] && ok "commit = o da rodada vigente (a releitura se amarra a ele)" || erro "commit"
+[ "$(jq -r '.ids|join(",")' "$A")" = "c1-01,c1-02,c1-07" ] && ok "ids = união do ciclo" || erro "ids" "$(jq -c .ids "$A")"
+[ "$(jq -r '.correcoes|map(.id)|join(",")' "$A")" = "c1-01,c1-02,c1-07" ] && ok "correcoes = união" || erro "correcoes" "$(jq -c .correcoes "$A")"
+[ "$(jq -r '.correcoes[]|select(.id=="c1-01")|.hash' "$A")" = "$HASH_A" ] \
+  && ok "c1-01 fica com o hash da rodada que o gravou (não é re-selado)" || erro "hash herdado mudou"
+[ "$(jq -r '.correcoes[]|select(.id=="c1-07")|.hash' "$A")" = "$(G rev-parse "HEAD:.planning/phases/24.3-fase/24.3-CONTEXT.md")" ] \
+  && ok "c1-07 selado contra o arquivo da rodada b" || erro "hash de c1-07" "$(jq -c .correcoes "$A")"
+[ "$(jq -r '.caminhos|join(",")' "$A")" = ".planning/phases/24.3-fase/24.3-CONTEXT.md" ] \
+  && ok "caminhos = só os da rodada vigente" || erro "caminhos" "$(jq -c .caminhos "$A")"
+[ "$(jq -r '.blobs|map(.path)|sort|join(",")' "$A")" = ".planning/phases/24.3-fase/24.3-CONTEXT.md,.planning/phases/24.3-fase/24.3-SPEC.md" ] \
+  && ok "blobs = selo de todo caminho do ciclo (por caminho)" || erro "blobs" "$(jq -c .blobs "$A")"
+[ "$(jq -r '[.rodadas[]|.rodada+":"+(.ids|join("+"))]|join(",")' "$A")" = "c1:c1-01+c1-02,c1b:c1-07" ] \
+  && ok "rodadas = c1 (c1-01, c1-02) e c1b (c1-07)" || erro "rodadas" "$(jq -c .rodadas "$A")"
+[ "$(G log -1 --pretty=%s)" = "docs(fase 24.3): correções do ciclo 1 — c1-07" ] \
+  && ok "assunto da rodada b = só o id novo (prefixo que o confere-reconciliacao procura)" || erro "assunto" "$(G log -1 --pretty=%s)"
+case "$(G log -1 --pretty=%b)" in *"rodada: c1b (herdados das anteriores: c1-01,c1-02)"*) ok "corpo declara a rodada e os herdados" ;;
+  *) erro "corpo" "$(G log -1 --pretty=%b)" ;; esac
+
+echo "== t59 b3 — rodada c herda as duas anteriores"
+vereditos 1 "c1-01 | bug | confirmado | codigo" "c1-02 | bug | confirmado | codigo" "c1-07 | bug | confirmado | codigo"
+RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1
+echo "review emendado na rodada c" >> "$PD/24.3-INTENT-REVIEW.md"
+saida=$(RUN "$PD" 1 --ids "c1b-01" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "rodada c → exit 0" || erro "rodada c falhou ($rc)" "$saida"
+[ "$(jq -r '.commits|length' "$A"):$(jq -r '.rodadas[2].rodada' "$A"):$(jq -r '.ids|join(",")' "$A")" = "3:c1c:c1-01,c1-02,c1-07,c1b-01" ] \
+  && ok "3 commits, rodada c1c, ids da união" || erro "rodada c" "$(jq -c '{commits,ids,r:[.rodadas[].rodada]}' "$A")"
+limpa
+
+echo "== t59 b3 — id de rodada anterior repetido (o prompt antigo mandava) fica com a entrada herdada"
+rodada_a; rodada_b_inicio
+saida=$(RUN "$PD" 1 --ids "c1-01:$PD/24.3-SPEC.md,c1-02,c1-07" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "repetir c1-01 com caminho da rodada a NÃO é recusa (FM-05INT só olha ids novos)" || erro "rc=$rc" "$saida"
+A="$(APL1)"
+[ "$(jq -r '.correcoes[]|select(.id=="c1-01")|.hash' "$A")" = "$HASH_A" ] && ok "c1-01 manteve o hash herdado" || erro "c1-01 re-selado"
+[ "$(jq -r '.correcoes|length' "$A")" = 3 ] && ok "sem entrada duplicada" || erro "duplicou" "$(jq -c .correcoes "$A")"
+[ "$(G log -1 --pretty=%s)" = "docs(fase 24.3): correções do ciclo 1 — c1-07" ] && ok "assunto só com o id novo" || erro "assunto" "$(G log -1 --pretty=%s)"
+limpa
+
+echo "== t59 b3 — .aplicado anterior que NÃO confere com o git não é herdado"
+rodada_a; rodada_b_inicio
+A="$(APL1)"
+jq '.blobs[0].blob_commit="0000000000000000000000000000000000000000"' "$A" > "$A.t" && mv "$A.t" "$A"
+H0=$(G rev-parse HEAD)
+saida=$(RUN "$PD" 1 --ids "c1-07" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 3 ] && ok "blob adulterado → nada herdado → a trava recusa (exit 3)" || erro "esperava exit 3, veio $rc" "$saida"
+case "$saida" in *"NÃO confere com o git"*) ok "o aviso diz que não confere e por quê" ;; *) erro "sem aviso" "$saida" ;; esac
+case "$saida" in *"sem destino"*c1-0[12]*) ok "…e a recusa é a de sempre (confirmados sem destino)" ;; *) erro "recusa" "$saida" ;; esac
+[ "$(G rev-parse HEAD)" = "$H0" ] && ok "HEAD inalterado" || erro "HEAD avançou"
+limpa
+rodada_a; rodada_b_inicio
+A="$(APL1)"
+Z=0000000000000000000000000000000000000000
+jq --arg z "$Z" '.blobs[0].blob_commit=$z | .rodadas[0].blobs[0].blob_commit=$z' "$A" > "$A.t" && mv "$A.t" "$A"
+saida=$(RUN "$PD" 1 --ids "c1-07" "${ALVOS[@]}" 2>&1); rc=$?
+{ [ "$rc" = 3 ] && case "$saida" in *"!= blob_commit gravado"*) true ;; *) false ;; esac; } \
+  && ok "blob adulterado dos dois lados (coerente) → o git desmente, não herda" || erro "adulteração coerente" "rc=$rc $saida"
+limpa
+rodada_a; rodada_b_inicio
+A="$(APL1)"
+jq '.commit="1111111111111111111111111111111111111111" | .rodadas[0].commit=.commit' "$A" > "$A.t" && mv "$A.t" "$A"
+saida=$(RUN "$PD" 1 --ids "c1-07" "${ALVOS[@]}" 2>&1); rc=$?
+{ [ "$rc" = 3 ] && case "$saida" in *"não existe no repositório"*) true ;; *) false ;; esac; } \
+  && ok "commit inexistente → não herda (exit 3)" || erro "commit inexistente" "rc=$rc $saida"
+limpa
+
+echo "== t59 b2 — rodada b SEM alteração não apaga o registro das anteriores"
+rodada_a
+vereditos 1 "c1-01 | bug | confirmado | codigo" "c1-02 | bug | confirmado | codigo" "c1-07 | bug | confirmado | codigo"
+RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1
+M0=$(md5sum < "$(APL1)")
+saida=$(RUN "$PD" 1 --ids "c1-07" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 3 ] && ok "rodada sem alteração → exit 3" || erro "esperava exit 3, veio $rc" "$saida"
+[ "$(md5sum < "$(APL1)")" = "$M0" ] && ok ".aplicado das rodadas anteriores intacto" || erro ".aplicado mudou/sumiu"
+[ -f "$PD/.intent/.correcoes-c1.vazio" ] && erro "gravou .vazio num ciclo com commit" || ok "nenhum .vazio"
+echo "== t59 b2 — --vazio num ciclo que já tem rodada comitada é recusa"
+RUN "$PD" 1 --vazio >/dev/null 2>&1; rc=$?
+[ "$rc" = 3 ] && ok "--vazio → exit 3" || erro "esperava exit 3, veio $rc"
+[ "$(md5sum < "$(APL1)")" = "$M0" ] && ok ".aplicado intacto" || erro ".aplicado apagado pelo --vazio"
+echo "== t59 b3 — rodada só com ids repetidos (nenhum novo) é recusa"
+echo "context emendado" >> "$PD/24.3-CONTEXT.md"
+saida=$(RUN "$PD" 1 --ids "c1-01,c1-02" "${ALVOS[@]}" 2>&1); rc=$?
+{ [ "$rc" = 3 ] && case "$saida" in *"nenhum id novo"*) true ;; *) false ;; esac; } \
+  && ok "sem id novo → exit 3 com a razão" || erro "rc=$rc" "$saida"
+limpa
+
+echo "== t59 b3 — .aplicado ANTERIOR ao conserto (sem rodadas/commits/adiados) é herdado"
+monta_repo; set_alvos
+vereditos 1 "c1-01 | bug | confirmado | codigo" "c1-02 | bug | confirmado | codigo"
+RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1
+echo "spec corrigida na rodada a" >> "$PD/24.3-SPEC.md"
+RUN "$PD" 1 --ids "c1-01" --adiados "c1-02" "${ALVOS[@]}" >/dev/null 2>&1 || erro "rodada a falhou"
+CA=$(G rev-parse HEAD); A="$(APL1)"
+jq 'del(.rodadas, .commits, .adiados) | .mensagem = "docs(fase 24.3): correções do ciclo 1 — x\n\nids: c1-01\nadiados: c1-02"' "$A" > "$A.t" && mv "$A.t" "$A"
+RUN "$PD" 1 --inicio "${ALVOS[@]}" >/dev/null 2>&1
+echo "context na rodada b" >> "$PD/24.3-CONTEXT.md"
+saida=$(RUN "$PD" 1 --ids "c1b-01" "${ALVOS[@]}" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "legado herdado: c1-02 adiado (lido da mensagem) não vira «sem destino»" || erro "rc=$rc" "$saida"
+[ "$(jq -c '.commits' "$A")" = "[\"$CA\",\"$(G rev-parse HEAD)\"]" ] && ok "a 1ª rodada foi sintetizada do legado" || erro "commits" "$(jq -c .commits "$A")"
+[ "$(jq -r '.adiados|join(",")' "$A")" = "c1-02" ] && ok "adiados herdados" || erro "adiados" "$(jq -c .adiados "$A")"
 limpa
 
 echo

@@ -1159,12 +1159,20 @@ if [ "$ETAPA" = "1" ]; then
   # (c1-10/I-01/I-02 ficam de fora). AVISO, não falha: o
   # plano diz «acusa» e um parser de cardinalidade que travasse a etapa cobraria caro por
   # um artefato que o coordenador ainda pode emendar. Vai ao briefing pelo `extrai`.
+  # EXCEÇÃO (FM-F27INS-07INT, tarefa 59 b4): o que o script devolve em `bloqueantes` —
+  # confirmados cabeçalho × tabela e dívida fora do deferred-items.md — é FALHA. Na F27 INS o
+  # aviso passou 4 vezes (run-log seq 79/87/95/102) e 2 de 5 dívidas nunca chegaram ao
+  # arquivo que o planejamento lê. O resto continua AVISO.
   CCARD="$GAD_SCRIPTS_DIR/confere-cardinalidade.sh"
   if [ -f "$CCARD" ]; then
     cardrc=0; cardout=$(bash "$CCARD" "$PHASE_DIR" "$NN" --json 2>/dev/null) || cardrc=$?
-    jq -e . >/dev/null 2>&1 <<<"$cardout" || cardout='{"avisos":[],"medido":{}}'
+    jq -e . >/dev/null 2>&1 <<<"$cardout" || cardout='{"avisos":[],"bloqueantes":[],"medido":{}}'
     n_card=$(jq '(.avisos//[])|length' <<<"$cardout")
-    if [ "${n_card:-0}" -gt 0 ]; then
+    n_card_bloq=$(jq '(.bloqueantes//[])|length' <<<"$cardout")
+    if [ "${n_card_bloq:-0}" -gt 0 ]; then
+      RES=$(jq -c --arg d "$n_card_bloq divergência(s) de cardinalidade que barram a etapa 1 — $(jq -r '(.bloqueantes//[])|join(" · ")' <<<"$cardout" | cut -c1-400)$( [ "$n_card" -gt "$n_card_bloq" ] && printf ' (+%s aviso(s): %s)' "$((n_card-n_card_bloq))" "$(jq -r '((.avisos//[]) - (.bloqueantes//[]))|join(" · ")' <<<"$cardout" | cut -c1-200)")" \
+        '. + [{id:"cardinalidade_etapa_1", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    elif [ "${n_card:-0}" -gt 0 ]; then
       RES=$(jq -c --arg d "AVISO: $n_card divergência(s) de cardinalidade na etapa 1 — $(jq -r '(.avisos//[])|join(" · ")' <<<"$cardout" | cut -c1-400)" \
         '. + [{id:"cardinalidade_etapa_1", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
     fi

@@ -200,6 +200,18 @@ qids=$(jq -cr '.qids|join(",")' "$PD/.intent/.perguntas-c1.json")
 grep -q '^- \*\*Q7\*\* (revalidação do ciclo 0)' "$BRF" && ok "a Q de revalidação interpola o qid (Q7)" || erro "Q7 não interpolada"
 grep -q 'evidência = o diff do commit' "$BRF" && erro "a frase que entregava a evidência do «sim» continua" || ok "a frase «evidência = o diff do commit» saiu (J7)"
 
+echo "== FM-F27INS-09INT (t59 b5) — sino do ciclo 0 «levado_aos_consultores» com destino"
+jq -n --arg c "$COMMIT0" --arg h "$H0" --slurpfile r "$PD/.intent/.releitura-c0.json" '{
+  v:1,
+  sinos:[{id:"s-01",origem:"spec",disposicao:"corrigido",correcao_id:"c0-01"},
+         {id:"s-02",origem:"discuss",disposicao:"levado_aos_consultores",destino:"c1-02"}],
+  correcoes:[{id:"c0-01",hash:$h}],
+  releitura:$r[0]}' > "$PD/.intent/.ciclo0.json"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "estado novo aceito pelo gate do c1" || erro "esperado 0, veio $rc" "$saida"
+grep -q "\`s-02\` (discuss) — levado_aos_consultores → \`c1-02\`" "$BRF" \
+  && ok "o briefing mostra o sino levado e o destino dele" || erro "linha do sino levado" "$(grep s-02 "$BRF")"
+
 echo "== E2c.5 — negativas do schema do ciclo 0"
 neg() { # <rotulo> <json do .ciclo0>
   printf '%s' "$2" > "$PD/.intent/.ciclo0.json"
@@ -211,6 +223,10 @@ neg "sino corrigido sem correcao_id" \
   "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
 neg "sino aberto COM correcao_id" \
   "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"aberto\",\"correcao_id\":\"c0-01\"},{\"id\":\"s-9\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
+neg "sino levado_aos_consultores SEM destino (t59 b5)" \
+  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"},{\"id\":\"s-02\",\"origem\":\"spec\",\"disposicao\":\"levado_aos_consultores\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
+neg "sino aberto COM destino (t59 b5: destino só no levado)" \
+  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"},{\"id\":\"s-02\",\"origem\":\"spec\",\"disposicao\":\"aberto\",\"destino\":\"c1-02\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
 neg "correção órfã (sem sino que a referencie)" \
   "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"aberto\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
 neg "hash da correção divergente do .aplicado" \
@@ -427,6 +443,43 @@ rm -f "$PD/.intent/".releitura-c0*.done
 saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
 [ "$rc" = 4 ] && printf '%s' "$saida" | grep -q 'releitura-c0\*.done` ausente' \
   && ok "c1: nenhum .releitura-c0*.done reprova" || erro "sem marcador deveria reprovar" "rc=$rc $saida"
+limpa
+
+echo "== t59 b2/b3 — duas rodadas no MESMO ciclo: os gates do c1 e do c2 leem o .aplicado acumulado"
+limpa; monta_repo
+ART=(--artefatos "$PD/24.3-SPEC.md" "$PD/24.3-CONTEXT.md" "$PD/24.3-INTENT-REVIEW.md")
+# ciclo 0: rodada c0 (c0-01, SPEC) + rodada c0b só com o id novo (c0b-01, CONTEXT)
+RUNC "$PD" 0 --inicio "${ART[@]}" >/dev/null 2>&1
+echo "correcao c0 rodada a" >> "$PD/24.3-SPEC.md"
+RUNC "$PD" 0 --ids "c0-01" "${ART[@]}" >/dev/null 2>&1 || erro "c0 rodada a falhou"
+RUNC "$PD" 0 --inicio "${ART[@]}" >/dev/null 2>&1
+echo "correcao c0 rodada b" >> "$PD/24.3-CONTEXT.md"
+saida=$(RUNC "$PD" 0 --ids "c0b-01" "${ART[@]}" 2>&1) || erro "c0 rodada b falhou" "$saida"
+APL="$PD/.intent/.correcoes-c0.aplicado"
+[ "$(jq -r '.commits|length' "$APL")" = 2 ] && ok "c0: dois commits no .aplicado" || erro "c0 commits" "$(jq -c .commits "$APL")"
+releitura_json_de 0 > "$PD/.intent/.releitura-c0b.json"      # releitura da rodada vigente
+: > "$PD/.intent/.releitura-c0b.done"
+jq --slurpfile r "$PD/.intent/.releitura-c0b.json" --slurpfile a "$APL" -n '{
+  v:1, sinos:[{id:"s-01",origem:"spec",disposicao:"corrigido",correcao_id:"c0-01"},
+              {id:"s-02",origem:"discuss",disposicao:"corrigido",correcao_id:"c0b-01"}],
+  correcoes:$a[0].correcoes, releitura:$r[0]}' > "$PD/.intent/.ciclo0.json"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "gate c1 aceita correcoes = união das rodadas e releitura amarrada ao commit vigente" \
+  || erro "gate c1 (esperado 0, veio $rc)" "$saida"
+# ciclo 1: rodada c1 (c1-01) + rodada c1b com o achado confirmado tarde (c1-07), só ele
+printf 'c1-01 | bug | confirmado | codigo\n' > "$PD/.intent/.vereditos-c1.txt"
+RUNC "$PD" 1 --inicio "${ART[@]}" >/dev/null 2>&1
+echo "correcao c1 rodada a" >> "$PD/24.3-SPEC.md"
+RUNC "$PD" 1 --ids "c1-01" "${ART[@]}" >/dev/null 2>&1 || erro "c1 rodada a falhou"
+printf 'c1-01 | bug | confirmado | codigo\nc1-07 | bug | confirmado | codigo\n' > "$PD/.intent/.vereditos-c1.txt"
+RUNC "$PD" 1 --inicio "${ART[@]}" >/dev/null 2>&1
+echo "review da rodada b" >> "$PD/24.3-INTENT-REVIEW.md"
+saida=$(RUNC "$PD" 1 --ids "c1-07" "${ART[@]}" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "c1b só com o id novo passa pela trava" || erro "c1b (rc=$rc)" "$saida"
+releitura_json_de 1 > "$PD/.intent/.releitura-c1b.json"
+saida=$(RUN "$PD" 24.3 2 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "gate c2 amarra a releitura c1b ao commit/caminhos vigentes do .aplicado acumulado" \
+  || erro "gate c2 (esperado 0, veio $rc)" "$saida"
 limpa
 
 echo

@@ -9,6 +9,17 @@
 #
 # SÓ ACUSA (o plano diz «acusa»; reescrever cabeçalho por script fica para depois de uma
 # fase real, mesma decisão da MGTm-01INT). Exit 0 = tudo bate · exit 1 = divergência.
+#
+# BLOQUEANTES (FM-F27INS-07INT, tarefa 59 b4) — o `--json` traz, além de `avisos`, a lista
+# `bloqueantes` (subconjunto de `avisos`, mesmo texto) que o fiscal da etapa 1
+# (`confere-etapa.sh`, assert `cardinalidade_etapa_1`) trata como FALHA, não aviso:
+#   · CARDINALIDADE confirmados — cabeçalho × TABELA do mesmo INTENT-REVIEW (F27 INS: 3 × 4,
+#     c1-07 fora do cabeçalho, passou como aviso);
+#   · DIVIDA-SEM-REGISTRO / DIVIDA-SEM-ARQUIVO — dívida da seção que não chegou ao
+#     deferred-items.md (F27 INS: c0-02/c0-03; o planejamento lê o deferred-items, não a seção).
+# Seguem AVISO: cabeçalho × vereditos no disco (o disco soma todos os ciclos e rodadas, e na
+# F4 RLR divergia da tabela sem que isso fosse erro provado — 12 × 24 × 30), descartados,
+# dispensados e VEREDITO-NAO-RECONHECIDO.
 # Uso: confere-cardinalidade.sh <phase_dir> <NN> [--json]
 set -uo pipefail
 
@@ -27,6 +38,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, os.environ["GAD_LIB"])
 import gad_caminhos  # v2.10.1: caminhos da fase (formato novo × antigo)
 avisos = []
+bloqueantes = []   # subconjunto de `avisos` que o fiscal da etapa 1 reprova (t59 b4)
 medido = {}
 
 ir = os.path.join(pd, f"{nn}-INTENT-REVIEW.md")
@@ -103,6 +115,8 @@ for k in ("confirmados", "descartados", "dispensados"):
         continue
     if d != t:
         avisos.append(f"CARDINALIDADE {k}: cabeçalho diz {d}, a tabela do mesmo arquivo tem {t}")
+        if k == "confirmados":
+            bloqueantes.append(avisos[-1])
     if arquivos and d != v:
         avisos.append(f"CARDINALIDADE {k}: cabeçalho diz {d}, os arquivos de veredito têm {v}")
 if tab["outros"]:
@@ -119,6 +133,11 @@ if m:
         ident = re.sub(r"[*`]", "", linha.strip("|").split("|")[0]).strip()
         if ident and not re.match(r"^(id|achado)$", ident, re.I):
             ids_secao.append(ident)
+
+def tem_id(ident):
+    """Id de dívida de verdade (c0-02, I-01, c1b-03): letra seguida de dígito em algum ponto."""
+    return re.search(r"[A-Za-z][A-Za-z0-9]*-?\d", ident) is not None
+
 
 defer = []
 for cand in (os.path.join(pd, "deferred-items.md"),
@@ -138,17 +157,26 @@ if ids_secao and defer:
     if faltam:
         avisos.append("DIVIDA-SEM-REGISTRO: " + " ".join(faltam)
                       + f" — na «## Dívidas registradas» ({len(ids_secao)}) e ausente(s) do deferred-items.md")
+        # linha-marcador sem id (`| — | nenhuma |`) segue só aviso: barra-se dívida com id
+        if all(tem_id(i) for i in faltam):
+            bloqueantes.append(avisos[-1])
+        elif any(tem_id(i) for i in faltam):
+            bloqueantes.append("DIVIDA-SEM-REGISTRO: " + " ".join(i for i in faltam if tem_id(i))
+                               + " — ausente(s) do deferred-items.md")
 elif ids_secao and not defer:
     avisos.append(f"DIVIDA-SEM-ARQUIVO: {len(ids_secao)} dívida(s) na seção e NENHUM deferred-items.md na fase nem no .planning/")
+    if any(tem_id(i) for i in ids_secao):
+        bloqueantes.append(avisos[-1])
 
 if modo == "--json":
-    print(json.dumps({"avisos": avisos, "medido": medido}, ensure_ascii=False))
+    print(json.dumps({"avisos": avisos, "bloqueantes": bloqueantes, "medido": medido},
+                     ensure_ascii=False))
 else:
     if not os.path.exists(ir):
         print(f"cardinalidade: sem {nn}-INTENT-REVIEW.md — nada a conferir")
         raise SystemExit(0)
     for a in avisos:
-        print("⚠️ " + a)
+        print(("⛔ " if a in bloqueantes else "⚠️ ") + a)
     if not avisos:
         print("cardinalidade: OK — cabeçalho, tabela, vereditos e dívidas batem")
 raise SystemExit(1 if avisos else 0)

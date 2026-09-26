@@ -63,14 +63,45 @@
 #   Qualquer falha antes do update-ref: nada promovido, HEAD e `.git/index` byte a byte
 #   inalterados, exit 3.
 #
-# Grava `.intent/.correcoes-c<C>.aplicado` (atômico, tmp + mv), SEMPRE no mesmo nome —
-# uma correção pós-releitura (`c<C>b`) sobrescreve IN-PLACE com o commit e os hashes
-# novos. A releitura seguinte (FM-F4RLR-10INT) já NÃO sobrescreve mais o `.releitura-c<C>.json`
+# Grava `.intent/.correcoes-c<C>.aplicado` (atômico, tmp + mv), SEMPRE no mesmo nome.
+# A releitura seguinte (FM-F4RLR-10INT) já NÃO sobrescreve mais o `.releitura-c<C>.json`
 # — grava `.releitura-c<C>b.json`, arquivo próprio; o `briefing-build.sh` (`caminho_releitura`)
 # lê a rodada mais recente do ciclo, não mais um nome fixo só:
 #   {v:1, ciclo, ids, correcoes:[{id,hash}], commit, caminhos:[...],
-#    hash_ausente:[...], blobs:[{path, blob_commit, blob_worktree}], mensagem}
+#    hash_ausente:[...], blobs:[{path, blob_commit, blob_worktree}], mensagem,
+#    adiados:[...], commits:[...], rodadas:[{rodada, commit, ids, adiados, caminhos, blobs}]}
 # — insumo do `--mudancas`, do R1 (releitura) e do T3.
+#
+# RODADAS DO MESMO CICLO (FM-F27INS-04INT + FJ-F27INS-03INT, tarefa 59 b2/b3). Uma correção
+# pós-releitura (`c<C>b`, `c<C>c`…) é um SEGUNDO commit do mesmo ciclo. Antes, ela
+# sobrescrevia o `.aplicado` inteiro — na F27 INS o commit 5d270b2 (c1-01) sumiu do registro,
+# só o f2f67b4 ficou — e exigia que o coordenador repetisse `--ids` com TODOS os ids do ciclo
+# (ele passou só o novo e levou a recusa «confirmado sem destino»). Agora:
+#   · o `.aplicado` anterior do ciclo é HERDADO quando confere com o git: o arquivo é do mesmo
+#     ciclo, todo commit dele existe e é ancestral do HEAD, e o `blob_commit` de cada caminho
+#     é o blob daquele caminho no commit da rodada que o gravou. Não confere → nada é
+#     herdado (aviso no stderr com o motivo) e vale o comportamento antigo: `--ids` completo;
+#   · com herança, `--ids` leva SÓ os ids novos da rodada. Id repetido de rodada anterior é
+#     redundante: fica com a entrada herdada (não é re-selado contra o arquivo da rodada nova
+#     nem conferido pelo FM-05INT) — o prompt antigo mandava repetir e isso não pode quebrar.
+#     Rodada sem nenhum id novo, ou sem nenhuma alteração, é RECUSA (exit 3) e o `.aplicado`
+#     anterior fica intacto — antes, a rodada sem alteração caía no `--vazio` e APAGAVA o
+#     registro das rodadas que já estavam no git;
+#   · a trava de ids (3) confere o ciclo inteiro: ids e adiados herdados + os da rodada;
+#   · UNIÃO de todas as rodadas: `ids`, `correcoes`, `hash_ausente`, `adiados` e `blobs`
+#     (por caminho, a rodada mais nova vence); `commits` = todos os commits do ciclo, em ordem;
+#     `rodadas` = o detalhe de cada uma (só o que ELA trouxe);
+#   · SÓ A RODADA VIGENTE: `commit`, `caminhos`, `mensagem` — é contra eles que a releitura
+#     da rodada é amarrada (`briefing-build.sh`: commit igual, conjunto de caminhos igual) e o
+#     `confere-reconciliacao.sh --ordem` compara a data.
+#   `.aplicado` anterior a este conserto (sem `rodadas`) vira a 1ª rodada sintetizada do
+#   `commit`/`ids`/`caminhos`/`blobs` dele; os adiados saem da linha `adiados:` da `mensagem`.
+#
+# MENSAGEM DO COMMIT (FM-F27INS-04INT): assunto `docs(fase NN): correções do ciclo C — <ids>`
+# (os ids NOVOS da rodada, sem o `:caminho`) — a forma que a skill documenta e que o
+# `confere-reconciliacao.sh` procura com `--grep` (não mude o prefixo); o corpo leva
+# `caminhos:` (a lista do diff, a de antes no assunto), `ids:`/`adiados:` como digitados e,
+# numa rodada ≥ 2, `rodada:` + os ids herdados.
 #
 # CAMPO `hash` (C1, 01/09/2026) — quem preenche é ESTE script, porque só ele tem a
 # informação. Não é o sha do commit (esse já está em `commit`, seria redundante): é o
@@ -124,7 +155,46 @@ CI() { gad_fase_caminho "$PD" "intent/c$C/$1"; }
 mkdir -p "$(dirname -- "$(CI correcoes.base.json)")"
 BASE="$(CI correcoes.base.json)"
 
+# ── herança do `.aplicado` anterior do MESMO ciclo (t59 b2/b3; ver cabeçalho) ──────
+# aplicado_confere <arquivo> <root> → exit 0 se o arquivo é do ciclo $C e confere com o git
+# (todo commit existe e é ancestral do HEAD; cada blob_commit bate com o blob do caminho no
+# commit da rodada que o gravou). Senão, exit 1 e o motivo no stdout.
+aplicado_confere() {
+  local f="$1" root="$2" ciclo sha p b real
+  jq -e 'type=="object"' "$f" >/dev/null 2>&1 || { echo "JSON ilegível"; return 1; }
+  ciclo=$(jq -r '.ciclo // empty | tostring' "$f")
+  [ "$ciclo" = "$C" ] || { echo "arquivo do ciclo «$ciclo», não do $C"; return 1; }
+  [ -n "$(jq -r '.commit // empty' "$f")" ] || { echo "sem commit"; return 1; }
+  while IFS= read -r sha; do
+    [ -n "$sha" ] || continue
+    git -C "$root" cat-file -e "$sha^{commit}" 2>/dev/null || { echo "commit $sha não existe no repositório"; return 1; }
+    git -C "$root" merge-base --is-ancestor "$sha" HEAD 2>/dev/null || { echo "commit $sha não é ancestral do HEAD"; return 1; }
+  done < <(jq -r '((.rodadas // []) | map(.commit)) + [.commit] | unique | .[]' "$f")
+  while IFS=$'\t' read -r sha p b; do
+    [ -n "$p" ] && [ -n "$b" ] || continue
+    real=$(git -C "$root" rev-parse "$sha:$p" 2>/dev/null) || real=""
+    [ "$real" = "$b" ] || { echo "blob de $p no commit $sha ($real) != blob_commit gravado ($b)"; return 1; }
+  done < <(jq -r 'if (.rodadas // [] | length) > 0
+                  then .rodadas[] | .commit as $c | (.blobs // [])[] | [$c, .path, .blob_commit] | @tsv
+                  else .commit as $c | (.blobs // [])[] | [$c, .path, .blob_commit] | @tsv end' "$f")
+  # com `rodadas`, o topo tem de ser a união delas: `commit` = o da última rodada e `blobs`
+  # = o selo mais novo de cada caminho (quem edita um lado só é pego aqui)
+  jq -e 'if (.rodadas // [] | length) == 0 then true else
+           (.commit == .rodadas[-1].commit)
+           and ((reduce ((.rodadas[].blobs // [])[]) as $b ({}; .[$b.path] = $b.blob_commit))
+                == (reduce ((.blobs // [])[]) as $b ({}; .[$b.path] = $b.blob_commit)))
+         end' "$f" >/dev/null 2>&1 \
+    || { echo "topo (commit/blobs) incoerente com as rodadas"; return 1; }
+  return 0
+}
+
 if [ "$MODO" = vazio ]; then
+  # `--vazio` num ciclo que JÁ tem rodada comitada apagaria o registro dela: recusa.
+  if [ -f "$(CI correcoes.aplicado)" ] \
+     && aplicado_confere "$(CI correcoes.aplicado)" "$(gad_project_root "$PD")" >/dev/null; then
+    echo "RECUSA: o ciclo $C já tem correção comitada ($(jq -r .commit "$(CI correcoes.aplicado)" | cut -c1-8)) — «--vazio» apagaria o registro dela. Rodada sem alteração não se registra." >&2
+    exit 3
+  fi
   printf '{"v":1,"ciclo":"%s","motivo":"ciclo sem correção factual","ts":"%s"}\n' \
     "$C" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$(CI correcoes.vazio.tmp)" \
     && mv -f "$(CI correcoes.vazio.tmp)" "$(CI correcoes.vazio)"
@@ -236,6 +306,42 @@ fi
 [ -f "$BASE" ] || { echo "RECUSA: $BASE ausente — rode --inicio ANTES do ciclo (sem o estado pré-ciclo não dá para separar o delta do usuário do delta do ciclo)" >&2; exit 3; }
 [ -n "$IDS" ] || { echo "ERRO: --ids obrigatório no fecho do ciclo" >&2; exit 2; }
 
+APL="$(CI correcoes.aplicado)"
+lista_ids() { printf '%s' "${1:-}" | tr ',' '\n' | sed 's/:.*$//; s/^[ \t]*//; s/[ \t]*$//' | grep -v '^$' || true; }
+HER_ON=0; HER_IDS=""; HER_ADI=""; HER_N=0
+if [ -f "$APL" ]; then
+  if motivo=$(aplicado_confere "$APL" "$ROOT"); then
+    HER_ON=1
+    HER_IDS=$(jq -r '(.ids // [])[]' "$APL")
+    HER_ADI=$(jq -r 'if has("adiados") then (.adiados // [])[]
+                     else ((.mensagem // "") | split("\n") | map(select(startswith("adiados: ")))
+                           | (.[0] // "adiados: ") | ltrimstr("adiados: ") | split(",")
+                           | map(sub(":.*$";"") | gsub("^\\s+|\\s+$";"")) | map(select(length>0)) | .[]) end' "$APL")
+    HER_N=$(jq -r 'if (.rodadas // [] | length) > 0 then (.rodadas | length) else 1 end' "$APL")
+    echo "nota: rodada $((HER_N+1)) do ciclo $C — herdados do .aplicado (conferido contra o git): ids $(printf '%s' "$HER_IDS" | paste -sd, -)${HER_ADI:+; adiados $(printf '%s' "$HER_ADI" | paste -sd, -)}" >&2
+  else
+    echo "aviso: $APL existe mas NÃO confere com o git ($motivo) — nada herdado; --ids tem de trazer todos os ids do ciclo" >&2
+  fi
+fi
+# tokens desta rodada: id já herdado é redundante (fica a entrada da rodada que o gravou)
+IDS_NOVOS=""; REPETIDOS=()
+IFS=',' read -r -a _TOK_ALL <<< "$IDS"
+for tok in ${_TOK_ALL[@]+"${_TOK_ALL[@]}"}; do
+  _cid=$(printf '%s' "${tok%%:*}" | sed 's/^[ \t]*//; s/[ \t]*$//')
+  [ -n "$_cid" ] || continue
+  if [ "$HER_ON" = 1 ] && printf '%s\n' "$HER_IDS" | grep -qxF "$_cid"; then
+    REPETIDOS+=("$_cid"); continue
+  fi
+  IDS_NOVOS="${IDS_NOVOS:+$IDS_NOVOS,}$tok"
+done
+[ ${#REPETIDOS[@]} -eq 0 ] || echo "nota: id(s) de rodada anterior repetido(s) em --ids — ficam com a entrada herdada: ${REPETIDOS[*]}" >&2
+if [ -z "$IDS_NOVOS" ]; then
+  echo "RECUSA: --ids não traz nenhum id novo nesta rodada do ciclo $C (todos já estão no .aplicado: ${REPETIDOS[*]})." >&2
+  echo "        a emenda de uma rodada pós-releitura leva id próprio (c${C}b-NN) ou o id do achado que ela fecha." >&2
+  exit 3
+fi
+ADI_NOVOS=$(lista_ids "$ADIADOS" | { if [ "$HER_ON" = 1 ]; then grep -vxF -f <(printf '%s\n' "$HER_ADI" | grep -v '^$' || echo '__nenhum__') || true; else cat; fi; })
+
 # ── trava de ids (FM-04INT + FJ-05INT + FJ-04INT, auditoria F4 RLR) ──────────
 # A reconciliação (confere-reconciliacao.sh) só acusa DEPOIS do commit: id inventado,
 # achado dispensado promovido e confirmado sem destino já estavam no repositório quando
@@ -259,7 +365,6 @@ if [ -f "$VERED" ]; then
   done < "$VERED"
 
   # lista plana dos ids informados (sem o `:caminho`) e dos adiados
-  lista_ids() { printf '%s' "${1:-}" | tr ',' '\n' | sed 's/:.*$//; s/^[ \t]*//; s/[ \t]*$//' | grep -v '^$' || true; }
   IDS_PLANOS=$(lista_ids "$IDS")
   ADI_PLANOS=$(lista_ids "$ADIADOS")
 
@@ -294,12 +399,13 @@ $_conj
 EOF_IDS
   done
 
-  # (3) achado confirmado sem destino: nem corrigido (--ids) nem adiado (--adiados)
+  # (3) achado confirmado sem destino: nem corrigido (--ids) nem adiado (--adiados) — no
+  # ciclo INTEIRO: o que as rodadas anteriores já levaram (herança conferida) conta.
   SEM_DESTINO=()
   for _id in "${!VER_DE[@]}"; do
     [ "${VER_DE[$_id]}" = confirmado ] || continue
-    printf '%s\n' "$IDS_PLANOS" | grep -qxF "$_id" && continue
-    printf '%s\n' "$ADI_PLANOS" | grep -qxF "$_id" && continue
+    printf '%s\n' "$IDS_PLANOS" "$HER_IDS" | grep -qxF "$_id" && continue
+    printf '%s\n' "$ADI_PLANOS" "$HER_ADI" | grep -qxF "$_id" && continue
     SEM_DESTINO+=("$_id")
   done
   if [ ${#SEM_DESTINO[@]} -gt 0 ]; then
@@ -388,6 +494,9 @@ for r in "${REL[@]}"; do
   COMITADOS+=("$r"); MODOS+=("$m"); BLOBS_CAND+=("$cand_blob")
 done
 
+if [ ${#COMITADOS[@]} -eq 0 ] && [ "$HER_ON" = 1 ]; then
+  falhar "a rodada $((HER_N+1)) do ciclo $C não alterou nenhum alvo — nada a registrar; o .aplicado das rodadas anteriores fica como está (ids novos sem emenda: $(lista_ids "$IDS_NOVOS" | paste -sd, -))"
+fi
 if [ ${#COMITADOS[@]} -eq 0 ]; then
   echo "aviso: ciclo $C nao alterou nenhum alvo — gravando marcador .vazio" >&2
   rm -rf "$T"; trap - EXIT
@@ -399,7 +508,7 @@ fi
 # a entrada caía na regra do caminho único — foi assim que 18 ids do ciclo 1 saíram
 # selados contra o arquivo errado. Agora é recusa, antes de qualquer promoção.
 DECL_FORA=()
-IFS=',' read -r -a _TOK_CHECK <<< "$IDS"
+IFS=',' read -r -a _TOK_CHECK <<< "$IDS_NOVOS"
 for tok in ${_TOK_CHECK[@]+"${_TOK_CHECK[@]}"}; do
   case "$tok" in *:*) ;; *) continue ;; esac
   _cid="${tok%%:*}"; _decl="${tok#*:}"
@@ -430,11 +539,21 @@ if [ -f "$GAD_SCRIPTS_DIR/revalida-documentos.sh" ]; then
   }
 fi
 
-# Mensagem do commit a partir da LISTA DE ARQUIVOS DO DIFF (não da lista de ids que o
-# coordenador digitou): 7 commits da F4 traziam mensagem divergente do que tocavam.
-# O DECISIONS-INDEX entra porque ele é, de fato, parte do que o commit muda.
-MSG="docs(fase $NN): correções do ciclo $C — $(printf '%s, ' "${COMITADOS[@]}" | sed 's/, $//')"
-MSG="$MSG"$'\n\n'"ids: $IDS${ADIADOS:+$'\n'adiados: $ADIADOS}"
+# Mensagem (FM-F27INS-04INT): ids NOVOS da rodada no assunto — a forma documentada —, a
+# LISTA DE ARQUIVOS DO DIFF no corpo (FM-05INT da F4: 7 commits traziam mensagem divergente
+# do que tocavam; a lista continua saindo do diff, não do que o coordenador digitou). O
+# DECISIONS-INDEX entra porque ele é, de fato, parte do que o commit muda.
+RODADA="c$C"
+if [ "$HER_ON" = 1 ]; then
+  _letras=bcdefghijklmnopqrstuvwxyz
+  RODADA="c$C${_letras:$((HER_N-1)):1}"
+fi
+MSG="docs(fase $NN): correções do ciclo $C — $(lista_ids "$IDS_NOVOS" | paste -sd, - | sed 's/,/, /g')"
+MSG="$MSG"$'\n\n'"caminhos: $(printf '%s, ' "${COMITADOS[@]}" | sed 's/, $//')"
+MSG="$MSG"$'\n'"ids: $IDS_NOVOS${ADIADOS:+$'\n'adiados: $ADIADOS}"
+if [ "$HER_ON" = 1 ]; then
+  MSG="$MSG"$'\n'"rodada: $RODADA (herdados das anteriores: $(printf '%s' "$HER_IDS" | paste -sd, -))"
+fi
 TREE=$(GIT_INDEX_FILE="$IDX" git -C "$ROOT" write-tree) || falhar "write-tree falhou"
 CAND=$(git -C "$ROOT" commit-tree "$TREE" -p "$HEADP" -m "$MSG") || falhar "commit-tree falhou"
 
@@ -480,7 +599,7 @@ UNICO=""
 [ ${#COMITADOS_COR[@]} -eq 1 ] && UNICO="${COMITADOS_COR[0]}"
 
 COR_ENTRADAS=(); AUSENTES=()
-IFS=',' read -r -a TOKENS_ID <<< "$IDS"
+IFS=',' read -r -a TOKENS_ID <<< "$IDS_NOVOS"
 for tok in ${TOKENS_ID[@]+"${TOKENS_ID[@]}"}; do
   [ -n "$tok" ] || continue
   cid="${tok%%:*}"
@@ -509,7 +628,8 @@ AUS_JSON=$(printf '%s\n' ${AUSENTES[@]+"${AUSENTES[@]}"} | jq -R . | jq -cs 'map
 if [ ${#AUSENTES[@]} -gt 0 ]; then
   echo "aviso: ${#AUSENTES[@]} correção(ões) sem hash (ciclo comitou ${#COMITADOS_COR[@]} caminhos de correção e o id não declarou qual): ${AUSENTES[*]} — declaradas em hash_ausente[]" >&2
 fi
-IDS_JSON=$(printf '%s' "$IDS" | tr ',' '\n' | jq -R 'select(length>0) | split(":")[0]' | jq -cs .)
+IDS_JSON=$(lista_ids "$IDS_NOVOS" | jq -R 'select(length>0)' | jq -cs .)
+ADI_JSON=$(printf '%s\n' "$ADI_NOVOS" | jq -R 'select(length>0)' | jq -cs .)
 CAM_JSON=$(printf '%s\n' "${COMITADOS[@]}" | jq -R . | jq -cs .)
 # Dois hashes por caminho comitado (resolução do conflito E2 x R1):
 #   blob_commit    = o que a releitura relê (o commit do ciclo)
@@ -526,16 +646,37 @@ for r in "${COMITADOS[@]}"; do
     '{path:$p, blob_commit:$c, blob_worktree:$w}')")
 done
 BLOBS_JSON=$(printf '%s\n' "${BLOBS[@]}" | jq -cs .)
-APL="$(CI correcoes.aplicado)"
-jq -cn --arg c "$C" --arg commit "$CAND" --arg msg "$MSG" \
+# herança (t59 b2/b3): a rodada anterior conferida entra como base da união
+if [ "$HER_ON" = 1 ]; then
+  HER_JSON=$(jq -c --argjson adi "$(printf '%s\n' "$HER_ADI" | jq -R 'select(length>0)' | jq -cs .)" '
+    {ids: (.ids // []), correcoes: (.correcoes // []), hash_ausente: (.hash_ausente // []),
+     adiados: $adi, blobs: (.blobs // []),
+     rodadas: (if (.rodadas // [] | length) > 0 then .rodadas
+               else [{rodada: ("c" + (.ciclo|tostring)), commit: .commit, ids: (.ids // []),
+                      adiados: $adi, caminhos: (.caminhos // []), blobs: (.blobs // [])}] end)}' "$APL")
+else
+  HER_JSON='{"ids":[],"correcoes":[],"hash_ausente":[],"adiados":[],"blobs":[],"rodadas":[]}'
+fi
+jq -cn --arg c "$C" --arg commit "$CAND" --arg msg "$MSG" --arg rod "$RODADA" \
   --argjson ids "$IDS_JSON" --argjson cor "$COR_JSON" --argjson cam "$CAM_JSON" \
-  --argjson bl "$BLOBS_JSON" --argjson aus "$AUS_JSON" \
-  '{v:1, ciclo:$c, ids:$ids, correcoes:$cor, commit:$commit, caminhos:$cam,
-    hash_ausente:$aus, blobs:$bl, mensagem:$msg}' \
+  --argjson bl "$BLOBS_JSON" --argjson aus "$AUS_JSON" --argjson adi "$ADI_JSON" \
+  --argjson h "$HER_JSON" \
+  '($h.rodadas + [{rodada:$rod, commit:$commit, ids:$ids, adiados:$adi, caminhos:$cam, blobs:$bl}]) as $rs
+   | {v:1, ciclo:$c,
+      ids: ($h.ids + ($ids - $h.ids)),
+      correcoes: ($h.correcoes + ($cor | map(select(.id as $i | ($h.ids | index($i)) == null)))),
+      commit:$commit, caminhos:$cam,
+      hash_ausente: ($h.hash_ausente + ($aus - $h.hash_ausente)),
+      blobs: (reduce ($h.blobs + $bl)[] as $b ({}; .[$b.path] = $b) | [.[]]),
+      mensagem:$msg,
+      adiados: ($h.adiados + ($adi - $h.adiados)),
+      commits: ($rs | map(.commit)),
+      rodadas: $rs}' \
   > "$APL.tmp" && mv -f "$APL.tmp" "$APL"
 rm -f "$(CI correcoes.vazio)"
 
-gad_autoregistro "correcoes-commit.sh" 0 "c$C commit $CAND (${#COMITADOS[@]} caminhos)" || true
+gad_autoregistro "correcoes-commit.sh" 0 "$RODADA commit $CAND (${#COMITADOS[@]} caminhos)" || true
 gad_json_out correcoes-commit "$(jq -cn --arg c "$C" --arg commit "$CAND" --arg a "$APL" \
-  --argjson cam "$CAM_JSON" --argjson rev "$REVALIDA_N" \
-  '{ciclo:$c, modo:"fim", commit:$commit, caminhos:$cam, aplicado:$a, revalida_avisos:$rev}')"
+  --argjson cam "$CAM_JSON" --argjson rev "$REVALIDA_N" --arg rod "$RODADA" \
+  --argjson her "$([ "$HER_ON" = 1 ] && echo true || echo false)" \
+  '{ciclo:$c, modo:"fim", rodada:$rod, herdou:$her, commit:$commit, caminhos:$cam, aplicado:$a, revalida_avisos:$rev}')"

@@ -112,6 +112,54 @@ printf '%s' "$saida" | grep -q "aberto: c0-14" \
   && ok "c0-14 nomeado, exatamente como a auditoria apurou" \
   || erro "c0-14 não apareceu nomeado" "$saida"
 
+echo "== FM-F27INS-09INT (t59 b5) — «levado_aos_consultores» com destino é estado final"
+# Réplica do caso F27 INS: c0-01 virou o achado corrigido c1-02; c0-02/c0-03 viraram dívidas.
+D="$TMP/f27"
+monta_ciclo0 "$D" '[
+  {"id":"c0-01","origem":"spec","disposicao":"levado_aos_consultores","destino":"c1-02"},
+  {"id":"c0-02","origem":"discuss","disposicao":"levado_aos_consultores","destino":"c0-02"},
+  {"id":"c0-03","origem":"discuss","disposicao":"levado_aos_consultores","destino":"c0-03"}
+]'
+printf 'c1-02 | bug | confirmado | codigo\n' > "$D/.intent/.vereditos-c1.txt"
+printf '# review\n\n## Dívidas registradas\n\n| id | o quê | destino |\n|---|---|---|\n| c0-02 | x | planejamento |\n| c0-03 | y | planejamento |\n' \
+  > "$D/27-INTENT-REVIEW.md"
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+printf '%s' "$saida" | grep -q "^sinos_abertos: 0$" && [ "$rc" = 0 ] \
+  && ok "3 sinos levados com destino existente → exit 0 (sem reescrever para «descartado»)" \
+  || erro "levado com destino devia passar" "$saida (rc=$rc)"
+
+echo "== (t59 b5) levado sem destino → exit 1 nomeando o sino"
+D="$TMP/lev-vazio"
+monta_ciclo0 "$D" '[{"id":"c0-05","origem":"spec","disposicao":"levado_aos_consultores"}]'
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+[ "$rc" = 1 ] && printf '%s' "$saida" | grep -q "SINOS-SEM-DESTINO: 1" && printf '%s' "$saida" | grep -q "c0-05" \
+  && ok "destino vazio → exit 1, SINOS-SEM-DESTINO, c0-05 nomeado" || erro "destino vazio devia reprovar" "$saida (rc=$rc)"
+
+echo "== (t59 b5) levado com destino inventado → exit 1"
+D="$TMP/lev-inventado"
+monta_ciclo0 "$D" '[{"id":"c0-06","origem":"spec","disposicao":"levado_aos_consultores","destino":"c1-99"}]'
+printf 'c1-02 | bug | confirmado | codigo\n' > "$D/.intent/.vereditos-c1.txt"
+echo "review sem o id pedido; c1-990 e xc1-99 não contam" > "$D/27-INTENT-REVIEW.md"
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+[ "$rc" = 1 ] && printf '%s' "$saida" | grep -q "c1-99" \
+  && ok "destino ausente dos vereditos e do INTENT-REVIEW → exit 1" || erro "destino inventado passou" "$saida (rc=$rc)"
+
+echo "== (t59 b5) aberto + levado juntos: as duas mensagens"
+D="$TMP/misto"
+monta_ciclo0 "$D" '[{"id":"c0-07","origem":"spec","disposicao":"aberto"},
+  {"id":"c0-08","origem":"spec","disposicao":"levado_aos_consultores","destino":""}]'
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+[ "$rc" = 1 ] && printf '%s' "$saida" | grep -q "SINOS-ABERTOS: 1" && printf '%s' "$saida" | grep -q "SINOS-SEM-DESTINO: 1" \
+  && ok "cada problema com a sua linha" || erro "mensagens" "$saida (rc=$rc)"
+
+echo "== (t59 b5) formato novo da fase (.gad/intent/c0/ciclo.json)"
+D="$TMP/novo"; mkdir -p "$D/.gad/intent/c0" "$D/.gad/intent/c1"; echo f > "$D/.gad/FORMATO"
+printf '{"v":1,"sinos":[{"id":"c0-01","origem":"spec","disposicao":"levado_aos_consultores","destino":"c1-02"}],"correcoes":[],"releitura":{}}\n' \
+  > "$D/.gad/intent/c0/ciclo.json"
+printf 'c1-02 | bug | confirmado | codigo\n' > "$D/.gad/intent/c1/vereditos.txt"
+saida=$("$SCRIPT" "$D" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "destino achado nos vereditos do formato novo → exit 0" || erro "formato novo" "$saida (rc=$rc)"
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-confere-sinos: TUDO OK" || echo "test-confere-sinos: $falhas falha(s)"
 [ "$falhas" -eq 0 ]
