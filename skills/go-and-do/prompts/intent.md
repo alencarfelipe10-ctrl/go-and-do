@@ -608,28 +608,18 @@ que o registro foi feito de memória, no fim, e não no ato.
    1. ANTES de editar qualquer artefato:
       ```bash
       $HOME/.claude/skills/go-and-do/scripts/correcoes-commit.sh "<phase_dir>" <C> --inicio \
-        --artefatos "<SPEC>" "<CONTEXT>" "<INTENT-REVIEW>" \
+        --artefatos "<SPEC>" "<CONTEXT>" \
         [--docs .planning/ROADMAP.md .planning/REQUIREMENTS.md]
       ```
+      **Não liste `<INTENT-REVIEW>` aqui (FM-03INT).** Ele só nasce no passo 7, depois que o
+      loop de ciclos termina — em nenhum ciclo (0, 1, 2…) ele existe no momento do
+      `--inicio`, então listá-lo aqui faz o script recusar por alvo inexistente todo ciclo
+      da fase. O `--ids` do fecho de cada ciclo (item 3 abaixo) pode continuar listando-o:
+      esse modo já tolera alvo ausente desde a M4.
       `--docs` **só** quando o ciclo resolve issue R6 ou reconcilia o Goal — neles o
       script comita só o delta do ciclo, mesmo se já estavam sujos.
    2. Escreva **um** `.gad/intent/c<C>/correcoes.py|.sh` com TODAS as correções factuais do
       ciclo e execute-o **no mesmo turno**. Uma edição por achado, id `c<C>-NN`.
-   3. Feche:
-      ```bash
-      …  correcoes-commit.sh "<phase_dir>" <C> --ids "c<C>-01,c<C>-02" \
-        --artefatos "<SPEC>" "<CONTEXT>" "<INTENT-REVIEW>" [--docs …]
-      ```
-      O `--ids` leva só os ids. O `hash` de cada correção é preenchido pelo próprio script,
-      com o blob sha do arquivo alvo depois da correção — no instante em que você monta a
-      flag o commit ainda não existe (o exemplo antigo pedia um hash sem fonte, e o campo
-      saiu vazio em 58/58 entradas da F24.4).
-      Ciclo que tocou **mais de um arquivo**: diga qual correção mexeu em qual, na forma
-      `id:<caminho relativo à raiz do repo>` —
-      `--ids "c<C>-01:.planning/phases/<fase>/NN-SPEC.md,c<C>-02:.planning/ROADMAP.md"`.
-      Sem essa declaração o script grava `hash: ""` e lista os ids em `hash_ausente[]` no
-      `c<C>/correcoes.aplicado`: a ausência fica auditável, mas a releitura perde a âncora
-      por correção. Com um só arquivo no ciclo, a forma só-ids basta.
       **Tocou o CONTEXT? Re-rode a guarda estrutural, sempre com `--spec` (FJ-04INT):**
       ```bash
       if [ -f "<phase_dir>/.discuss-guard-args" ]; then
@@ -646,6 +636,21 @@ que o registro foi feito de memória, no fim, e não no ato.
       Sem ele (CONTEXT anterior a este fork), monte `--spec`/`--reqs` você mesmo. Rodar a
       guarda **sem `--spec`** é o que gerou `[guard] FAIL: <spec_lock> present without
       SPEC` na F27-INS: reprovação falsa, 1 turno de leitura do uso.
+   3. Feche:
+      ```bash
+      …  correcoes-commit.sh "<phase_dir>" <C> --ids "c<C>-01,c<C>-02" \
+        --artefatos "<SPEC>" "<CONTEXT>" "<INTENT-REVIEW>" [--docs …]
+      ```
+      O `--ids` leva só os ids. O `hash` de cada correção é preenchido pelo próprio script,
+      com o blob sha do arquivo alvo depois da correção — no instante em que você monta a
+      flag o commit ainda não existe (o exemplo antigo pedia um hash sem fonte, e o campo
+      saiu vazio em 58/58 entradas da F24.4).
+      Ciclo que tocou **mais de um arquivo**: diga qual correção mexeu em qual, na forma
+      `id:<caminho relativo à raiz do repo>` —
+      `--ids "c<C>-01:.planning/phases/<fase>/NN-SPEC.md,c<C>-02:.planning/ROADMAP.md"`.
+      Sem essa declaração o script grava `hash: ""` e lista os ids em `hash_ausente[]` no
+      `c<C>/correcoes.aplicado`: a ausência fica auditável, mas a releitura perde a âncora
+      por correção. Com um só arquivo no ciclo, a forma só-ids basta.
       Ciclo sem correção → `correcoes-commit.sh "<phase_dir>" <C> --vazio` (marcador
       explícito; ausência não vale). Exit 3 = **nada promovido**: leia a razão, conserte e
       re-rode — nunca contorne com `git` na mão.
@@ -767,6 +772,10 @@ que o registro foi feito de memória, no fim, e não no ato.
    ```bash
    $HOME/.claude/skills/go-and-do/scripts/limpa-intencao.sh "<phase_dir>"
    ```
+   Um argumento só; o script resolve os dois formatos de fase pelo `caminho-fase.sh` e apaga
+   exatamente os 4 alvos de hoje, sem depender do glob do shell que chama. Nada casou → exit
+   0 em silêncio; `<phase_dir>` inexistente → exit 2 com mensagem (trate como falha, não
+   como "nada a limpar").
    **Não alargue esses globs.** SOBREVIVEM, por serem insumo da `/audit-gad` e dos gates:
    `c*/runs/`, `c*/status-*`, `c*/tabela.txt`, `c*/vereditos.txt`, `c*/prova-leitura.txt`,
    `c*/rota-verificacao.json`, `c*/correcoes.aplicado|.vazio`, `c*/releitura.*`,
@@ -798,12 +807,25 @@ que o registro foi feito de memória, no fim, e não no ato.
    ele conferiu. Não invente o veredito e não descreva o que «deve» ter passado: na F24.5 a etapa
    foi declarada pronta às 12:10:20 e o fiscal reprovou 1 min depois, por três correções sem
    veredito; custou 4 turnos de engenharia reversa do script.
+   **Nunca conserte uma `FALHA` reescrevendo evidência de ciclo já consumida (FJ-05INT).**
+   Arquivo de ciclo que um gate anterior já leu — `c<C>/ciclo.json` (o gate do briefing c1
+   lê o `c0/ciclo.json`), `c<C>/releitura.json`, `c<C>/correcoes.aplicado` — não se edita
+   depois de usado, nem para trocar `disposicao` (`aberto`→`descartado`) e agradar o
+   fiscal: o destino verdadeiro do sino fica, mesmo que o fiscal reprove por isso (nunca
+   escreva você mesmo o `fences/1.ok` — é o recibo do fiscal, só ele grava, e reescrevê-lo
+   seria exatamente o «não invente o veredito» do parágrafo acima). Sino do ciclo 0
+   `aberto` que já virou achado corrigido ou dívida registrada é um gap de formato
+   conhecido (o ciclo 0 só tem `corrigido|descartado|aberto`, e o fiscal reprova todo
+   `aberto` — sem estado para «foi à consultoria e virou X»): a correção do formato é
+   `FM-09INT` (`confere-sinos.sh` + `c0/ciclo.json`, fora desta lane). Enquanto ela não
+   chega, registre o conflito como `incidente` (`origem=intent-fecho`,
+   `detalhe=sino c0 aberto já resolvido em <achado/dívida> — gap FM-09INT`) e trate como
+   qualquer outra `FALHA` do fiscal: você **não devolve `done`** só por isto — devolva
+   `estado: falha` com o `motivo:` literal (não force `FENCE-OK`), a menos que o achado que
+   consumiu o sino já esteja coberto por uma ressalva do passo 7 (`ressalva_dividas`), caso
+   em que `aprovado_com_ressalva` é a saída honesta.
 9. **Relato de turnos: a saída do medidor, verbatim.** Antes do retorno, rode
    ```bash
-   Um argumento só; o script resolve os dois formatos de fase pelo `caminho-fase.sh` e apaga
-   exatamente os 4 alvos de hoje, sem depender do glob do shell que chama. Nada casou → exit
-   0 em silêncio; `<phase_dir>` inexistente → exit 2 com mensagem (trate como falha, não
-   como "nada a limpar").
    python3 $HOME/.claude/skills/audit-gad/scripts/turnos-por-ciclo.py \
      "<subagents_dir>" --json 2>/dev/null | head -40
    ```
@@ -909,20 +931,3 @@ motivo: <por consultor — ex.: "codex indisponível; agy falhou: stdout vazio">
 acao_do_usuario: <1 linha — ex.: "autentique um dos consultores (codex login / agy) e re-rode /go-and-do N">
 ```
 </return_contract>
-   **Nunca conserte uma `FALHA` reescrevendo evidência de ciclo já consumida (FJ-05INT).**
-   Arquivo de ciclo que um gate anterior já leu — `c<C>/ciclo.json` (o gate do briefing c1
-   lê o `c0/ciclo.json`), `c<C>/releitura.json`, `c<C>/correcoes.aplicado` — não se edita
-   depois de usado, nem para trocar `disposicao` (`aberto`→`descartado`) e agradar o
-   fiscal: o destino verdadeiro do sino fica, mesmo que o fiscal reprove por isso (nunca
-   escreva você mesmo o `fences/1.ok` — é o recibo do fiscal, só ele grava, e reescrevê-lo
-   seria exatamente o «não invente o veredito» do parágrafo acima). Sino do ciclo 0
-   `aberto` que já virou achado corrigido ou dívida registrada é um gap de formato
-   conhecido (o ciclo 0 só tem `corrigido|descartado|aberto`, e o fiscal reprova todo
-   `aberto` — sem estado para «foi à consultoria e virou X»): a correção do formato é
-   `FM-09INT` (`confere-sinos.sh` + `c0/ciclo.json`, fora desta lane). Enquanto ela não
-   chega, registre o conflito como `incidente` (`origem=intent-fecho`,
-   `detalhe=sino c0 aberto já resolvido em <achado/dívida> — gap FM-09INT`) e trate como
-   qualquer outra `FALHA` do fiscal: você **não devolve `done`** só por isto — devolva
-   `estado: falha` com o `motivo:` literal (não force `FENCE-OK`), a menos que o achado que
-   consumiu o sino já esteja coberto por uma ressalva do passo 7 (`ressalva_dividas`), caso
-   em que `aprovado_com_ressalva` é a saída honesta.
