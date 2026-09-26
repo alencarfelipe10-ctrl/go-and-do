@@ -180,6 +180,30 @@ elif [ "$REREVIEW" = 1 ]; then
   echo "ERRO: --rereview só vale para 4-code-review (o gate 4.1b)" >&2; exit 2
 fi
 
+# ── t59 (FM-F27INS-02UAT): qual recibo a cerca desta etapa tolera fora do git ──────
+# O da própria etapa (escrito adiante, neste script) e o da etapa IMEDIATAMENTE anterior na
+# ordem canônica — nunca mais que isso («tolerar demais esconderia um recibo que devia estar no
+# git»). O 4.1b vem entre o 4.1 e o 4.4. Recuar além de uma etapa só passa por etapa OPCIONAL
+# que não deixou recibo (2.5 com a config off, 4.1b que não houve, 4.2 sem --ui, 4.3 sem --ai);
+# etapa obrigatória sem recibo encerra o recuo nela mesma. A chave é o rótulo do run-log (o
+# argumento `4-secure` vira `4.4`), a mesma do nome do recibo.
+ORDEM_RECIBOS="0 1 1.5 2 2.5 3 4.1 4.1b 4.2 4.3 4.4 4.5 5 6"
+RECIBOS_OPCIONAIS=" 2.5 4.1b 4.2 4.3 "
+RECIBO_PROPRIO="${RUNLOG_ETAPA:-$ETAPA}"; RECIBO_PROPRIO="${RECIBO_PROPRIO%% *}"
+RECIBO_ANTERIOR=""
+_antes=(); for _i in $ORDEM_RECIBOS; do [ "$_i" = "$RECIBO_PROPRIO" ] && break; _antes+=("$_i"); done
+if [ "${#_antes[@]}" -lt "$(wc -w <<<"$ORDEM_RECIBOS")" ]; then
+  for (( _k=${#_antes[@]}-1; _k>=0; _k-- )); do
+    _i="${_antes[$_k]}"
+    if [ "${RECIBOS_OPCIONAIS/ $_i /}" != "$RECIBOS_OPCIONAIS" ] \
+       && [ ! -f "$(gad_fase_caminho "$PHASE_DIR" "fences/$_i.ok")" ] && [ ! -f "$PHASE_DIR/.fence-$_i.ok" ] \
+       && [ ! -f "$PHASE_DIR/.gad/fences/$_i.ok" ]; then
+      continue
+    fi
+    RECIBO_ANTERIOR="$_i"; break
+  done
+fi
+
 # ── modo pausa --pos-pausa: o STATE.md aponta o commit real da parada? ───────
 if [ "$ETAPA" = "pausa" ] && [ "$POSPAUSA" = 1 ]; then
   STATE="$ROOT/.planning/STATE.md"; MOTIVOS="[]"
@@ -1641,13 +1665,13 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
         *"/.intent/"*|*"/pareceres/"*|*"/.gad/intent/"*|*"/.gad/lanes/"*)
           # produzidos pela etapa 1 → isentos NELA, duros das etapas 2 em diante
           if [ "${ETAPA%% *}" = "1" ]; then RESTO="$RESTO $arq"; else DURA="$DURA $arq"; fi ;;
-        *"/.fence-"*".ok")
-          # o atestado da PRÓPRIA etapa é escrito adiante; os das etapas anteriores não
-          if [ "$arq" = "${arq%/.fence-${ETAPA%% *}.ok}" ]; then DURA="$DURA $arq"
-          else RESTO="$RESTO $arq"; fi ;;
-        *"/.gad/fences/"*".ok")
-          if [ "$arq" = "${arq%/.gad/fences/${ETAPA%% *}.ok}" ]; then DURA="$DURA $arq"
-          else RESTO="$RESTO $arq"; fi ;;
+        *"/.fence-"*".ok"|*"/.gad/fences/"*".ok")
+          # o atestado da PRÓPRIA etapa é escrito adiante; t59 (FM-F27INS-02UAT): o da etapa
+          # IMEDIATAMENTE anterior também é isento (nasce 1 s depois do último commit dela e
+          # reprovava a cerca seguinte — 6 vezes na F27 INS); os demais são duros.
+          _rid="${arq##*/}"; _rid="${_rid#.fence-}"; _rid="${_rid%.ok}"
+          if [ "$_rid" = "$RECIBO_PROPRIO" ] || { [ -n "$RECIBO_ANTERIOR" ] && [ "$_rid" = "$RECIBO_ANTERIOR" ]; }
+          then RESTO="$RESTO $arq"; else DURA="$DURA $arq"; fi ;;
         *) if [ -n "$UAT_OBRIG" ] && printf '%s' "$UAT_OBRIG" | grep -qxF -- "$arq"; then
              DURA_UAT="$DURA_UAT $arq"
            else RESTO="$RESTO $arq"; fi ;;

@@ -822,6 +822,24 @@ J2="$(bash "$C" 3 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
 eq "atestado de OUTRA etapa fora de commit → FALHA dura" \
    "$(assert_de "$J2" evidencia_fora_do_git)" "FALHA"
 rm -f "$PD/.fence-1.ok"
+# — t59 FM-F27INS-02UAT: isento só o recibo da etapa IMEDIATAMENTE anterior (o 4.1b entre 4.1 e 4.4)
+ev_de() { bash "$C" "$1" --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1 | jq -r '(.asserts[]|select(.id=="evidencia_fora_do_git")|.resultado) // "<ausente>"'; }
+echo ok > "$PD/.fence-4.5.ok"
+eq "etapa 5: recibo do 4.5 (imediatamente anterior) fora de commit → isento" "$(ev_de 5)" "<ausente>"
+rm -f "$PD/.fence-4.5.ok"; echo ok > "$PD/.fence-4.4.ok"
+eq "etapa 5: recibo do 4.4 (duas atrás) fora de commit → FALHA dura" "$(ev_de 5)" "FALHA"
+eq "etapa 4-secure: o próprio recibo (4.4) fora de commit → isento (rótulo do run-log, não o argumento)" "$(ev_de 4-secure)" "<ausente>"
+rm -f "$PD/.fence-4.4.ok"; echo ok > "$PD/.fence-4.1.ok"
+eq "etapa 4-secure sem 4.1b/4.2/4.3: o anterior é o 4.1 → isento" "$(ev_de 4-secure)" "<ausente>"
+echo ok > "$PD/.fence-4.1b.ok"
+eq "etapa 4-secure com recibo do 4.1b: o 4.1 deixa de ser o anterior → FALHA dura" "$(ev_de 4-secure)" "FALHA"
+( cd "$R" && git add -f "$PD/.fence-4.1.ok" && git -c user.name=t -c user.email=t@t.io \
+    -c commit.gpgsign=false commit -qm f41 >/dev/null 2>&1 )
+eq "…e o 4.1b (anterior do 4.4 na ordem) fora de commit é isento" "$(ev_de 4-secure)" "<ausente>"
+eq "etapa 4-validate: o 4.1b não é o anterior do 4.5 → FALHA dura" "$(ev_de 4-validate)" "FALHA"
+rm -f "$PD/.fence-4.1b.ok"
+( cd "$R" && git rm -q --cached "$PD/.fence-4.1.ok" >/dev/null 2>&1 && git -c user.name=t -c user.email=t@t.io \
+    -c commit.gpgsign=false commit -qm rm-f41 >/dev/null 2>&1 ); rm -f "$PD/.fence-4.1.ok"
 
 # — t59 FM-F27INS-01UAT: NN-POS-SHIP.md e a evidência CITADA por cenário são DUROS
 mkdir -p "$PD/uat-evidencia"
