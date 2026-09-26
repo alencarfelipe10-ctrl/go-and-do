@@ -2,6 +2,84 @@
 
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
+## [Não lançada]
+
+Tarefa 59 (26/09): as 50 sugestões aprovadas da auditoria por etapa da F27 INS (grupo-inspired), em 15 lanes
+paralelas + revisor cético. Suíte 51/51. O fork do GSD (`gen5-patches`) foi reinstalado junto (VERSION 1.14.0).
+
+### ⚠️ Pode reprovar fase ou plano que antes passava
+
+- **Incidente gravado depois do `end` reprova a etapa** (`incidente_tardio`, decisão do dono). Antes era
+  aviso. Vários incidentes no mesmo segundo (rajada) **continuam aviso**: o run-log marca o horário ao
+  segundo e a §5.4 grava a lista do condutor item a item. `uat_pass_sem_sondagem` segue aviso.
+- **Dívida fora do `deferred-items.md` reprova a intenção** (`cardinalidade_etapa_1`, FM-07INT). Supera a
+  decisão da rodada 4 da F4 RLR, que só avisava.
+- **`FORA-DA-LISTA` sem motivo reprova o plano** (`confere-plano.sh`, f2). Agora aceita negrito e crases,
+  mas exige caminho **e** motivo não vazio — como a sugestão aprovada pedia.
+- **Resultado do UAT fora do git reprova já na etapa 5** (`uat_fora_do_git`): o `NN-POS-SHIP.md` e a
+  prova em texto citada por cenário entram no commit do UAT, que agora vem antes da cerca 5.
+
+### Hooks (valem em toda sessão)
+
+- **Fim real do subagente** (a1): o aviso de «lançado em segundo plano» deixou de ser gravado como fim; a
+  parada de quem ainda espera um filho sai `fim_real:false` (provisória) e o fim real fica na primeira parada
+  sem filho vivo. Um coordenador de 64 min não aparece mais com 47 s.
+- **Gate certo com gates em paralelo** (L15): com o 4.1b e o 4.5 abertos juntos, cada agente é registrado
+  no gate a que pertence (marca `etapa_por_janela`), não no último aberto.
+- **Guarda do Bash** (a2, a3): executar um script da skill não é mais confundido com editá-lo quando o mesmo
+  comando edita outro arquivo; `git` dentro de `.git/` não conta como chamada de git, e `/usr/bin/git` conta.
+
+### Intenção
+
+- `correcoes-commit.sh` guarda todos os commits do ciclo com os ids no título; a rodada «b» recebe só os ids
+  novos e herda os anteriores conferidos contra o git (b2, b3). Rodada sem mudança não apaga mais o registro.
+- Novo `limpa-intencao.sh`: a limpeza do fecho funciona igual em bash e zsh (b7).
+- Sino do ciclo 0 ganha o estado «levado aos consultores», com destino (b5).
+- Novo `gera-intent-review.sh`: monta a tabela do INTENT-REVIEW a partir dos arquivos do verificador e não
+  esconde divergência entre eles (b6). O passo 7 do `intent.md` manda usá-lo.
+- Prompts: o INTENT-REVIEW saiu do `--inicio`; cada correção procura o mesmo ponto no SPEC e no CONTEXT; o
+  context-guard roda com `--spec`; evidência de ciclo já consumida não se reescreve; o `gad-discuss` commita
+  (ou reverte) o que mexer fora da fase e confere contradição entre as próprias decisões (b1, c1, c2, c4, c5).
+
+### Plano, convergência e execução
+
+- `gsd-shim.sh` acha a própria pasta também no zsh (e1).
+- `confere-ponteiros-plano.sh` reconhece D-NN (avisos falsos da INS-27: 12 → 5); `spot-check-ponteiros.sh`
+  acha citação `arquivo:linha` cujo conteúdo mudou de lugar, em tabela (2 dos 3 casos reais; o 3º é
+  paráfrase — limite do desenho) (e2, parcial).
+- `registra-ciclo.sh` conta só «### Achado N» e mantém o aviso quando o parecer não tem nenhum (e3).
+- O briefing do executor diz onde gravar a evidência RED, por task (f3).
+- Fork: `roda-suite.sh` confere a assinatura das planilhas de teste antes da suíte (`--aceitar-assinatura`
+  para aceitar de propósito); o UAT usa uma cópia da planilha (f1).
+
+### Gates
+
+- O 4.1b ganhou rótulo, checkpoint, `end` e recibo `fences/4.1b.ok` próprios; abrir o 4.5 não fecha o 4.1b.
+  A cerca só tolera fora do git o recibo da etapa imediatamente anterior (g1, FM-02UAT). A /audit-gad mostra
+  o 4.1b como sub-bloco do 4.1.
+- `review-maior.py` escolhe a última re-revisão, não o último relatório de conserto (g2).
+- O gate real de PII roda uma vez no fim do 4.1 quando o conserto toca arquivo publicado (g3).
+- Achado confirmado que o gate queira deixar de fora vira pergunta ao dono (g4).
+- «Quem mais lê ou grava este estado» antes de trocar uma checagem: no texto do hospedeiro e, pelo fork, no
+  `gsd-code-fixer` desde a 1ª iteração (g5).
+
+### Evidência no git e encerramento
+
+- Todo hospedeiro (os 10, inclusive 4.2 e 4.3) termina gravando os incidentes e só então commitando a
+  evidência (d1, c3). A camada 0 grava os itens do retorno antes da cerca.
+- A trava de gate reprovado saiu da pasta de evidência para `.planning/.gad/gates/` (ignorada), com leitura
+  do lugar antigo por 1 release (d3).
+- O aviso de pasta suja (e os irmãos) grava a lista inteira em `.planning/.gad/pasta-suja/`; o banner da
+  §6.5 lista todo artefato da fase fora do git (d4).
+- `pos-ship.py move` anexa a linha nas lacunas e na data do `NN-UAT.md` e leva a prova do cético (h1); o
+  gerador do UAT não roda prova nem decide balde (h2); `numeros-da-fase.sh --conferir` cobra sobras
+  desejáveis e o «como desfazer» no resumo (h3).
+
+### /audit-gad
+
+- `turnos-por-ciclo.py` mede o E4 pelo transcript: nenhuma espera por fim de turno entre as lanes e o
+  verificador (i).
+
 ## [2.10.1] - 2026-09-24
 
 Tarefas 56 e 57 (24/09). Tema: a `.planning/` mais limpa — a raiz sem arquivos soltos e **uma** entrada
