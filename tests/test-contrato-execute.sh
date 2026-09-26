@@ -41,6 +41,8 @@ tem "47e: filho Agent acorda o pai"                              'encerre o turn
 nao "47e: a frase falsa de que não chegam notificações saiu"     'você **não recebe notificações**'
 tem "FJ-01EXE: a mesma frase de handoff ao gsd-verifier"         'números medidos da suíte completa e o escopo de módulos tocados'
 tem "FM-08EXE: escopo do commit por extenso no briefing"         'escopo dos seus commits: (NN-PP)'
+tem "FM-F27INS-02EXE: commit do hospedeiro no escopo de um plano também exige a linha" 'A mesma regra vale quando é VOCÊ, o hospedeiro, quem commita'
+tem "FM-F27INS-02EXE: motivo é obrigatório, negrito/crases são só enfeite aceito" 'negrito e crases no rótulo são aceitos pelo fiscal, mas o'
 # o outro lado do FJ-01EXE: a camada 0 manda a MESMA frase no despacho do 3.4 (arquivo de etapa
 # desde a divisão do workflow, tarefa 9 do mapa-gad)
 W3="$RAIZ/skills/go-and-do/workflow-etapa-3.md"

@@ -216,11 +216,19 @@ tarefas num commit e ninguém cobrou — a cancela de fecho (`confere-etapa.sh 3
 reprova.
 
 Arquivo tocado fora do `files_modified` do plano: a resposta é **declarar**, não reescrever o
-contrato. Escreva `ARQUIVO-NAO-DECLARADO: <caminho>` no SUMMARY do plano (uma linha por arquivo,
-com o motivo ao lado) e commite essa declaração. Editar o `files_modified` de um plano já
+contrato. Escreva `ARQUIVO-NAO-DECLARADO: <caminho> — <motivo>` no SUMMARY do plano (uma linha
+por arquivo, com o motivo ao lado — negrito e crases no rótulo são aceitos pelo fiscal, mas o
+motivo é obrigatório) e commite essa declaração. Editar o `files_modified` de um plano já
 executado é proibido: o cálculo de ondas rodou com a lista antiga, e uma colisão entre planos da
 mesma onda fica invisível (F24.5, 4 planos editados depois da execução; o `confere-etapa.sh 3`
 agora reconfere a colisão pelas listas reais dos commits e reprova `colisao_real_onda`).
+
+**A mesma regra vale quando é VOCÊ, o hospedeiro, quem commita** algo com o escopo de um plano
+(FM-F27INS-02EXE — caso real 27-07: você commitou a allowlist de PII por decisão do dono, com a
+tag `(27-07)`, e não declarou; o fiscal reprovou `FORA-DA-LISTA` na hora). Sempre que você
+commitar por conta própria um arquivo tocando o escopo de um plano já em execução, acrescente
+**na mesma resposta**, antes de seguir, a linha `ARQUIVO-NAO-DECLARADO: <caminho> — <motivo>` no
+SUMMARY daquele plano (commit junto ou imediatamente depois) — não deixe para o fiscal achar.
 
 Depois que a última onda fechar, rode a suíte completa uma vez, por `roda-suite.sh`, e trate
 o resultado como gate da etapa. Rodada extra no meio é escolha sua (fase longa, arquivo-hub
