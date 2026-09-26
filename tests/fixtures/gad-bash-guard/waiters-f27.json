@@ -2,7 +2,17 @@
  {
   "codigo": "FM-F27INS-05EXE",
   "agente": "gad-execute",
-  "origem": "transcript agent-aa82de781936a74b0 (sessão 2557efcc)",
+  "origem": "transcript agent-aa82de781936a74b0 (sessão 2557efcc), run-log seq 257",
+  "tool_input": {
+   "command": "cd /home/alencar/Projetos-Vox-AI/grupo-inspired; date -Is; timeout 590 bash -c 'until [ -s .git/gad-suite/suite-final/rc ]; do sleep 15; done'; date -Is; ls .git/gad-suite/suite-final/; tail -c 300 .git/gad-suite/suite-final/log"
+  },
+  "esperado": "allow",
+  "rastros": 0
+ },
+ {
+  "codigo": "FM-F27INS-05EXE",
+  "agente": "gad-execute",
+  "origem": "transcript agent-aa82de781936a74b0 (sessão 2557efcc), run-log seq 265–269",
   "tool_input": {
    "command": "cd /home/alencar/Projetos-Vox-AI/grupo-inspired; timeout 590 bash -c 'until [ -s .git/gad-suite/suite-final-27b/rc ]; do sleep 15; done'; ls .git/gad-suite/suite-final-27b/"
   },
@@ -12,7 +22,7 @@
  {
   "codigo": "FM-F27INS-05EXE",
   "agente": "gad-execute",
-  "origem": "transcript agent-aa82de781936a74b0 (sessão 2557efcc)",
+  "origem": "transcript agent-aa82de781936a74b0 (sessão 2557efcc), run-log seq 265–269",
   "tool_input": {
    "command": "cd /home/alencar/Projetos-Vox-AI/grupo-inspired; timeout 590 bash -c 'until [ -s .git/gad-suite/suite-final-27b/rc ]; do sleep 15; done'; ls .git/gad-suite/suite-final-27b/ | tr '\\n' ' '"
   },
@@ -22,7 +32,7 @@
  {
   "codigo": "FM-F27INS-05EXE",
   "agente": "gad-execute",
-  "origem": "transcript agent-aa82de781936a74b0 (sessão 2557efcc)",
+  "origem": "transcript agent-aa82de781936a74b0 (sessão 2557efcc), run-log seq 265–269",
   "tool_input": {
    "command": "cd /home/alencar/Projetos-Vox-AI/grupo-inspired; timeout 590 bash -c 'until [ -s .git/gad-suite/suite-final-27b/rc ]; do sleep 15; done'; ls .git/gad-suite/suite-final-27b/ | tr '\\n' ' '; tail -c 200 .git/gad-suite/suite-final-27b/log"
   },
@@ -32,7 +42,7 @@
  {
   "codigo": "FM-F27INS-05EXE",
   "agente": "gad-execute",
-  "origem": "transcript agent-aa82de781936a74b0 (sessão 2557efcc)",
+  "origem": "transcript agent-aa82de781936a74b0 (sessão 2557efcc), run-log seq 265–269",
   "tool_input": {
    "command": "cd /home/alencar/Projetos-Vox-AI/grupo-inspired; timeout 590 bash -c 'until [ -s .git/gad-suite/suite-final-27b/rc ]; do sleep 15; done'; cat .git/gad-suite/suite-final-27b/rc; tail -c 300 .git/gad-suite/suite-final-27b/log"
   },
