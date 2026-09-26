@@ -1496,7 +1496,10 @@ def da_etapa(et):
     b = (et or "").split()[0] if (et or "").split() else (et or "")
     return a == b
 
-ends, eventos = {}, []
+def chave(et):
+    return et.split()[0] if et.split() else et
+
+ends, eventos, cps = {}, [], {}
 for linha in open(sys.argv[1], encoding="utf-8", errors="replace"):
     linha = linha.strip()
     if not linha: continue
@@ -1507,13 +1510,22 @@ for linha in open(sys.argv[1], encoding="utf-8", errors="replace"):
     if e.get("evento") == "end" and t is not None and et:
         # `substitui`: um `end` re-emitido aposenta o anterior — fica o mais recente
         ends[et] = max(ends.get(et, 0.0), t)
+    if e.get("evento") == "checkpoint" and t is not None and et:
+        cps.setdefault(chave(et), []).append(t)
     if e.get("evento") == "incidente" and da_etapa(et):
         eventos.append((t, et, (e.get("detalhe") or e.get("kv", {}).get("detalhe") or "")[:70]))
 
+# t59 (L10): a etapa que roda a cerca mais de uma vez com o MESMO rótulo (5.4 → 5.5
+# --fix-cycle / 5.6 --reuat; 3 → 3.5; 4.1 iteração 2+) abre uma janela nova pelo
+# `checkpoint` do pre-despacho.sh. Incidente gravado na hora DENTRO dessa janela nova é
+# posterior ao `end` da passada anterior e não é tardio: só conta como tardio o que não
+# tem checkpoint da mesma etapa entre o `end` e ele.
 tardios, rajadas = [], []
 for t, et, det in eventos:
     fim = ends.get(et)
     if t is not None and fim is not None and t > fim + 1:
+        if any(fim < c <= t for c in cps.get(chave(et), [])):
+            continue
         tardios.append("%s (+%ds do end)" % (det or et, int(t - fim)))
 
 por_segundo = collections.Counter(int(t) for t, _, _ in eventos if t is not None)

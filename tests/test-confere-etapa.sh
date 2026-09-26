@@ -757,6 +757,23 @@ eq "incidente depois do end da etapa → FALHA dura (t59)" "$(assert_de "$J" inc
 casa "a falha diz quantos segundos depois" "$J" '\+500s do end'
 eq "…e reprova a etapa" "$(jq -r '.veredito' <<<"$J")" "fail"
 
+# — t59 (L10): segunda passada da mesma etapa (5.4 → 5.6 --reuat, 3 → 3.5, 4.1 iter. 2+):
+#   o checkpoint do pre-despacho abre janela nova; incidente na hora dentro dela não é tardio
+IFS='|' read -r R PD <<<"$(monta tardio_2a_passada 99)"
+RL="$PD/99-RUN-LOG.jsonl"
+{ rl_linha end        "1 intencao" 2000
+  rl_linha checkpoint "1 intencao" 2100
+  rl_linha incidente  "1 intencao" 2500 "na hora, na 2a passada"; } > "$RL"
+J="$(confere "$R" 99)"
+eq "incidente na hora depois de um checkpoint novo da etapa → não é tardio" "$(assert_de "$J" incidente_tardio)" "<ausente>"
+IFS='|' read -r R PD <<<"$(monta tardio_cp_outra 99)"
+RL="$PD/99-RUN-LOG.jsonl"
+{ rl_linha end        "1 intencao"   2000
+  rl_linha checkpoint "2 planejamento" 2100
+  rl_linha incidente  "1 intencao"   2500 "de memoria"; } > "$RL"
+J="$(confere "$R" 99)"
+eq "checkpoint de OUTRA etapa não abre janela → segue FALHA" "$(assert_de "$J" incidente_tardio)" "FALHA"
+
 # — incidente de OUTRA etapa não reprova esta (recorte medido em 21/09)
 IFS='|' read -r R PD <<<"$(monta tardio_outra 99)"
 RL="$PD/99-RUN-LOG.jsonl"
