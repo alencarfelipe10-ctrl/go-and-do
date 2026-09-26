@@ -294,6 +294,11 @@ cenário, salve a **lista de chamadas que o dublê recebeu** no arquivo de evid�
 cenário some com ele. Exemplo: `browser_extract`/`curl` sobre o endpoint de introspecção do
 dublê, gravado em disco, só então `stack.sh down`/reset.
 
+Se o cenário exercita dado real que fica **fora do git** (planilha, seed, dado de aluno com
+LGPD), **o UAT usa uma cópia da planilha**, nunca o arquivo original — salvar em cima do
+original fora da fase é exatamente o que causou 32 min de suíte vermelha numa auditoria
+anterior (F27, FM-F27INS-01EXE).
+
 </project_surface>
 
 ---
