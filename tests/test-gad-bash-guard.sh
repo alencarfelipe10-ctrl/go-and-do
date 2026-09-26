@@ -235,6 +235,8 @@ for c in "sed -i s/a/b/ $H/scripts/x.sh; echo ok" \
          "sed -i 's/a;b/c/' $H/scripts/x.sh" \
          "sed -i 's/a|b/c/' $H/scripts/x.sh && echo ok" \
          "sed -i \"s/a&b/c/\" $H/scripts/x.sh" \
+         "sed -i s/a/\$(echo x;echo y)/ $H/scripts/x.sh" \
+         "sed -i s/a/\`echo x;echo y\`/ $H/scripts/x.sh" \
          "sed -i s/a/b/ /tmp/f.md $H/scripts/x.sh; bash $H/scripts/y.sh" \
          "patch -p1 $H/hooks/x.sh < /tmp/p.diff; echo ok"; do
   r=$(chama "$c"); [ "$r" = deny ] && ok "deny (alvo do sed/patch): $(printf '%.60s' "$c")" || bad "deny esperado (alvo do sed/patch): $c" "$r"

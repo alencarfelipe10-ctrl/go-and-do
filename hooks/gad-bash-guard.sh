@@ -167,9 +167,10 @@ def _comando_simples(texto, i):
     FM-F27INS-10INT (F27 INS, run-log seq 15 e 92): `sed -i … arquivo-da-fase; bash
     <skill>/confere-pre-spec.sh` era lido como escrita no script, que só é EXECUTADO. O
     teto continua sendo o fim da linha (`_segmento`): o recorte novo é sempre um pedaço do
-    antigo, nunca mais largo. Aspa sem fechamento → recorte antigo inteiro."""
+    antigo, nunca mais largo. Aspa sem fechamento → recorte antigo inteiro. Separador
+    dentro de `$( … )` ou de crase também não corta: `sed -i s/a/$(x;y)/ <alvo>`."""
     teto = _segmento(texto, i)
-    k, n, q = 0, len(teto), None
+    k, n, q, fundo, crase = 0, len(teto), None, 0, False
     while k < n:
         c = teto[k]
         if q:
@@ -181,7 +182,13 @@ def _comando_simples(texto, i):
             k += 2; continue
         elif c in "'\"":
             q = c
-        elif c in ";|&":
+        elif c == "`":
+            crase = not crase
+        elif c == "$" and teto[k + 1:k + 2] == "(":
+            fundo += 1; k += 2; continue
+        elif c == ")" and fundo:
+            fundo -= 1
+        elif c in ";|&" and not fundo and not crase:
             return teto[:k]
         k += 1
     return teto
