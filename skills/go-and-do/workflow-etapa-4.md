@@ -29,10 +29,13 @@
   same line for every finding the HOST itself drafts a fix suggestion for (the Codex merge,
   the dedup). The native reviewer's own iteration-1 findings stay out of reach — their fixer
   briefing is built inside `gsd-code-review --fix`, upstream, not by this prompt.
-- **Gate 4.1b is its own re-dispatch of 4.1, not a footnote of it** (FM-02GAT): open a
-  checkpoint labeled **"4.1b re-review"**, run `pre-despacho.sh 4-code-review` and
-  `confere-etapa.sh 4-code-review` exactly like 4.1, and stamp its own `.gad/fences/4.1b.ok`. It
-  does not inherit 4.1's fence.
+- **Gate 4.1b is its own re-dispatch of 4.1, not a footnote of it** (FM-02GAT,
+  FM-F27INS-01GAT): `pre-despacho.sh 4-code-review --rereview` is the only writer of its
+  checkpoint — label **"4.1b re-review"**, no resume «pular», parallel window (does not close
+  4.4). On return, `confere-etapa.sh 4-code-review` (same asserts; it reads the open 4.1b window,
+  or pass `--rereview`) stamps its own `.gad/fences/4.1b.ok` and its own `end`. It does not
+  inherit or rewrite 4.1's fence — never touch a fence by hand. Its incidents use the label
+  "4.1b re-review".
 - **The host never fixes a 4.1b finding itself** (FJ-04GAT): it goes to `gsd-code-fixer` with a
   scope EQUAL to the finding's own scope. Widening that scope, or changing observable behavior
   beyond what the finding names, is a question to the owner, not a host judgment call. Every
@@ -58,7 +61,10 @@
   `needs_decision` (Fix all recommended). On return: `confere-etapa.sh 4-validate`. Continue.
   When gate 4.1b exists (secure or a late commit reopened it), dispatch 4.5 in PARALLEL with
   4.1b instead of after it — validate only reads the map and runs the suite; if 4.1b fixes
-  something, re-run 4.5's suite alone afterward, not the whole validate (MGTm-01GAT).
+  something, re-run 4.5's suite alone afterward, not the whole validate (MGTm-01GAT). Order:
+  4.1b's `pre-despacho` and Agent calls first, then `pre-despacho.sh 4-validate` (it opens a
+  parallel window by itself while 4.1b's is open; `--paralelo` forces it). Each gate closes
+  with its own fiscal `end`.
 
 **Every gate host reports incidents at the moment they happen** (same contract as C1/C3),
 via `run-log.sh "<phase_dir>" "<NN>" incidente "<etapa>" --kv origem=… --kv detalhe=…` — before whatever else the

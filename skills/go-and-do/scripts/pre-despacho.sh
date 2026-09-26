@@ -5,7 +5,14 @@
 # parar > compactar) + extras da etapa (lidos do manifest) + evento no run-log. A camada 0
 # roda isto ANTES de despachar e obedece o campo `despacho` do JSON — não decide.
 #
-# Uso: pre-despacho.sh <etapa> [--fase N] [--projeto DIR] [--dry-run]
+# Uso: pre-despacho.sh <etapa> [--fase N] [--projeto DIR] [--dry-run] [--rereview] [--paralelo]
+#   --rereview (só 4-code-review): o gate 4.1b — rótulo próprio do manifest
+#     (`runlog_etapa_rereview`, "4.1b re-review"), sem o «pular» do marcador de retomada (o
+#     NN-REVIEW.md existe por construção) e checkpoint paralelo. t59 (FM-F27INS-01GAT): na F27 INS
+#     o 4.1b recebeu «pular» e o checkpoint dele fechou vazio quando o 4.5 abriu.
+#   --paralelo: o checkpoint abre janela SEM fechar as abertas (`--kv paralelo=true` no
+#     run-log.sh) — gate que o workflow manda rodar em paralelo (4.5 com o 4.1b, MGTm-01GAT).
+#     Automático quando há janela do 4.1b aberta nesta sessão e a etapa é outro gate 4.x.
 #   <etapa> casa com scripts/manifests/etapa-<etapa>.json (string opaca — "1.5" e "2.5"
 #   nunca viram int, PC-9). Sem --fase/--projeto, lê o ponteiro da rodada ativa
 #   (.planning/.gad/rodada-ativa.json, escrito pelo abre-rodada.sh; o legado
@@ -48,13 +55,15 @@ set -euo pipefail
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gsd-shim.sh"
 
 ETAPA="${1:-}"; shift || true
-[ -n "$ETAPA" ] || { echo "uso: pre-despacho.sh <etapa> [--fase N] [--projeto DIR] [--dry-run]" >&2; exit 2; }
-FASE=""; PROJ=""; DRY=0
+[ -n "$ETAPA" ] || { echo "uso: pre-despacho.sh <etapa> [--fase N] [--projeto DIR] [--dry-run] [--rereview] [--paralelo]" >&2; exit 2; }
+FASE=""; PROJ=""; DRY=0; REREVIEW=0; PARALELO=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --fase)    FASE="${2:-}"; shift 2 ;;
     --projeto) PROJ="${2:-}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
+    --rereview) REREVIEW=1; PARALELO=1; shift ;;
+    --paralelo) PARALELO=1; shift ;;
     *) echo "flag desconhecida: $1" >&2; exit 2 ;;
   esac
 done
@@ -62,6 +71,10 @@ done
 MANIFEST="$GAD_SCRIPTS_DIR/manifests/etapa-$ETAPA.json"
 [ -f "$MANIFEST" ] || { echo "ERRO: manifest inexistente para etapa \"$ETAPA\" ($MANIFEST)" >&2; exit 2; }
 RUNLOG_ETAPA=$(jq -r '.runlog_etapa' "$MANIFEST")
+if [ "$REREVIEW" = 1 ]; then
+  RUNLOG_ETAPA=$(jq -r '.runlog_etapa_rereview // empty' "$MANIFEST")
+  [ -n "$RUNLOG_ETAPA" ] || { echo "ERRO: --rereview só vale para etapa com runlog_etapa_rereview no manifest (4-code-review)" >&2; exit 2; }
+fi
 
 ROOT="$(gad_project_root "${PROJ:-$PWD}")"
 # v2.10.1 (56(a)): novo tem precedência; o legado vale por uma release (rodada da v2.10.0)
@@ -125,6 +138,8 @@ if [ -n "$FLAG_NOME" ]; then
 fi
 # retomada por marcador (2.5-C: grep de frontmatter — artefato presente = etapa já feita)
 RET_ARQ=$(jq -r '.pre.retomada.arquivo // empty' "$MANIFEST")
+# o 4.1b é a re-despacho de um 4.1 que JÁ fechou: o marcador existe por construção
+[ "$REREVIEW" = 1 ] && RET_ARQ=""
 if [ -n "$RET_ARQ" ]; then
   RET_ARQ=$(printf '%s' "$RET_ARQ" | sed "s|{fase}|$PHASE_DIR|; s|{nn}|$NN|")
   RET_RE=$(jq -r '.pre.retomada.regex' "$MANIFEST")
@@ -463,12 +478,25 @@ fi
 
 # ok (ou unknown declarado): abre a janela da etapa e autoriza o despacho
 PAR_KV=(); [ "$PARALELISMO_ATIVO" = 1 ] && PAR_KV=(--kv paralelismo=ok)
+# t59 (FM-F27INS-01GAT): janela paralela. Explícita (--paralelo/--rereview) ou mecânica: outro
+# gate 4.x abrindo com a janela do 4.1b ainda aberta nesta sessão (o 4.5 em paralelo com o 4.1b,
+# MGTm-01GAT) — sem isso o checkpoint do 4.5 fecha o do 4.1b vazio (F27 INS seq 356–359).
+case "${RUNLOG_ETAPA%% *}" in
+  4.1b) ;;
+  4.*) if [ "$PARALELO" = 0 ] && [ -n "${CLAUDE_CODE_SESSION_ID:-}" ] \
+          && bash "$GAD_SCRIPTS_DIR/run-log.sh" "$PHASE_DIR" "$NN" abertas 2>/dev/null \
+             | cut -f2 | grep -q '^4\.1b\( \|$\)'; then
+         PARALELO=1
+       fi ;;
+esac
+[ "$PARALELO" = 1 ] && PAR_KV+=(--kv paralelo=true)
 [ "$DRY" = 1 ] || gad_runlog "$PHASE_DIR" "$NN" checkpoint "$RUNLOG_ETAPA" \
   "$tokens" "$pct" "" "$limite" --kv despacho=autorizado ${PAR_KV[@]+"${PAR_KV[@]}"}
 gad_json_out pre-despacho "$(jq -cn --arg e "$ETAPA" --arg st "${status:-unknown}" --arg rz "$reason" \
+  --arg rle "$RUNLOG_ETAPA" --argjson par "$( [ "$PARALELO" = 1 ] && echo true || echo false )" \
   --arg pr "prompts" --argjson t "${tokens:-0}" --argjson p "${pct:-0}" --argjson l "${limite:-0}" \
   --argjson sil "$silencio" --argjson x "$extras" \
   --arg fmt "$( [ -n "$PHASE_DIR" ] && gad_fase_formato "$PHASE_DIR" || echo desconhecido)" \
   '{etapa:$e, despacho:"ok",
     contexto:({tokens:$t,pct:$p,limit:$l,status:$st} + (if $rz != "" then {reason:$rz} else {} end)),
-    janela_silencio:$sil, formato_fase:$fmt} + $x')"
+    janela_silencio:$sil, formato_fase:$fmt, runlog_etapa:$rle, paralelo:$par} + $x')"
