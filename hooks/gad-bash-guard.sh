@@ -37,6 +37,9 @@
 #   `sem_aspas` apaga o caminho junto com as aspas) e NUNCA resolve symlink — o
 #   `~/.claude/skills/go-and-do` aponta para o repositório de desenvolvimento, e canonizar
 #   faria a regra morder a bancada de conserto, que não é uma rodada.
+#   O destino de `sed -i`/`patch` é procurado só no MESMO comando simples (até o primeiro
+#   `;`, `|`, `&` fora de aspas; teto = fim da linha): EXECUTAR um script da skill depois
+#   de um `sed -i` noutro arquivo não é escrita nele (t59, FM-F27INS-10INT).
 # Exceção de `run_in_background` (v2.6.0, 47e — bancada B de 11/09/2026, CC 2.1.269):
 #   filho Bash com `run_in_background: true` ACORDA o pai quando o processo DA PRÓPRIA
 #   chamada termina; o `( … ) &` desprendido do `roda-suite.sh --lancar` NÃO acorda
@@ -156,6 +159,33 @@ def _segmento(texto, i):
     return texto[i:(len(texto) if j < 0 else j)]
 
 
+def _comando_simples(texto, i):
+    """Do ponto i até o primeiro `;`, `|`, `&` ou quebra de linha FORA de aspas — o alvo
+    do `sed -i`/`patch` mora no mesmo comando simples, não no seguinte.
+
+    FM-F27INS-10INT (F27 INS, run-log seq 15 e 92): `sed -i … arquivo-da-fase; bash
+    <skill>/confere-pre-spec.sh` era lido como escrita no script, que só é EXECUTADO. O
+    teto continua sendo o fim da linha (`_segmento`): o recorte novo é sempre um pedaço do
+    antigo, nunca mais largo. Aspa sem fechamento → recorte antigo inteiro."""
+    teto = _segmento(texto, i)
+    k, n, q = 0, len(teto), None
+    while k < n:
+        c = teto[k]
+        if q:
+            if c == "\\" and q == '"':
+                k += 2; continue
+            if c == q:
+                q = None
+        elif c == "\\":
+            k += 2; continue
+        elif c in "'\"":
+            q = c
+        elif c in ";|&":
+            return teto[:k]
+        k += 1
+    return teto
+
+
 def destinos_de_escrita(texto):
     """Caminhos que o comando pretende ESCREVER. Texto CRU (só sem heredoc), com aspas."""
     d = []
@@ -166,9 +196,13 @@ def destinos_de_escrita(texto):
         args = [t for t in m.group(3).split() if not t.startswith("-")]
         if args:
             d.append(args[-1])          # destino é o último argumento não-flag
-    for rx in (SED_I, PATCH_CMD, PY_ESCRITA):
+    for rx in (SED_I, PATCH_CMD):
         for m in rx.finditer(texto):
-            d += re.findall(r"[^\s'\"();|&<>]*/[^\s'\"();|&<>]+", _segmento(texto, m.start()))
+            d += re.findall(r"[^\s'\"();|&<>]*/[^\s'\"();|&<>]+", _comando_simples(texto, m.start()))
+    # `open(…,'w')` casa DENTRO da string do `python -c`: separador de shell não vale ali,
+    # então o recorte segue até o fim da linha (inalterado).
+    for m in PY_ESCRITA.finditer(texto):
+        d += re.findall(r"[^\s'\"();|&<>]*/[^\s'\"();|&<>]+", _segmento(texto, m.start()))
     return d
 
 

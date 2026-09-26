@@ -1,0 +1,20 @@
+[
+ {
+  "codigo": "FM-F27INS-10INT",
+  "runlog_seq": 15,
+  "agente": "gad-spec",
+  "tool_input": {
+   "command": "cd /home/alencar/Projetos-Vox-AI/grupo-inspired; P=.planning/phases/INS-27-executavel-windows; sed -i 's/no repositório público-privado do GitHub (o \"espelho\")/no repositório privado do GitHub (o \"espelho\")/' $P/for-humans/27-SPEC-FH.md; python3 $HOME/.claude/gsd-core/bin/nosso/fh-render.py $P/for-humans/27-SPEC-FH.md >/dev/null; bash $HOME/.claude/skills/go-and-do/scripts/confere-pre-spec.sh --exige-origem --reqs .planning/REQUIREMENTS.md \"$P/27-SPEC.md\" \"$P/27-PRE-SPEC.md\"; echo rc=$?"
+  },
+  "esperado": "allow"
+ },
+ {
+  "codigo": "FM-F27INS-10INT",
+  "runlog_seq": 92,
+  "agente": "gad-intent",
+  "tool_input": {
+   "command": "PD=$PWD/.planning/phases/INS-27-executavel-windows; S=$HOME/.claude/skills/go-and-do/scripts; sed -i -e 's#{artefato: CONTEXT, ancora: D-19, texto:#{artefato: CONTEXT, ancora: D-19, span_linhas: [125, 125], texto:#' -e 's#{artefato: CONTEXT, ancora: D-22, texto:#{artefato: CONTEXT, ancora: D-22, span_linhas: [145, 145], texto:#' -e 's#{artefato: CONTEXT, ancora: D-23, texto:#{artefato: CONTEXT, ancora: D-23, span_linhas: [152, 152], texto:#' -e 's#{artefato: SPEC, ancora: \"Regression Surface\", texto:#{artefato: SPEC, ancora: \"Regression Surface\", span_linhas: [223, 223], texto:#' $PD/27-INTENT-REVIEW.md; grep -c span_linhas $PD/27-INTENT-REVIEW.md; $S/commita-artefatos.sh \"$PD\" 27 intencao | jq -c .commit; $S/confere-etapa.sh 1 --fase 27 --projeto \"$PWD\" --sem-telemetria | jq -c '{veredito, problemas:[.asserts[]|select(.resultado!=\"ok\")|{id,resultado}]}'; F=$(bash $S/caminho-fase.sh \"$PD\" fences/1.ok); H=$(git rev-parse HEAD); [ -f \"$F\" ] && [ \"$(jq -r '.head' \"$F\")\" = \"$H\" ] && echo FENCE-OK || echo FENCE-AUSENTE; python3 $HOME/.claude/skills/audit-gad/scripts/turnos-por-ciclo.py \"/home/alencar/.claude/projects/-home-alencar-Projetos-Vox-AI-grupo-inspired/2557efcc-2c30-4388-9173-c1b649c5f1ed/subagents\" 2>/dev/null | tail -5"
+  },
+  "esperado": "allow"
+ }
+]
