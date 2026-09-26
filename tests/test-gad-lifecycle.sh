@@ -622,6 +622,111 @@ roda "$P_SEMID"
   && ok "fail-open: sem agent_id não há checagem de filhos (fim_real:true, como antes)" \
   || bad "fail-open sem agent_id" "rc=$RC delta=$DELTA $ULT"
 
+# ───────── t59 L15 (sobra do FM-F27INS-01GAT): rótulo da janela a que o Agent PERTENCE ─────────
+# F27 INS: o 4.5 abriu com o 4.1b ainda rodando e os eventos do 4.1b (filhos do host, retornos, o
+# fim do host) saíram "4.5 validate". Fixture = trecho REAL do run-log da F27 (seq 337–355, gate
+# 4.4 até o `end`, sessão trocada pela da bancada) + a continuação no formato pós-L9 (checkpoint
+# 4.1b e 4.5 com `paralelo:true`), com os ids, descrições e parentAgentId reais dos metas.
+echo "── t59 L15: gates paralelos 4.1b × 4.5 — cada Agent com o rótulo da própria janela ──"
+monta
+cp "$FIX/f27-ate-4.4.jsonl" "$RL"
+S8="${SESS:0:8}"
+H41B=a57313699831ff05c; H45=a7000b5d2ef7f1dd2
+REV=a8ae66f695c0f3442; FIXR=a5ac9bfcefc41f136; REV2=a2134217d95d03b14
+D41B="Etapa 4.1b re-review fase 27"; D45="Etapa 4.5 validate fase 27"
+D_REV="Re-review 4.1b fase 27"; D_FIX="Fix WR-11 fase 27"; D_REV2="Re-review WR-11 fix fase 27"
+cp_line() { printf '{"ts":"%s","seq":%s,"sessao":"%s","evento":"%s","etapa":"%s"%s}\n' "$1" "$2" "$S8" "$3" "$4" "${5:-}" >> "$RL"; }
+p_pre_sub() { # $1=subagent_type $2=descrição $3=tool_use_id $4=agent_id de quem chama (host)
+  p_pre_d "$1" "$2" "$3" | jq -c --arg a "$4" '. + {agent_id:$a, agent_type:"gad-gates"}'
+}
+et_ult() { jq -r '.etapa // ""' <<<"$ULT"; }
+
+# 4.1b abre (pre-despacho --rereview → paralelo) e a camada 0 despacha o host do 4.1b
+cp_line "2026-09-25T19:18:33-03:00" 356 checkpoint "4.1b re-review" ',"tokens":190000,"pct":47,"limit":400000,"paralelo":true'
+roda "$(p_pre_d gad-gates "$D41B" toolu_01UeFVR9jr4vohtgcCErk7d2)"
+[ "$(et_ult)" = "4.1b re-review" ] && [ "$(jq -r '.etapa_por_janela // false' <<<"$ULT")" = true ] \
+  && ok "L15: despacho do host 4.1b = 4.1b re-review, marcado etapa_por_janela" || bad "L15: despacho do host 4.1b" "$ULT"
+meta_real "$H41B" gad-gates toolu_01UeFVR9jr4vohtgcCErk7d2 1 "$D41B"
+# 4.5 abre em paralelo (4.1b aberto) e a camada 0 despacha o host do 4.5
+cp_line "2026-09-25T19:18:34-03:00" 359 checkpoint "4.5 validate" ',"tokens":187040,"pct":46,"limit":400000,"despacho":"autorizado","paralelo":true'
+roda "$(p_pre_d gad-gates "$D45" toolu_013U7dfwRMZPXy81PPhuQMKm)"
+[ "$(et_ult)" = "4.5 validate" ] && ok "L15: despacho do host 4.5 = 4.5 validate" || bad "L15: despacho do host 4.5" "$ULT"
+meta_real "$H45" gad-gates toolu_013U7dfwRMZPXy81PPhuQMKm 1 "$D45"
+# o host do 4.1b despacha os filhos DEPOIS do checkpoint do 4.5 (F27 seq 365, 371, 375)
+roda "$(p_pre_sub gsd-code-reviewer "$D_REV" toolu_01PJFtZGRFVxAL93C9y9EMo2 "$H41B")"
+[ "$(et_ult)" = "4.1b re-review" ] && [ "$(jq -r '.etapa_checkpoint // ""' <<<"$ULT")" = "4.5_validate" ] \
+  && ok "L15: filho revisor do 4.1b = 4.1b re-review (etapa_checkpoint=4.5_validate na trilha)" || bad "L15: revisor do 4.1b" "$ULT"
+meta_real "$REV" gsd-code-reviewer toolu_01PJFtZGRFVxAL93C9y9EMo2 2 "$D_REV" "$H41B"
+roda "$(p_stop_real "$REV" gsd-code-reviewer)"
+[ "$(et_ult)" = "4.1b re-review" ] && ok "L15: fim do revisor do 4.1b = 4.1b re-review" || bad "L15: fim do revisor" "$ULT"
+roda "$(p_pre_sub gsd-code-fixer "$D_FIX" toolu_01LdhqdBtHCk16Vp4VpCTRMb "$H41B")"
+[ "$(et_ult)" = "4.1b re-review" ] \
+  && ok "L15: fixer do 4.1b (descrição sem «4.1b») = 4.1b re-review pela descrição do host" || bad "L15: fixer do 4.1b" "$ULT"
+meta_real "$FIXR" gsd-code-fixer toolu_01LdhqdBtHCk16Vp4VpCTRMb 2 "$D_FIX" "$H41B"
+roda "$(p_stop_real "$FIXR" gsd-code-fixer)"
+[ "$(et_ult)" = "4.1b re-review" ] && ok "L15: fim do fixer = 4.1b re-review (pelo pai)" || bad "L15: fim do fixer" "$ULT"
+# o host do 4.5 despacha um filho próprio: fica no 4.5
+roda "$(p_pre_sub general-purpose "Checar suíte" tu-45-filho "$H45")"
+[ "$(et_ult)" = "4.5 validate" ] && ok "L15: filho do host 4.5 = 4.5 validate" || bad "L15: filho do 4.5" "$ULT"
+roda "$(p_pre_sub gsd-code-reviewer "$D_REV2" toolu_013K8xVqDKLxa9xciTpQfy47 "$H41B")"
+[ "$(et_ult)" = "4.1b re-review" ] && ok "L15: 2º revisor do 4.1b = 4.1b re-review" || bad "L15: 2º revisor" "$ULT"
+meta_real "$REV2" gsd-code-reviewer toolu_013K8xVqDKLxa9xciTpQfy47 2 "$D_REV2" "$H41B"
+roda "$(p_stop_real "$REV2" gsd-code-reviewer)"
+# o host do 4.1b grava o próprio `end` (fiscal) e só depois termina: janela fechada → herança
+cp_line "2026-09-25T19:37:58-03:00" 383 end "4.1b re-review" ',"tokens_reais":2633440,"veredito":"pass"'
+roda "$(p_stop_real "$H41B" gad-gates)"
+[ "$(et_ult)" = "4.1b re-review" ] && grep -q '"fim_real":true' <<<"$ULT" \
+  && ok "L15: fim do host 4.1b depois do end dele = 4.1b re-review (herda o despacho marcado)" \
+  || bad "L15: fim do host 4.1b" "$ULT"
+roda "$(p_stop_real "$H45" gad-gates)"
+[ "$(et_ult)" = "4.5 validate" ] && ok "L15: fim do host 4.5 = 4.5 validate" || bad "L15: fim do host 4.5" "$ULT"
+# contagem: todos os eventos do hook do 4.1b (descrição com «4.1b» ou «WR-11») ficaram no 4.1b
+N_ERR=$(jq -c --arg s "$S8" 'select(.sessao==$s and .origem=="hook" and .seq > 355)
+  | select((.descricao // "") | test("4\\.1b|WR-11")) | select(.etapa != "4.1b re-review")' "$RL" | wc -l)
+[ "$N_ERR" = 0 ] && ok "L15: nenhum evento do 4.1b com o rótulo do 4.5" || bad "L15: eventos do 4.1b fora do 4.1b" "$N_ERR"
+# depois do 4.5 fechar e o 5 uat abrir SEM paralelo: agente novo segue o último checkpoint, sem marcador
+cp_line "2026-09-25T19:58:40-03:00" 398 end "4.5 validate" ',"veredito":"pass"'
+cp_line "2026-09-25T19:58:50-03:00" 401 checkpoint "5 uat" ',"tokens":203781,"pct":50,"limit":400000,"despacho":"autorizado"'
+roda "$(p_pre_d general-purpose "Etapa 4.1b resto" tu-uat)"
+[ "$(et_ult)" = "5 uat" ] && [ "$(jq -r '.etapa_por_janela // false' <<<"$ULT")" = false ] \
+  && ok "L15: checkpoint sem paralelo → último checkpoint, mesmo com «4.1b» na descrição" || bad "L15: pós-paralelo" "$ULT"
+
+# (2) sem sobreposição nada muda: checkpoints comuns 4.4 → 4.5, descrições citando 4.1b/4.4
+monta
+cp_line "2026-09-25T18:50:28-03:00" 1 checkpoint "4.4 secure"
+roda "$(p_pre_d gad-gates "Etapa 4.1b re-review fase 27" tu-np1)"
+[ "$(et_ult)" = "4.4 secure" ] && ok "L15 sem paralelo: despacho citando 4.1b fica no último checkpoint" || bad "L15 sem paralelo (1)" "$ULT"
+meta_real "$H41B" gad-gates tu-np1 1 "Etapa 4.1b re-review fase 27"
+cp_line "2026-09-25T19:18:34-03:00" 3 checkpoint "4.5 validate"
+roda "$(p_pre_sub gsd-code-fixer "Fix 4.4" tu-np2 "$H41B")"
+[ "$(et_ult)" = "4.5 validate" ] && ok "L15 sem paralelo: filho segue o último checkpoint" || bad "L15 sem paralelo (2)" "$ULT"
+roda "$(p_stop_real "$H41B" gad-gates)"
+[ "$(et_ult)" = "4.5 validate" ] && ok "L15 sem paralelo: retorno segue o último checkpoint" || bad "L15 sem paralelo (3)" "$ULT"
+if grep -q 'etapa_por_janela\|etapa_checkpoint' "$RL"; then
+  bad "L15 sem paralelo: marcador gravado" "$(grep -m2 'etapa_por_janela\|etapa_checkpoint' "$RL")"
+else
+  ok "L15 sem paralelo: nenhum etapa_por_janela/etapa_checkpoint no run-log"
+fi
+
+# (2b) paralelo com descrição ambígua (cita as duas janelas) ou sem ID: fica no último checkpoint
+monta
+cp_line "2026-09-25T19:18:33-03:00" 1 checkpoint "4.1b re-review" ',"paralelo":true'
+cp_line "2026-09-25T19:18:34-03:00" 2 checkpoint "4.5 validate" ',"paralelo":true'
+roda "$(p_pre_d general-purpose "Juntar 4.1b e 4.5" tu-amb)"
+[ "$(et_ult)" = "4.5 validate" ] && [ "$(jq -r '.etapa_por_janela // false' <<<"$ULT")" = false ] \
+  && ok "L15: descrição ambígua (cita as 2 janelas) → último checkpoint, sem marcador" || bad "L15 ambígua" "$ULT"
+roda "$(p_pre_d general-purpose "Pesquisa de biblioteca" tu-semid)"
+[ "$(et_ult)" = "4.5 validate" ] && ok "L15: descrição sem ID → último checkpoint" || bad "L15 sem ID" "$ULT"
+roda "$(p_pre_d general-purpose "Conferir 4.1 antigo" tu-41)"
+[ "$(et_ult)" = "4.5 validate" ] && ok "L15: «4.1» não casa com a janela 4.1b" || bad "L15 4.1 × 4.1b" "$ULT"
+# fail-open: run-log.sh instalado sem o modo `abertas` (instalação antiga) → nada muda, exit 0
+rm "$H/.claude/skills/go-and-do/scripts"; mkdir -p "$H/.claude/skills/go-and-do/scripts"
+printf '#!/usr/bin/env bash\n[ "${3:-}" = abertas ] && exit 0\nexec bash %q "$@"\n' \
+  "$REPO/skills/go-and-do/scripts/run-log.sh" > "$H/.claude/skills/go-and-do/scripts/run-log.sh"
+roda "$(p_pre_d gad-gates "$D41B" tu-velho)"
+[ "$RC" = 0 ] && [ "$DELTA" = 1 ] && [ "$(et_ult)" = "4.5 validate" ] \
+  && ok "L15 fail-open: run-log.sh sem «abertas» → último checkpoint, grava normal" || bad "L15 fail-open" "rc=$RC delta=$DELTA $ULT"
+
 echo "--------------------------------------------------"
 echo "$ok ok / $falhas falhas"
 [ "$falhas" -eq 0 ]
