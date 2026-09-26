@@ -981,6 +981,22 @@ eq "all_fixed com skipped 0 → sem falha" "$(assert_de "$JR" all_fixed_com_skip
 printf 'sem cabecalho nenhum\n' > "$PD/99-REVIEW-FIX.iter4.md"
 JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
 eq "formato não reconhecido falha ALTO" "$(assert_de "$JR" review_formato)" "FALHA"
+# t59/L16 (achado A1 do revisor L12): conserto all_fixed com skipped > 0 SEGUIDO de re-revisão
+# clean. Depois da L6 o N mais alto manda (a re-revisão), e o assert lia só o topo — ficava mudo.
+# O conserto superado vem em `ultima_correcao` (review-maior.py) e continua reprovando.
+IFS='|' read -r R PD <<<"$(monta review-a1 99)"
+printf 'status: all_fixed\ncritical: 0\nskipped: 2\n' > "$PD/99-REVIEW-FIX.md"
+printf 'status: clean\ncritical: 0\nskipped: 0\n'     > "$PD/99-REVIEW.iter2.md"
+JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "re-revisão de N maior é o arquivo lido" \
+  "$(printf '%s' "$JR" | jq -r '.extrai.review_maior_iteracao.arquivo')" "99-REVIEW.iter2.md"
+eq "conserto com skipped > 0 superado por re-revisão clean → FALHA (A1/L12)" \
+  "$(assert_de "$JR" all_fixed_com_skipped)" "FALHA"
+eq "…o detalhe nomeia o conserto, não a re-revisão" \
+  "$(printf '%s' "$JR" | jq -r '[.asserts[]? | select(.id=="all_fixed_com_skipped") | .detalhe] | first // "" | startswith("99-REVIEW-FIX.md ")')" "true"
+printf 'status: all_fixed\ncritical: 0\nskipped: 0\n' > "$PD/99-REVIEW-FIX.md"
+JR="$(bash "$C" 4-code-review --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "mesmo formato com skipped 0 → sem all_fixed_com_skipped" "$(assert_de "$JR" all_fixed_com_skipped)" "<ausente>"
 
 # ══════════════════════════════════════════ F4 RLR — FJ-01ENC (etapa 6)
 # Os dois resumos da F4 RLR disseram que as rodadas «fecharam os avisos restantes» com
