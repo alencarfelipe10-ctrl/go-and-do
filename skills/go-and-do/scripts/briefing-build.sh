@@ -321,8 +321,18 @@ if str(C) == "1":
                     die("`.ciclo0.json`.sinos: item sem `%s`" % k)
             if s["origem"] not in ("spec", "discuss"):
                 die("sino %s: origem `%s` inválida (spec|discuss)" % (s["id"], s["origem"]))
-            if s["disposicao"] not in ("corrigido", "descartado", "aberto"):
+            # `levado_aos_consultores` (FM-F27INS-09INT, tarefa 59 b5): estado FINAL do sino
+            # entregue à consultoria que virou achado ou dívida — exige `destino` (o id em que
+            # ele se transformou); o `confere-sinos.sh` aceita o mesmo estado no fecho.
+            if s["disposicao"] not in ("corrigido", "descartado", "aberto",
+                                       "levado_aos_consultores"):
                 die("sino %s: disposicao `%s` inválida" % (s["id"], s["disposicao"]))
+            if s["disposicao"] == "levado_aos_consultores":
+                if not str(s.get("destino") or "").strip():
+                    die("sino %s: `levado_aos_consultores` exige `destino` (o achado ou a "
+                        "dívida em que o sino virou)" % s["id"])
+            elif "destino" in s:
+                die("sino %s: `%s` proíbe o campo `destino`" % (s["id"], s["disposicao"]))
             if s["disposicao"] == "corrigido":
                 cid = s.get("correcao_id")
                 if not cid:
@@ -364,7 +374,7 @@ if str(C) == "1":
         info["ciclo0_vazio"] = not cors
         info["sinos"] = [
             {"id": s["id"], "origem": s["origem"], "disposicao": s["disposicao"],
-             "correcao_id": s.get("correcao_id", "")}
+             "correcao_id": s.get("correcao_id", ""), "destino": s.get("destino", "")}
             for s in sinos
         ]
         info["correcoes"] = [{"id": k, "hash": v} for k, v in ids_cor.items()]
@@ -651,7 +661,8 @@ fi
       echo
       printf '%s' "$GATE_JSON" | jq -r '.sinos[]? | select(.disposicao!="corrigido")
         | select(.id | test("^licao ?[0-9]") | not)
-        | "- `" + .id + "` (" + .origem + ") — " + .disposicao'
+        | "- `" + .id + "` (" + .origem + ") — " + .disposicao
+          + (if (.destino // "") != "" then " → `" + .destino + "`" else "" end)'
       echo
     fi
   fi

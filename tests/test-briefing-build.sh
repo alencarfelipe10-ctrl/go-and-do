@@ -200,6 +200,18 @@ qids=$(jq -cr '.qids|join(",")' "$PD/.intent/.perguntas-c1.json")
 grep -q '^- \*\*Q7\*\* (revalidação do ciclo 0)' "$BRF" && ok "a Q de revalidação interpola o qid (Q7)" || erro "Q7 não interpolada"
 grep -q 'evidência = o diff do commit' "$BRF" && erro "a frase que entregava a evidência do «sim» continua" || ok "a frase «evidência = o diff do commit» saiu (J7)"
 
+echo "== FM-F27INS-09INT (t59 b5) — sino do ciclo 0 «levado_aos_consultores» com destino"
+jq -n --arg c "$COMMIT0" --arg h "$H0" --slurpfile r "$PD/.intent/.releitura-c0.json" '{
+  v:1,
+  sinos:[{id:"s-01",origem:"spec",disposicao:"corrigido",correcao_id:"c0-01"},
+         {id:"s-02",origem:"discuss",disposicao:"levado_aos_consultores",destino:"c1-02"}],
+  correcoes:[{id:"c0-01",hash:$h}],
+  releitura:$r[0]}' > "$PD/.intent/.ciclo0.json"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "estado novo aceito pelo gate do c1" || erro "esperado 0, veio $rc" "$saida"
+grep -q "\`s-02\` (discuss) — levado_aos_consultores → \`c1-02\`" "$BRF" \
+  && ok "o briefing mostra o sino levado e o destino dele" || erro "linha do sino levado" "$(grep s-02 "$BRF")"
+
 echo "== E2c.5 — negativas do schema do ciclo 0"
 neg() { # <rotulo> <json do .ciclo0>
   printf '%s' "$2" > "$PD/.intent/.ciclo0.json"
@@ -211,6 +223,10 @@ neg "sino corrigido sem correcao_id" \
   "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
 neg "sino aberto COM correcao_id" \
   "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"aberto\",\"correcao_id\":\"c0-01\"},{\"id\":\"s-9\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
+neg "sino levado_aos_consultores SEM destino (t59 b5)" \
+  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"},{\"id\":\"s-02\",\"origem\":\"spec\",\"disposicao\":\"levado_aos_consultores\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
+neg "sino aberto COM destino (t59 b5: destino só no levado)" \
+  "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"corrigido\",\"correcao_id\":\"c0-01\"},{\"id\":\"s-02\",\"origem\":\"spec\",\"disposicao\":\"aberto\",\"destino\":\"c1-02\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
 neg "correção órfã (sem sino que a referencie)" \
   "{\"v\":1,\"sinos\":[{\"id\":\"s-01\",\"origem\":\"spec\",\"disposicao\":\"aberto\"}],\"correcoes\":[{\"id\":\"c0-01\",\"hash\":\"$H0\"}],\"releitura\":$REL}"
 neg "hash da correção divergente do .aplicado" \
