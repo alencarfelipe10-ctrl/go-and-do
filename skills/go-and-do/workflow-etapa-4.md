@@ -24,6 +24,11 @@
   reviewer tagged "não aplicar sem o dono": it returns `needs_decision`, never `done` with the
   finding silently skipped (FJ-01GAT). Ask, apply the fix INSIDE this gate once answered, and
   only then let the fiscal → `end` → recibo sequence close.
+- **Fixer briefing extends past 4.1b (FJ-F27INS-02GAT).** The "what else reads or writes this
+  state" ask two bullets below is not 4.1b-only anymore: `code-review.md` §2b now carries the
+  same line for every finding the HOST itself drafts a fix suggestion for (the Codex merge,
+  the dedup). The native reviewer's own iteration-1 findings stay out of reach — their fixer
+  briefing is built inside `gsd-code-review --fix`, upstream, not by this prompt.
 - **Gate 4.1b is its own re-dispatch of 4.1, not a footnote of it** (FM-02GAT): open a
   checkpoint labeled **"4.1b re-review"**, run `pre-despacho.sh 4-code-review` and
   `confere-etapa.sh 4-code-review` exactly like 4.1, and stamp its own `.gad/fences/4.1b.ok`. It

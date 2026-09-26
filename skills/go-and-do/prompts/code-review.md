@@ -128,6 +128,14 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
      com datas de modelo e foi corrigido à mão).
    Sem loop de negociação: no código o árbitro é o repo (confirma ou descarta por
    evidência).
+   **Quando você mesmo redige a sugestão de conserto** de um achado (as duas linhas
+   acima — fonte codex e fusão), acrescente ao texto: somar a checagem, nunca trocar,
+   salvo prova de que a antiga ficou inútil; e listar, por commit, "quem mais lê ou grava
+   este estado" antes de aceitar a troca — a mesma exigência do 4.1b (MGTk-01GAT,
+   `workflow-etapa-4.md`; FJ-F27INS-02GAT). **Fora do seu alcance:** o achado nativo do
+   revisor interno (iteração 1) é corrigido pelo `gsd-code-fixer` direto por dentro do
+   comando `gsd-code-review --fix`, sem passar pelo SEU texto — esta linha não alcança
+   aquele caminho (é briefing de agente upstream, fora deste prompt).
 2c. *(Experimento 4.C-c, a validar em fase real:)* quando o model profile do GSD
    permitir, rode o fixer em Sonnet e registre `fixer=sonnet (experimento)` em
    `sinos` — nunca em silêncio.
