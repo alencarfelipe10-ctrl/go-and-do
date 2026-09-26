@@ -1189,8 +1189,8 @@ if [ "$ETAPA" = "1" ]; then
   # dívida da ressalva corretamente registrada, porque a seção carrega dívidas de outros
   # ciclos que nunca foram para o deferred-items.md. Trocado por: cada ressalva do veredito
   # precisa de UMA dívida nomeada com destino, ligada a ela — o resto da seção não é
-  # cobrado aqui (mas segue visível: `cardinalidade_etapa_1`/FM-09INT acima continua
-  # acusando DIVIDA-SEM-REGISTRO para toda a seção, como AVISO).
+  # cobrado aqui. SUPERADO em 26/09 (tarefa 59, FM-F27INS-07INT, decisão do dono): o
+  # `cardinalidade_etapa_1` acima passou a REPROVAR dívida da seção fora do deferred-items.
   #
   # O vínculo é o frontmatter `ressalva_dividas: [id, ...]` do INTENT-REVIEW — uma lista
   # (uma fase pode ter mais de uma ressalva). Sem essa chave (ou lista vazia) com o rótulo

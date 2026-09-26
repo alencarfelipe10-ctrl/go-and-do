@@ -657,7 +657,7 @@ achados_dispensados: 0
 | c1-01 | a | codex | confirmado (A-produto) | correção |
 EOF
 J=$(confere "$R" 99)
-eq "cabeçalho 3 × tabela 1 → cardinalidade_etapa_1 vira AVISO" "$(assert_de "$J" cardinalidade_etapa_1)" "AVISO"
+eq "cabeçalho 3 × tabela 1 → cardinalidade_etapa_1 vira FALHA" "$(assert_de "$J" cardinalidade_etapa_1)" "FALHA"
 casa "…o detalhe nomeia CARDINALIDADE confirmados" "$J" 'CARDINALIDADE confirmados'
 eq "…e o EXTRAI carrega o medido da cardinalidade" "$(printf '%s' "$J" | jq -r '.extrai.cardinalidade.medido.cabecalho.confirmados')" "3"
 
