@@ -101,7 +101,11 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
    — não um `.done` de terceiro; assim que o marcador existe, leia. Parecer presente → despache **`gad-verificador`** (síncrono)
    com `prompts/intent-verifica.md` adaptado no despacho: "verifique cada achado do
    parecer `<caminho>` contra o código real; vereditos confirmado/nao_sustentado; sem
-   classificação de ciclo". **Exceção que dispensa o despacho:** achado do Codex que coincide
+   classificação de ciclo". **Não acrescente critério de escopo ao briefing do verificador**
+   (ex.: "código pré-existente/fora do diff da fase é fora de escopo") — o verificador
+   arbitra evidência, não relevância; quem decide relevância é o dono, no `needs_decision`
+   abaixo, nunca um critério improvisado no despacho (FJ-F27INS-01GAT: foi assim que 2
+   achados confirmados saíram do conserto sem decisão do dono). **Exceção que dispensa o despacho:** achado do Codex que coincide
    1:1 (mesmo arquivo, linha e classe) com um achado já confirmado do revisor interno entra
    direto como fusão declarada — o verificador existe para arbitrar divergência, e aqui não
    houve nenhuma (FJ-02GAT). Divergência real, mesmo que pequena, ainda vai ao verificador.
@@ -110,7 +114,13 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
      Critical · WR-xx Warning; preferir CR a BL-x) com `fonte: codex` no corpo;
    - achado coincidente com um do reviewer interno (mesmo arquivo/linha/classe) →
      funde no existente creditando as duas fontes (dedup);
-   - não confirmado → apêndice "descartados (codex)" com a razão, nunca silencioso;
+   - **achado CONFIRMADO nunca vai para "descartados"** — nem "código pré-existente" nem
+     "fora do delta da fase" tiram um achado confirmado da contagem (FJ-F27INS-01GAT): ou
+     ele entra numerado (linha acima) e vai ao fixer, ou volta como `needs_decision` (passo
+     3) com as opções mastigadas — consertar agora / quick depois / aceitar com registro,
+     recomendação primeiro — e é o DONO quem escolhe, com ponteiro para a decisão;
+   - não confirmado (o verificador não sustentou) → apêndice "descartados (codex)" com a
+     razão, nunca silencioso;
    - reconte o frontmatter (`critical:`/`warning:`/`total:`) — fixer e cancela do 4.A
      consomem 1:1 sem saber quem achou. Criticals novos do Codex → mais uma passada do
      fixer neles (mesmo loop). Timestamps do frontmatter (`reviewed:`, `fixed_at:`) são
