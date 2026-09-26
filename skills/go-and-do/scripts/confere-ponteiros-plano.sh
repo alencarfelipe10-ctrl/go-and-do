@@ -18,13 +18,24 @@
 #       formato do confere-plano.sh). Ponteiro de linha citando outro ARQUIVO cujo dono é
 #       outra ferramenta (spot-check-ponteiros.sh) fica fora daqui — o foco é a seção.
 #
-#   (3) CITACAO-CODIGO-FORA-DO-ARQUIVO — FM-F27INS-03PLAN: o read_first cita `arquivo:linha`
-#       de código (não `.md` — isso é a checagem 2) e o arquivo citado, no disco, tem MENOS
-#       linhas do que o número citado. É onde os 3 ponteiros deslocados da F27-INS (ship.py,
-#       conftest.py, test_bat_commands.py) escaparam: o conferente antigo só olhava título de
-#       seção. Ignora arquivo que está em `files_modified` de QUALQUER plano da fase (risco
+#   (3) CITACAO-CODIGO-FORA-DO-ARQUIVO — FM-F27INS-03PLAN (metade parcial — ver nota):
+#       o read_first cita `arquivo:linha` de código (não `.md` — isso é a checagem 2) e
+#       o arquivo citado, no disco, tem MENOS linhas do que o número citado — piso de
+#       LIMITE (a linha existe?), nunca de CONTEÚDO (a linha diz o que a citação afirma?).
+#       Ignora arquivo que está em `files_modified` de QUALQUER plano da fase (risco
 #       anotado na melhoria aprovada: ele está para mudar, o número de linha de HOJE não é
 #       critério de nada).
+#       NOTA (conferido contra o INS-27-executavel-windows real, 26/09): os 3 ponteiros
+#       deslocados citados na melhoria (`ship.py:502→503`, `conftest.py:57→59`,
+#       `test_bat_commands.py:23-25→25-26`) NÃO estão em `<read_first>` de PLAN.md — estão
+#       na tabela de "source-grounding pass" do 27-REVIEWS.md (achado da CONVERGÊNCIA, um
+#       artefato e um agente diferentes). Esta checagem não os pega, e não pegaria mesmo
+#       sem o filtro de files_modified: as 3 linhas citadas EXISTEM no arquivo (só o
+#       conteúdo mudou 1-2 linhas) — checagem de limite não vê isso, precisaria comparar
+#       conteúdo ou exigir citação por símbolo (`arquivo.py#simbolo`, já usado nos
+#       `<read_first>` reais desta fase). O ganho real desta checagem (3) é mais estreito:
+#       pegar citação de código apontando para FORA do arquivo (typo grosseiro de linha),
+#       não deslocamento fino de conteúdo. Descrito para o coordenador no relatório da L4.
 #
 # Uso: confere-ponteiros-plano.sh <phase_dir>
 # Saída: JSON de 1 linha {"avisos":[{codigo,plano,detalhe}], "total":N}. Exit sempre 0.
