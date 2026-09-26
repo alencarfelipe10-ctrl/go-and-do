@@ -1544,6 +1544,34 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     | grep -vE '^\.planning/\.gad(/|-)|(^|/)\.gad-[a-z-]*$|(^|/)\.correcoes-c[0-9a-z]*\.(tmp|pre-[0-9]+\.patch)$|/\.gad/intent/c[0-9a-z]+/correcoes\.(tmp|pre-[0-9]+\.patch)$' \
     | grep -vE '\.(tmp|swp|err|log|pyc)$|(^|/)__pycache__/|(^|/)\.DS_Store$' \
     | head -40; } || true )
+  # t59 (FM-F27INS-01UAT): o NN-POS-SHIP.md (trava a fase seguinte) e a evidência que um
+  # cenário do NN-UAT.md CITA também são obrigatórios — na F27 INS os dois ficaram fora do
+  # git e a cerca 5 deu pass duas vezes com aviso. Classe DURA:
+  #   • NN-POS-SHIP.md — etapas 5 e 6. Ele nasce no passo 4 da 5.6, que commita
+  #     (`commita-artefatos.sh … uat`) ANTES de re-rodar esta cerca;
+  #   • evidência citada — da etapa 6 em diante. Na etapa 5 segue AVISO: a cerca da 5.4
+  #     roda ANTES do commit do resultado (5.4 passo 3), e cobrar ali seria o impasse que a
+  #     decisão de 21/09 (abaixo) evitou. O 6.3b commita tudo antes da cerca 6.
+  # Lista de citados = gad_uat_evidencias_citadas (a MESMA do commita-artefatos, modo uat).
+  UAT_OBRIG=""
+  case "${ETAPA%% *}" in
+    5|6|6.*)
+      _raiz_p="$(cd -P -- "$ROOT" 2>/dev/null && pwd)" || _raiz_p="$ROOT"
+      UAT_OBRIG="$(realpath -m --relative-to="$_raiz_p" "$PHASE_DIR/$NN-POS-SHIP.md" 2>/dev/null)"$'\n'
+      if [ "${ETAPA%% *}" != 5 ]; then
+        while IFS= read -r _c; do
+          [ -n "$_c" ] && UAT_OBRIG="$UAT_OBRIG$(realpath -m --relative-to="$_raiz_p" "$_c" 2>/dev/null)"$'\n'
+        done < <(gad_uat_evidencias_citadas "$PHASE_DIR" "$NN")
+      fi ;;
+  esac
+  # O filtro de ruído acima (.log/.err/.tmp…) esconderia uma evidência CITADA com essa
+  # extensão (ex.: `sondagem.log`), que o commita-artefatos (modo uat) commita: ela volta.
+  while IFS= read -r _o; do
+    [ -n "$_o" ] || continue
+    printf '%s\n' "$SUJOS" | grep -qxF -- "$_o" && continue
+    [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=all -- "$_o" 2>/dev/null)" ] \
+      && SUJOS="${SUJOS:+$SUJOS$'\n'}$_o"
+  done <<<"$UAT_OBRIG"
   if [ -n "$SUJOS" ]; then
     n_sujos=$( { printf '%s\n' "$SUJOS" | grep -c . || true; } )
     # ── DECISÃO DO DONO (21/09), sobre a contradição medida pelo executor 1 ───────
@@ -1560,26 +1588,6 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     #   • AVISO para todo o resto (`NN-UAT.md`, SUMMARY, run-log, …).
     # Quem commita a evidência dura é `commita-artefatos.sh … evidencia` — uma fonte só.
     DURA=""; RESTO=""; DURA_UAT=""
-    # t59 (FM-F27INS-01UAT): o NN-POS-SHIP.md (trava a fase seguinte) e a evidência que um
-    # cenário do NN-UAT.md CITA também são obrigatórios — na F27 INS os dois ficaram fora do
-    # git e a cerca 5 deu pass duas vezes com aviso. Classe DURA:
-    #   • NN-POS-SHIP.md — etapas 5 e 6. Ele nasce no passo 4 da 5.6, que commita
-    #     (`commita-artefatos.sh … uat`) ANTES de re-rodar esta cerca;
-    #   • evidência citada — da etapa 6 em diante. Na etapa 5 segue AVISO: a cerca da 5.4
-    #     roda ANTES do commit do resultado (5.4 passo 3), e cobrar ali seria o impasse que a
-    #     decisão de 21/09 acima evitou. O 6.3b commita tudo antes da cerca 6.
-    # Lista de citados = gad_uat_evidencias_citadas (a MESMA do commita-artefatos, modo uat).
-    UAT_OBRIG=""
-    case "${ETAPA%% *}" in
-      5|6|6.*)
-        _raiz_p="$(cd -P -- "$ROOT" 2>/dev/null && pwd)"
-        UAT_OBRIG="$(realpath -m --relative-to="$_raiz_p" "$PHASE_DIR/$NN-POS-SHIP.md" 2>/dev/null)"$'\n'
-        if [ "${ETAPA%% *}" != 5 ]; then
-          while IFS= read -r _c; do
-            [ -n "$_c" ] && UAT_OBRIG="$UAT_OBRIG$(realpath -m --relative-to="$_raiz_p" "$_c" 2>/dev/null)"$'\n'
-          done < <(gad_uat_evidencias_citadas "$PHASE_DIR" "$NN")
-        fi ;;
-    esac
     while IFS= read -r arq; do
       [ -n "$arq" ] || continue
       # v2.10.1 (57): os dois formatos, braço a braço — formato novo `.gad/intent/` e

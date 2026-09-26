@@ -849,6 +849,13 @@ eq "etapa 3: a regra do UAT não se aplica" "$(assert_de "$J3" uat_fora_do_git)"
     -c user.email=t@t.io -c commit.gpgsign=false commit -qm pos >/dev/null 2>&1 )
 J6="$(bash "$C" 6 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
 eq "etapa 6: tudo commitado → sem uat_fora_do_git" "$(assert_de "$J6" uat_fora_do_git)" "<ausente>"
+# extensão de «ruído» (.log) CITADA: o filtro de temporários não pode escondê-la da cerca
+echo 'evidencia: uat-evidencia/sondagem.log' >> "$PD/99-UAT.md"
+echo '$ curl -s' > "$PD/uat-evidencia/sondagem.log"
+J6="$(bash "$C" 6 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 6: .log CITADO fora de commit → FALHA dura (o filtro de ruído não esconde)" \
+   "$(assert_de "$J6" uat_fora_do_git)" "FALHA"
+rm -f "$PD/uat-evidencia/sondagem.log"
 rm -rf "$PD/uat-evidencia/nao-citado.txt"
 
 # — FM-01GAT: recibo do 4.1 vencido por commit de CÓDIGO posterior ao head aprovado
