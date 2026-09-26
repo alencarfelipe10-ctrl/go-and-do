@@ -18,7 +18,7 @@ for f in tres-formas.md intervalo.md deslocamento.md; do
   sed "s|@@ABS@@|$TMP|g" "$FIX/$f" > "$TMP/$f"
 done
 cp "$FIX/sem-links.md" "$TMP/sem-links.md"
-for f in desloc-ship.py desloc-conftest.py no-desloc.py bat-paraphrase.py; do
+for f in desloc-ship.py desloc-conftest.py no-desloc.py bat-paraphrase.py bat-verbatim.py; do
   cp "$FIX/$f" "$TMP/$f"
 done
 
@@ -130,18 +130,24 @@ else
   ok "bat-paraphrase.py: literal parafraseado (não verbatim) — script fica em silêncio, não inventa aviso"
 fi
 
-deslocados=$(echo "$saida" | grep -c '^DESLOCADO ')
-if [ "$deslocados" -eq 2 ]; then
-  ok "exatamente 2 DESLOCADO (ship + conftest:3); conftest:8/no-desloc/bat-paraphrase não contam"
+if echo "$saida" | grep -qF "DESLOCADO $TMP/bat-verbatim.py:2-3 -> linha real 3-4 (\"alvo_verbatim_unico\")"; then
+  ok "citação em FAIXA (:2-3) desloca preservando a largura -> real 3-4 (bug pós-revisão corrigido)"
 else
-  erro "contagem de DESLOCADO" "esperado 2, obtido $deslocados
+  erro "deslocamento de faixa (bat-verbatim.py) não detectado" "$saida"
+fi
+
+deslocados=$(echo "$saida" | grep -c '^DESLOCADO ')
+if [ "$deslocados" -eq 3 ]; then
+  ok "exatamente 3 DESLOCADO (ship + conftest:3 + bat-verbatim faixa); conftest:8/no-desloc/bat-paraphrase não contam"
+else
+  erro "contagem de DESLOCADO" "esperado 3, obtido $deslocados
 $saida"
 fi
 
-if echo "$saida" | tail -1 | grep -qF '· deslocados=2'; then
-  ok "sumário ganha «· deslocados=2» só quando há deslocamento"
+if echo "$saida" | tail -1 | grep -qF '· deslocados=3'; then
+  ok "sumário ganha «· deslocados=3» só quando há deslocamento"
 else
-  erro "sumário sem «deslocados=2»" "$(echo "$saida" | tail -1)"
+  erro "sumário sem «deslocados=3»" "$(echo "$saida" | tail -1)"
 fi
 
 # --- 8. Sem deslocamento no documento: sumário NÃO ganha o sufixo (superconjunto) ---

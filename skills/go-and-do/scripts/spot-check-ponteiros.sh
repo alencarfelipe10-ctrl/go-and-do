@@ -245,7 +245,10 @@ def bate(linhas, n, m, literais):
 def busca_deslocado(linhas, n, m, literais, janela):
     largura = m - n
     for d in range(1, janela + 1):
-        for inicio in (n - d, m + d):
+        # Desloca a FAIXA inteira (preserva largura) para trás (n-d) ou para
+        # frente (n+d) — nunca só uma ponta, senão faixa (`:23-25`) buscaria
+        # `[m+d, m+d+largura]` em vez de `[n+d, m+d]` (achado pós-revisão, t59/L13).
+        for inicio in (n - d, n + d):
             fim = inicio + largura
             if inicio < 1 or fim > len(linhas):
                 continue
