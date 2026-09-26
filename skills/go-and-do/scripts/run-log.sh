@@ -449,18 +449,23 @@ fi
 
   # Dente do gate (fix da 3ª ocorrência de "guarda cega reporta verde", F24-fecho:
   # confere-etapa exit 1 → end pass 18s depois). O confere-etapa.sh em fail grava
-  # .gate-fail-<id>.json na phase_dir e SÓ ele, ao dar pass, remove. Um `end` com o
+  # o lock da etapa e SÓ ele, ao dar pass, remove. Um `end` com o
   # lock vivo é recusado: vira evento `incidente` + instrução no stdout. Exceções que
   # fecham janela sem passar pelo gate: interrompida=true (pausa) e stop/skip.
   if [ "$evento" = "end" ]; then
     _id="${etapa%% *}"
-    # v2.10.1 (57): o lock mora onde o formato da fase manda (`.gad/gates/<id>.json` ou o
-    # antigo `.gate-fail-<id>.json`) — tabela única no lib/gad-caminhos.sh.
+    # t59 (FM-F27INS-01ENC): o lock mora no estado ignorado da rodada
+    # (`.planning/.gad/gates/<fase>/<id>.json`); por 1 release o caminho antigo da pasta da
+    # fase (`.gad/gates/<id>.json` ou `.gate-fail-<id>.json`) também trava — tabela única no
+    # lib/gad-caminhos.sh (gad_trava_caminhos).
     . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gad-caminhos.sh"
-    _lock="$(gad_fase_caminho "$dir" "gates/$_id.json")"
+    _lock=""
+    while IFS= read -r _l; do
+      [ -n "$_l" ] && [ -f "$_l" ] && { _lock="$_l"; break; }
+    done < <(gad_trava_caminhos "$dir" "$_id")
     _interr=0
     for _kv in ${kvs[@]+"${kvs[@]}"}; do [ "$_kv" = "interrompida=true" ] && _interr=1; done
-    if [ -f "$_lock" ] && [ "$_interr" = 0 ]; then
+    if [ -n "$_lock" ] && [ "$_interr" = 0 ]; then
       _res=$(sed -n 's/.*"resumo":"\([^"]*\)".*/\1/p' "$_lock" | head -1)
       trava "$f"
       last_seq=$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$f" 2>/dev/null | tail -n1)

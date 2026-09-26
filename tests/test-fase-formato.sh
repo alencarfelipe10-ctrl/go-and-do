@@ -85,16 +85,28 @@ for par in "novo|$RN|$PDN|.gad/fences/0.ok" "antigo|$RA|$PDA|.fence-0.ok"; do
 done
 sim "[novo] nenhum .fence-*.ok solto na pasta da fase"         "! ls '$PDN'/.fence-* >/dev/null 2>&1"
 ( cd "$RN" && bash "$SC/confere-etapa.sh" 1 --projeto "$RN" --fase 99 >/dev/null 2>&1 )
-sim "[novo] fail grava a trava em .gad/gates/1.json"          "[ -s '$PDN/.gad/gates/1.json' ]"
-sim "[novo] …e nenhum .gate-fail-* solto"                      "! ls '$PDN'/.gate-fail-* >/dev/null 2>&1"
+# t59 (FM-F27INS-01ENC): a trava é estado da rodada — sai da pasta da fase nos dois formatos
+sim "[novo] fail grava a trava em .planning/.gad/gates/<fase>/1.json" "[ -s '$RN/.planning/.gad/gates/99-bancada/1.json' ]"
+sim "[novo] …e nenhuma trava na pasta da fase (evidência)"     "[ ! -e '$PDN/.gad/gates/1.json' ] && ! ls '$PDN'/.gate-fail-* >/dev/null 2>&1"
 OUT=$(bash "$SC/run-log.sh" "$PDN" 99 end "1 intencao" --kv veredito=pass 2>&1)
 case "$OUT" in *GATE-EM-FAIL*) ok "[novo] run-log recusa o end com a trava viva (dente do gate)" ;;
   *) falha "[novo] run-log recusa o end com a trava viva" "$OUT" ;; esac
 ( cd "$RA" && bash "$SC/confere-etapa.sh" 1 --projeto "$RA" --fase 99 >/dev/null 2>&1 )
-sim "[antigo] fail grava a trava em .gate-fail-1.json"         "[ -s '$PDA/.gate-fail-1.json' ]"
+sim "[antigo] fail grava a trava em .planning/.gad/gates/<fase>/1.json" "[ -s '$RA/.planning/.gad/gates/99-bancada/1.json' ] && [ ! -e '$PDA/.gate-fail-1.json' ]"
 OUT=$(bash "$SC/run-log.sh" "$PDA" 99 end "1 intencao" --kv veredito=pass 2>&1)
 case "$OUT" in *GATE-EM-FAIL*) ok "[antigo] run-log recusa o end com a trava viva" ;;
   *) falha "[antigo] run-log recusa o end com a trava viva" "$OUT" ;; esac
+
+# leitura dupla por 1 release: trava deixada no caminho ANTIGO por uma rodada da v2.10.1
+mkdir -p "$PDN/.gad/gates"; printf '{"etapa":"2","ts":"x","resumo":"falhas: legado"}\n' > "$PDN/.gad/gates/2.json"
+OUT=$(bash "$SC/run-log.sh" "$PDN" 99 end "2 planejamento" --kv veredito=pass 2>&1)
+case "$OUT" in *GATE-EM-FAIL*) ok "[novo] run-log recusa o end com a trava ANTIGA viva (leitura dupla)" ;;
+  *) falha "[novo] run-log recusa o end com a trava antiga viva" "$OUT" ;; esac
+rm -f "$PDN/.gad/gates/2.json"
+PYT=$(python3 -B -c 'import sys; sys.path.insert(0, sys.argv[1]); import gad_caminhos as g; print("|".join(g.trava_caminhos(sys.argv[2], "5")))' "$SC/lib" "$PDN")
+eq  "[py] trava_caminhos = novo e antigo, nessa ordem"          "$PYT" "$RN/.planning/.gad/gates/99-bancada/5.json|$PDN/.gad/gates/5.json"
+SHT=$(bash -c '. "$1/lib/gad-caminhos.sh"; gad_trava_caminhos "$2" 5 | paste -sd"|"' _ "$SC" "$PDN")
+eq  "[sh] gad_trava_caminhos = o mesmo que o gêmeo Python"      "$SHT" "$PYT"
 
 echo "── ciclo de lanes inteiro no formato novo (dublês) ──"
 export GAD_LANES_DIR="$RAIZ/tests/fixtures/roda-lanes/stub" GAD_ESPERAR_PASSO=1

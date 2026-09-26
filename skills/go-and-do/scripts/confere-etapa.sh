@@ -18,7 +18,7 @@
 #   --dry-run: avalia e imprime, não grava evento nenhum (PC-12 — validação contra
 #   fases arquivadas sem sujar run-log real).
 #   --sem-telemetria: avalia e grava o `.fence-<etapa>.ok` no pass (removendo-o no fail), e NÃO
-#   grava evento nenhum no run-log, NÃO mede tokens e NÃO TOCA NO LOCK `.gate-fail-<etapa>.json`
+#   grava evento nenhum no run-log, NÃO mede tokens e NÃO TOCA NO LOCK `.planning/.gad/gates/<fase>/<etapa>.json`
 #   (nem o cria no fail, nem o remove no pass). É o modo do subagente de camada 1, que confere o
 #   próprio trabalho antes de devolver `done` (46 j / 46 r). Duas razões, as duas medidas:
 #   (1) telemetria é da camada 0, que re-roda esta cancela na chegada — dois `end` para a mesma
@@ -1552,6 +1552,34 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     | grep -vE '^\.planning/\.gad(/|-)|(^|/)\.gad-[a-z-]*$|(^|/)\.correcoes-c[0-9a-z]*\.(tmp|pre-[0-9]+\.patch)$|/\.gad/intent/c[0-9a-z]+/correcoes\.(tmp|pre-[0-9]+\.patch)$' \
     | grep -vE '\.(tmp|swp|err|log|pyc)$|(^|/)__pycache__/|(^|/)\.DS_Store$' \
     | head -40; } || true )
+  # t59 (FM-F27INS-01UAT): o NN-POS-SHIP.md (trava a fase seguinte) e a evidência que um
+  # cenário do NN-UAT.md CITA também são obrigatórios — na F27 INS os dois ficaram fora do
+  # git e a cerca 5 deu pass duas vezes com aviso. Classe DURA:
+  #   • NN-POS-SHIP.md — etapas 5 e 6. Ele nasce no passo 4 da 5.6, que commita
+  #     (`commita-artefatos.sh … uat`) ANTES de re-rodar esta cerca;
+  #   • evidência citada — da etapa 6 em diante. Na etapa 5 segue AVISO: a cerca da 5.4
+  #     roda ANTES do commit do resultado (5.4 passo 3), e cobrar ali seria o impasse que a
+  #     decisão de 21/09 (abaixo) evitou. O 6.3b commita tudo antes da cerca 6.
+  # Lista de citados = gad_uat_evidencias_citadas (a MESMA do commita-artefatos, modo uat).
+  UAT_OBRIG=""
+  case "${ETAPA%% *}" in
+    5|6|6.*)
+      _raiz_p="$(cd -P -- "$ROOT" 2>/dev/null && pwd)" || _raiz_p="$ROOT"
+      UAT_OBRIG="$(realpath -m --relative-to="$_raiz_p" "$PHASE_DIR/$NN-POS-SHIP.md" 2>/dev/null)"$'\n'
+      if [ "${ETAPA%% *}" != 5 ]; then
+        while IFS= read -r _c; do
+          [ -n "$_c" ] && UAT_OBRIG="$UAT_OBRIG$(realpath -m --relative-to="$_raiz_p" "$_c" 2>/dev/null)"$'\n'
+        done < <(gad_uat_evidencias_citadas "$PHASE_DIR" "$NN")
+      fi ;;
+  esac
+  # O filtro de ruído acima (.log/.err/.tmp…) esconderia uma evidência CITADA com essa
+  # extensão (ex.: `sondagem.log`), que o commita-artefatos (modo uat) commita: ela volta.
+  while IFS= read -r _o; do
+    [ -n "$_o" ] || continue
+    printf '%s\n' "$SUJOS" | grep -qxF -- "$_o" && continue
+    [ -n "$(git -C "$ROOT" status --porcelain --untracked-files=all -- "$_o" 2>/dev/null)" ] \
+      && SUJOS="${SUJOS:+$SUJOS$'\n'}$_o"
+  done <<<"$UAT_OBRIG"
   if [ -n "$SUJOS" ]; then
     n_sujos=$( { printf '%s\n' "$SUJOS" | grep -c . || true; } )
     # ── DECISÃO DO DONO (21/09), sobre a contradição medida pelo executor 1 ───────
@@ -1567,7 +1595,7 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     #     quem produz o seu `.fence-N.ok` (gravado adiante, neste mesmo script);
     #   • AVISO para todo o resto (`NN-UAT.md`, SUMMARY, run-log, …).
     # Quem commita a evidência dura é `commita-artefatos.sh … evidencia` — uma fonte só.
-    DURA=""; RESTO=""
+    DURA=""; RESTO=""; DURA_UAT=""
     while IFS= read -r arq; do
       [ -n "$arq" ] || continue
       # v2.10.1 (57): os dois formatos, braço a braço — formato novo `.gad/intent/` e
@@ -1585,9 +1613,16 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
         *"/.gad/fences/"*".ok")
           if [ "$arq" = "${arq%/.gad/fences/${ETAPA%% *}.ok}" ]; then DURA="$DURA $arq"
           else RESTO="$RESTO $arq"; fi ;;
-        *) RESTO="$RESTO $arq" ;;
+        *) if [ -n "$UAT_OBRIG" ] && printf '%s' "$UAT_OBRIG" | grep -qxF -- "$arq"; then
+             DURA_UAT="$DURA_UAT $arq"
+           else RESTO="$RESTO $arq"; fi ;;
       esac
     done <<<"$SUJOS"
+    if [ -n "$DURA_UAT" ]; then
+      n_du=$( { printf '%s\n' $DURA_UAT | grep -c . || true; } )
+      RES=$(jq -c --arg d "resultado do UAT fora de commit na etapa $ETAPA — $n_du arquivo(s): NN-POS-SHIP.md e/ou evidência citada por cenário do NN-UAT.md (rode: commita-artefatos.sh <fase> <NN> uat): $(printf '%s ' $DURA_UAT | cut -c1-350)" \
+        '. + [{id:"uat_fora_do_git", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    fi
     if [ -n "$DURA" ]; then
       n_dura=$( { printf '%s\n' $DURA | grep -c . || true; } )
       RES=$(jq -c --arg d "evidência da fase fora de commit na etapa $ETAPA — $n_dura arquivo(s) de .intent/, pareceres/ ou atestado (rode: commita-artefatos.sh <fase> <NN> evidencia): $(printf '%s ' $DURA | cut -c1-350)" \
@@ -1756,7 +1791,13 @@ if [ "$FALHAS" = 0 ]; then VEREDITO=pass; else VEREDITO=fail; fi
 # dente do gate (auditorias F21-ox/F24-pausa/F24-fecho — 3ª ocorrência de "guarda cega
 # reporta verde"): o fail deixa um lock que o run-log.sh HONRA — nenhum `end` desta
 # etapa é gravável enquanto o lock existir. Só ESTE script, ao dar pass, remove o lock.
-LOCK="$(gad_fase_caminho "$PHASE_DIR" "gates/${RUNLOG_ETAPA%% *}.json")"
+# t59 (FM-F27INS-01ENC): o lock é ESTADO da rodada — mora em `.planning/.gad/gates/<fase>/`
+# (ignorado), não na pasta de evidência que o commita-artefatos commita (F27 INS: 6 travas
+# commitadas e depois apagadas sem commit). O fail grava só o caminho novo; o pass apaga o
+# novo E o antigo (leitura dupla por 1 release, igual ao dente do run-log.sh).
+LOCK="$(gad_trava_caminho "$PHASE_DIR" "${RUNLOG_ETAPA%% *}")"
+LOCKS=(); while IFS= read -r _l; do [ -n "$_l" ] && LOCKS+=("$_l"); done \
+  < <(gad_trava_caminhos "$PHASE_DIR" "${RUNLOG_ETAPA%% *}")
 # 46(j)/46(r): recibo do fiscal. O lock acima é o dente do fail; este é o do pass. O
 # coordenador da etapa só pode devolver `done` com este arquivo válido — «válido» = existe E
 # `head` é o HEAD atual. Na F24.5 a etapa 1 e a etapa 3 devolveram «pronto» sem o fiscal ter
@@ -1766,13 +1807,14 @@ MEDICAO=null
 if [ "$DRY" = 0 ]; then
   if [ "$VEREDITO" = pass ]; then
     POS_FAIL=0
-    if [ "$SEMTEL" = 0 ] && [ -f "$LOCK" ]; then
+    _lock_vivo=0; for _l in "${LOCKS[@]}"; do [ -f "$_l" ] && _lock_vivo=1; done
+    if [ "$SEMTEL" = 0 ] && [ "$_lock_vivo" = 1 ]; then
       # v2.1.9: o pass que destrava um fail também fica no run-log como evento `script`
       # (F24.3 4.4: só a reprovação aparecia; a re-cancela verde só existia no transcript).
       # B1 (F4 RLR): a escrita saiu daqui — o `trap EXIT` no topo do arquivo grava o
       # evento `script` uma vez, no fim, com o exit real; `POS_FAIL=1` só alimenta o
       # resumo dele (_gad_ce_resumo) e o `--kv pos_gate_fail=true` do `end` abaixo.
-      POS_FAIL=1; rm -f "$LOCK"
+      POS_FAIL=1; rm -f "${LOCKS[@]}"
     fi
     HEAD_NOW=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "")
     mkdir -p "$(dirname -- "$FENCE")"
@@ -1829,6 +1871,7 @@ if [ "$DRY" = 0 ]; then
     rm -f "$FENCE"
     resumo=$(jq -r '[.[] | select(.resultado=="FALHA") | .id] | join(",")' <<<"$RES")
     if [ "$SEMTEL" = 0 ]; then
+      gad_estado_garante "$(_gad_raiz_da_fase "$PHASE_DIR")" || true
       mkdir -p "$(dirname -- "$LOCK")"
       printf '{"etapa":"%s","ts":"%s","resumo":"falhas: %s"}\n' \
         "${RUNLOG_ETAPA%% *}" "$(date -Is)" "$resumo" > "$LOCK"

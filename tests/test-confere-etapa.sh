@@ -39,6 +39,8 @@ confere() { # <root> <fase> → JSON do confere-etapa (última linha)
   bash "$C" 1 --projeto "$1" --fase "$2" --dry-run 2>/dev/null | tail -1
 }
 assert_de() { printf '%s' "$1" | jq -r --arg id "$2" '(.asserts[]|select(.id==$id)|.resultado) // "<ausente>"'; }
+# t59 (FM-F27INS-01ENC): a trava de gate reprovado mora no estado ignorado da rodada
+trava() { printf '%s/.planning/.gad/gates/%s/%s.json' "$1" "$(basename -- "$2")" "$3"; } # <root> <pd> <etapa>
 
 # ═════════════════════════════════════════════════════════════════════ R2
 echo "── R2: SPEC × PRE-SPEC na cancela ──"
@@ -221,8 +223,8 @@ casa "e o id sem proposição é nomeado" \
 # o lock só é gravado FORA do --dry-run: uma rodada real (ainda em projeto de bancada)
 # prova que R7 usa a mesma mecânica de dente do gate que R2/R6.
 bash "$C" 1 --projeto "$R" --fase 99 >/dev/null 2>&1
-[ -f "$PD/.gate-fail-1.json" ] && ok ".gate-fail-1.json criado (mesma mecânica de R2/R6)" \
-  || falha ".gate-fail-1.json criado (mesma mecânica de R2/R6)" "lock ausente em $PD"
+[ -f "$(trava "$R" "$PD" 1)" ] && ok "trava da etapa 1 criada (mesma mecânica de R2/R6)" \
+  || falha "trava da etapa 1 criada (mesma mecânica de R2/R6)" "lock ausente em $(trava "$R" "$PD" 1)"
 
 IFS='|' read -r R PD <<<"$(monta r7vazio 99)"
 tabela_ir "$PD/99-INTENT-REVIEW.md" "—" "—"
@@ -685,10 +687,18 @@ bash "$C" 1 --projeto "$R" --fase 99 --dry-run >/dev/null 2>&1
 [ -f "$PD/.fence-1.ok" ] && ok "--dry-run não apaga o fence" || falha "--dry-run apagou o fence"
 bash "$C" 1 --projeto "$R" --fase 99 >/dev/null 2>&1
 [ -f "$PD/.fence-1.ok" ] && falha "fail não apagou o fence" || ok "fail apaga o .fence-1.ok"
-[ -f "$PD/.gate-fail-1.json" ] && ok "fail grava o lock" || falha "fail não gravou o lock"
-rm -f "$PD/.gate-fail-1.json"
+[ -f "$(trava "$R" "$PD" 1)" ] && ok "fail grava o lock em .planning/.gad/gates/<fase>/" || falha "fail não gravou o lock"
+[ -f "$PD/.gate-fail-1.json" ] && falha "fail ainda grava o lock na pasta da fase (evidência)" \
+  || ok "fail NÃO grava o lock na pasta da fase"
+[ "$(tail -n1 "$R/.planning/.gad/.gitignore" 2>/dev/null)" = '*' ] \
+  && ok "a pasta da trava é ignorada (.planning/.gad/.gitignore = *)" \
+  || falha "a pasta da trava é ignorada" "sem .gitignore com * em $R/.planning/.gad"
+git -C "$R" status --porcelain --untracked-files=all 2>/dev/null | grep -q 'gates/' \
+  && falha "a trava aparece no git status" "$(git -C "$R" status --porcelain --untracked-files=all | grep gates/)" \
+  || ok "a trava não aparece no git status"
+rm -f "$(trava "$R" "$PD" 1)"
 bash "$C" 1 --projeto "$R" --fase 99 --sem-telemetria >/dev/null 2>&1
-[ -f "$PD/.gate-fail-1.json" ] && falha "--sem-telemetria criou o lock no fail" \
+[ -f "$(trava "$R" "$PD" 1)" ] && falha "--sem-telemetria criou o lock no fail" \
   || ok "--sem-telemetria no fail NÃO cria o lock"
 
 # ramo pass: a etapa 0 tem manifest mínimo (ponteiro da rodada + evento `run`) e é onde
@@ -703,15 +713,20 @@ if bash "$C" 0 --projeto "$R" --fase 99 --sem-telemetria >/dev/null 2>&1; then
   [ -f "$PD/.fence-0.ok" ] && ok "pass grava o .fence-<etapa>.ok" || falha "pass não gravou o fence"
   eq "head do fence == HEAD" "$(jq -r .head "$PD/.fence-0.ok" 2>/dev/null)" \
      "$(git -C "$R" rev-parse HEAD)"
-  printf '{"etapa":"0","ts":"x","resumo":"falhas: teste"}\n' > "$PD/.gate-fail-0.json"
+  mkdir -p "$(dirname -- "$(trava "$R" "$PD" 0)")"
+  printf '{"etapa":"0","ts":"x","resumo":"falhas: teste"}\n' > "$(trava "$R" "$PD" 0)"
+  # leitura dupla por 1 release: a trava do caminho ANTIGO (rodada aberta pela v2.10.1)
+  printf '{"etapa":"0","ts":"x","resumo":"falhas: legado"}\n' > "$PD/.gate-fail-0.json"
   n=$(wc -l < "$RLP")
   bash "$C" 0 --projeto "$R" --fase 99 --sem-telemetria >/dev/null 2>&1
-  [ -f "$PD/.gate-fail-0.json" ] && ok "--sem-telemetria no pass PRESERVA o lock" \
+  [ -f "$(trava "$R" "$PD" 0)" ] && [ -f "$PD/.gate-fail-0.json" ] && ok "--sem-telemetria no pass PRESERVA o lock" \
     || falha "--sem-telemetria removeu o lock no pass"
   eq "--sem-telemetria no pass não escreve no run-log" "$(wc -l < "$RLP")" "$n"
   bash "$C" 0 --projeto "$R" --fase 99 >/dev/null 2>&1
-  [ -f "$PD/.gate-fail-0.json" ] && falha "a rodada normal não removeu o lock" \
+  [ -f "$(trava "$R" "$PD" 0)" ] && falha "a rodada normal não removeu o lock" \
     || ok "a rodada normal depois do --sem-telemetria remove o lock"
+  [ -f "$PD/.gate-fail-0.json" ] && falha "o pass não removeu a trava do caminho antigo" \
+    || ok "o pass remove também a trava do caminho antigo (leitura dupla)"
   eq "…e grava 'pass pós-fail (lock removido)' exatamente uma vez" \
      "$(grep -c 'pass pós-fail (lock removido)' "$RLP" || true)" "1"
 else
@@ -807,6 +822,41 @@ J2="$(bash "$C" 3 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
 eq "atestado de OUTRA etapa fora de commit → FALHA dura" \
    "$(assert_de "$J2" evidencia_fora_do_git)" "FALHA"
 rm -f "$PD/.fence-1.ok"
+
+# — t59 FM-F27INS-01UAT: NN-POS-SHIP.md e a evidência CITADA por cenário são DUROS
+mkdir -p "$PD/uat-evidencia"
+printf '### 10. cli\ntype: cli\nresult: pass\nevidencia: uat-evidencia/cenario-10.txt\n' > "$PD/99-UAT.md"
+( cd "$R" && git add "$PD/99-UAT.md" && git -c user.name=t -c user.email=t@t.io \
+    -c commit.gpgsign=false commit -qm uat >/dev/null 2>&1 )
+echo '$ pytest -q' > "$PD/uat-evidencia/cenario-10.txt"
+echo 'rascunho'    > "$PD/uat-evidencia/nao-citado.txt"
+J5="$(bash "$C" 5 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 5: evidência citada fora de commit ainda é AVISO (a cerca da 5.4 roda antes do commit)" \
+   "$(assert_de "$J5" uat_fora_do_git)" "<ausente>"
+J6="$(bash "$C" 6 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 6: evidência citada fora de commit → FALHA dura (uat_fora_do_git)" \
+   "$(assert_de "$J6" uat_fora_do_git)" "FALHA"
+casa "…nomeia o arquivo citado e o modo uat" "$J6" 'commita-artefatos\.sh <fase> <NN> uat.*cenario-10\.txt'
+printf '%s' "$J6" | jq -r '.asserts[]|select(.id=="uat_fora_do_git")|.detalhe' | grep -q 'nao-citado' \
+  && falha "evidência NÃO citada virou dura" "$J6" || ok "evidência não citada segue só no aviso"
+echo '- id: 99-01' > "$PD/99-POS-SHIP.md"
+J5="$(bash "$C" 5 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 5: NN-POS-SHIP.md fora de commit → FALHA dura (uat_fora_do_git)" \
+   "$(assert_de "$J5" uat_fora_do_git)" "FALHA"
+J3="$(bash "$C" 3 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 3: a regra do UAT não se aplica" "$(assert_de "$J3" uat_fora_do_git)" "<ausente>"
+( cd "$R" && git add -f "$PD/99-POS-SHIP.md" "$PD/uat-evidencia/cenario-10.txt" && git -c user.name=t \
+    -c user.email=t@t.io -c commit.gpgsign=false commit -qm pos >/dev/null 2>&1 )
+J6="$(bash "$C" 6 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 6: tudo commitado → sem uat_fora_do_git" "$(assert_de "$J6" uat_fora_do_git)" "<ausente>"
+# extensão de «ruído» (.log) CITADA: o filtro de temporários não pode escondê-la da cerca
+echo 'evidencia: uat-evidencia/sondagem.log' >> "$PD/99-UAT.md"
+echo '$ curl -s' > "$PD/uat-evidencia/sondagem.log"
+J6="$(bash "$C" 6 --projeto "$R" --fase 99 --dry-run 2>/dev/null | tail -1)"
+eq "etapa 6: .log CITADO fora de commit → FALHA dura (o filtro de ruído não esconde)" \
+   "$(assert_de "$J6" uat_fora_do_git)" "FALHA"
+rm -f "$PD/uat-evidencia/sondagem.log"
+rm -rf "$PD/uat-evidencia/nao-citado.txt"
 
 # — FM-01GAT: recibo do 4.1 vencido por commit de CÓDIGO posterior ao head aprovado
 IFS='|' read -r R PD <<<"$(monta recibo 99)"

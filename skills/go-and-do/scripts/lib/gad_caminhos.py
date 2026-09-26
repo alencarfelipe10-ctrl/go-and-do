@@ -162,6 +162,33 @@ def fase_de_base(d):
     return d
 
 
+def _raiz_da_fase(pd):
+    pd = pd.rstrip("/")
+    i = pd.find("/.planning/")
+    if i >= 0:
+        return pd[:i]
+    try:
+        r = subprocess.run(["git", "-C", pd, "rev-parse", "--show-toplevel"],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+    except Exception:
+        pass
+    return pd
+
+
+def trava_caminho(pd, etapa):
+    """Trava de gate reprovado (t59 · FM-F27INS-01ENC): estado ignorado da rodada, por fase —
+    <root>/.planning/.gad/gates/<nome da pasta da fase>/<etapa>.json."""
+    pd = pd.rstrip("/")
+    return os.path.join(estado_dir(_raiz_da_fase(pd)), "gates", os.path.basename(pd), f"{etapa}.json")
+
+
+def trava_caminhos(pd, etapa):
+    """Novo e antigo (pasta da fase), nesta ordem — leitura dupla por 1 release."""
+    return [trava_caminho(pd, etapa), caminho(pd, f"gates/{etapa}.json")]
+
+
 def arq_da_base(base, rel):
     """Arquivo pelo nome novo a partir de uma base de trabalho; base avulsa → nome antigo nela."""
     b = base.rstrip("/")

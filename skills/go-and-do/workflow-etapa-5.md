@@ -124,8 +124,9 @@ leaves basket 3 without open `issue`. Order matters: re-run first, triage what i
    `.gad/pos-ship/vereditos.json`. Whoever classifies never judges.
 4. `scripts/pos-ship.py move <phase_dir> <NN> <project_root>` — moves only what passes its six
    conditions; a refused candidate stays in `NN-UAT.md` as basket 3 and keeps blocking the
-   ship. Then `confere-etapa.sh 5` again (it may now promote `status: complete`) and
-   `commita-artefatos.sh`.
+   ship. Then `commita-artefatos.sh <phase_dir> <NN> uat` — it commits `NN-POS-SHIP.md` and the
+   `uat-evidencia/` files a scenario cites — and only then `confere-etapa.sh 5` again (it may
+   now promote `status: complete`; an `NN-POS-SHIP.md` outside git fails it: `uat_fora_do_git`).
 - The re-run produced a new `issue` → 5.5 (the fix cycle is still unspent; its re-UAT uses the
   same project surface). Basket 3 empty → Etapa 6 by the ship route. Still there → **commit the
   UAT result before leaving this stage** (`commita-artefatos.sh <phase_dir> <NN> uat`, the same

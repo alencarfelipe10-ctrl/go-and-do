@@ -92,6 +92,58 @@ gad_dev_server_estado() { # <root> [json|log] → o novo, ou o legado se só ele
 }
 
 # Arquivo rastreado pelo git? (a limpeza da 56(c) nunca toca o índice)
+# ── TRAVA DE GATE REPROVADO (t59 · FM-F27INS-01ENC) ───────────────────────────
+# A trava diz «esta etapa está reprovada AGORA» — é estado da rodada, não evidência. Até a
+# v2.10.1 ela morava na pasta da fase (`.gad/gates/<id>.json` / `.gate-fail-<id>.json`), que
+# o commita-artefatos commita: cada reprovação ia para o git e o pass deixava uma exclusão
+# órfã (F27 INS: 6 de 6). Agora ela mora no estado ignorado da rodada, por fase:
+#   <root>/.planning/.gad/gates/<nome da pasta da fase>/<id>.json
+# Por 1 release quem LÊ a trava confere também o caminho antigo (rodada aberta pela v2.10.1).
+# A evidência de gate (`gates/<id>-evidencia.txt`) NÃO muda: continua na pasta da fase.
+#   gad_trava_caminho <pd> <id>   → onde gravar (caminho novo)
+#   gad_trava_caminhos <pd> <id>  → novo e antigo, 1 por linha (para ler e para apagar)
+_gad_raiz_da_fase() { # <pd> → raiz do projeto: o que vem antes de /.planning/, senão git
+  local pd="${1%/}"
+  case "$pd" in */.planning/*) printf '%s' "${pd%%/.planning/*}" ;; *) _gad_raiz_de "$pd" ;; esac
+}
+gad_trava_caminho() { # <pd> <id>
+  local pd="${1%/}"
+  printf '%s/gates/%s/%s.json' "$(gad_estado_dir "$(_gad_raiz_da_fase "$pd")")" "$(basename -- "$pd")" "${2:-}"
+}
+gad_trava_caminhos() { # <pd> <id>
+  gad_trava_caminho "$1" "$2"; printf '\n'
+  gad_fase_caminho "$1" "gates/${2:-}.json"; printf '\n'
+}
+
+# ── EVIDÊNCIA DO UAT CITADA EM CENÁRIO (t59 · FM-F27INS-01UAT) ────────────────
+# Fase sem tela prova com a saída de um comando, gravada em texto (`cenario-10.txt`); o modo
+# uat do commita-artefatos só reconhecia .pdf/.png e a prova ficou fora do git (F27 INS).
+# Fonte única de «qual arquivo de uat-evidencia/ o NN-UAT.md cita» — o commita-artefatos
+# (modo uat) e o confere-etapa.sh (classe DURA) leem daqui. Cita = campo `evidencia:` ou
+# qualquer menção `uat-evidencia/<nome>` no NN-UAT.md. Só entra arquivo regular, visível,
+# que exista DENTRO de <pd>/uat-evidencia/ (o campo pode apontar para fora do git com o
+# motivo — workflow-etapa-6.md 6.3b; esse não é cobrado). Qualquer extensão: a citação é a
+# seleção explícita, e é ela que limita o volume (risco anotado no FM-F27INS-01UAT).
+#   gad_uat_evidencias_citadas <pd> <NN> → caminhos absolutos, 1 por linha, sem repetição
+gad_uat_evidencias_citadas() { # <pd> <NN>
+  local pd="${1%/}" nn="${2:-}" uat c abs ev
+  uat="$pd/$nn-UAT.md"
+  [ -f "$uat" ] && [ -d "$pd/uat-evidencia" ] || return 0
+  ev="$(cd -P -- "$pd/uat-evidencia" 2>/dev/null && pwd)" || return 0
+  { sed -n 's/^[[:space:]]*evidencia:[[:space:]]*//p' "$uat"
+    grep -oE 'uat-evidencia/[^][:space:]`"'"'"'()<>|,;]+' "$uat" || true
+  } | while IFS= read -r c; do
+    c="${c%%[[:space:]]*}"; c="${c#[\`\"\']}"; c="${c%[\`\"\'.:]}"
+    [ -n "$c" ] || continue
+    case "$c" in /*) abs="$c" ;; *) abs="$pd/$c" ;; esac
+    [ -f "$abs" ] || continue
+    abs="$(cd -P -- "$(dirname -- "$abs")" 2>/dev/null && pwd)/$(basename -- "$abs")" || continue
+    case "$abs" in "$ev"/*) : ;; *) continue ;; esac
+    case "$(basename -- "$abs")" in .*) continue ;; esac
+    printf '%s\n' "$abs"
+  done | LC_ALL=C sort -u
+}
+
 gad_rastreado() { # <root> <arquivo>
   git -C "$1" ls-files --error-unmatch -- "$2" >/dev/null 2>&1
 }
