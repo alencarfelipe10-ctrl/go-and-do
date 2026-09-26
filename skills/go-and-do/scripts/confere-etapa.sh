@@ -1556,7 +1556,9 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
     | sed 's/^...//' \
     | grep -vE '^\.planning/\.gad(/|-)|(^|/)\.gad-[a-z-]*$|(^|/)\.correcoes-c[0-9a-z]*\.(tmp|pre-[0-9]+\.patch)$|/\.gad/intent/c[0-9a-z]+/correcoes\.(tmp|pre-[0-9]+\.patch)$' \
     | grep -vE '\.(tmp|swp|err|log|pyc)$|(^|/)__pycache__/|(^|/)\.DS_Store$' \
-    | head -40; } || true )
+    | head -2000; } || true )
+  # t59 (L10): o teto era 40 — a lista inteira nunca chegava a ninguém (a F4 teve 160). 2000
+  # é só guarda contra pasta patológica; a lista completa vai para o arquivo de estado abaixo.
   # t59 (FM-F27INS-01UAT): o NN-POS-SHIP.md (trava a fase seguinte) e a evidência que um
   # cenário do NN-UAT.md CITA também são obrigatórios — na F27 INS os dois ficaram fora do
   # git e a cerca 5 deu pass duas vezes com aviso. Classe DURA:
@@ -1623,23 +1625,55 @@ if [ "$ETAPA" != "0" ] && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; th
            else RESTO="$RESTO $arq"; fi ;;
       esac
     done <<<"$SUJOS"
+    # ── t59 (L10, decisão do dono 26/09): a lista INTEIRA vai para um arquivo no estado
+    # ignorado da rodada (`gad_pasta_suja_caminho`), com as três classes; o `detalhe` de cada
+    # assert fica com o resumo (os primeiros nomes) + o caminho — o banner da §6.5 lê o
+    # arquivo em vez do trecho cortado. Em --dry-run nada é gravado: a lista inteira sai
+    # também em `extrai.pasta_suja` (JSON), que serve nos dois modos.
+    LISTA_SUJA=""; _cauda=""
+    if [ "$DRY" = 0 ]; then
+      LISTA_SUJA="$(gad_pasta_suja_caminho "$PHASE_DIR" "$ETAPA")"
+      if mkdir -p "$(dirname -- "$LISTA_SUJA")" 2>/dev/null && gad_estado_garante "$(_gad_raiz_da_fase "$PHASE_DIR")"; then
+        { printf '# pasta da fase fora de commit — etapa %s — %s arquivo(s)\n' "$ETAPA" "${n_sujos:-0}"
+          printf '## DURA — evidencia_fora_do_git (commita-artefatos.sh <fase> <NN> evidencia)\n'
+          printf '%s\n' $DURA
+          printf '## DURA — uat_fora_do_git (commita-artefatos.sh <fase> <NN> uat)\n'
+          printf '%s\n' $DURA_UAT
+          printf '## AVISO — pasta_da_fase_suja\n'
+          printf '%s\n' $RESTO; } 2>/dev/null | grep -v '^$' > "$LISTA_SUJA" 2>/dev/null || LISTA_SUJA=""
+      else LISTA_SUJA=""; fi
+    fi
+    _resumo_suja() { # <lista separada por espaço> → os primeiros nomes (até 350 chars) + onde está o resto
+      local l; l="$(printf '%s ' $1)"
+      if [ "${#l}" -gt 350 ]; then printf '%s…' "${l:0:350}"; else printf '%s' "${l% }"; fi
+      if [ -n "$LISTA_SUJA" ]; then printf ' — lista inteira: %s' "$LISTA_SUJA"
+      elif [ "${#l}" -gt 350 ]; then printf ' — lista inteira: extrai.pasta_suja'; fi
+    }
     if [ -n "$DURA_UAT" ]; then
       n_du=$( { printf '%s\n' $DURA_UAT | grep -c . || true; } )
-      RES=$(jq -c --arg d "resultado do UAT fora de commit na etapa $ETAPA — $n_du arquivo(s): NN-POS-SHIP.md e/ou evidência citada por cenário do NN-UAT.md (rode: commita-artefatos.sh <fase> <NN> uat): $(printf '%s ' $DURA_UAT | cut -c1-350)" \
+      RES=$(jq -c --arg d "resultado do UAT fora de commit na etapa $ETAPA — $n_du arquivo(s): NN-POS-SHIP.md e/ou evidência citada por cenário do NN-UAT.md (rode: commita-artefatos.sh <fase> <NN> uat): $(_resumo_suja "$DURA_UAT")" \
         '. + [{id:"uat_fora_do_git", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
     if [ -n "$DURA" ]; then
       n_dura=$( { printf '%s\n' $DURA | grep -c . || true; } )
-      RES=$(jq -c --arg d "evidência da fase fora de commit na etapa $ETAPA — $n_dura arquivo(s) de .intent/, pareceres/ ou atestado (rode: commita-artefatos.sh <fase> <NN> evidencia): $(printf '%s ' $DURA | cut -c1-350)" \
+      RES=$(jq -c --arg d "evidência da fase fora de commit na etapa $ETAPA — $n_dura arquivo(s) de .intent/, pareceres/ ou atestado (rode: commita-artefatos.sh <fase> <NN> evidencia): $(_resumo_suja "$DURA")" \
         '. + [{id:"evidencia_fora_do_git", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     fi
     if [ -n "$RESTO" ]; then
       n_resto=$( { printf '%s\n' $RESTO | grep -c . || true; } )
-      RES=$(jq -c --arg d "AVISO: pasta da fase com $n_resto arquivo(s) fora de commit na etapa $ETAPA (rode commita-artefatos.sh antes de fechar): $(printf '%s ' $RESTO | cut -c1-350)" \
+      RES=$(jq -c --arg d "AVISO: pasta da fase com $n_resto arquivo(s) fora de commit na etapa $ETAPA (rode commita-artefatos.sh antes de fechar): $(_resumo_suja "$RESTO")" \
         '. + [{id:"pasta_da_fase_suja", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
     fi
+    # superconjunto: `total` e `evidencia_dura` (string) como antes + as três listas e o arquivo
     EXTRAI=$(jq -c --argjson n "${n_sujos:-0}" --arg du "$(printf '%s ' $DURA)" \
-      '. + {pasta_suja: {total:$n, evidencia_dura:($du|ltrimstr(" ")|rtrimstr(" "))}}' <<<"$EXTRAI")
+      --arg ua "$(printf '%s ' $DURA_UAT)" --arg re "$(printf '%s ' $RESTO)" --arg li "$LISTA_SUJA" \
+      'def l: split(" ")|map(select(length>0));
+       . + {pasta_suja: {total:$n, evidencia_dura:($du|ltrimstr(" ")|rtrimstr(" ")),
+                         dura:($du|l), dura_uat:($ua|l), aviso:($re|l),
+                         lista:(if $li == "" then null else $li end)}}' <<<"$EXTRAI")
+  elif [ "$DRY" = 0 ]; then
+    # pasta limpa: a lista de uma rodada anterior desta etapa não pode sobrar para o banner
+    rm -f -- "$(gad_pasta_suja_caminho "$PHASE_DIR" "$ETAPA")" 2>/dev/null || true
   fi
 fi
 

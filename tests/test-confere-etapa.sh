@@ -811,6 +811,31 @@ J="$(confere "$R" 99)"
 eq "só temporários (.tmp/.log) → sem aviso de pasta suja" "$(assert_de "$J" pasta_da_fase_suja)" "<ausente>"
 rm -f "$PD/.intent/rascunho.tmp" "$PD/saida.log"
 
+# — t59 (L10): a lista da pasta suja deixa de ser cortada em 350 caracteres. A lista INTEIRA
+#   vai para o estado ignorado da rodada (gad_pasta_suja_caminho) e para extrai.pasta_suja;
+#   o detalhe fica com o resumo + o caminho. Em --dry-run nada é gravado.
+for i in $(seq 1 30); do echo x > "$PD/99-artefato-com-nome-comprido-para-estourar-o-corte-$i.md"; done
+LS="$R/.planning/.gad/pasta-suja/99-bancada/1.txt"
+J="$(confere "$R" 99)"
+eq "30 arquivos → extrai.pasta_suja.aviso traz os 30 (sem corte)" \
+   "$(printf '%s' "$J" | jq '.extrai.pasta_suja.aviso|length')" "30"
+eq "…e total = 30" "$(printf '%s' "$J" | jq '.extrai.pasta_suja.total')" "30"
+casa "--dry-run: o detalhe aponta extrai.pasta_suja (nenhum arquivo gravado)" "$J" 'lista inteira: extrai\.pasta_suja'
+[ -e "$LS" ] && falha "--dry-run gravou a lista" "$LS" || ok "--dry-run não grava a lista"
+J="$(bash "$C" 1 --projeto "$R" --fase 99 --sem-telemetria 2>/dev/null | tail -1)"
+[ -s "$LS" ] && ok "fora do --dry-run a lista inteira vai para .planning/.gad/pasta-suja/<fase>/<etapa>.txt" \
+  || falha "lista da pasta suja gravada" "ausente: $LS"
+eq "…com os 30 nomes" "$(grep -c 'artefato-com-nome-comprido' "$LS" 2>/dev/null)" "30"
+casa "…e o detalhe do aviso cita o caminho do arquivo" \
+     "$(printf '%s' "$J" | jq -r '.asserts[]|select(.id=="pasta_da_fase_suja")|.detalhe')" "lista inteira: .*pasta-suja/99-bancada/1\.txt"
+eq "extrai.pasta_suja.lista = o mesmo caminho" "$(printf '%s' "$J" | jq -r '.extrai.pasta_suja.lista')" "$LS"
+[ -f "$R/.planning/.gad/.gitignore" ] && ok "o estado garante o .gitignore de .planning/.gad/" \
+  || falha "gitignore do estado" "ausente"
+rm -f "$PD"/99-artefato-com-nome-comprido-para-estourar-o-corte-*.md
+bash "$C" 1 --projeto "$R" --fase 99 --sem-telemetria >/dev/null 2>&1
+[ -e "$LS" ] && falha "pasta limpa: a lista antiga sobrou" "$LS" || ok "pasta limpa: a lista antiga da etapa é apagada"
+rm -f "$PD/.fence-1.ok" "$PD/.gad/fences/1.ok"   # recibo de um eventual pass: não contamina os casos abaixo
+
 # — FM-06INT, DECISÃO DO DONO (21/09): falha dura SÓ para a evidência dura, e o que a
 #   própria etapa produz é isento. `.intent/` e `pareceres/` são produzidos pela etapa 1.
 echo "selo do ciclo 1" > "$PD/.intent/.correcoes-c1.aplicado"
