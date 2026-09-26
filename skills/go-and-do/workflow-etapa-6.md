@@ -108,7 +108,14 @@ Reconcile the TaskList (anti-orphan, Sub-rotina C). Run `varre-worktrees.sh --pr
 (report only): every `com-trabalho` or `suja` copy in the JSON enters the executive summary
 as a pending item with the owner (`cópia <branch>: <commits> commits, <idade_dias> dias`); a
 phase does not close with work
-hidden in a copy. Then:
+hidden in a copy. `pasta_da_fase_suja` AVISO from `confere-etapa.sh` (FJ-F27INS-01ENC) — its
+`detalhe` is truncated for the assert's own log; read the WHOLE list (never the 220-char head
+a previous run stopped at), and if the assert's own cut still hides some of it, list the
+phase directory yourself (`git status --porcelain -- <phase_dir>`, read-only — this does not
+commit anything, `commita-artefatos.sh` remains the only writer). Name, in the final banner,
+EVERY `NN-*.md` of this phase still outside git, saying plainly it is not versioned — never
+summarize "gate markers/logs, nothing that's product code" while a `NN-POS-SHIP.md` (or any
+other artifact the owner will act on) sits unnamed inside that count. Then:
 - Ship: frame with title `— shipada`, fields `PR` (with the REAL state: `#N — mergeado` or
   `#N — aberto`) and `Resumo`; below: PR URL, transparency block and add-tests as a post-PR
   step. End.
