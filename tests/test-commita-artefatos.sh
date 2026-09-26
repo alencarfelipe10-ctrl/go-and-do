@@ -151,6 +151,28 @@ printf '%s\n' "$vivos" | grep -q 'tmp-parecer\|agy\.log' \
   && erro "temporário (.tmp-parecer-*/.log) entrou na evidência" "$vivos" \
   || ok "temporários (.tmp-parecer-*, .log) ficaram de fora"
 
+echo "== t59 FM-F27INS-01ENC — modo evidencia: trava de gate fica de fora; exclusão órfã da trava antiga entra"
+DT="$TMP/trava"; repo_de_mentira "$DT"
+PDT="$DT/.planning/phases/27-x"
+mkdir -p "$PDT/.gad/gates" "$PDT/.gad/intent"
+echo 'go-and-do: formato 2' > "$PDT/.gad/FORMATO"
+echo '{"etapa":"2"}' > "$PDT/.gad/gates/2.json"            # trava que a v2.10.1 commitou
+git -C "$DT" add -f "$PDT/.gad/gates/2.json" && git -C "$DT" commit -qm "v2.10.1 commitou a trava"
+rm -f "$PDT/.gad/gates/2.json"                              # o pass apagou → «D» órfão
+echo '{"etapa":"4.1"}' > "$PDT/.gad/gates/4.1.json"        # trava viva no caminho antigo
+echo '$ pytest' > "$PDT/.gad/gates/4.1-evidencia.txt"       # evidência de gate: É evidência
+echo v > "$PDT/.gad/intent/vereditos.txt"
+saida=$(cd "$DT" && bash "$SCRIPT" "$PDT" 27 evidencia 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "modo evidencia: exit 0" || erro "esperado exit 0, veio $rc" "$saida"
+vivos=$(git -C "$DT" ls-files)
+printf '%s\n' "$vivos" | grep -q 'gates/4.1.json' && erro "a trava viva entrou no commit de evidência" "$vivos" \
+  || ok "trava de gate (gates/*.json) fica fora do commit de evidência"
+printf '%s\n' "$vivos" | grep -q 'gates/4.1-evidencia.txt' && ok "evidência de gate (gates/*-evidencia.txt) entra" \
+  || erro "evidência de gate ficou de fora" "$vivos"
+git -C "$DT" status --porcelain | grep -q '^ D.*gates/2.json' \
+  && erro "exclusão órfã da trava antiga continua pendurada" "$(git -C "$DT" status --porcelain)" \
+  || ok "exclusão da trava antiga entrou no commit (sem «D» órfão)"
+
 echo "== modo desconhecido segue reprovando"
 saida=$(cd "$D" && bash "$SCRIPT" "$D/fase" 99 xpto 2>&1); rc=$?
 [ "$rc" = 2 ] && printf '%s' "$saida" | grep -q 'uat|runlog|intencao' \

@@ -18,7 +18,7 @@
 #   --dry-run: avalia e imprime, não grava evento nenhum (PC-12 — validação contra
 #   fases arquivadas sem sujar run-log real).
 #   --sem-telemetria: avalia e grava o `.fence-<etapa>.ok` no pass (removendo-o no fail), e NÃO
-#   grava evento nenhum no run-log, NÃO mede tokens e NÃO TOCA NO LOCK `.gate-fail-<etapa>.json`
+#   grava evento nenhum no run-log, NÃO mede tokens e NÃO TOCA NO LOCK `.planning/.gad/gates/<fase>/<etapa>.json`
 #   (nem o cria no fail, nem o remove no pass). É o modo do subagente de camada 1, que confere o
 #   próprio trabalho antes de devolver `done` (46 j / 46 r). Duas razões, as duas medidas:
 #   (1) telemetria é da camada 0, que re-roda esta cancela na chegada — dois `end` para a mesma
@@ -1748,7 +1748,13 @@ if [ "$FALHAS" = 0 ]; then VEREDITO=pass; else VEREDITO=fail; fi
 # dente do gate (auditorias F21-ox/F24-pausa/F24-fecho — 3ª ocorrência de "guarda cega
 # reporta verde"): o fail deixa um lock que o run-log.sh HONRA — nenhum `end` desta
 # etapa é gravável enquanto o lock existir. Só ESTE script, ao dar pass, remove o lock.
-LOCK="$(gad_fase_caminho "$PHASE_DIR" "gates/${RUNLOG_ETAPA%% *}.json")"
+# t59 (FM-F27INS-01ENC): o lock é ESTADO da rodada — mora em `.planning/.gad/gates/<fase>/`
+# (ignorado), não na pasta de evidência que o commita-artefatos commita (F27 INS: 6 travas
+# commitadas e depois apagadas sem commit). O fail grava só o caminho novo; o pass apaga o
+# novo E o antigo (leitura dupla por 1 release, igual ao dente do run-log.sh).
+LOCK="$(gad_trava_caminho "$PHASE_DIR" "${RUNLOG_ETAPA%% *}")"
+LOCKS=(); while IFS= read -r _l; do [ -n "$_l" ] && LOCKS+=("$_l"); done \
+  < <(gad_trava_caminhos "$PHASE_DIR" "${RUNLOG_ETAPA%% *}")
 # 46(j)/46(r): recibo do fiscal. O lock acima é o dente do fail; este é o do pass. O
 # coordenador da etapa só pode devolver `done` com este arquivo válido — «válido» = existe E
 # `head` é o HEAD atual. Na F24.5 a etapa 1 e a etapa 3 devolveram «pronto» sem o fiscal ter
@@ -1758,13 +1764,14 @@ MEDICAO=null
 if [ "$DRY" = 0 ]; then
   if [ "$VEREDITO" = pass ]; then
     POS_FAIL=0
-    if [ "$SEMTEL" = 0 ] && [ -f "$LOCK" ]; then
+    _lock_vivo=0; for _l in "${LOCKS[@]}"; do [ -f "$_l" ] && _lock_vivo=1; done
+    if [ "$SEMTEL" = 0 ] && [ "$_lock_vivo" = 1 ]; then
       # v2.1.9: o pass que destrava um fail também fica no run-log como evento `script`
       # (F24.3 4.4: só a reprovação aparecia; a re-cancela verde só existia no transcript).
       # B1 (F4 RLR): a escrita saiu daqui — o `trap EXIT` no topo do arquivo grava o
       # evento `script` uma vez, no fim, com o exit real; `POS_FAIL=1` só alimenta o
       # resumo dele (_gad_ce_resumo) e o `--kv pos_gate_fail=true` do `end` abaixo.
-      POS_FAIL=1; rm -f "$LOCK"
+      POS_FAIL=1; rm -f "${LOCKS[@]}"
     fi
     HEAD_NOW=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "")
     mkdir -p "$(dirname -- "$FENCE")"
@@ -1821,6 +1828,7 @@ if [ "$DRY" = 0 ]; then
     rm -f "$FENCE"
     resumo=$(jq -r '[.[] | select(.resultado=="FALHA") | .id] | join(",")' <<<"$RES")
     if [ "$SEMTEL" = 0 ]; then
+      gad_estado_garante "$(_gad_raiz_da_fase "$PHASE_DIR")" || true
       mkdir -p "$(dirname -- "$LOCK")"
       printf '{"etapa":"%s","ts":"%s","resumo":"falhas: %s"}\n' \
         "${RUNLOG_ETAPA%% *}" "$(date -Is)" "$resumo" > "$LOCK"

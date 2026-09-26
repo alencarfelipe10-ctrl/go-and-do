@@ -92,6 +92,29 @@ gad_dev_server_estado() { # <root> [json|log] → o novo, ou o legado se só ele
 }
 
 # Arquivo rastreado pelo git? (a limpeza da 56(c) nunca toca o índice)
+# ── TRAVA DE GATE REPROVADO (t59 · FM-F27INS-01ENC) ───────────────────────────
+# A trava diz «esta etapa está reprovada AGORA» — é estado da rodada, não evidência. Até a
+# v2.10.1 ela morava na pasta da fase (`.gad/gates/<id>.json` / `.gate-fail-<id>.json`), que
+# o commita-artefatos commita: cada reprovação ia para o git e o pass deixava uma exclusão
+# órfã (F27 INS: 6 de 6). Agora ela mora no estado ignorado da rodada, por fase:
+#   <root>/.planning/.gad/gates/<nome da pasta da fase>/<id>.json
+# Por 1 release quem LÊ a trava confere também o caminho antigo (rodada aberta pela v2.10.1).
+# A evidência de gate (`gates/<id>-evidencia.txt`) NÃO muda: continua na pasta da fase.
+#   gad_trava_caminho <pd> <id>   → onde gravar (caminho novo)
+#   gad_trava_caminhos <pd> <id>  → novo e antigo, 1 por linha (para ler e para apagar)
+_gad_raiz_da_fase() { # <pd> → raiz do projeto: o que vem antes de /.planning/, senão git
+  local pd="${1%/}"
+  case "$pd" in */.planning/*) printf '%s' "${pd%%/.planning/*}" ;; *) _gad_raiz_de "$pd" ;; esac
+}
+gad_trava_caminho() { # <pd> <id>
+  local pd="${1%/}"
+  printf '%s/gates/%s/%s.json' "$(gad_estado_dir "$(_gad_raiz_da_fase "$pd")")" "$(basename -- "$pd")" "${2:-}"
+}
+gad_trava_caminhos() { # <pd> <id>
+  gad_trava_caminho "$1" "$2"; printf '\n'
+  gad_fase_caminho "$1" "gates/${2:-}.json"; printf '\n'
+}
+
 gad_rastreado() { # <root> <arquivo>
   git -C "$1" ls-files --error-unmatch -- "$2" >/dev/null 2>&1
 }

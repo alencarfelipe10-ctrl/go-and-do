@@ -17,7 +17,8 @@
 #   evidencia — só a evidência dura (FM-06INT): .intent/, pareceres/, atestados
 #            (.fence-*.ok), NN-RUN-LOG.jsonl, deferred-items.md e NN-DECISOES.md.
 #            Formato novo da fase (v2.10.1, `.gad/FORMATO`): a pasta `.gad/` inteira
-#            (menos o que o `.gitignore` de `.gad/lanes/` ignora) + pareceres/ visíveis.
+#            (menos o que o `.gitignore` de `.gad/lanes/` ignora e as travas de gate
+#            `gates/*.json`, que são estado — t59) + pareceres/ visíveis.
 #            Medido na F4 RLR: 160 arquivos da pasta da fase — os selos dos ciclos 2/3/4,
 #            os vereditos, os espelhos dos pareceres e os próprios atestados do fiscal —
 #            nunca foram commitados; o run-log commitado tinha 49 linhas e o do disco 171.
@@ -50,7 +51,9 @@ gad_evidencia_dura() {
   # `.gitignore` de `lanes/` ignora (`codex-*`, `*.launch.log`) não entra — nem com `-f`.
   if [ "$(gad_fase_formato "$pd")" = novo ]; then
     DIRS=("$pd/.gad")
-    EXCL=(! -path "$pd/.gad/lanes/codex-*" ! -name '*.launch.log')
+    # t59 (FM-F27INS-01ENC): trava de gate reprovado (`gates/<id>.json`) é estado da rodada,
+    # não evidência — nunca entra (a evidência de gate, `gates/<id>-evidencia.txt`, entra).
+    EXCL=(! -path "$pd/.gad/lanes/codex-*" ! -name '*.launch.log' ! -path "$pd/.gad/gates/*.json")
   fi
   # `sem_pareceres`: no modo `intencao` a seleção de pareceres/ já é explícita (só
   # `NN-parecer-*.md`) e um teste protege que o parecer da CONVERGÊNCIA
@@ -76,6 +79,13 @@ gad_evidencia_dura() {
            "$ROOT/.planning/deferred-items.md"; do
     [ -f "$f" ] && ARQ+=("$f")
   done
+  # t59 (FM-F27INS-01ENC): travas do caminho antigo que a v2.10.1 commitou e o pass apagou
+  # ficavam como exclusão órfã («D» no git status). A exclusão entra no mesmo commit — só a
+  # de trava (`.gad/gates/*.json` / `.gate-fail-*.json`) rastreada que sumiu do disco.
+  local -a SUMIU=()
+  while IFS= read -r -d '' f; do SUMIU+=("$f"); done < <(
+    git ls-files -d -z -- "$pd/.gad/gates/*.json" "$pd/.gate-fail-*.json" 2>/dev/null)
+  [ ${#SUMIU[@]} -gt 0 ] && { git rm --cached -q -- "${SUMIU[@]}" >/dev/null 2>&1 || true; }
   [ ${#ARQ[@]} -gt 0 ] || return 0
   # -f: o .gitignore do projeto costuma barrar dotdir; a evidência da fase é
   # deliberada e não pode sumir por causa de uma regra genérica.
