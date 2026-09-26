@@ -78,7 +78,7 @@ alcance`, which is a legitimate route (owner's decision of 11/09: layer 0 passes
 
 **1.3a — The fiscal now leaves a receipt.** `confere-etapa.sh <etapa>` writes, on a pass,
 `<phase_dir>/.gad/fences/<etapa>.ok` with the HEAD it checked, and deletes it on a fail (the pair of the
-`.gad/gates/<etapa>.json` lock). `gad-intent` only returns `done` after running the fiscal itself
+failed-gate lock, which lives in the ignored round state: `.planning/.gad/gates/<phase dir name>/<etapa>.json`). `gad-intent` only returns `done` after running the fiscal itself
 and seeing a valid fence. A return that says `done` **without** a valid fence on disk is an
 incident of the subagent, not of the fiscal: log it and send it back to the same subagent, as the
 gate already prescribes. `--dry-run` neither writes nor deletes a fence.

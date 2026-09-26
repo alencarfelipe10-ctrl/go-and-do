@@ -1851,9 +1851,13 @@ fi
 # ── FM-04GAT: o 4.1 lê as contagens do arquivo de MAIOR iteração ─────────────
 # A F4 RLR tinha 04-REVIEW.md, .iter2, .iter3, .iter4, 04-REVIEW-FIX.md e
 # 04-REVIEW-FIX.iter4.md — o fiscal lia o `04-REVIEW.md` (a 1ª iteração) e dava o
-# veredito da rodada errada. Ordem: REVIEW-FIX mais recente > REVIEW.iterN mais alto >
-# REVIEW.md. E `status: all_fixed` com `skipped > 0` reprova: nada fica de fora sem ser
-# nomeado. Formato não reconhecido FALHA ALTO — leitor cego é pior que leitor ausente.
+# veredito da rodada errada. Ordem (FM-F27INS-02GAT, L6): o N mais alto manda — uma
+# re-revisão `REVIEW.iterN` de N maior vence o REVIEW-FIX; só no empate de N o REVIEW-FIX
+# desempata (ver `lib/review-maior.py`). E `status: all_fixed` com `skipped > 0` reprova:
+# nada fica de fora sem ser nomeado — no arquivo escolhido E no conserto que uma
+# re-revisão superou (`ultima_correcao`, t59/L16: sem isso o assert ficava mudo sempre
+# que havia re-revisão depois do conserto, o caminho normal). Formato não reconhecido
+# FALHA ALTO — leitor cego é pior que leitor ausente.
 if [ "$ETAPA" = "4-code-review" ]; then
   # Leitor fatorado para `lib/review-maior.py` (21/09) — o `numeros-da-fase.sh` (FJ-01ENC)
   # lê o MESMO arquivo pela MESMA regra. Não escreva um segundo parser.
@@ -1869,6 +1873,15 @@ if [ "$ETAPA" = "4-code-review" ]; then
     if [ "$rv_st" = all_fixed ] && [ "${rv_sk:-0}" != 0 ] && [ "${rv_sk:-0}" != null ]; then
       RES=$(jq -c --arg d "$rv_arq declara \`status: all_fixed\` com skipped: $rv_sk — achado pulado não é achado consertado; nomeie cada um" \
         '. + [{id:"all_fixed_com_skipped", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+    else
+      # O conserto superado por uma re-revisão continua valendo para este assert: o skipped
+      # dele não some porque alguém re-revisou depois (o re-revisor não vê o que foi pulado).
+      uc_arq=$(jq -r '.ultima_correcao.arquivo // ""' <<<"$REVMAX")
+      uc_st=$(jq -r '.ultima_correcao.status // ""' <<<"$REVMAX"); uc_sk=$(jq -r '.ultima_correcao.skipped // 0' <<<"$REVMAX")
+      if [ -n "$uc_arq" ] && [ "$uc_st" = all_fixed ] && [ "${uc_sk:-0}" != 0 ] && [ "${uc_sk:-0}" != null ]; then
+        RES=$(jq -c --arg d "$uc_arq declara \`status: all_fixed\` com skipped: $uc_sk (conserto depois superado pela re-revisão $rv_arq) — achado pulado não é achado consertado; nomeie cada um" \
+          '. + [{id:"all_fixed_com_skipped", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      fi
     fi
   fi
   EXTRAI=$(jq -c --argjson r "$REVMAX" '. + {review_maior_iteracao: $r}' <<<"$EXTRAI")
