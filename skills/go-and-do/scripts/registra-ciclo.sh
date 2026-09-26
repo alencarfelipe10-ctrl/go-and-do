@@ -82,8 +82,41 @@ if [ ${#PARECERES[@]} -gt 0 ]; then
   bash "$GAD_SCRIPTS_DIR/confere-ciclo.sh" --tabela ${FLAGS_TAB[@]+"${FLAGS_TAB[@]}"} \
     "${PARECERES[@]}" > "$TABELA" 2>/dev/null || true
 fi
+
+# FM-F27INS-01CONV: conta só cabeçalhos «### Achado N» (N>=1) — nem título de SEÇÃO
+# («### Síntese», «### Conclusão»), nem item de lista solto. O fallback por severidade/
+# ref do confere-ciclo.sh (sem heading numerado) também casa esses dois — 2 ciclos reais
+# da F27-INS registraram "3 brutos" onde eram 1 e 0. Usada só quando NÃO há resposta
+# dirigida a somar (FLAGS_TAB vazio: convergência, ou intenção sem manifesto/perguntas):
+# com dirigidas, `achados_estruturais_total` do confere-ciclo.sh é a única fonte que
+# sabe somar Q dirigidas ao total (R8), e não temos como reconstruir isso aqui.
+# <parecer.md> → imprime "N status" em stdout (N = achados numerados >=1; status =
+# ok|achado_zero|sem_cabecalho). Sem subshell escondendo efeito colateral: o chamador lê
+# o próprio stdout, nada de array populado por dentro de um $(...) (não propagaria).
+conta_achados_numerados() {
+  local f="$1" nums n=0 num achado_zero=0
+  nums=$({ grep -oE '^#{2,4}[[:space:]]+Achado[[:space:]]+[0-9]+' "$f" 2>/dev/null || true; } | { grep -oE '[0-9]+$' || true; })
+  while IFS= read -r num; do
+    [ -n "$num" ] || continue
+    [ "$num" -eq 0 ] && { achado_zero=1; continue; }
+    n=$((n+1))
+  done <<<"$nums"
+  if [ "$n" -gt 0 ]; then printf '%s ok\n' "$n"
+  elif [ "$achado_zero" -eq 1 ]; then printf '0 achado_zero\n'
+  else printf '0 sem_cabecalho\n'
+  fi
+}
+
 BRUTOS=""
-if [ -f "$TABELA" ]; then
+if [ ${#FLAGS_TAB[@]} -eq 0 ]; then
+  BRUTOS=0
+  for f in ${PARECERES[@]+"${PARECERES[@]}"}; do
+    read -r n status < <(conta_achados_numerados "$f")
+    BRUTOS=$((BRUTOS + n))
+    [ "$status" = sem_cabecalho ] && \
+      echo "AVISO: $f sem cabeçalho «### Achado N» reconhecível (nem «Achado 0») — contagem 0 não é medição, achado em prosa fica indetectável aqui" >&2
+  done
+elif [ -f "$TABELA" ]; then
   # contagem pela linha-total do próprio confere-ciclo (o grep antigo exigia lane
   # [a-z]+ pura e zerava quando a lane vinha com dígitos/hífens — guarda cega)
   BRUTOS=$(sed -n 's/^achados_estruturais_total: *//p' "$TABELA" | head -1 | tr -cd '0-9')
