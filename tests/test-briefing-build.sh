@@ -445,6 +445,43 @@ saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
   && ok "c1: nenhum .releitura-c0*.done reprova" || erro "sem marcador deveria reprovar" "rc=$rc $saida"
 limpa
 
+echo "== t59 b2/b3 — duas rodadas no MESMO ciclo: os gates do c1 e do c2 leem o .aplicado acumulado"
+limpa; monta_repo
+ART=(--artefatos "$PD/24.3-SPEC.md" "$PD/24.3-CONTEXT.md" "$PD/24.3-INTENT-REVIEW.md")
+# ciclo 0: rodada c0 (c0-01, SPEC) + rodada c0b só com o id novo (c0b-01, CONTEXT)
+RUNC "$PD" 0 --inicio "${ART[@]}" >/dev/null 2>&1
+echo "correcao c0 rodada a" >> "$PD/24.3-SPEC.md"
+RUNC "$PD" 0 --ids "c0-01" "${ART[@]}" >/dev/null 2>&1 || erro "c0 rodada a falhou"
+RUNC "$PD" 0 --inicio "${ART[@]}" >/dev/null 2>&1
+echo "correcao c0 rodada b" >> "$PD/24.3-CONTEXT.md"
+saida=$(RUNC "$PD" 0 --ids "c0b-01" "${ART[@]}" 2>&1) || erro "c0 rodada b falhou" "$saida"
+APL="$PD/.intent/.correcoes-c0.aplicado"
+[ "$(jq -r '.commits|length' "$APL")" = 2 ] && ok "c0: dois commits no .aplicado" || erro "c0 commits" "$(jq -c .commits "$APL")"
+releitura_json_de 0 > "$PD/.intent/.releitura-c0b.json"      # releitura da rodada vigente
+: > "$PD/.intent/.releitura-c0b.done"
+jq --slurpfile r "$PD/.intent/.releitura-c0b.json" --slurpfile a "$APL" -n '{
+  v:1, sinos:[{id:"s-01",origem:"spec",disposicao:"corrigido",correcao_id:"c0-01"},
+              {id:"s-02",origem:"discuss",disposicao:"corrigido",correcao_id:"c0b-01"}],
+  correcoes:$a[0].correcoes, releitura:$r[0]}' > "$PD/.intent/.ciclo0.json"
+saida=$(RUN "$PD" 24.3 1 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "gate c1 aceita correcoes = união das rodadas e releitura amarrada ao commit vigente" \
+  || erro "gate c1 (esperado 0, veio $rc)" "$saida"
+# ciclo 1: rodada c1 (c1-01) + rodada c1b com o achado confirmado tarde (c1-07), só ele
+printf 'c1-01 | bug | confirmado | codigo\n' > "$PD/.intent/.vereditos-c1.txt"
+RUNC "$PD" 1 --inicio "${ART[@]}" >/dev/null 2>&1
+echo "correcao c1 rodada a" >> "$PD/24.3-SPEC.md"
+RUNC "$PD" 1 --ids "c1-01" "${ART[@]}" >/dev/null 2>&1 || erro "c1 rodada a falhou"
+printf 'c1-01 | bug | confirmado | codigo\nc1-07 | bug | confirmado | codigo\n' > "$PD/.intent/.vereditos-c1.txt"
+RUNC "$PD" 1 --inicio "${ART[@]}" >/dev/null 2>&1
+echo "review da rodada b" >> "$PD/24.3-INTENT-REVIEW.md"
+saida=$(RUNC "$PD" 1 --ids "c1-07" "${ART[@]}" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "c1b só com o id novo passa pela trava" || erro "c1b (rc=$rc)" "$saida"
+releitura_json_de 1 > "$PD/.intent/.releitura-c1b.json"
+saida=$(RUN "$PD" 24.3 2 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "gate c2 amarra a releitura c1b ao commit/caminhos vigentes do .aplicado acumulado" \
+  || erro "gate c2 (esperado 0, veio $rc)" "$saida"
+limpa
+
 echo
 [ "$falhas" -eq 0 ] && echo "test-briefing-build: TUDO OK" || echo "test-briefing-build: $falhas falha(s)"
 [ "$falhas" -eq 0 ]
