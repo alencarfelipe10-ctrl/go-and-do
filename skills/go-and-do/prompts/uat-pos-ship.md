@@ -29,5 +29,12 @@ Grave `<phase_dir>/.gad/pos-ship/vereditos.json` — numa fase sem `<phase_dir>/
  {"cenario": 7, "veredito": "recusado",   "motivo": "<1 linha: qual das três falhou>"}]
 ```
 
+FJ-F27INS-03UAT: quando `confirmado`, este `motivo` deixa de ser só o seu registro — o
+`pos-ship.py move` copia o texto para o item movido em `NN-POS-SHIP.md` (campo `cetico:`),
+no lugar de qualquer número que o subagente de UAT tenha anotado no cenário. É esse
+`motivo` que o dono vai ler no 1º run do espelho: cite o comando E o resultado que VOCÊ
+mediu (ex.: "90 passed, 2 skipped — pytest tests/x.py"), nunca um número herdado do
+subagente sem reconferir.
+
 Não edite o `NN-UAT.md`, não mova nada, não leia arquivo de segredo. Devolva só:
 `vereditos_path`, quantos confirmados, quantos recusados, e `incidentes` (ou `nenhum`).
