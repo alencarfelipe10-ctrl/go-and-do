@@ -594,6 +594,16 @@ que o registro foi feito de memória, no fim, e não no ato.
    desambiguar com `(achado)` à mão). A garantia de verdade é o script (FM-04): id inventado ou
    achado confirmado sem destino é recusado — este parágrafo só evita o turno perdido de recusa.
 
+   **Antes de escrever `correcoes.py`, procure o mesmo ponto nos dois artefatos
+   (FJ-01INT).** Para cada achado confirmado, `grep` a âncora ou o trecho citado
+   (`D-nn`, `AC-n`, `ship.py:541` etc.) no `NN-SPEC.md` **e** no `NN-CONTEXT.md` — não só
+   no artefato onde a `proposicao` apontou. Achado que cita um ponto que os dois citam
+   (ex.: uma decisão do CONTEXT que remete a uma tabela do SPEC) corrige os dois no mesmo
+   lote. Pular esta busca é como a c1-03 da F27-INS aconteceu: corrigida no CONTEXT,
+   esquecida na tabela do SPEC que a própria decisão citava como origem — a releitura
+   pegou a omissão e abriu uma rodada `c1b` inteira (≈ 59 mil tokens de releitura, 5
+   turnos). O script (FM-04) não garante isto: ele só confere id, não cobertura.
+
    **As correções do ciclo: um script, um turno.**
    1. ANTES de editar qualquer artefato:
       ```bash
