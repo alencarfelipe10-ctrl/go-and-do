@@ -39,7 +39,22 @@
 [ -n "${_GAD_SHIM_LOADED:-}" ] && return 0 2>/dev/null
 _GAD_SHIM_LOADED=1
 
-GAD_SCRIPTS_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+# FM-F27INS-01PLAN: BASH_SOURCE só existe no bash. O `plan.md <inputs>` manda o
+# hospedeiro (zsh) sourcear este arquivo direto — sem o plano B abaixo,
+# BASH_SOURCE[0] vem vazio, dirname resolve para "." e o resto do shim (a
+# começar por gad-caminhos.sh) carrega do diretório de trabalho errado, sem
+# erro visível. `${(%):-%x}` é o equivalente do zsh (nome do arquivo sourceado,
+# doc `zshexpn`); último recurso é `$0`, que na maioria dos shells POSIX é o
+# script sourceado quando não há BASH_SOURCE nem ZSH_VERSION.
+if [ -n "${BASH_SOURCE:-}" ]; then
+  _gad_shim_self="${BASH_SOURCE[0]}"
+elif [ -n "${ZSH_VERSION:-}" ]; then
+  _gad_shim_self="${(%):-%x}"
+else
+  _gad_shim_self="$0"
+fi
+GAD_SCRIPTS_DIR="$(CDPATH= cd -- "$(dirname -- "$_gad_shim_self")/.." && pwd -P)"
+unset _gad_shim_self
 . "$GAD_SCRIPTS_DIR/lib/gad-caminhos.sh"
 
 GSD_TOOLS=""

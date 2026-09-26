@@ -64,6 +64,24 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    se grava na hora" abaixo) e, ao receber o `SUMMARY.md`, confira aquele item específico antes
    de aceitar o retorno — exigência que você inventou e não cobrou de volta é exigência que não
    existiu (FJ-03EXE).
+1f. **Diga onde grava a evidência do teste vermelho (TDD).** O `tdd.md` (referência do GSD,
+   Red-Green-Refactor) manda "persistir o registro" de que o teste falhou antes do código
+   (`gsd_run check tdd-red-evidence <record.json>`), sem dizer ONDE o `record.json` mora — dois
+   executores da F27-INS gravaram em `.intent/` (nome antigo) numa fase que já usa `.gad/` (nome
+   novo), e a fase ficou com os dois formatos misturados (FM-F27INS-03EXE). Um registro por
+   TASK, não por plano (um plano TDD pode ter várias `<task tdd="true">`, cada uma com o próprio
+   ciclo RED-GREEN). Antes de despachar, resolva o caminho você mesmo — não deixe o `$(...)` para
+   o executor, ele não expande dentro do `prompt` de um `Agent()` (mesma família do `@` que este
+   arquivo já condena acima):
+   ```bash
+   R=$(bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "intent/red-<NN>-<PP>-t<índice da task>.json")
+   ```
+   e escreva no briefing, já com o VALOR de `R` colado (não o comando):
+   ```
+   Evidência do teste vermelho (RED) desta task: grave em <valor de R>
+   ```
+   O `caminho-fase.sh` devolve o nome novo (`.gad/…`) ou o legado, conforme
+   `<phase_dir>/.gad/FORMATO` — nunca escreva `.intent/` a dedo no briefing.
 2. Deixe o motor de ondas trabalhar. O `--auto` **não silencia** as paradas de
    realidade — falha de teste de regressão, schema drift, conflito pós-merge — e elas
    devem parar mesmo: são decisões do usuário → siga o `**Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
@@ -216,11 +234,19 @@ tarefas num commit e ninguém cobrou — a cancela de fecho (`confere-etapa.sh 3
 reprova.
 
 Arquivo tocado fora do `files_modified` do plano: a resposta é **declarar**, não reescrever o
-contrato. Escreva `ARQUIVO-NAO-DECLARADO: <caminho>` no SUMMARY do plano (uma linha por arquivo,
-com o motivo ao lado) e commite essa declaração. Editar o `files_modified` de um plano já
+contrato. Escreva `ARQUIVO-NAO-DECLARADO: <caminho> — <motivo>` no SUMMARY do plano (uma linha
+por arquivo, com o motivo ao lado — negrito e crases no rótulo são aceitos pelo fiscal, mas o
+motivo é obrigatório) e commite essa declaração. Editar o `files_modified` de um plano já
 executado é proibido: o cálculo de ondas rodou com a lista antiga, e uma colisão entre planos da
 mesma onda fica invisível (F24.5, 4 planos editados depois da execução; o `confere-etapa.sh 3`
 agora reconfere a colisão pelas listas reais dos commits e reprova `colisao_real_onda`).
+
+**A mesma regra vale quando é VOCÊ, o hospedeiro, quem commita** algo com o escopo de um plano
+(FM-F27INS-02EXE — caso real 27-07: você commitou a allowlist de PII por decisão do dono, com a
+tag `(27-07)`, e não declarou; o fiscal reprovou `FORA-DA-LISTA` na hora). Sempre que você
+commitar por conta própria um arquivo tocando o escopo de um plano já em execução, acrescente
+**na mesma resposta**, antes de seguir, a linha `ARQUIVO-NAO-DECLARADO: <caminho> — <motivo>` no
+SUMMARY daquele plano (commit junto ou imediatamente depois) — não deixe para o fiscal achar.
 
 Depois que a última onda fechar, rode a suíte completa uma vez, por `roda-suite.sh`, e trate
 o resultado como gate da etapa. Rodada extra no meio é escolha sua (fase longa, arquivo-hub

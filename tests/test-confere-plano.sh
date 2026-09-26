@@ -173,6 +173,21 @@ rm -f "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"; roda "$R"
 eq "veredito falha, exit 1"                 "$(campo .veredito)/$rc" "falha/1"
 eq "codigos = FORA-DA-LISTA"                "$(campo '.codigos|join(",")')" "FORA-DA-LISTA"
 
+echo "== (m2) mesmo desvio declarado com NEGRITO e CRASES (FJ-F27INS-01EXE: caso real 27-07) → aceito"
+printf -- '---\nphase: 7\nplan: 01\n---\n# Summary\n**ARQUIVO-NAO-DECLARADO:** `src/x.py` — redação final delegada pelo plano 02\n' \
+  > "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"
+roda "$R"
+eq "veredito ok (negrito+crases aceitos)"   "$(campo .veredito)/$rc" "ok/0"
+eq "codigos sem FORA-DA-LISTA"              "$(campo '.codigos|length')" "0"
+eq "arquivo_nao_declarado nomeia o desvio"  "$(campo '.arquivo_nao_declarado|join(",")')" "src/x.py"
+
+echo "== (m3) mesmo negrito/crases, mas SEM motivo ao lado do caminho → continua FORA-DA-LISTA (não afrouxou a exigência)"
+printf -- '---\nphase: 7\nplan: 01\n---\n# Summary\n**ARQUIVO-NAO-DECLARADO:** `src/x.py`\n' \
+  > "$R/.planning/phases/7-bancada/7-01-SUMMARY.md"
+roda "$R"
+eq "veredito falha (sem motivo não é declaração válida)" "$(campo .veredito)/$rc" "falha/1"
+eq "codigos = FORA-DA-LISTA"                             "$(campo '.codigos|join(",")')" "FORA-DA-LISTA"
+
 echo "== (o) actuals.commits divergente do git log → COMMITS-SUBDECLARADOS informativo (46u)"
 R=$(repo o); plano "$R" 'files_modified:
   - src/a.py' '<task type="auto">a</task>'

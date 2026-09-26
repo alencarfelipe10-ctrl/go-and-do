@@ -155,15 +155,25 @@ if [ -f "$SUM_F" ] && [ -n "$CTX_F" ] && [ -f "$CTX_F" ]; then
   fi
 fi
 
-# ── ARQUIVO-NAO-DECLARADO reconhecido (46t) ──────────────────────────────────
+# ── ARQUIVO-NAO-DECLARADO reconhecido (46t; FJ-F27INS-01EXE + FM-F27INS-02EXE) ───────
 # O fiscal aceita o desvio quando ele foi DECLARADO pelo executor: linha
-# `ARQUIVO-NAO-DECLARADO: <caminho>` no SUMMARY do plano (uma por arquivo), ou o
-# caminho citado no `deferred-items.md` da fase na mesma linha do literal. Declarar é o
+# `ARQUIVO-NAO-DECLARADO: <caminho> — <motivo>` no SUMMARY do plano (uma por arquivo), ou
+# o caminho citado no `deferred-items.md` da fase na mesma linha do literal. Declarar é o
 # comportamento certo; editar o files_modified depois da execução é o errado (workflow 3.3).
+# O executor do 27-07 escreveu a mesma declaração com negrito e crases
+# («**ARQUIVO-NAO-DECLARADO:** `caminho`») e o fiscal reprovou por exigir o literal exato.
+# A leitura ignora `**`/`` ` `` (enfeite de markdown) mas continua exigindo os dois
+# campos: o caminho exato E algo depois dele (o motivo) — só o rótulo sem nada ao lado
+# não conta como declaração.
 RECONHECIDOS=()
+SUM_SEM_ENFEITE=""
+[ -f "$SUM_F" ] && SUM_SEM_ENFEITE="$(sed -E 's/\*\*//g; s/`//g' "$SUM_F")"
 for f in ${FORA[@]+"${FORA[@]}"}; do
   decl=0
-  [ -f "$SUM_F" ] && grep -qF "ARQUIVO-NAO-DECLARADO: $f" "$SUM_F" && decl=1
+  if [ -n "$SUM_SEM_ENFEITE" ] && printf '%s\n' "$SUM_SEM_ENFEITE" \
+       | grep -qE "ARQUIVO-NAO-DECLARADO:[[:space:]]*$(esc "$f")[[:space:]]+[^[:space:]]"; then
+    decl=1
+  fi
   [ "$decl" = 0 ] && [ -f "$PHASE_DIR/deferred-items.md" ] \
     && grep -F "ARQUIVO-NAO-DECLARADO" "$PHASE_DIR/deferred-items.md" | grep -qF "$f" && decl=1
   [ "$decl" = 1 ] && RECONHECIDOS+=("$f")

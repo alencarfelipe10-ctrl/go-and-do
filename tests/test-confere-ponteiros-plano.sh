@@ -117,6 +117,96 @@ OUT=$(bash "$S" "$PD4"); RC=$?
 eq "exit 0" "$RC" 0
 eq "0 avisos" "$(jq -r .total <<<"$OUT")" 0
 
+echo "== (3) SECAO-FORA-DA-POSICAO: §texto D-NN é item de lista, não título — acha pela posição do item (FM-F27INS-03PLAN)"
+PD5="$TMP/fase-e"; mkdir -p "$PD5"
+{ printf 'linha1\nlinha2\n<decisions>\n'
+  for i in $(seq 4 30); do echo "linha$i"; done
+  printf -- '- **D-14 [auto, R1]:** atalho combinado\nlinha32\n'
+  for i in $(seq 33 60); do echo "linha$i"; done
+} > "$PD5/7-CONTEXT.md"
+cat > "$PD5/7-01-PLAN.md" <<'EOF'
+---
+phase: "7"
+plan: 01
+wave: 1
+files_modified:
+  - src/a.py
+---
+<tasks><task type="auto"><read_first>
+- 7-CONTEXT.md §Atalhos D-14, linhas 31-33
+</read_first></task></tasks>
+EOF
+OUT=$(bash "$S" "$PD5")
+eq "posição bate (item D-14 na linha 31, faixa citada 31-33) → sem aviso" "$(jq -r .total <<<"$OUT")" 0
+cat > "$PD5/7-01-PLAN.md" <<'EOF'
+---
+phase: "7"
+plan: 01
+wave: 1
+files_modified:
+  - src/a.py
+---
+<tasks><task type="auto"><read_first>
+- 7-CONTEXT.md §Atalhos D-14, linhas 3-5
+</read_first></task></tasks>
+EOF
+OUT=$(bash "$S" "$PD5")
+eq "posição errada → SECAO-FORA-DA-POSICAO achando o item, não 'nenhum título'" "$(jq -r .total <<<"$OUT")" 1
+eq "detalhe cita o item, não 'nenhum'" "$(jq -r '.avisos[0].detalhe' <<<"$OUT" | grep -c 'título/item real')" 1
+
+echo "== (4) CITACAO-CODIGO-FORA-DO-ARQUIVO — read_first cita linha maior que o arquivo tem (FM-F27INS-03PLAN)"
+PD6="$TMP/fase-f"; mkdir -p "$PD6/src"
+seq 1 20 > "$PD6/src/util.py"
+cat > "$PD6/7-01-PLAN.md" <<'EOF'
+---
+phase: "7"
+plan: 01
+wave: 1
+files_modified:
+  - src/a.py
+---
+<tasks><task type="auto"><read_first>
+- src/util.py:502 (função alvo)
+</read_first></task></tasks>
+EOF
+OUT=$(bash "$S" "$PD6")
+eq "1 aviso: 502 > 20 linhas" "$(jq -r .total <<<"$OUT")" 1
+eq "código certo" "$(jq -r '.avisos[0].codigo' <<<"$OUT")" "CITACAO-CODIGO-FORA-DO-ARQUIVO"
+
+echo "== (4b) mesmo caso, mas src/util.py está em files_modified da fase → ignorado (risco anotado na melhoria)"
+cat > "$PD6/7-02-PLAN.md" <<'EOF'
+---
+phase: "7"
+plan: 02
+wave: 2
+files_modified:
+  - src/util.py
+---
+<tasks><task type="auto"><read_first>
+- nada
+</read_first></task></tasks>
+EOF
+OUT=$(bash "$S" "$PD6")
+eq "sem aviso: arquivo está para mudar" "$(jq -r .total <<<"$OUT")" 0
+
+echo "== (4c) citação dentro do tamanho do arquivo → sem aviso"
+PD7="$TMP/fase-g"; mkdir -p "$PD7/src"
+seq 1 20 > "$PD7/src/util.py"
+cat > "$PD7/7-01-PLAN.md" <<'EOF'
+---
+phase: "7"
+plan: 01
+wave: 1
+files_modified:
+  - src/a.py
+---
+<tasks><task type="auto"><read_first>
+- src/util.py:10 (função alvo)
+</read_first></task></tasks>
+EOF
+OUT=$(bash "$S" "$PD7")
+eq "sem aviso: 10 <= 20 linhas" "$(jq -r .total <<<"$OUT")" 0
+
 echo "== uso inválido → exit 2"
 bash "$S" >/dev/null 2>&1; eq "sem argumentos" "$?" 2
 bash "$S" "$TMP/nao-existe" >/dev/null 2>&1; eq "phase_dir inexistente" "$?" 2

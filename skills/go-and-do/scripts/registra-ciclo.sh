@@ -82,13 +82,58 @@ if [ ${#PARECERES[@]} -gt 0 ]; then
   bash "$GAD_SCRIPTS_DIR/confere-ciclo.sh" --tabela ${FLAGS_TAB[@]+"${FLAGS_TAB[@]}"} \
     "${PARECERES[@]}" > "$TABELA" 2>/dev/null || true
 fi
-BRUTOS=""
+
+# FM-F27INS-01CONV: conta só cabeçalhos «### Achado N» (N>=1) — nem título de SEÇÃO
+# («### Síntese», «### Conclusão»), nem item de lista solto. O fallback por severidade/
+# ref do confere-ciclo.sh (sem heading numerado) também casa esses dois — 2 ciclos reais
+# da F27-INS registraram "3 brutos" onde eram 1 e 0. Usada só quando NÃO há resposta
+# dirigida a somar (FLAGS_TAB vazio: convergência, ou intenção sem manifesto/perguntas):
+# com dirigidas, `achados_estruturais_total` do confere-ciclo.sh é a única fonte que
+# sabe somar Q dirigidas ao total (R8), e não temos como reconstruir isso aqui.
+# <parecer.md> → imprime "N status" em stdout (N = achados numerados >=1; status =
+# ok|achado_zero|sem_cabecalho). Sem subshell escondendo efeito colateral: o chamador lê
+# o próprio stdout, nada de array populado por dentro de um $(...) (não propagaria).
+conta_achados_numerados() {
+  local f="$1" nums n=0 num achado_zero=0
+  nums=$({ grep -oE '^#{2,4}[[:space:]]+Achado[[:space:]]+[0-9]+' "$f" 2>/dev/null || true; } | { grep -oE '[0-9]+$' || true; })
+  while IFS= read -r num; do
+    [ -n "$num" ] || continue
+    [ "$num" -eq 0 ] && { achado_zero=1; continue; }
+    n=$((n+1))
+  done <<<"$nums"
+  if [ "$n" -gt 0 ]; then printf '%s ok\n' "$n"
+  elif [ "$achado_zero" -eq 1 ]; then printf '0 achado_zero\n'
+  else printf '0 sem_cabecalho\n'
+  fi
+}
+
+# TOTAL_TABELA: o número que o confere-ciclo.sh calculou (formato de sempre), sempre que
+# a tabela existir — independente de qual dos dois vira BRUTOS abaixo. É o que evita os
+# «dois números para o mesmo ciclo» que o R8/E4 (comentário no topo do arquivo) veio
+# impedir: quando a contagem própria (FM-F27INS-01CONV) diverge dela, o apêndice mostra
+# as duas, rotuladas, em vez de esconder uma.
+TOTAL_TABELA=""
 if [ -f "$TABELA" ]; then
-  # contagem pela linha-total do próprio confere-ciclo (o grep antigo exigia lane
-  # [a-z]+ pura e zerava quando a lane vinha com dígitos/hífens — guarda cega)
-  BRUTOS=$(sed -n 's/^achados_estruturais_total: *//p' "$TABELA" | head -1 | tr -cd '0-9')
-  [ -n "$BRUTOS" ] || BRUTOS=$( { grep -cE '^\| [^|]+ \| L?[0-9]+ \|' "$TABELA" || true; } | head -1 )
+  TOTAL_TABELA=$(sed -n 's/^achados_estruturais_total: *//p' "$TABELA" | head -1 | tr -cd '0-9')
+  [ -n "$TOTAL_TABELA" ] || TOTAL_TABELA=$( { grep -cE '^\| [^|]+ \| L?[0-9]+ \|' "$TABELA" || true; } | head -1 )
 fi
+
+BRUTOS=""; PROPRIA=0; SEM_CABECALHO_ARQS=()
+if [ ${#FLAGS_TAB[@]} -eq 0 ]; then
+  PROPRIA=1
+  BRUTOS=0
+  for f in ${PARECERES[@]+"${PARECERES[@]}"}; do
+    read -r n status < <(conta_achados_numerados "$f")
+    BRUTOS=$((BRUTOS + n))
+    if [ "$status" = sem_cabecalho ]; then
+      SEM_CABECALHO_ARQS+=("$f")
+      echo "AVISO: $f sem cabeçalho «### Achado N» reconhecível (nem «Achado 0») — contagem 0 não é medição, achado em prosa fica indetectável aqui" >&2
+    fi
+  done
+else
+  BRUTOS="$TOTAL_TABELA"
+fi
+: "${TOTAL_TABELA:=}"
 : "${BRUTOS:=0}"
 # guarda anti-cega: registrar um ciclo SEM parecer legível não pode parecer verde
 if [ ${#PARECERES[@]} -eq 0 ]; then
@@ -156,6 +201,15 @@ SEM_CITACAO=()
   done
   if [ ${#PARECERES[@]} -eq 0 ]; then
     echo "- brutos na tabela do ciclo: **SEM MEDIÇÃO** (nenhum parecer legível — guarda não conta o que não leu)"
+  elif [ "$PROPRIA" -eq 1 ]; then
+    if [ -n "$TOTAL_TABELA" ] && [ "$TOTAL_TABELA" != "$BRUTOS" ]; then
+      echo "- brutos por cabeçalho \`### Achado N\`: $BRUTOS · total da tabela do confere-ciclo.sh (\`${TABELA#"$PD"/}\`): $TOTAL_TABELA (a tabela conta cabeçalho de seção/item de lista como achado — FM-F27INS-01CONV; o número que vale é o primeiro)"
+    else
+      echo "- brutos na tabela do ciclo: $BRUTOS (\`${TABELA#"$PD"/}\`)"
+    fi
+    if [ ${#SEM_CABECALHO_ARQS[@]} -gt 0 ]; then
+      echo "- ⚠️ sem cabeçalho \`### Achado N\` reconhecível (contagem 0 não é medição, achado em prosa fica indetectável aqui): $(printf '%s, ' "${SEM_CABECALHO_ARQS[@]#"$PD"/}" | sed 's/, $//')"
+    fi
   else
     echo "- brutos na tabela do ciclo: $BRUTOS (\`${TABELA#"$PD"/}\`)"
   fi
