@@ -64,17 +64,23 @@ bloco Bash com `cd "<project_root>"` e use caminhos absolutos em tudo.
    se grava na hora" abaixo) e, ao receber o `SUMMARY.md`, confira aquele item específico antes
    de aceitar o retorno — exigência que você inventou e não cobrou de volta é exigência que não
    existiu (FJ-03EXE).
-1f. **Diga onde grava a evidência do teste vermelho (TDD).** A referência do GSD manda o
-   executor "persistir o registro" de que o teste falhou antes do código (`tdd.md`), sem dizer
-   onde — dois executores da F27-INS gravaram em `.intent/` (nome antigo) numa fase que já usa
-   `.gad/` (nome novo), e a fase ficou com os dois formatos misturados (FM-F27INS-03EXE). No
-   briefing de toda `<task tdd="true">`, acrescente a linha:
+1f. **Diga onde grava a evidência do teste vermelho (TDD).** O `tdd.md` (referência do GSD,
+   Red-Green-Refactor) manda "persistir o registro" de que o teste falhou antes do código
+   (`gsd_run check tdd-red-evidence <record.json>`), sem dizer ONDE o `record.json` mora — dois
+   executores da F27-INS gravaram em `.intent/` (nome antigo) numa fase que já usa `.gad/` (nome
+   novo), e a fase ficou com os dois formatos misturados (FM-F27INS-03EXE). Um registro por
+   TASK, não por plano (um plano TDD pode ter várias `<task tdd="true">`, cada uma com o próprio
+   ciclo RED-GREEN). Antes de despachar, resolva o caminho você mesmo — não deixe o `$(...)` para
+   o executor, ele não expande dentro do `prompt` de um `Agent()` (mesma família do `@` que este
+   arquivo já condena acima):
+   ```bash
+   R=$(bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "intent/red-<NN>-<PP>-t<índice da task>.json")
    ```
-   Evidência do teste vermelho (RED): grave em
-   $(bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "intent/red-<NN>-<PP>.json")
+   e escreva no briefing, já com o VALOR de `R` colado (não o comando):
    ```
-   (resolva o caminho você mesmo antes de despachar — o executor recebe o valor já pronto, não o
-   comando). O `caminho-fase.sh` devolve o nome novo (`.gad/…`) ou o legado, conforme
+   Evidência do teste vermelho (RED) desta task: grave em <valor de R>
+   ```
+   O `caminho-fase.sh` devolve o nome novo (`.gad/…`) ou o legado, conforme
    `<phase_dir>/.gad/FORMATO` — nunca escreva `.intent/` a dedo no briefing.
 2. Deixe o motor de ondas trabalhar. O `--auto` **não silencia** as paradas de
    realidade — falha de teste de regressão, schema drift, conflito pós-merge — e elas
