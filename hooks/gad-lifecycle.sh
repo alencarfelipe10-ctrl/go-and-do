@@ -198,6 +198,114 @@ ET=$(grep "\"sessao\":\"$SESS8\"" "$RL" 2>/dev/null | grep '"evento":"checkpoint
      | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p')
 : "${ET:=0 abertura}"
 
+# t59 (sobra do FM-F27INS-01GAT, lane L15): Agent em gate PARALELO ganha o rótulo da janela a que
+# PERTENCE, não o do último checkpoint. Na F27 INS o 4.5 abriu com o 4.1b ainda rodando e todos os
+# eventos do 4.1b (despachos dos filhos, retornos, o fim do host) saíram "4.5 validate" — os
+# tokens do 4.1b somem da conta dele (recorte_base.atribui_agentes usa a `etapa` do despacho).
+# (A) PERTENÇA — só quando o último checkpoint da sessão é `"paralelo":true` (o 4.1b abre assim, e
+#     o 4.5 também quando o 4.1b está aberto; checkpoint sem paralelo aposenta as outras janelas,
+#     então sem ele não há sobreposição). Lê as janelas abertas (`run-log.sh abertas`) e testa as
+#     descrições candidatas, na ordem, 1º acerto vence:
+#     SubagentStop → a do meta do próprio agente, depois a dos ancestrais (parentAgentId);
+#     Pre/PostToolUse de dentro de um subagente (input com `agent_id`, BaseHookInput do CC: «present
+#     only when the hook fires from within a subagent») → a do meta de quem chama e dos ancestrais,
+#     depois a própria; SendMessage com `to` = id hex → a do alvo; camada 0 → a própria
+#     (tool_input.description). Acerto = a descrição cita o ID de EXATAMENTE UMA janela aberta,
+#     como palavra ("4.1" não casa em "4.1b"). O rótulo escolhido é sempre uma janela aberta.
+# (B) HERANÇA — janela do gate já fechada (o host do 4.1b grava o `end` antes do fim do turno):
+#     o evento herda a etapa do despacho casado (retorno → o próprio despacho; evento de dentro de
+#     um subagente → o despacho do pai) SÓ se esse despacho foi rotulado por (A) — marcador
+#     `etapa_por_janela:true`. Run-log sem checkpoint paralelo nunca tem o marcador.
+# Fora de gate paralelo nada muda (as duas portas fecham antes de ler qualquer coisa). Erro
+# interno → ET fica como estava (falha aberta).
+POR_JANELA=0; ET_JANELA_ANTES=""
+_meta_de() { # <dir> <id> → caminho do meta (formato real agent-<id>.meta.json; legado com sufixo)
+  ls "$1/agent-${2#agent-}.meta.json" "$1/agent-${2#agent-}"-*.meta.json 2>/dev/null | head -n1
+}
+_desc_meta() { # <dir> <id> → description do meta (vazio se não houver)
+  local m; m=$(_meta_de "$1" "$2")
+  [ -n "$m" ] && jq -r '(.description // "")[0:120]' "$m" 2>/dev/null
+}
+_meta_campo() { # <dir> <id> <campo>
+  local m; m=$(_meta_de "$1" "$2")
+  [ -n "$m" ] && jq -r --arg c "$3" '.[$c] // empty' "$m" 2>/dev/null
+}
+_casa_id() { # <descrição> <id da etapa> → 0 se o ID aparece como palavra
+  local idre="${2//./\\.}"
+  [[ "$1" =~ (^|[^0-9A-Za-z.])${idre}([^0-9A-Za-z.]|\.([^0-9]|$)|$) ]]
+}
+_CALLER=""; _MDIR="$SUBDIR"
+if [ "$EV" = SubagentStop ]; then
+  [ -n "$META_STOP" ] && _MDIR=$(dirname "$META_STOP")
+else
+  _CALLER=$(jq -r '.agent_id // empty' <<<"$IN" 2>/dev/null)
+fi
+if grep "\"sessao\":\"$SESS8\"" "$RL" 2>/dev/null | grep '"evento":"checkpoint"' | tail -n1 \
+     | grep -q '"paralelo":true'; then
+  _abertas=$(bash "$RUNLOG_SH" "$PD" "$NN" abertas --sessao "$SESS" 2>/dev/null | cut -f2)
+  if [ -n "$_abertas" ]; then
+    _cands=()
+    _cadeia() { # <id inicial> → descrições do agente e de até 3 ancestrais
+      local id="$1" i
+      for i in 1 2 3 4; do
+        [ -n "$id" ] || break
+        _cands+=("$(_desc_meta "$_MDIR" "$id")")
+        id=$(_meta_campo "$_MDIR" "$id" parentAgentId)
+      done
+    }
+    if [ "$EV" = SubagentStop ]; then
+      [ -n "$AGID" ] && _cadeia "$AGID"
+      _cands+=("$DESC")
+    else
+      [ -n "$_CALLER" ] && _cadeia "$_CALLER"
+      if [ "$TOOL" = SendMessage ]; then
+        case "${AG%% *}" in a[0-9a-f]*) _cands+=("$(_desc_meta "$_MDIR" "${AG%% *}")") ;; esac
+      fi
+      _cands+=("$DESC")
+    fi
+    for _d in "${_cands[@]}"; do
+      [ -n "$_d" ] || continue
+      _achou=""; _n=0
+      while IFS= read -r _j; do
+        [ -n "$_j" ] || continue
+        if _casa_id "$_d" "${_j%% *}"; then _achou="$_j"; _n=$((_n+1)); fi
+      done <<<"$_abertas"
+      if [ "$_n" = 1 ]; then
+        [ "$_achou" != "$ET" ] && ET_JANELA_ANTES="$ET"
+        ET="$_achou"; POR_JANELA=1; break
+      fi
+    done
+  fi
+fi
+if [ "$POR_JANELA" = 0 ] && grep -q '"etapa_por_janela":true' "$RL" 2>/dev/null; then
+  _herda() { # <agente> <descrição> → etapa do ÚLTIMO despacho casado desta sessão, se marcado
+    jq -rs --arg s8 "$SESS8" --arg a "$1" --arg d "$2" '
+      [ .[] | select(.evento=="despacho" and .sessao==$s8 and .agente==$a
+                     and (.descricao // "")==$d) ] | last
+      | if . != null and .etapa_por_janela == true then .etapa else empty end' "$RL" 2>/dev/null
+  }
+  _et=""
+  if [ "$TIPO" = retorno ] && [ "$TOOL" != SendMessage ] && [ -n "$DESC" ]; then
+    _et=$(_herda "$AG" "$DESC")
+  fi
+  if [ -z "$_et" ]; then
+    _pai=""
+    if [ "$EV" = SubagentStop ]; then
+      [ -n "$AGID" ] && _pai=$(_meta_campo "$_MDIR" "$AGID" parentAgentId)
+    else
+      _pai="$_CALLER"
+    fi
+    if [ -n "$_pai" ]; then
+      _pt=$(_meta_campo "$_MDIR" "$_pai" agentType); _pd=$(_desc_meta "$_MDIR" "$_pai")
+      [ -n "$_pt" ] && [ -n "$_pd" ] && _et=$(_herda "$_pt" "$_pd")
+    fi
+  fi
+  if [ -n "$_et" ]; then
+    [ "$_et" != "$ET" ] && ET_JANELA_ANTES="$ET"
+    ET="$_et"; POR_JANELA=1
+  fi
+fi
+
 AGN="${AG%% *}"   # nome puro do agente/alvo (o AG do SendMessage pode vir com sufixo) —
 # adiantado para o FM-02EXE logo abaixo; os gates E7/E3 mais adiante reusam a variável.
 
@@ -519,6 +627,8 @@ bash "$RUNLOG_SH" "$PD" "$NN" "$TIPO" "$ET" \
   $([ "$RETOMADA" = 1 ] && echo '--kv retomada=true') \
   $([ "$HERDADO" = 1 ] && echo '--kv modelo_herdado=true') \
   $([ "$ET_CORRIGIDA" = 1 ] && printf -- '--kv etapa_corrigida=true --kv etapa_checkpoint=%s' "$(printf '%s' "$ET_ANTERIOR" | tr ' ' '_')") \
+  $([ "$POR_JANELA" = 1 ] && echo '--kv etapa_por_janela=true') \
+  $([ "$POR_JANELA" = 1 ] && [ "$ET_CORRIGIDA" = 0 ] && [ -n "$ET_JANELA_ANTES" ] && printf -- '--kv etapa_checkpoint=%s' "$(printf '%s' "$ET_JANELA_ANTES" | tr ' ' '_')") \
   ${DESC:+--kv descricao="$DESC"} ${ISOL:+--kv isolation="$ISOL"} \
   ${DUP_SEQ:+--kv duplicado_de="$DUP_SEQ"} \
   $([ "$PROVISORIA" = 1 ] && printf -- '--kv parada_provisoria=true --kv filhos_vivos=%s' "$VIVOS") \
