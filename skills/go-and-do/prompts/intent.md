@@ -686,12 +686,14 @@ foi feito de memória, no fim, e não no ato.
    (`contradiz`, `prescreve_mecanismo`, `omissoes_novas`, `cardinalidade`, `unicidade` ou
    par em `consistencia`) → corrija **no mesmo turno, todos juntos** (bloqueante e
    documental na MESMA correção — nunca uma rodada por categoria) (rodada `c<C>b`: novo
-   script, `--inicio` e `--ids` de novo — o `.aplicado` é sobrescrito in-place; uma `D-NN`
+   script, `--inicio` e `--ids` só com os ids NOVOS desta rodada — o `.aplicado` herda as
+   rodadas anteriores do ciclo (`commits`, `rodadas`) e só `commit`/`caminhos` passam a ser
+   os da rodada vigente; uma `D-NN`
    desatualizada se emenda no CONTEXT ou ganha a tag `superada-c<C>` no bullet, com a
    guarda re-rodada como no item 2 do passo 5 (**sempre com `--spec`, via
    `.discuss-guard-args` ou à mão — FJ-04INT**) e **despache uma releitura nova** — a
-   segunda lista o
-   conjunto de caminhos do `.aplicado` vigente, que pode ser maior que o da primeira.
+   segunda lista os `caminhos` do `.aplicado` vigente — os da rodada `c<C>b`, não a união
+   do ciclo.
    **A partir desta rodada (`c<C>b` em diante) só `contradiz`/`prescreve_mecanismo` abrem
    outra rodada** (`c<C>c`): o filho já devolve o documental (`omissoes_novas`/
    `cardinalidade`/`unicidade`) vazio por contrato — fechou no lote da `c<C>b`, uma

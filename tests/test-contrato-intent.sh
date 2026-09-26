@@ -9,11 +9,18 @@
 #   A2 (FM-F27INS-09INT) — o `c0/ciclo.json` tem 4 estados (`levado_aos_consultores` + `destino`,
 #       aceito pelo `briefing-build.sh` e pelo `confere-sinos.sh`); o prompt dá o schema de 4 e
 #       não manda mais contornar o «gap FM-09INT».
+#   Baixos do revisor L12 — B2 (FM-F27INS-04INT/FJ-F27INS-03INT): o `.aplicado` não é mais
+#       sobrescrito in-place (herda `commits`/`rodadas`; a rodada «b» passa só os ids novos) ·
+#       B3 (FM-F27INS-01ENC): a trava de gate mora em `.planning/.gad/gates/<fase>/<id>.json`.
 #   bash tests/test-contrato-intent.sh      · exit 0 = verde
 set -u
 AQUI="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)"
 SK="$AQUI/../skills/go-and-do"
 I="$SK/prompts/intent.md"
+RL="$SK/prompts/intent-releitura.md"
+W1="$SK/workflow-etapa-1.md"
+CF="$SK/scripts/caminho-fase.sh"
+RD="$AQUI/../README.md"
 falhas=0
 ok()   { echo "  ok   — $1"; }
 erro() { echo "  FALHA — $1"; falhas=$((falhas+1)); }
@@ -39,6 +46,22 @@ nao "$I" 'gap FM-09INT' "o contorno do «gap FM-09INT» saiu"
 nao "$I" 'o ciclo 0 só tem `corrigido|descartado|aberto`' "a frase do schema de 3 estados saiu"
 nao "$I" '| corrigido|aberto`' "a linha c0-NN antiga (corrigido|aberto) saiu"
 nao "$I" '`descartado`/`aberto` proíbem o' "a regra do correcao_id cobre os 3 estados sem correção"
+
+echo "== B2 · .aplicado com rodadas (não sobrescrito in-place)"
+tem "$I" '`--ids` só com os ids NOVOS desta rodada' "rodada «b»: --ids só com os novos"
+tem "$I" 'rodadas anteriores do ciclo (`commits`, `rodadas`)' "intent.md descreve a herança"
+nao "$I" 'sobrescrito in-place' "intent.md: «sobrescrito in-place» saiu"
+nao "$I" 'que pode ser maior que o da primeira' "intent.md: releitura lista os caminhos da rodada, não a união"
+tem "$RL" '`.aplicado` guarda todas as rodadas do ciclo (`commits`, `rodadas`)' "intent-releitura.md descreve o formato novo"
+nao "$RL" 'foi sobrescrito' "intent-releitura.md: «foi sobrescrito» saiu"
+
+echo "== B3 · trava de gate no estado ignorado da rodada"
+tem "$W1" '`.planning/.gad/gates/<phase dir name>/<etapa>.json`' "workflow-etapa-1.md: caminho novo da trava"
+nao "$W1" '`.gad/gates/<etapa>.json` lock' "workflow-etapa-1.md: caminho antigo saiu"
+tem "$RD" 'a trava de gate reprovado mora em `.planning/.gad/gates/<pasta da fase>/<etapa>.json`, ignorada' "README: a trava fora da pasta commitada"
+nao "$RD" '`gates/` (trava de gate reprovado)' "README: a trava não aparece mais como evidência commitada"
+tem "$CF" 'resolva-a por' "caminho-fase.sh: aponta o helper da trava"
+nao "$CF" 'fences/3.ok gates/5.json' "caminho-fase.sh --tabela: sem gates/5.json como exemplo da pasta da fase"
 
 echo
 [ "$falhas" -eq 0 ] && echo "test-contrato-intent: TUDO OK" || echo "test-contrato-intent: $falhas falha(s)"

@@ -187,8 +187,9 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
    - `artefatos` = **TODOS** os `caminhos` do `.aplicado` **vigente**, um por entrada, sem
      duplicata e sem sobra — o `briefing-build.sh` exige igualdade de conjunto, não
      subconjunto. Na segunda releitura de um ciclo (depois da correção `c<C>b`) o
-     `.aplicado` foi sobrescrito e pode listar mais caminhos que na primeira (o CONTEXT
-     entra quando a `c<C>b` emendou uma `D-NN`): liste o conjunto vigente.
+     `.aplicado` guarda todas as rodadas do ciclo (`commits`, `rodadas`), mas o `commit` e
+     os `caminhos` do topo são só os da rodada vigente (o CONTEXT entra quando a `c<C>b`
+     emendou uma `D-NN`): liste esses, não a união das rodadas.
    - `blob` = `git rev-parse <commit>:<path>` (o blob **do commit**; o gate confere contra
      o commit **e** contra o worktree atual).
    - **Ciclo sem correção** (`c<C>/correcoes.vazio` no lugar do `.aplicado`) → o mesmo
