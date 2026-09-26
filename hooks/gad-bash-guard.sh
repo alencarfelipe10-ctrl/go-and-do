@@ -37,6 +37,9 @@
 #   `sem_aspas` apaga o caminho junto com as aspas) e NUNCA resolve symlink — o
 #   `~/.claude/skills/go-and-do` aponta para o repositório de desenvolvimento, e canonizar
 #   faria a regra morder a bancada de conserto, que não é uma rodada.
+#   O destino de `sed -i`/`patch` é procurado só no MESMO comando simples (até o primeiro
+#   `;`, `|`, `&` fora de aspas; teto = fim da linha): EXECUTAR um script da skill depois
+#   de um `sed -i` noutro arquivo não é escrita nele (t59, FM-F27INS-10INT).
 # Exceção de `run_in_background` (v2.6.0, 47e — bancada B de 11/09/2026, CC 2.1.269):
 #   filho Bash com `run_in_background: true` ACORDA o pai quando o processo DA PRÓPRIA
 #   chamada termina; o `( … ) &` desprendido do `roda-suite.sh --lancar` NÃO acorda
@@ -49,7 +52,8 @@
 # (`subprocess.run(["git"…])`, `os.system("… git …")`, `sh -c "… git …"`) grava `incidente`
 # no run-log e SEGUE. Na F24.5 três executores commitaram por esse caminho sem deixar
 # rastro no hook. Negar quebraria script de medição honesto — o que se quer é que o
-# contorno deixe de ser silencioso.
+# contorno deixe de ser silencioso. `git` conta só como comando (nua ou `/usr/bin/git`),
+# nunca dentro de caminho como `.git/` (t59, FM-F27INS-05EXE).
 # O corpo entre aspas de `bash -c "…"`, `sh -c '…'`, `bash -lc` e `eval "…"` passa pelas
 # mesmas regras (um nível): `bash -c "uv run pytest &"` é a evasão seguinte ao `nohup`
 # e custa uma linha (P21, D1).
@@ -156,6 +160,40 @@ def _segmento(texto, i):
     return texto[i:(len(texto) if j < 0 else j)]
 
 
+def _comando_simples(texto, i):
+    """Do ponto i até o primeiro `;`, `|`, `&` ou quebra de linha FORA de aspas — o alvo
+    do `sed -i`/`patch` mora no mesmo comando simples, não no seguinte.
+
+    FM-F27INS-10INT (F27 INS, run-log seq 15 e 92): `sed -i … arquivo-da-fase; bash
+    <skill>/confere-pre-spec.sh` era lido como escrita no script, que só é EXECUTADO. O
+    teto continua sendo o fim da linha (`_segmento`): o recorte novo é sempre um pedaço do
+    antigo, nunca mais largo. Aspa sem fechamento → recorte antigo inteiro. Separador
+    dentro de `$( … )` ou de crase também não corta: `sed -i s/a/$(x;y)/ <alvo>`."""
+    teto = _segmento(texto, i)
+    k, n, q, fundo, crase = 0, len(teto), None, 0, False
+    while k < n:
+        c = teto[k]
+        if q:
+            if c == "\\" and q == '"':
+                k += 2; continue
+            if c == q:
+                q = None
+        elif c == "\\":
+            k += 2; continue
+        elif c in "'\"":
+            q = c
+        elif c == "`":
+            crase = not crase
+        elif c == "$" and teto[k + 1:k + 2] == "(":
+            fundo += 1; k += 2; continue
+        elif c == ")" and fundo:
+            fundo -= 1
+        elif c in ";|&" and not fundo and not crase:
+            return teto[:k]
+        k += 1
+    return teto
+
+
 def destinos_de_escrita(texto):
     """Caminhos que o comando pretende ESCREVER. Texto CRU (só sem heredoc), com aspas."""
     d = []
@@ -166,17 +204,27 @@ def destinos_de_escrita(texto):
         args = [t for t in m.group(3).split() if not t.startswith("-")]
         if args:
             d.append(args[-1])          # destino é o último argumento não-flag
-    for rx in (SED_I, PATCH_CMD, PY_ESCRITA):
+    for rx in (SED_I, PATCH_CMD):
         for m in rx.finditer(texto):
-            d += re.findall(r"[^\s'\"();|&<>]*/[^\s'\"();|&<>]+", _segmento(texto, m.start()))
+            d += re.findall(r"[^\s'\"();|&<>]*/[^\s'\"();|&<>]+", _comando_simples(texto, m.start()))
+    # `open(…,'w')` casa DENTRO da string do `python -c`: separador de shell não vale ali,
+    # então o recorte segue até o fim da linha (inalterado).
+    for m in PY_ESCRITA.finditer(texto):
+        d += re.findall(r"[^\s'\"();|&<>]*/[^\s'\"();|&<>]+", _segmento(texto, m.start()))
     return d
 
 
 # ── 45n: rastro (não negativa) de `git` chamado por dentro de Python ──────────────────
+# t59 (FM-F27INS-05EXE): `git` só conta como COMANDO — nua ou por caminho (`/usr/bin/git`,
+# `$HOME/bin/git`) — e nunca como pedaço de caminho: `\bgit\b` casava `.git/` e os waiters
+# `bash -c 'until [ -s .git/gad-suite/…/rc ]…'` viravam incidente falso. Antes: início da
+# string, espaço, `;`, `&`, `|`, `(` ou crase. Depois: nem letra/dígito, nem `.`, nem `/`
+# (`/srv/git/repo` é diretório). `-` segue aceito: `git-lfs` continua contando, como antes.
+GIT_CMD = r"(?:(?:\$\{?\w+\}?|~)?(?:/[\w.+-]+)*/)?git(?![\w./])"
 GIT_INDIRETO = (
-    re.compile(r"subprocess\.(?:run|Popen|check_output|check_call|call)\s*\(\s*\[?\s*[\"']git\b"),
-    re.compile(r"os\.system\s*\([^)]*\bgit\b"),
-    re.compile(r"sh\s+-c\s+[\"'][^\"']*\bgit\b"),
+    re.compile(r"subprocess\.(?:run|Popen|check_output|check_call|call)\s*\(\s*\[?\s*[\"']" + GIT_CMD),
+    re.compile(r"os\.system\s*\([^)]*?[\s;&|(`\"']" + GIT_CMD),
+    re.compile(r"sh\s+-c\s+[\"'](?:[^\"']*[\s;&|(`])?" + GIT_CMD),
 )
 
 

@@ -212,6 +212,41 @@ for c in "bash $H/scripts/confere-etapa.sh 2" \
          "grep -n x $H/prompts/plan.md > /tmp/saida.txt"; do
   r=$(chama "$c"); [ "$r" = allow ] && ok "allow: $(printf '%.60s' "$c")" || bad "allow esperado: $c" "$r"
 done
+echo "── t59 FM-F27INS-10INT: executar script da skill depois de \`sed -i\` noutro arquivo não é escrita"
+FIX27="$AQUI/fixtures/gad-bash-guard/falsos-positivos-f27.json"
+res=$(python3 - "$FIX27" "$HOOK" "$PROJ" "$SESS" <<'PY'
+import json,subprocess,sys
+fix,hook,proj,sess=sys.argv[1:5]
+err=0; n=0
+for o in json.load(open(fix)):
+    n+=1
+    d={"session_id":sess,"cwd":proj,"hook_event_name":"PreToolUse","tool_name":"Bash","agent_type":o["agente"],"agent_id":"a0","tool_input":o["tool_input"]}
+    r=subprocess.run(["bash",hook],input=json.dumps(d),capture_output=True,text=True)
+    dec="allow" if not r.stdout.strip() else json.loads(r.stdout)["hookSpecificOutput"]["permissionDecision"]
+    if dec!=o["esperado"] or r.returncode!=0:
+        err+=1; print(f"  divergente: seq {o['runlog_seq']} esperado={o['esperado']} obtido={dec}")
+print("total",n,"erros",err)
+PY
+)
+echo "$res" | grep -q '^total 2 erros 0$' && ok "as 2 negações falsas da F27 (run-log seq 15 e 92, texto literal) → allow" || bad "falsos positivos F27" "$res"
+# controles: o alvo do sed -i continua protegido — o recorte não pode afrouxar o lado errado
+for c in "sed -i s/a/b/ $H/scripts/x.sh; echo ok" \
+         "echo ok; sed -i s/a/b/ $H/scripts/x.sh" \
+         "sed -i 's/a;b/c/' $H/scripts/x.sh" \
+         "sed -i 's/a|b/c/' $H/scripts/x.sh && echo ok" \
+         "sed -i \"s/a&b/c/\" $H/scripts/x.sh" \
+         "sed -i s/a/\$(echo x;echo y)/ $H/scripts/x.sh" \
+         "sed -i s/a/\`echo x;echo y\`/ $H/scripts/x.sh" \
+         "sed -i s/a/b/ /tmp/f.md $H/scripts/x.sh; bash $H/scripts/y.sh" \
+         "patch -p1 $H/hooks/x.sh < /tmp/p.diff; echo ok"; do
+  r=$(chama "$c"); [ "$r" = deny ] && ok "deny (alvo do sed/patch): $(printf '%.60s' "$c")" || bad "deny esperado (alvo do sed/patch): $c" "$r"
+done
+for c in "sed -i s/a/b/ /tmp/f.md; bash $H/scripts/confere-pre-spec.sh x" \
+         "sed -i s/a/b/ /tmp/f.md && python3 $A/scripts/turnos-por-ciclo.py /tmp/x | tail -5" \
+         "sed -i 's/(o \"x\")/y/' /tmp/f.md; bash $H/scripts/confere-pre-spec.sh" \
+         "patch -p1 /tmp/f.md < /tmp/p.diff; bash $H/scripts/confere-etapa.sh 1"; do
+  r=$(chama "$c"); [ "$r" = allow ] && ok "allow (execução depois de sed/patch): $(printf '%.60s' "$c")" || bad "allow esperado: $c" "$r"
+done
 # fora de escopo: sessão do dono (sem agent_type) e projeto sem ponteiro
 r=$(chama "sed -i s/a/b/ $H/scripts/confere-plano.sh" - -); [ "$r" = allow ] && ok "sem agent_type (dono) → allow" || bad "sem agent_type" "$r"
 r=$(chama "sed -i s/a/b/ $H/scripts/confere-plano.sh" - gsd-executor "$PAI"); [ "$r" = allow ] && ok "sem ponteiro de rodada → allow" || bad "sem ponteiro" "$r"
@@ -244,6 +279,27 @@ verifica_rastro "heredoc com subprocess.run([\"git\"…]) → allow + 1 incident
   "$(printf 'python3 - <<%s\nimport subprocess\nsubprocess.run(["git","log"])\nPY' "'PY'")" allow 1
 verifica_rastro "negado pelo P-11 E com rastro → deny + 2 eventos" \
   "sh -c \"git log > \$HOME/.claude/skills/go-and-do/scripts/x.sh\"" deny 2
+echo "── t59 FM-F27INS-05EXE: \`git\` só como comando (nua ou /usr/bin/git), nunca dentro de .git/"
+# os 4 waiters literais do gad-execute na F27 INS (run-log seq 265–269 eram falsos)
+WAIT27="$AQUI/fixtures/gad-bash-guard/waiters-f27.json"
+nw=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$WAIT27")
+for k in $(seq 0 $((nw-1))); do
+  c=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[int(sys.argv[2])]["tool_input"]["command"], end="")' "$WAIT27" "$k")
+  verifica_rastro "waiter literal F27 #$((k+1)) (.git/gad-suite) → allow, sem rastro" "$c" allow 0
+done
+verifica_rastro "sh -c '/usr/bin/git status' → allow + 1 incidente" "sh -c '/usr/bin/git status'" allow 1
+verifica_rastro "subprocess.run([\"/usr/bin/git\",…]) → allow + 1 incidente" \
+  "python3 -c \"import subprocess; subprocess.run(['/usr/bin/git','add','-A'])\"" allow 1
+verifica_rastro "os.system(\"/usr/local/bin/git log\") → allow + 1 incidente" \
+  "python3 -c 'import os; os.system(\"/usr/local/bin/git log\")'" allow 1
+verifica_rastro "sh -c \"cd x && git status\" → allow + 1 incidente" 'sh -c "cd x && git status"' allow 1
+verifica_rastro "sh -c \"\$HOME/bin/git log\" → allow + 1 incidente" 'sh -c "$HOME/bin/git log"' allow 1
+verifica_rastro "sh -c \"git-lfs pull\" → allow + 1 incidente (git-lfs segue contando)" 'sh -c "git-lfs pull"' allow 1
+verifica_rastro "os.system(\"cat .git/HEAD\") → allow, sem rastro" \
+  "python3 -c 'import os; os.system(\"cat .git/HEAD\")'" allow 0
+verifica_rastro "sh -c \"ls /home/u/p/.git/objects\" → allow, sem rastro" 'sh -c "ls /home/u/p/.git/objects"' allow 0
+verifica_rastro "sh -c \"ls /srv/git/repo\" → allow, sem rastro (diretório chamado git)" 'sh -c "ls /srv/git/repo"' allow 0
+verifica_rastro "sh -c \"cat .gitignore\" → allow, sem rastro" 'sh -c "cat .gitignore"' allow 0
 # o incidente traz o motivo canônico
 tail -n5 "$RL" | grep -q '"motivo":"git_por_subprocess"' \
   && ok "incidente do rastro com motivo=git_por_subprocess" || bad "motivo do rastro" "$(tail -n1 "$RL")"
