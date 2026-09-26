@@ -34,6 +34,19 @@ existe (retomada) — não re-cheque.
    critical gaps e a contagem de dimensões MISSING. Fidelidade acima de otimismo: um
    veredito abaixo de PRODUCTION READY reportado honestamente é exatamente o que o
    orquestrador precisa destacar no banner — não o suavize.
+3b. **Fecho: incidentes primeiro, evidência por último (FM-F27INS-06INT · FM-F27INS-02PLAN,
+   que cobre o FM-F27INS-04GAT).** Todo desvio entra no run-log no turno em que acontece
+   (`run-log.sh "<phase_dir>" "<NN>" incidente "4.3 eval-review" --kv origem=eval-review --kv detalhe=…`),
+   e antes de devolver confira que todo item de `incidentes:` já está lá — falta algum, grave
+   agora, um evento por item: depois que você devolve, a camada 0 roda o fiscal, que grava o
+   `end`, e incidente com horário posterior ao `end` reprova o gate. Só então, como **último
+   passo**, commite a evidência:
+   ```bash
+   cd "<project_root>"
+   $HOME/.claude/skills/go-and-do/scripts/commita-artefatos.sh "<phase_dir>" "<NN>" evidencia
+   ```
+   Sem ele, o fiscal reprova `evidencia_fora_do_git` e a camada 0 commita e roda de novo (F27
+   INS, três gates).
 4. Devolva pelo `<return_contract>`. O comando falhou de ponta a ponta (nenhum review
    escrito) → `estado: blocked` com o motivo.
 </mission>

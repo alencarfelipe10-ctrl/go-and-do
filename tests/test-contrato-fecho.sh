@@ -29,12 +29,12 @@ antes() {
 EVID='commita-artefatos.sh "<phase_dir>" "<NN>" evidencia'
 
 echo "== d1 + c3: fecho de cada hospedeiro"
-for f in plan convergence execute code-review secure validate close intent; do
+for f in plan convergence execute code-review secure validate close intent ui-review eval-review; do
   tem "$P/$f.md" "$EVID" "$f.md: commita a evidência (modo evidencia)"
   tem "$P/$f.md" 'FM-F27INS-06INT' "$f.md: fecho cita o incidente na hora (FM-F27INS-06INT)"
 done
 # último passo = logo antes do «Devolva»; incidentes vêm antes do commit
-for f in plan convergence code-review secure validate; do
+for f in plan convergence code-review secure validate ui-review eval-review; do
   antes "$P/$f.md" 'Fecho: incidentes primeiro' "$EVID" "$f.md: incidentes antes do commit"
   antes "$P/$f.md" "$EVID" 'Devolva pelo `<return_contract>`' "$f.md: commit da evidência antes do «Devolva»"
 done
