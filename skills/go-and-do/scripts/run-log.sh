@@ -295,6 +295,10 @@ if [ "$1" = "--selftest" ]; then
   bash "$SELF" "$D5" 95 close --sessao morta2000 "teste" >/dev/null
   [ "$(grep -c '"fechado_admin":true' "$F5")" = 2 ] && [ "$(aud5)" = 0 ] \
     && ok "close: fecha as 2 janelas paralelas da sessão morta" || bad "close: janelas paralelas ($(grep -c fechado_admin "$F5") fechadas)"
+  python3 -c 'import json,sys; [json.loads(l) for l in open(sys.argv[1]) if l.strip()]' "$F5" 2>/dev/null \
+    && ok "paralelo: linhas do run-log com escrita múltipla são JSON válido" || bad "paralelo: linha JSON inválida em $F5"
+  sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$F5" | awk 'NR>1 && $1!=p+1{exit 1} {p=$1}' \
+    && ok "paralelo: seq monotônico com ends sintéticos/admin em lote" || bad "paralelo: seq quebrado em $F5"
 
   seqs=$(sed -n 's/.*"seq":\([0-9]*\).*/\1/p' "$F" | tr '\n' ' ')
   python3 - "$F" <<'EOF' >/dev/null 2>&1 && ok "todas as linhas são JSON válido" || bad "linha JSON inválida"
