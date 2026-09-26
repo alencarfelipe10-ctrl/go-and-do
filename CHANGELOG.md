@@ -5,7 +5,7 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/) · Versionamento:
 ## [Não lançada]
 
 Tarefa 59 (26/09): as 50 sugestões aprovadas da auditoria por etapa da F27 INS (grupo-inspired), em 15 lanes
-paralelas + revisor cético. Suíte 51/51. O fork do GSD (`gen5-patches`) foi reinstalado junto (VERSION 1.14.0).
+paralelas + revisor cético + consertos do revisor. Suíte 52/52. O fork do GSD (`gen5-patches`) foi reinstalado junto (VERSION 1.14.0).
 
 ### ⚠️ Pode reprovar fase ou plano que antes passava
 
