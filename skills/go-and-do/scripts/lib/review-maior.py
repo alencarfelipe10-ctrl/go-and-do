@@ -6,8 +6,15 @@ o `numeros-da-fase.sh` (radiografia dos gates) leiam o MESMO arquivo pela MESMA 
 Dois parsers do mesmo artefato foi exatamente como o fiscal do 4.1 acabou dando veredito
 da iteração errada na F4 RLR — não escreva um segundo.
 
-Ordem de escolha: `NN-REVIEW-FIX*` (mais recente) > `NN-REVIEW.iterN` (N mais alto) >
-`NN-REVIEW.md`.
+Ordem de escolha (FM-F27INS-02GAT, 26/09): o N mais alto manda, sempre — `NN-REVIEW.iterN`
+(a re-revisão real) com N maior que o do `NN-REVIEW-FIX*` mais recente VENCE, porque uma
+re-revisão só existe depois do conserto que ela confere. Só quando os dois empatam no mesmo
+N (o par revisão→conserto da MESMA rodada, sem re-revisão ainda) o `NN-REVIEW-FIX*` desempata
+por ser escrito depois — nesse caso ele é o mais recente de verdade. Bug original (F27-INS,
+run-log seq 381): comparar por peso do TIPO antes do N («REVIEW-FIX sempre ganha») escolheu o
+`27-REVIEW-FIX.iter4.md` (relatório do conserto da rodada 4) sobre o `27-REVIEW.iter5.md`
+(a re-revisão da rodada 5, que deu `clean`) — o fiscal leu WR-10/WR-11 como abertos por busca
+de texto no relatório do conserto, não no estado real, mais novo.
 
 Uso: review-maior.py <phase_dir> <NN>   → JSON numa linha
 
@@ -46,11 +53,13 @@ def escolhe(pd, nn):
         (f"{nn}-REVIEW.iter*.md", 1),
     ):
         for f in glob.glob(os.path.join(pd, pat)):
-            cands.append((peso, iter_de(f), f))
+            cands.append((iter_de(f), peso, f))
     if not cands:
         return None, None
+    # Chave (iteração, peso): N mais alto manda; só no empate de N o REVIEW-FIX (peso 2)
+    # desempata sobre o REVIEW/REVIEW.iterN (peso 1) — ver docstring (FM-F27INS-02GAT).
     cands.sort()
-    _, it, alvo = cands[-1]
+    it, _, alvo = cands[-1]
     return it, alvo
 
 
@@ -76,6 +85,23 @@ def abertos_de(txt):
     return ids, fontes
 
 
+def campo(txt, nome):
+    m = re.search(r"^\s*%s:\s*(\S+)" % nome, txt, re.M)
+    return m.group(1) if m else None
+
+
+def nums_de(txt):
+    nums = {}
+    for k in ("critical", "warning", "info", "total", "skipped", "fixed"):
+        v = campo(txt, k)
+        if v is not None:
+            try:
+                nums[k] = int(v)
+            except ValueError:
+                nums[k] = v
+    return nums
+
+
 def main():
     if len(sys.argv) < 3:
         print(json.dumps({"arquivo": None, "erro": "uso: review-maior.py <phase_dir> <NN>"}))
@@ -86,31 +112,38 @@ def main():
         print(json.dumps({"arquivo": None, "abertos": []}))
         return 0
     txt = open(alvo, encoding="utf-8", errors="replace").read()
-
-    def campo(nome):
-        m = re.search(r"^\s*%s:\s*(\S+)" % nome, txt, re.M)
-        return m.group(1) if m else None
-
-    status = campo("status")
-    nums = {}
-    for k in ("critical", "warning", "info", "total", "skipped", "fixed"):
-        v = campo(k)
-        if v is not None:
-            try:
-                nums[k] = int(v)
-            except ValueError:
-                nums[k] = v
+    status = campo(txt, "status")
     ids, fontes = abertos_de(txt)
     saida = {
         "arquivo": os.path.basename(alvo),
         "iteracao": it,
         "status": status,
-        **nums,
+        **nums_de(txt),
         "abertos": ids,
         "abertos_fonte": sorted(set(fontes)),
     }
     if status is None:
         saida["formato_nao_reconhecido"] = True
+
+    # `ultima_correcao` (FM-F27INS-02GAT): quando o REVIEW-FIX mais recente NÃO é o
+    # `arquivo` escolhido (uma re-revisão de N maior o superou), o `fixed`/`skipped` daquele
+    # conserto — o insumo do assert `all_fixed_com_skipped` de quem lê este JSON — some do
+    # nível de cima. Superconjunto: manda também aqui, num campo próprio, em vez de apagar a
+    # informação. Não é o `arquivo`/`status` de cima — quem lê pela chave antiga não muda de
+    # comportamento; quem precisar do conserto separado da re-revisão lê daqui.
+    fix_cands = sorted(
+        (iter_de(f), f) for f in glob.glob(os.path.join(pd, f"{nn}-REVIEW-FIX*.md"))
+    )
+    if fix_cands:
+        fix_it, fix_arq = fix_cands[-1]
+        if os.path.basename(fix_arq) != saida["arquivo"]:
+            fix_txt = open(fix_arq, encoding="utf-8", errors="replace").read()
+            saida["ultima_correcao"] = {
+                "arquivo": os.path.basename(fix_arq),
+                "iteracao": fix_it,
+                "status": campo(fix_txt, "status"),
+                **nums_de(fix_txt),
+            }
     print(json.dumps(saida, ensure_ascii=False))
     return 0
 

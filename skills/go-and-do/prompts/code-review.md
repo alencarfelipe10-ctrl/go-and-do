@@ -101,7 +101,11 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
    — não um `.done` de terceiro; assim que o marcador existe, leia. Parecer presente → despache **`gad-verificador`** (síncrono)
    com `prompts/intent-verifica.md` adaptado no despacho: "verifique cada achado do
    parecer `<caminho>` contra o código real; vereditos confirmado/nao_sustentado; sem
-   classificação de ciclo". **Exceção que dispensa o despacho:** achado do Codex que coincide
+   classificação de ciclo". **Não acrescente critério de escopo ao briefing do verificador**
+   (ex.: "código pré-existente/fora do diff da fase é fora de escopo") — o verificador
+   arbitra evidência, não relevância; quem decide relevância é o dono, no `needs_decision`
+   abaixo, nunca um critério improvisado no despacho (FJ-F27INS-01GAT: foi assim que 2
+   achados confirmados saíram do conserto sem decisão do dono). **Exceção que dispensa o despacho:** achado do Codex que coincide
    1:1 (mesmo arquivo, linha e classe) com um achado já confirmado do revisor interno entra
    direto como fusão declarada — o verificador existe para arbitrar divergência, e aqui não
    houve nenhuma (FJ-02GAT). Divergência real, mesmo que pequena, ainda vai ao verificador.
@@ -110,7 +114,13 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
      Critical · WR-xx Warning; preferir CR a BL-x) com `fonte: codex` no corpo;
    - achado coincidente com um do reviewer interno (mesmo arquivo/linha/classe) →
      funde no existente creditando as duas fontes (dedup);
-   - não confirmado → apêndice "descartados (codex)" com a razão, nunca silencioso;
+   - **achado CONFIRMADO nunca vai para "descartados"** — nem "código pré-existente" nem
+     "fora do delta da fase" tiram um achado confirmado da contagem (FJ-F27INS-01GAT): ou
+     ele entra numerado (linha acima) e vai ao fixer, ou volta como `needs_decision` (passo
+     3) com as opções mastigadas — consertar agora / quick depois / aceitar com registro,
+     recomendação primeiro — e é o DONO quem escolhe, com ponteiro para a decisão;
+   - não confirmado (o verificador não sustentou) → apêndice "descartados (codex)" com a
+     razão, nunca silencioso;
    - reconte o frontmatter (`critical:`/`warning:`/`total:`) — fixer e cancela do 4.A
      consomem 1:1 sem saber quem achou. Criticals novos do Codex → mais uma passada do
      fixer neles (mesmo loop). Timestamps do frontmatter (`reviewed:`, `fixed_at:`) são
@@ -118,9 +128,29 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
      com datas de modelo e foi corrigido à mão).
    Sem loop de negociação: no código o árbitro é o repo (confirma ou descarta por
    evidência).
+   **Quando você mesmo redige a sugestão de conserto** de um achado (as duas linhas
+   acima — fonte codex e fusão), acrescente ao texto: somar a checagem, nunca trocar,
+   salvo prova de que a antiga ficou inútil; e listar, por commit, "quem mais lê ou grava
+   este estado" antes de aceitar a troca — a mesma exigência do 4.1b (MGTk-01GAT,
+   `workflow-etapa-4.md`; FJ-F27INS-02GAT). **Fora do seu alcance:** o achado nativo do
+   revisor interno (iteração 1) é corrigido pelo `gsd-code-fixer` direto por dentro do
+   comando `gsd-code-review --fix`, sem passar pelo SEU texto — esta linha não alcança
+   aquele caminho (é briefing de agente upstream, fora deste prompt).
 2c. *(Experimento 4.C-c, a validar em fase real:)* quando o model profile do GSD
    permitir, rode o fixer em Sonnet e registre `fixer=sonnet (experimento)` em
    `sinos` — nunca em silêncio.
+2d. **Fecho do loop — gate real quando o conserto toca arquivo publicado (FM-F27INS-03GAT):**
+   antes do passo 3, confira se algum commit do fixer (desta rodada) tocou um arquivo que a
+   fase leva a publicação/espelho (o que o `SUMMARY.md`/`CONTEXT.md` da fase declara como
+   destino de publicação). Se sim, rode a checagem REAL do projeto para esse escopo — a que
+   fica desligada por padrão porque é lenta (a variável/flag que o projeto documenta para
+   ligá-la; nunca invente um nome de variável que o projeto não declarou) — uma vez, agora,
+   em vez de deixar o gate 4.4/o 4.1b acusar depois. Achado novo dela é achado deste loop:
+   mais uma passada do fixer AQUI, não allowlist de emergência no fecho nem pergunta ao
+   dono adiada para outro gate (caso real F27-INS: 2 falsos positivos de PII escaparam do
+   4.1 porque o teste do clean-room pulou essa checagem sem a variável, e só o 4.4 viu —
+   1 pergunta ao dono, 1 commit de allowlist e 1 reprovação do fiscal do 4.4 depois).
+   Custa 2–4 min nas fases que publicam arquivo; fase sem arquivo publicado não paga nada.
 3. Ao final, colha do `NN-REVIEW.md` (e do output do comando) os números do retorno:
    achados por severidade (encontrados / corrigidos / restantes), o veredito
    (`clean` quando não sobrou Critical), e a lista compacta dos itens
