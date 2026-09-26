@@ -737,10 +737,7 @@ que o registro foi feito de memória, no fim, e não no ato.
    pre_spec_sem_bloco'`): a partir do `rm` eles só existem lá, e é lá que o
    `confere-etapa.sh 1` da camada 0 vai procurá-los. Só então a limpeza (política 1.5):
    ```bash
-   setopt nullglob 2>/dev/null || shopt -s nullglob 2>/dev/null || true
-   G() { bash "$HOME/.claude/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
-   rm -f $(G 'intent/sinos-*.txt') $(G 'intent/c*/briefing*.md') \
-         $(G intent/varredura.md) $(G 'intent/c*/mudancas.md')
+   $HOME/.claude/skills/go-and-do/scripts/limpa-intencao.sh "<phase_dir>"
    ```
    **Não alargue esses globs.** SOBREVIVEM, por serem insumo da `/audit-gad` e dos gates:
    `c*/runs/`, `c*/status-*`, `c*/tabela.txt`, `c*/vereditos.txt`, `c*/prova-leitura.txt`,
@@ -775,6 +772,10 @@ que o registro foi feito de memória, no fim, e não no ato.
    veredito; custou 4 turnos de engenharia reversa do script.
 9. **Relato de turnos: a saída do medidor, verbatim.** Antes do retorno, rode
    ```bash
+   Um argumento só; o script resolve os dois formatos de fase pelo `caminho-fase.sh` e apaga
+   exatamente os 4 alvos de hoje, sem depender do glob do shell que chama. Nada casou → exit
+   0 em silêncio; `<phase_dir>` inexistente → exit 2 com mensagem (trate como falha, não
+   como "nada a limpar").
    python3 $HOME/.claude/skills/audit-gad/scripts/turnos-por-ciclo.py \
      "<subagents_dir>" --json 2>/dev/null | head -40
    ```
