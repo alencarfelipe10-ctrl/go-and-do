@@ -19,7 +19,7 @@ cenario() { # <n> <result> <pos_ship|-> <prova|-> <bloqueia|-> <verificavel|->
   [ "$6" != - ] && printf 'verificavel_em: %s\n' "$6"
   printf 'note: |\n  nota do cenário %s\n\n' "$1"
 }
-{ printf -- '---\nstatus: testing\npre_uat: executed\n---\n\n## Tests\n\n'
+{ printf -- '---\nstatus: testing\npre_uat: executed\nupdated: 2020-01-01T00:00:00-03:00\n---\n\n## Tests\n\n'
   cenario 1 pass - - - -
   cenario 2 blocked candidato tests/test_leitura.py sim 'Fase 04.1 — API real'
   cenario 3 blocked candidato tests/test_leitura.py nao 'Fase 04.1 — volume do piloto'
@@ -30,7 +30,7 @@ cenario() { # <n> <result> <pos_ship|-> <prova|-> <bloqueia|-> <verificavel|->
   cenario 8 blocked candidato tests/test_leitura.py talvez 'Fase 04.1'
   printf '## Summary\n\ntotal: 8\n\n## Gaps\n'
 } > "$PD/04-UAT.md"
-printf '[{"cenario":2,"veredito":"confirmado"},{"cenario":3,"veredito":"confirmado"},{"cenario":4,"veredito":"confirmado"},{"cenario":5,"veredito":"recusado"},{"cenario":6,"veredito":"confirmado"},{"cenario":8,"veredito":"confirmado"}]' > "$PD/.pos-ship-vereditos.json"
+printf '[{"cenario":2,"veredito":"confirmado","motivo":"90 passed, 2 skipped (pytest tests/test_leitura.py)"},{"cenario":3,"veredito":"confirmado","motivo":"volume do piloto observável só em produção"},{"cenario":4,"veredito":"confirmado"},{"cenario":5,"veredito":"recusado"},{"cenario":6,"veredito":"confirmado"},{"cenario":8,"veredito":"confirmado"}]' > "$PD/.pos-ship-vereditos.json"
 
 echo "── move: só sai do balde 3 quem cumpre as 6 condições"
 OUT=$(python3 "$S" move "$PD" 04 "$R"); RC=$?
@@ -49,10 +49,27 @@ eq "POS-SHIP.md tem 2 itens" "$(grep -c '^### 04-' "$PD/04-POS-SHIP.md")" 2
 eq "POS-SHIP.md não carrega result:" "$(grep -c '^result:' "$PD/04-POS-SHIP.md")" 0
 eq "POS-SHIP.md fora da régua ### N. do predicado" "$(grep -cE '^### [0-9]+\. ' "$PD/04-POS-SHIP.md")" 0
 
+echo "── FM-F27INS-03UAT: a movimentação anexa à seção de lacunas e atualiza a data"
+eq "Gaps ganhou 1 linha gerada (não duplicou a seção)" "$(grep -c '^## Gaps' "$PD/04-UAT.md")" 1
+GAPS_LINHA=$(grep '^# pos-ship ' "$PD/04-UAT.md")
+eq "linha gerada existe"           "$([ -n "$GAPS_LINHA" ] && echo sim || echo nao)" sim
+casa() { echo "$1" | grep -qF "$2" && ok "…$2" || bad "…$2 ausente" "$1"; }
+casa "$GAPS_LINHA" "movidos 2,3"
+casa "$GAPS_LINHA" "recusados e bloqueando o ship: 4,5,8"
+eq "updated: mudou (não ficou 2020-01-01)" "$(grep -c '^updated: 2020-01-01' "$PD/04-UAT.md")" 0
+eq "texto antigo do condutor não foi apagado" "$(grep -c '^## Gaps' "$PD/04-UAT.md")" 1
+
+echo "── FJ-F27INS-03UAT: o item movido leva a prova do cético, não o número do condutor"
+CETICO_2=$(awk '/^### 04-2\./{f=1} f&&/^cetico:/{print;exit}' "$PD/04-POS-SHIP.md")
+casa "$CETICO_2" "90 passed, 2 skipped"
+CETICO_3=$(awk '/^### 04-3\./{f=1} f&&/^cetico:/{print;exit}' "$PD/04-POS-SHIP.md")
+casa "$CETICO_3" "volume do piloto observável só em produção"
+
 echo "── move é idempotente (2ª passada não duplica)"
 OUT=$(python3 "$S" move "$PD" 04 "$R")
 eq "nada a mover" "$(jq -c .movidos <<<"$OUT")" "[]"
 eq "POS-SHIP.md segue com 2" "$(grep -c '^### 04-' "$PD/04-POS-SHIP.md")" 2
+eq "Gaps segue com 1 linha só (2ª passada não duplica)" "$(grep -c '^# pos-ship ' "$PD/04-UAT.md")" 1
 
 echo "── sem arquivo de vereditos: ninguém sai"
 PD2="$R/.planning/phases/05-y"; mkdir -p "$PD2"

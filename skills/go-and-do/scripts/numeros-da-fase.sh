@@ -264,6 +264,39 @@ while read -r m; do
     falhas=$((falhas+1))
   fi
 done < <(grep -oE '[0-9]+ (planos?|ondas?)' "$alvo" | sort -u)
+
+# ── FJ-F27INS-02ENC: sobras desejáveis (por código) e «como desfazer» das decisões ──
+# automáticas — só sobre o RESUMO EXECUTIVO em modo final (é ele que traz a seção de
+# transparência das decisões e é ele que o dono lê no hand-back); outro alvo (ex.: as
+# bancadas com bom.md/ruim.md/enum.md) não entra nesta régua nova.
+case "$alvo" in
+  *-RESUMO-EXECUTIVO.md)
+    if grep -qm1 '^go_and_do_resumo: final' "$alvo" 2>/dev/null; then
+      verif="$dir/$nn-VERIFICATION.md"
+      if [ -f "$verif" ]; then
+        secao=$(awk '/^## Desejáveis pendentes/{f=1;next} /^#{1,2} /{if(f)exit} f' "$verif")
+        if [ -n "$secao" ] && ! printf '%s\n' "$secao" | grep -qiE '^[[:space:]]*(Todos os desej[áa]veis[^.]*\.[[:space:]]*)?\*{0,2}Nenhum desej[áa]vel pendente\b'; then
+          for ac in $(printf '%s\n' "$secao" | grep -oE 'AC-[0-9]+' | sort -u); do
+            if ! grep -qF "$ac" "$alvo"; then
+              echo "⚠️ SOBRA-AUSENTE: $ac está na \"## Desejáveis pendentes\" do $nn-VERIFICATION.md mas não aparece (pelo código) no resumo"
+              falhas=$((falhas+1))
+            fi
+          done
+        fi
+      fi
+      dec="$dir/$nn-DECISOES.md"
+      if [ -f "$dec" ]; then
+        n_desfazer=$(grep -cE '^[[:space:]]*Desfazer:' "$dec" 2>/dev/null); n_desfazer=${n_desfazer:-0}
+        n_no_resumo=$(grep -cio 'desfaz' "$alvo" 2>/dev/null); n_no_resumo=${n_no_resumo:-0}
+        if [ "$n_desfazer" -gt 0 ] && [ "$n_no_resumo" -eq 0 ]; then
+          echo "⚠️ DESFAZER-AUSENTE: $nn-DECISOES.md tem $n_desfazer decisão(ões) automática(s) com \"Desfazer:\" mas o resumo não traz nenhum \"como desfazer\""
+          falhas=$((falhas+1))
+        fi
+      fi
+    fi
+    ;;
+esac
+
 if [ "$falhas" -eq 0 ]; then
   echo "conferir: OK — todo \"N planos/ondas\" do documento bate com o disco"
   exit 0

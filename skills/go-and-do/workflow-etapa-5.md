@@ -52,7 +52,15 @@ of treating either as orphaned.
 - (c) create_uat_file — template `$HOME/.claude/gsd-core/templates/UAT.md`,
   `status: testing`, all `[pending]`, frontmatter `pre_uat: generated`;
 - (d) reviewers' input in the dispatch: `uat_humano` from 4.1 + `human_needed` from 3.4 —
-  this is where the promised "becomes UAT" materializes.
+  this is where the promised "becomes UAT" materializes;
+- (e) FJ-F27INS-01UAT — the dispatch prompt itself says, in these terms: every scenario
+  leaves this generator as `[pending]` — you run no proof and you do not decide a basket
+  (5.4/5.5/5.6 do that); any factual claim you record about the state of the repo (e.g.
+  "nothing changed since commit X", "this gate already ran clean") must quote the command
+  and its real output, never a recollection. A generator caught re-running the PII gate 3×
+  and asserting `git log` came back empty when the same command listed 11 commits is the
+  failure this line exists to stop (measured 25/09/2026: ~6 min of the conductor's window
+  redoing the gate, plus a false claim that almost reached the pass record).
 
 **5.4 — Run the UAT (via SUBAGENT — ALWAYS, with or without GUI).**
 > The subagent — not you — drives the browser. A phase without GUI is not a reason for

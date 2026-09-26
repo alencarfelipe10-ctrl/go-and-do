@@ -101,7 +101,9 @@ def _blocos(texto: str) -> tuple[list[str], list[dict], list[str]]:
     return prefacio, blocos, rodape
 
 
-def _vereditos(phase_dir: Path) -> dict[int, str]:
+def _vereditos(phase_dir: Path) -> dict[int, dict[str, str]]:
+    """FJ-F27INS-03UAT: guarda também o `motivo` — é a prova do cético que viaja com o
+    item quando ele é movido ao NN-POS-SHIP.md (antes só o `veredito` sobrevivia)."""
     arq = Path(gad_caminhos.caminho(str(phase_dir), "pos-ship/vereditos.json"))
     if not arq.is_file():
         return {}
@@ -109,10 +111,13 @@ def _vereditos(phase_dir: Path) -> dict[int, str]:
         dados = json.loads(arq.read_text(encoding="utf-8"))
     except ValueError:
         return {}
-    saida: dict[int, str] = {}
+    saida: dict[int, dict[str, str]] = {}
     for item in dados if isinstance(dados, list) else []:
         if isinstance(item, dict) and isinstance(item.get("cenario"), int):
-            saida[item["cenario"]] = str(item.get("veredito", ""))
+            saida[item["cenario"]] = {
+                "veredito": str(item.get("veredito", "")),
+                "motivo": str(item.get("motivo", "")),
+            }
     return saida
 
 
@@ -143,7 +148,7 @@ def _malformados(texto: str, blocos: list[dict]) -> list[dict]:
     return achados
 
 
-def _recusa(bloco: dict, vereditos: dict[int, str], raiz: Path) -> str | None:
+def _recusa(bloco: dict, vereditos: dict[int, dict[str, str]], raiz: Path) -> str | None:
     """Motivo pelo qual o candidato NÃO pode sair do balde 3; None = pode."""
     ls = bloco["linhas"]
     if _campo(ls, "result") not in RESULT_ELEGIVEL:
@@ -157,9 +162,50 @@ def _recusa(bloco: dict, vereditos: dict[int, str], raiz: Path) -> str | None:
         return "bloqueia_proxima ausente ou fora de sim|nao"
     if not _campo(ls, "verificavel_em"):
         return "sem verificavel_em"
-    if vereditos.get(bloco["n"]) != "confirmado":
+    if vereditos.get(bloco["n"], {}).get("veredito") != "confirmado":
         return "sem veredito confirmado do verificador"
     return None
+
+
+def _atualiza_updated(prefacio: list[str], agora: str) -> list[str]:
+    """FM-F27INS-03UAT: sobrescreve só o VALOR de `updated:` no frontmatter (entre os dois
+    primeiros `---`) — nunca cria o campo se ele não existir (superconjunto, sem inventar
+    chave nova no template)."""
+    saida = list(prefacio)
+    delimitadores = [i for i, l in enumerate(saida) if l.strip() == "---"]
+    if len(delimitadores) < 2:
+        return saida
+    ini, fim = delimitadores[0], delimitadores[1]
+    for i in range(ini + 1, fim):
+        if saida[i].startswith("updated:"):
+            saida[i] = f"updated: {agora}"
+            break
+    return saida
+
+
+def _anexa_gaps(rodape: list[str], linha: str) -> list[str]:
+    """FM-F27INS-03UAT: anexa `linha` ao FIM da seção `## Gaps` — NUNCA apaga o texto do
+    condutor. `linha` é um comentário YAML (`# …`), não um item `- truth:`, para não
+    contar como gap novo no lint de `confere-etapa.sh` (5.E-c) nem no `--gaps` nativo.
+    Sem a seção (UAT.md sem rodapé ainda), cria-a no fim — mesmo nome do template UAT.md."""
+    saida = list(rodape)
+    inicio = next((i for i, l in enumerate(saida) if l.strip() == "## Gaps"), None)
+    if inicio is None:
+        if saida and saida[-1].strip():
+            saida.append("")
+        saida.append("## Gaps")
+        saida.append("")
+        saida.append(linha)
+        return saida
+    fim = len(saida)
+    for j in range(inicio + 1, len(saida)):
+        if saida[j].startswith("## "):
+            fim = j
+            break
+    while fim > inicio + 1 and not saida[fim - 1].strip():
+        fim -= 1
+    saida[fim:fim] = [linha]
+    return saida
 
 
 def cmd_move(phase_dir: Path, nn: str, raiz: Path) -> int:
@@ -204,13 +250,35 @@ def cmd_move(phase_dir: Path, nn: str, raiz: Path) -> int:
                      if not l.startswith(("result:", "pos_ship:"))]
             while corpo and not corpo[-1].strip():
                 corpo.pop()
-            partes.append("\n".join(
-                [f"### {nn}-{b['n']}. {b['titulo']}",
-                 f"origem: {nn}-UAT.md cenário {b['n']}",
-                 f"movido_em: {agora}",
-                 "observado_em:"] + corpo) + "\n")
+            # FJ-F27INS-03UAT: carrega a prova do cético (não o número que o condutor
+            # copiou do lote) junto com o item movido — é o que o dono confere depois.
+            motivo_cetico = vereditos.get(b["n"], {}).get("motivo", "")
+            linhas_item = [f"### {nn}-{b['n']}. {b['titulo']}",
+                           f"origem: {nn}-UAT.md cenário {b['n']}",
+                           f"movido_em: {agora}"]
+            if motivo_cetico:
+                linhas_item.append(f"cetico: {motivo_cetico}")
+            linhas_item.append("observado_em:")
+            partes.append("\n".join(linhas_item + corpo) + "\n")
         with destino.open("a", encoding="utf-8") as f:
             f.write("\n" + "\n".join(partes))
+        # FM-F27INS-03UAT: a movimentação passa a ANEXAR (nunca apagar) uma linha gerada
+        # à seção de lacunas e a atualizar a data do cabeçalho — sem isso o NN-UAT.md
+        # segue dizendo, na seção de lacunas, que candidatos já recusados (ou já movidos)
+        # ainda são "candidatos", contradizendo o Summary que o script acabou de mudar.
+        recusados_ns = {r["cenario"] for r in recusados}
+        bloco_por_n = {b["n"]: b for b in ficam if b["n"] in recusados_ns}
+        recusados_bloqueando = sorted(
+            n for n in recusados_ns
+            if _campo(bloco_por_n[n]["linhas"], "result") in RESULT_ELEGIVEL
+        )
+        linha_gaps = (
+            f"# pos-ship {agora}: movidos {','.join(str(b['n']) for b in movidos)}"
+            f" · recusados e bloqueando o ship: "
+            f"{','.join(str(n) for n in recusados_bloqueando) if recusados_bloqueando else 'nenhum'}"
+        )
+        rodape = _anexa_gaps(rodape, linha_gaps)
+        prefacio = _atualiza_updated(prefacio, agora)
         novo = prefacio + [l for b in ficam for l in b["linhas"]] + rodape
         uat.write_text("\n".join(novo), encoding="utf-8")
     print(json.dumps({
