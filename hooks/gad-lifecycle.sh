@@ -10,6 +10,9 @@
 # da CHAMADA. Por isso o hook também é registrado em `SubagentStop` (matcher vazio), que grava
 # o `retorno` de fim real (`fim_real:true`, `agent_id`, `duracao_s`); o retorno do PostToolUse
 # fica com `fim_real:false`. Registro: `hooks/registra-hooks.sh`.
+# t59 (FM-F27INS-05INT): o PostToolUse que só traz o aviso «Async agent launched» não grava
+# mais nada; e o SubagentStop de um agente com filho vivo é parada PROVISÓRIA (fim_real:false
+# + parada_provisoria:true + filhos_vivos) — o fim_real:true fica para a parada sem filho vivo.
 #
 # Instalação (fora do repo — passo documentado no README):
 #   ln -s <clone>/hooks/gad-lifecycle.sh ~/.claude/hooks/gad-lifecycle.sh
@@ -99,6 +102,8 @@ EV=$(jq -r '.hook_event_name // empty' <<<"$IN")
 # assíncrona (CC 2.1.26x, "Async agent launched"), o PostToolUse dispara segundos após o
 # despacho — o `retorno` dele é o retorno da CHAMADA (F24.5: 9 executores "encerrados" 2–5 s
 # após nascer, 12 incidentes falsos de onda serializada). v2.5.4, tarefa 45g.
+# t59: esse retorno da chamada nem é mais gravado quando é o aviso assíncrono (bloco abaixo), e
+# o SubagentStop com filho vivo é rebaixado a parada provisória (bloco antes do dedup FM-05UAT).
 FIM_REAL=0
 case "$EV" in
   PreToolUse)   TIPO=despacho ;;
@@ -109,6 +114,28 @@ esac
 
 TOOL=$(jq -r '.tool_name // empty' <<<"$IN")
 TUID=$(jq -r '.tool_use_id // empty' <<<"$IN")
+
+# FM-F27INS-05INT (1): o PostToolUse de um Agent assíncrono não é retorno — é o aviso de
+# «lançado em segundo plano», 1–3 s após o despacho, e o meta ainda não tem o modelo do filho
+# (F27 INS: 9 `retorno` espúrios só na intenção, todos com o modelo da sessão principal). Não
+# grava NADA: o retorno de verdade vem do SubagentStop. Só Agent/Task — o PostToolUse do
+# SendMessage continua gravando, porque é ele que fecha o despacho `retomada:true` na
+# camada_heuristica. Formas aceitas (o transcript grava o toolUseResult como objeto
+# {status:"async_launched", isAsync:true}; o texto começa por "Async agent launched"): objeto,
+# string ou content[].text. Nenhuma casou → segue como antes (retorno fim_real:false).
+if [ "$EV" = PostToolUse ] && { [ "$TOOL" = Agent ] || [ "$TOOL" = Task ]; }; then
+  _async=$(jq -r '
+    (.tool_response // null) as $r
+    | if ($r | type) == "object" then
+        (($r.status // "") == "async_launched") or ($r.isAsync == true)
+        or ([($r.content // [])[]? | objects | (.text // "") | tostring
+             | test("Async agent launched")] | any)
+      elif ($r | type) == "string" then ($r | test("Async agent launched"))
+      elif ($r | type) == "array" then
+        ([$r[]? | objects | (.text // "") | tostring | test("Async agent launched")] | any)
+      else false end' <<<"$IN" 2>/dev/null)
+  [ "$_async" = true ] && exit 0
+fi
 TP=$(jq -r '.transcript_path // ""' <<<"$IN")
 SUBDIR="${TP%.jsonl}/subagents"
 
@@ -316,14 +343,20 @@ despacha() {
 
 # camada heurística (Pre): nº de hosts despachadores com janela aberta no run-log.
 # $1 opcional = agente a excluir (o próprio, no fallback do Post).
+# t59 (FM-F27INS-05INT): sem o retorno do aviso assíncrono, o host fica aberto até o SubagentStop.
+# Por isso (a) só eventos DESTA sessão contam (subagente não sobrevive à sessão: um SubagentStop
+# perdido numa rodada pausada não pode empurrar a sessão seguinte inteira para camada 2) e
+# (b) `parada_provisoria:true` não fecha o host (é, por definição, host vivo esperando filho).
+# Retornos legados sem o marcador continuam contando — run-logs antigos leem igual.
 camada_heuristica() {
   local excl="${1:-}" ag n=0
   while IFS= read -r ag; do
     [ -n "$ag" ] || continue
     [ "$ag" = "$excl" ] && continue
     despacha "$ag" && n=$((n+1))
-  done < <(jq -rs '
-    [ .[] | select(.evento=="despacho" or .evento=="retorno") | select(.origem=="hook") ]
+  done < <(jq -rs --arg s8 "$SESS8" '
+    [ .[] | select(.evento=="despacho" or .evento=="retorno") | select(.origem=="hook")
+          | select((.sessao // $s8) == $s8) | select(.parada_provisoria != true) ]
     | group_by(.agente + "|" + (.descricao // ""))
     | map(select(([.[] | select(.evento=="despacho")] | length)
                > ([.[] | select(.evento=="retorno")]  | length)))
@@ -432,6 +465,37 @@ fi
 # (vem direto do payload do SubagentStop, estável entre disparos do MESMO agente — tool_use_id
 # e seq mudam a cada chamada). Só o PRIMEIRO fim_real:true de um agent_id vale; os seguintes
 # viram fim_real:false + duplicado_de:<seq da linha original>.
+# FM-F27INS-05INT (2): parada com filho vivo ≠ fim. Um host (gad-intent, gad-plan, gad-execute,
+# gad-gates) encerra o TURNO para esperar o filho que acabou de despachar em segundo plano, e o
+# CC dispara SubagentStop nessa parada. Até aqui a 1ª parada virava fim_real:true e o fim de
+# verdade saía `duplicado_de` (F27 INS: gad-intent «durou» 47 s, gad-plan 253 s, gad-execute
+# 1.042 s — viveram 64 min, 101 min e 234 min). Regra do próprio CC (nota da task-notification:
+# «fires each time this agent stops with no live background children of its own»): só é fim a
+# parada SEM filho vivo. Filhos = metas com parentAgentId = este agent_id, na pasta do meta.
+# Filho terminado = retorno fim_real:true dele no run-log OU <task-id> dele no transcript do pai
+# (qualquer status). Com filho vivo → fim_real:false + parada_provisoria:true + filhos_vivos:N.
+# FAIL-OPEN: sem meta, sem agent_id ou qualquer dúvida → segue como antes (fim_real:true): o
+# risco de sumir o ÚNICO retorno pesa mais que o fim prematuro (status quo).
+# Caso conhecido: filho que parou, notificou e foi re-acordado pelo próprio pai via SendMessage
+# conta como terminado (a notificação já existe) — degrada para o comportamento anterior.
+PROVISORIA=0; VIVOS=0
+if [ "$FIM_REAL" = 1 ] && [ -n "$AGID" ] && [ -n "$META_STOP" ]; then
+  _pai_jsonl="${META_STOP%.meta.json}.jsonl"
+  _ag8="${AGID#agent-}"
+  while IFS= read -r _fm; do
+    [ -n "$_fm" ] || continue
+    _fid="${_fm##*/agent-}"; _fid="${_fid%%[-.]*}"
+    [ -n "$_fid" ] && [ "$_fid" != "$_ag8" ] || continue
+    if [ -f "$RL" ] && grep -F "\"agent_id\":\"$_fid\"" "$RL" 2>/dev/null \
+         | grep -F '"evento":"retorno"' | grep -qF '"fim_real":true'; then
+      continue
+    fi
+    [ -f "$_pai_jsonl" ] && grep -qF "<task-id>$_fid</task-id>" "$_pai_jsonl" 2>/dev/null && continue
+    VIVOS=$((VIVOS+1))
+  done < <(grep -lF "\"parentAgentId\":\"$_ag8\"" "$(dirname "$META_STOP")"/agent-*.meta.json 2>/dev/null)
+  if [ "$VIVOS" -gt 0 ] 2>/dev/null; then FIM_REAL=0; PROVISORIA=1; fi
+fi
+
 DUP_SEQ=""
 if [ "$FIM_REAL" = 1 ] && [ -n "$AGID" ] && [ -f "$RL" ]; then
   DUP_SEQ=$(grep -F "\"agent_id\":\"$AGID\"" "$RL" 2>/dev/null \
@@ -456,6 +520,8 @@ bash "$RUNLOG_SH" "$PD" "$NN" "$TIPO" "$ET" \
   $([ "$HERDADO" = 1 ] && echo '--kv modelo_herdado=true') \
   $([ "$ET_CORRIGIDA" = 1 ] && printf -- '--kv etapa_corrigida=true --kv etapa_checkpoint=%s' "$(printf '%s' "$ET_ANTERIOR" | tr ' ' '_')") \
   ${DESC:+--kv descricao="$DESC"} ${ISOL:+--kv isolation="$ISOL"} \
-  ${DUP_SEQ:+--kv duplicado_de="$DUP_SEQ"} >/dev/null 2>&1
+  ${DUP_SEQ:+--kv duplicado_de="$DUP_SEQ"} \
+  $([ "$PROVISORIA" = 1 ] && printf -- '--kv parada_provisoria=true --kv filhos_vivos=%s' "$VIVOS") \
+  >/dev/null 2>&1
 
 exit 0

@@ -482,6 +482,146 @@ CNT=$(grep -F '"agent_id":"a0dedup"' "$RL" | grep -c '"fim_real":true')
 [ "$CNT" = 1 ] && ok "dedup: exatamente 1 fim_real:true para agent_id a0dedup no run-log" \
   || bad "dedup: contagem de fim_real:true para a0dedup" "esperado 1, achei $CNT"
 
+# ───────── t59 FM-F27INS-05INT: aviso assíncrono × parada com filho vivo × parada final ─────────
+# Montado a partir do run-log real da F27 INS (grupo-inspired, sessão 2557efcc, seq 7–33):
+#   seq 7/8   despacho gad-intent + retorno 1 s depois com o modelo da sessão principal (é o
+#             aviso «Async agent launched», não retorno)
+#   seq 13    gad-intent fim_real:true aos 47 s — parou para esperar o gad-spec (a70c…) VIVO
+#   seq 18    gad-spec fim_real:true
+#   seq 21…33 paradas seguintes do gad-intent saem duplicado_de:13 e o fim de verdade some
+# Ids e descrições são os reais; o meta segue o formato real (agent-<id>.meta.json, sem sufixo).
+echo "── t59 FM-F27INS-05INT: aviso assíncrono não grava; parada com filho vivo é provisória ──"
+monta
+HOST=a658bcaf96ef7e260; SPEC=a70c5bac6780dc18e; EXPL=a3f8fe0be223d14c3
+D_HOST="Etapa 1 intenção fase 27"; D_SPEC="Gerar SPEC da fase 27"; D_EXPL="Explorar comportamento atual por R-n"
+meta_real() { # $1=id $2=agentType $3=toolUseId $4=spawnDepth $5=descrição [$6=parentAgentId]
+  jq -cn --arg at "$2" --arg tu "$3" --argjson sd "$4" --arg d "$5" --arg p "${6:-}" '
+    {agentType:$at, description:$d, toolUseId:$tu} + (if $p == "" then {} else {parentAgentId:$p} end)
+    + {spawnDepth:$sd, requestShape:"background", requestNonInteractive:true}' > "$SUB/agent-$1.meta.json"
+  printf '%s\n' '{"type":"assistant","timestamp":"2026-09-25T10:01:33-03:00","message":{"model":"claude-opus-5-5"}}' \
+    > "$SUB/agent-$1.jsonl"
+}
+p_pre_d() { # $1=subagent_type $2=descrição $3=tool_use_id
+  jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$TP" --arg ag "$1" --arg d "$2" --arg tu "$3" '
+    {hook_event_name:"PreToolUse", tool_name:"Agent", cwd:$cwd, session_id:$s, transcript_path:$tp,
+     tool_use_id:$tu, tool_input:{subagent_type:$ag, description:$d}}'
+}
+p_post_async() { # $1=subagent_type $2=descrição $3=tool_use_id $4=agentId $5=forma (obj|str|content)
+  jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$TP" --arg ag "$1" --arg d "$2" --arg tu "$3" \
+         --arg id "$4" --arg f "$5" '
+    ("Async agent launched successfully.\nagentId: " + $id + "\nThe agent is working in the background.") as $txt
+    | {hook_event_name:"PostToolUse", tool_name:"Agent", cwd:$cwd, session_id:$s, transcript_path:$tp,
+       tool_use_id:$tu, tool_input:{subagent_type:$ag, description:$d},
+       tool_response: (if $f == "obj" then {isAsync:true, status:"async_launched", agentId:$id, description:$d}
+                       elif $f == "str" then $txt
+                       else {content:[{type:"text", text:$txt}]} end)}'
+}
+p_stop_real() { # $1=agent_id $2=agent_type
+  jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$SUB/agent-$1.jsonl" --arg id "$1" --arg at "$2" '
+    {hook_event_name:"SubagentStop", cwd:$cwd, session_id:$s, agent_id:$id, agent_type:$at,
+     transcript_path:$tp, agent_transcript_path:$tp}'
+}
+
+# 1) despacho do host (camada 0 → 1) e o aviso assíncrono nas três formas: nenhuma linha
+roda "$(p_pre_d gad-intent "$D_HOST" toolu_01Kxjc4xerbsEkXvzo6TV7gk)"
+esp_passou "F27: despacho do gad-intent" gad-intent
+meta_real "$HOST" gad-intent toolu_01Kxjc4xerbsEkXvzo6TV7gk 1 "$D_HOST"
+for _f in obj str content; do
+  roda "$(p_post_async gad-intent "$D_HOST" toolu_01Kxjc4xerbsEkXvzo6TV7gk "$HOST" "$_f")"
+  [ "$DELTA" = 0 ] && [ "$RC" = 0 ] && [ -z "$OUT" ] \
+    && ok "aviso «Async agent launched» ($_f): nenhuma linha no run-log" \
+    || bad "aviso assíncrono ($_f) gravou" "delta=$DELTA rc=$RC $(tail -n1 "$RL")"
+done
+# PostToolUse de Agent síncrono (resposta sem o aviso) continua gravando fim_real:false
+roda "$(p_post gsd-executor tu-sincrono)"
+[ "$DELTA" = 1 ] && grep -q '"fim_real":false' <<<"$ULT" \
+  && ok "PostToolUse síncrono (sem aviso) continua gravando retorno fim_real:false" \
+  || bad "PostToolUse síncrono" "delta=$DELTA $ULT"
+
+# 2) o host despacha o gad-spec: host sem retorno → camada 2 (hoje a F27 gravou 1, seq 11)
+roda "$(p_pre_d gad-spec "$D_SPEC" toolu_019AuYxGp8qowTGMX7XK2cwK)"
+esp_passou "F27: despacho do gad-spec pelo host" gad-spec
+[ "$(jq -r .camada <<<"$ULT")" = 2 ] && ok "gad-spec despachado com o host aberto sai camada 2" \
+  || bad "camada do gad-spec" "$ULT"
+meta_real "$SPEC" gad-spec toolu_019AuYxGp8qowTGMX7XK2cwK 2 "$D_SPEC" "$HOST"
+roda "$(p_post_async gad-spec "$D_SPEC" toolu_019AuYxGp8qowTGMX7XK2cwK "$SPEC" obj)"
+[ "$DELTA" = 0 ] && ok "aviso assíncrono do gad-spec: nenhuma linha" || bad "aviso do gad-spec gravou" "$ULT"
+
+# 3) host para esperando o gad-spec VIVO → parada provisória (era o seq 13 fim_real:true, 47 s)
+roda "$(p_stop_real "$HOST" gad-intent)"
+[ "$DELTA" = 1 ] && grep -q '"evento":"retorno"' <<<"$ULT" && grep -q '"fim_real":false' <<<"$ULT" \
+  && ok "parada do host com filho vivo: retorno fim_real:false" || bad "parada com filho vivo" "$ULT"
+[ "$(jq -r '.parada_provisoria' <<<"$ULT")" = true ] && [ "$(jq -r '.filhos_vivos' <<<"$ULT")" = 1 ] \
+  && ok "…parada_provisoria:true, filhos_vivos:1" || bad "marcadores da parada provisória" "$ULT"
+[ "$(jq -r '.duplicado_de // "nenhum"' <<<"$ULT")" = nenhum ] && grep -q "\"agent_id\":\"$HOST\"" <<<"$ULT" \
+  && grep -Eq '"duracao_s":[0-9]+' <<<"$ULT" \
+  && ok "…sem duplicado_de, com agent_id e duracao_s" || bad "parada provisória: campos" "$ULT"
+
+# 4) host (ainda vivo) despacha o gad-explore depois da parada provisória → camada 2
+#    (na F27, seq 19, saiu camada 1: o 1º stop já tinha «fechado» o host)
+roda "$(p_pre_d gad-explore "$D_EXPL" toolu_explore)"
+[ "$(jq -r .camada <<<"$ULT")" = 2 ] && ok "despacho após parada provisória: camada 2 (host segue aberto)" \
+  || bad "camada após parada provisória" "$ULT"
+meta_real "$EXPL" gad-explore toolu_explore 2 "$D_EXPL" "$HOST"
+
+# 5) gad-spec termina de verdade (sem filho) → fim_real:true
+roda "$(p_stop_real "$SPEC" gad-spec)"
+grep -q '"fim_real":true' <<<"$ULT" && [ "$(jq -r '.parada_provisoria // false' <<<"$ULT")" = false ] \
+  && ok "filho sem filho próprio: fim_real:true" || bad "fim do gad-spec" "$ULT"
+
+# 6) host para de novo com o gad-explore vivo → provisória, filhos_vivos:1 (o gad-spec já fechou)
+roda "$(p_stop_real "$HOST" gad-intent)"
+grep -q '"fim_real":false' <<<"$ULT" && [ "$(jq -r '.filhos_vivos' <<<"$ULT")" = 1 ] \
+  && ok "2ª parada com 1 filho vivo (o terminado não conta): provisória, filhos_vivos:1" \
+  || bad "2ª parada provisória" "$ULT"
+
+# 7) o gad-explore termina SEM SubagentStop no run-log (hook no-op, por ex.), mas a
+#    task-notification dele chegou ao transcript do host → a próxima parada é o fim de verdade
+printf '%s\n' "{\"type\":\"user\",\"message\":{\"content\":\"<task-notification>\\n<task-id>$EXPL</task-id>\\n<status>completed</status>\"}}" \
+  >> "$SUB/agent-$HOST.jsonl"
+roda "$(p_stop_real "$HOST" gad-intent)"
+grep -q '"fim_real":true' <<<"$ULT" && [ "$(jq -r '.duplicado_de // "nenhum"' <<<"$ULT")" = nenhum ] \
+  && [ "$(jq -r '.parada_provisoria // false' <<<"$ULT")" = false ] \
+  && ok "parada sem filho vivo (task-notification no transcript do pai): fim_real:true" \
+  || bad "parada final do host" "$ULT"
+SEQ_FIM=$(jq -r .seq <<<"$ULT")
+
+# 8) parada depois do fim (retomada) → duplicado_de aponta para a parada FINAL, não para a 1ª
+roda "$(p_stop_real "$HOST" gad-intent)"
+[ "$(jq -r '.duplicado_de // empty' <<<"$ULT")" = "$SEQ_FIM" ] && grep -q '"fim_real":false' <<<"$ULT" \
+  && ok "parada pós-fim: duplicado_de = seq do fim real ($SEQ_FIM)" || bad "duplicado pós-fim" "$ULT (esperado $SEQ_FIM)"
+for _id in "$HOST" "$SPEC"; do
+  CNT=$(grep -F "\"agent_id\":\"$_id\"" "$RL" | grep -c '"fim_real":true')
+  [ "$CNT" = 1 ] && ok "exatamente 1 fim_real:true para $_id" || bad "fim_real:true de $_id" "achei $CNT"
+done
+ESP=$(grep -F "\"descricao\":\"$D_HOST\"" "$RL" | grep -F '"evento":"retorno"' | grep -vc '"agent_id"')
+[ "$ESP" = 0 ] \
+  && ok "nenhum retorno do host sem agent_id (o aviso assíncrono não entrou)" \
+  || bad "retorno espúrio do host" "$(grep -F "$D_HOST" "$RL" | grep retorno | head -3)"
+
+# 9) host fechado → novo despacho da camada 0 volta a sair camada 1
+roda "$(p_pre_d gad-plan "Etapa 2 planejamento fase 27" toolu_plan)"
+[ "$(jq -r .camada <<<"$ULT")" = 1 ] && ok "depois do fim real do host, despacho da camada 0 sai camada 1" \
+  || bad "camada depois do fim do host" "$ULT"
+
+# 10) sessão anterior com despacho aberto (SubagentStop perdido) não contamina a sessão atual
+monta
+printf '%s\n' '{"ts":"2026-09-25T09:00:00-03:00","seq":1,"sessao":"outra000","evento":"despacho","etapa":"1 intencao","camada":1,"agente":"general-purpose","origem":"hook","descricao":"órfão da sessão anterior"}' > "$RL"
+roda "$(p_pre_d gad-intent "$D_HOST" tu-sessao)"
+[ "$(jq -r .camada <<<"$ULT")" = 1 ] && ok "despacho aberto de OUTRA sessão não empurra para camada 2" \
+  || bad "heurística olhou outra sessão" "$ULT"
+
+# 11) fail-open: SubagentStop com meta mas sem agent_id → sem a checagem de filhos, fim_real:true
+monta
+meta_real "$HOST" gad-intent tu-x 1 "$D_HOST"
+meta_real "$SPEC" gad-spec tu-y 2 "$D_SPEC" "$HOST"
+P_SEMID=$(jq -cn --arg cwd "$PROJ" --arg s "$SESS" --arg tp "$SUB/agent-$HOST.jsonl" '
+  {hook_event_name:"SubagentStop", cwd:$cwd, session_id:$s, agent_type:"gad-intent", transcript_path:$tp}')
+roda "$P_SEMID"
+[ "$RC" = 0 ] && [ "$DELTA" = 1 ] && grep -q '"fim_real":true' <<<"$ULT" \
+  && ok "fail-open: sem agent_id não há checagem de filhos (fim_real:true, como antes)" \
+  || bad "fail-open sem agent_id" "rc=$RC delta=$DELTA $ULT"
+
 echo "--------------------------------------------------"
 echo "$ok ok / $falhas falhas"
 [ "$falhas" -eq 0 ]
