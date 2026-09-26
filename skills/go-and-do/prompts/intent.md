@@ -880,3 +880,20 @@ motivo: <por consultor — ex.: "codex indisponível; agy falhou: stdout vazio">
 acao_do_usuario: <1 linha — ex.: "autentique um dos consultores (codex login / agy) e re-rode /go-and-do N">
 ```
 </return_contract>
+   **Nunca conserte uma `FALHA` reescrevendo evidência de ciclo já consumida (FJ-05INT).**
+   Arquivo de ciclo que um gate anterior já leu — `c<C>/ciclo.json` (o gate do briefing c1
+   lê o `c0/ciclo.json`), `c<C>/releitura.json`, `c<C>/correcoes.aplicado` — não se edita
+   depois de usado, nem para trocar `disposicao` (`aberto`→`descartado`) e agradar o
+   fiscal: o destino verdadeiro do sino fica, mesmo que o fiscal reprove por isso (nunca
+   escreva você mesmo o `fences/1.ok` — é o recibo do fiscal, só ele grava, e reescrevê-lo
+   seria exatamente o «não invente o veredito» do parágrafo acima). Sino do ciclo 0
+   `aberto` que já virou achado corrigido ou dívida registrada é um gap de formato
+   conhecido (o ciclo 0 só tem `corrigido|descartado|aberto`, e o fiscal reprova todo
+   `aberto` — sem estado para «foi à consultoria e virou X»): a correção do formato é
+   `FM-09INT` (`confere-sinos.sh` + `c0/ciclo.json`, fora desta lane). Enquanto ela não
+   chega, registre o conflito como `incidente` (`origem=intent-fecho`,
+   `detalhe=sino c0 aberto já resolvido em <achado/dívida> — gap FM-09INT`) e trate como
+   qualquer outra `FALHA` do fiscal: você **não devolve `done`** só por isto — devolva
+   `estado: falha` com o `motivo:` literal (não force `FENCE-OK`), a menos que o achado que
+   consumiu o sino já esteja coberto por uma ressalva do passo 7 (`ressalva_dividas`), caso
+   em que `aprovado_com_ressalva` é a saída honesta.
