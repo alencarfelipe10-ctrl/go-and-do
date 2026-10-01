@@ -1,0 +1,30 @@
+{
+  "formato": 1,
+  "nota": "Lista fechada da instalação v2 da go-and-do (D-15), medida na casa do mantenedor (RESEARCH Pattern 7) e escrita com marcadores: {{HOME}} é a casa (HOME) e {{CFG}} é o diretório de config (--config-dir); nunca o caminho real (Pitfall 10). atalhos: caminho relativo a <cfg>, alvo do symlink v2 e par = atalho do produto que o substitui (null = só-v2, removido). entradas: grupo de hook do settings.json com exatamente um hook cujo comando é `bash` + caminho (entre aspas, sem aspas ou com $HOME literal); script = script do produto de mesmo papel; destino = obrigatoria (grupo do bloco hooks do dist/hooks.json) ou opcional (grupo do bloco opcionais, que passa a contar como pedido); matcher null = grupo sem matcher; forma_medida = a forma de comando que a medição achou.",
+  "raiz": "{{HOME}}/.local/share/go-and-do/v2.11.0",
+  "atalhos": [
+    { "caminho": "skills/close-phase", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/skills/close-phase", "par": "skills/close-phase" },
+    { "caminho": "skills/end-mile", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/skills/end-mile", "par": "skills/end-mile" },
+    { "caminho": "skills/gad-pre-spec", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/skills/gad-pre-spec", "par": "skills/gad-pre-spec" },
+    { "caminho": "skills/go-and-do", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/skills/go-and-do", "par": "skills/go-and-do" },
+    { "caminho": "agents/gad-contratos.md", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/agents/gad-contratos.md", "par": "agents/gad-contratos.md" },
+    { "caminho": "agents/gad-discuss.md", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/agents/gad-discuss.md", "par": "agents/gad-discuss.md" },
+    { "caminho": "agents/gad-execute.md", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/agents/gad-execute.md", "par": "agents/gad-execute.md" },
+    { "caminho": "agents/gad-explore.md", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/agents/gad-explore.md", "par": null },
+    { "caminho": "agents/gad-gates.md", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/agents/gad-gates.md", "par": "agents/gad-gates.md" },
+    { "caminho": "agents/gad-intent.md", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/agents/gad-intent.md", "par": "agents/gad-intent.md" },
+    { "caminho": "agents/gad-plan.md", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/agents/gad-plan.md", "par": "agents/gad-plan.md" },
+    { "caminho": "agents/gad-spec.md", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/agents/gad-spec.md", "par": "agents/gad-spec.md" },
+    { "caminho": "agents/gad-verificador.md", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/agents/gad-verificador.md", "par": "agents/gad-verificador.md" },
+    { "caminho": "hooks/gad-lifecycle.sh", "alvo": "{{HOME}}/.local/share/go-and-do/v2.11.0/hooks/gad-lifecycle.sh", "par": null }
+  ],
+  "entradas": [
+    { "evento": "PreToolUse", "matcher": "Agent|Task|SendMessage", "script": "gad-lifecycle.sh", "caminho": "{{CFG}}/hooks/gad-lifecycle.sh", "destino": "obrigatoria", "forma_medida": "aspas" },
+    { "evento": "PostToolUse", "matcher": "Agent|Task|SendMessage", "script": "gad-lifecycle.sh", "caminho": "{{CFG}}/hooks/gad-lifecycle.sh", "destino": "obrigatoria", "forma_medida": "aspas" },
+    { "evento": "SubagentStop", "matcher": null, "script": "gad-lifecycle.sh", "caminho": "{{CFG}}/hooks/gad-lifecycle.sh", "destino": "obrigatoria", "forma_medida": "$HOME" },
+    { "evento": "PreToolUse", "matcher": "Bash", "script": "gad-bash-guard.sh", "caminho": "{{HOME}}/.local/share/go-and-do/v2.11.0/hooks/gad-bash-guard.sh", "destino": "obrigatoria", "forma_medida": "$HOME" },
+    { "evento": "PreToolUse", "matcher": "AskUserQuestion", "script": "gad-gate-guard.sh", "caminho": "{{HOME}}/.local/share/go-and-do/v2.11.0/hooks/gad-gate-guard.sh", "destino": "obrigatoria", "forma_medida": "$HOME" },
+    { "evento": "PreToolUse", "matcher": "Bash", "script": "gad-rtk-worktree.sh", "caminho": "{{HOME}}/.local/share/go-and-do/v2.11.0/hooks/gad-rtk-worktree.sh", "destino": "opcional", "forma_medida": "sem-aspas" },
+    { "evento": "Notification", "matcher": "permission_prompt", "script": "notify-telegram.sh", "caminho": "{{HOME}}/.local/share/go-and-do/v2.11.0/tools/notify-telegram.sh", "destino": "opcional", "forma_medida": "aspas" }
+  ]
+}

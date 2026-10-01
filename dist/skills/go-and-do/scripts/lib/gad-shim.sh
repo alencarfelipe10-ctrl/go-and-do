@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+# lib/gad-shim.sh — biblioteca sourced dos scripts da go-and-do (S.E, reformulação major).
+#
+# Substitui o shim colável da antiga Sub-rotina E do workflow.md: com a abertura e os
+# despachos mecanizados, quem consulta o SDK do GAD são os scripts — a camada 0 não cola
+# mais bloco bash nenhum. Fonte única da resolução do gad-tools + helpers comuns.
+#
+# Uso (sempre no topo do script, depois do set -euo pipefail):
+#   . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gad-shim.sh"
+#
+# O QUE DEFINE
+#   gad_run <args...>       — roda o gad-tools.cjs resolvido (exit 1 com instrução de
+#                             install se não achado em lugar nenhum — portão de entrada).
+#   gad_project_root [dir]  — raiz git do projeto alvo (ou o próprio dir se não for git).
+#   gad_phase_dir <root> <N>— diretório da fase N em .planning/phases/ (match pelo número
+#                             no início do nome, com ou sem prefixo de projeto: "20-...",
+#                             "INS-20-...", "RLR-02-..."). Vazio + exit 1 se não achar.
+#   gad_json_out <slug> <json> — contrato de saída PC-5: imprime o JSON COMPACTO em 1
+#                             linha no stdout E espelha em `last-<slug>.json` (o RTK capa
+#                             stdout em ~50 linhas; o modelo lê do espelho se a linha vier
+#                             truncada). v2.10.1 (56(f)): cópia vai para o CACHE fora do git
+#                             (`gad_cache_dir`), estado continua em `.planning/.gad/`
+#                             (`GAD_ESTADO_SLUGS`); o caminho do espelho sai como PRIMEIRA
+#                             chave do JSON (`espelho`). Requer jq.
+#   Caminhos (estado, cache, ponteiro, pasta da fase): lib/gad-caminhos.sh.
+#   gad_runlog <args...>    — chama o run-log.sh do mesmo diretório de scripts (caminho
+#                             resolvido por pwd -P — symlink-safe). Nunca falha o caller.
+#   GAD_SCRIPTS_DIR         — diretório real (resolvido) de scripts/ da skill.
+#
+# Resolução do gad-tools (mesma escada dos preâmbulos do produto, sem degrau de PATH — PS-03):
+#   1. <runtime>/gad-core/bin/gad-tools.cjs   (runtime = GAD_RUNTIME_DIR ou raiz git ou pwd)
+#   2. <runtime>/.claude/gad-core/bin/gad-tools.cjs
+#   3. $GAD_CFG_DIR/gad-core/bin/gad-tools.cjs
+# A resolução acontece na PRIMEIRA chamada de gad_run (lazy): sourcear a lib nunca falha,
+# então scripts que não consultam o SDK podem usá-la só pelos helpers.
+
+# Guard de duplo-source (scripts podem sourcear uns aos outros no futuro).
+[ -n "${_GAD_SHIM_LOADED:-}" ] && return 0 2>/dev/null
+_GAD_SHIM_LOADED=1
+
+# FM-F27INS-01PLAN: BASH_SOURCE só existe no bash. O `plan.md <inputs>` manda o
+# hospedeiro (zsh) sourcear este arquivo direto — sem o plano B abaixo,
+# BASH_SOURCE[0] vem vazio, dirname resolve para "." e o resto do shim (a
+# começar por gad-caminhos.sh) carrega do diretório de trabalho errado, sem
+# erro visível. `${(%):-%x}` é o equivalente do zsh (nome do arquivo sourceado,
+# doc `zshexpn`); último recurso é `$0`, que na maioria dos shells POSIX é o
+# script sourceado quando não há BASH_SOURCE nem ZSH_VERSION.
+if [ -n "${BASH_SOURCE:-}" ]; then
+  _gad_shim_self="${BASH_SOURCE[0]}"
+elif [ -n "${ZSH_VERSION:-}" ]; then
+  _gad_shim_self="${(%):-%x}"
+else
+  _gad_shim_self="$0"
+fi
+GAD_SCRIPTS_DIR="$(CDPATH= cd -- "$(dirname -- "$_gad_shim_self")/.." && pwd -P)"
+unset _gad_shim_self
+. "$GAD_SCRIPTS_DIR/lib/gad-caminhos.sh"
+
+GAD_CFG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+GAD_TOOLS=""
+_gad_resolve() {
+  [ -n "$GAD_TOOLS" ] && return 0
+  local name="gad-tools.cjs"
+  local root="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+  if [ -f "$root/gad-core/bin/$name" ]; then
+    GAD_TOOLS="$root/gad-core/bin/$name"; _GAD_VIA=node
+  elif [ -f "$root/.claude/gad-core/bin/$name" ]; then
+    GAD_TOOLS="$root/.claude/gad-core/bin/$name"; _GAD_VIA=node
+  elif [ -f "$GAD_CFG_DIR/gad-core/bin/$name" ]; then
+    GAD_TOOLS="$GAD_CFG_DIR/gad-core/bin/$name"; _GAD_VIA=node
+  else
+    echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2
+    return 1
+  fi
+}
+
+gad_run() {
+  _gad_resolve || return 1
+  if [ "$_GAD_VIA" = direct ]; then "$GAD_TOOLS" "$@"; else node "$GAD_TOOLS" "$@"; fi
+}
+
+gad_project_root() {
+  local d="${1:-$PWD}"
+  git -C "$d" rev-parse --show-toplevel 2>/dev/null || echo "$d"
+}
+
+# Fase N no disco sem passar pelo SDK (barato; o retrato completo continua sendo do
+# init.phase-op). N é STRING OPACA (PC-9: "1.5"/"2.5"/"999.3" jamais viram int); a
+# variante com zero à esquerda cobre nomes tipo RLR-01-fundacao sem aritmética.
+# ── número da fase num lugar só (FM-01EXE, auditoria F4 RLR de 21/09/2026) ────
+# Cada script tinha o seu jeito de casar o número da fase, e o casamento era por
+# PEDAÇO: um glob `*-4-*` ou um `grep "Phase 4"` alcançava a 04.1. Agora há uma função:
+#   fase_norm "4" · "04" · "RLR-04" · "RLR-4" → "4"        (e "04.1" → "4.1")
+#   fase_num_do_nome "RLR-04.1-fundacao"      → "4.1"      (número do NOME da pasta)
+#   fase_rx "4"                                → "0*4"      (regex do número EXATO)
+#   fase_casa "04" "4"                         → exit 0
+# O número é STRING OPACA (PC-9): "1.5" nunca vira float; só os zeros à esquerda de
+# cada segmento saem, e o prefixo de projeto (`RLR-`, `INS-`) é descartado.
+fase_norm() { # <fase> → número canônico; exit 1 (e nada no stdout) se não houver número
+  local s="${1:-}" seg out=""
+  s="${s##*/}"
+  s="$(printf '%s' "$s" | sed -E 's/^([A-Za-z]+-)+//')"          # tira RLR-, INS-, …
+  s="$(printf '%s' "$s" | grep -oE '^[0-9]+(\.[0-9]+)*' || true)" # só o número da frente
+  [ -n "$s" ] || return 1
+  local IFS=.
+  for seg in $s; do
+    seg="$(printf '%s' "$seg" | sed -E 's/^0+([0-9])/\1/')"
+    out="${out:+$out.}$seg"
+  done
+  printf '%s' "$out"
+}
+
+fase_num_do_nome() { fase_norm "${1:-}"; }
+
+# Regex (ERE/PCRE, sem âncora) que casa o número da fase em qualquer grafia com zero
+# à esquerda, e SÓ ele: quem usa fecha com `(?![0-9.])` / `[^0-9.]` à direita.
+fase_rx() { # <fase> → "4" → "0*4" · "4.1" → "0*4\.0*1"
+  local n; n="$(fase_norm "${1:-}")" || return 1
+  printf '%s' "$n" | sed -E 's/\./\\./g; s/([0-9]+)/0*\1/g'
+}
+
+# Dois números de fase designam a MESMA fase? (exit 0 = sim)
+fase_casa() { [ "$(fase_norm "${1:-}" || echo _a)" = "$(fase_norm "${2:-}" || echo _b)" ]; }
+
+# Fase N no disco sem passar pelo SDK (barato; o retrato completo continua sendo do
+# init.phase-op). O casamento é pelo número NORMALIZADO do nome da pasta — nunca por
+# pedaço de string: com as fases 4, 04.1 e 14 no mesmo projeto, `4` acha só a 4.
+gad_phase_dir() {
+  local root="$1" n="$2" d base num alvo
+  alvo="$(fase_norm "$n")" || return 1
+  for d in "$root/.planning/phases/"*; do
+    [ -d "$d" ] || continue
+    base="$(basename "$d")"
+    num="$(fase_norm "$base")" || continue
+    [ "$num" = "$alvo" ] && { echo "$d"; return 0; }
+  done
+  return 1
+}
+
+gad_json_out() {
+  local slug="$1" json="$2" root compact
+  compact="$(printf '%s' "$json" | jq -c . 2>/dev/null)" || compact=""
+  [ -n "$compact" ] || {
+    echo "ERRO: gad_json_out recebeu JSON inválido ou vazio ($slug)" >&2; return 1; }
+  root="$(gad_project_root)"
+  # GAD_DRY_RUN=1 (F4 RLR, pré-requisito da «prova extra» do A3): o espelho é a ÚNICA
+  # escrita que o `--dry-run` dos gates ainda fazia — medimos 10 arquivos sujos no
+  # rl-representation ao rodar o fiscal em modo seco contra a F4. Uma cancela não muta
+  # estado para julgar (a própria linha 383 do confere-etapa.sh já dizia isso do
+  # reconcilia-docs.sh). Com a variável ligada, só o stdout sai.
+  if [ "${GAD_DRY_RUN:-0}" != 1 ] && [ -d "$root/.planning" ]; then
+    # v2.10.1 (56(f)): ESTADO (lista explícita GAD_ESTADO_SLUGS) fica em .planning/.gad/;
+    # CÓPIA vai para o cache fora do git. O caminho entra como 1ª chave (`espelho`): se o
+    # RTK cortar a linha, o começo dela já diz onde ler. Escrita do cache é best-effort —
+    # um .git só-leitura nunca derruba o script que chamou.
+    local esp dir
+    esp="$(gad_espelho_caminho "$root" "$slug")"; dir="$(dirname -- "$esp")"
+    if gad_eh_estado "$slug"; then gad_estado_garante "$root" || esp=""
+    else mkdir -p "$dir" 2>/dev/null || esp=""; fi
+    if [ -n "$esp" ]; then
+      [ "$(printf '%s' "$compact" | jq -r 'type')" = object ] \
+        && compact="$(printf '%s' "$compact" | jq -c --arg e "$esp" '{espelho:$e} + .')"
+      printf '%s\n' "$compact" > "$esp" 2>/dev/null || true
+    fi
+  fi
+  printf '%s\n' "$compact"
+}
+
+# Aterramento por citação (GAD 1.11.0, #3194): o runner upstream carimba
+# `[reviewed-without-source-citations]` todo parecer sem UMA citação `arquivo:linha` e
+# manda rebaixá-lo no consenso. Como nossas lanes rodam pelos roda-*.sh (fora do runner),
+# reproduzimos a MESMA regex (SOURCE_CITATION_RE do review-lane-runner.cjs) aqui.
+# Uso: gad_tem_citacao_fonte <parecer.md> → exit 0 = tem ≥1 citação · 1 = nenhuma.
+gad_tem_citacao_fonte() {
+  [ -s "${1:-}" ] || return 1
+  grep -qP '(?<![/:])(?:[^\s:]*[/\\][^\s:]*|[^\s:]*\.[A-Za-z0-9]{1,16}):[0-9]+' "$1"
+}
+GAD_CARIMBO_SEM_CITACAO='[reviewed-without-source-citations]'
+
+# Telemetria nunca derruba o caller (mesma política do próprio run-log.sh).
+gad_runlog() {
+  bash "$GAD_SCRIPTS_DIR/run-log.sh" "$@" || true
+}
+
+# Auto-registro G.2-ii: todo script da skill grava o próprio resultado no run-log ao
+# rodar DENTRO de uma rodada ativa (descoberta pelo ponteiro PC-3; sem rodada = no-op).
+# Uso típico: trap 'gad_autoregistro "<nome>.sh" "$?"' EXIT
+gad_autoregistro() { # <nome> <exit> [resumo]
+  local root p nn pd rl et sess8
+  # GAD_DRY_RUN=1: nenhuma prova seca escreve run-log (mesma regra do gad_json_out acima) —
+  # sem isto, `confere-etapa.sh 1 --dry-run` (que chama `setup-intencao.sh --r6`, documentado
+  # como "SEM efeito colateral") passaria a gravar um evento `script` mesmo em modo seco.
+  [ "${GAD_DRY_RUN:-0}" = 1 ] && return 0
+  root="$(gad_project_root)" || return 0
+  # v2.10.1 (56(a)): ponteiro novo em .planning/.gad/; o legado vale por uma release.
+  p="$(gad_rodada_ativa "$root")" || return 0
+  nn=$(jq -r '.nn // empty' "$p" 2>/dev/null); pd=$(jq -r '.phase_dir // empty' "$p" 2>/dev/null)
+  rl=$(jq -r '.runlog // empty' "$p" 2>/dev/null)
+  [ -n "$nn" ] && [ -n "$pd" ] || return 0
+  # Mesma causa do FM-04ENC (gad-lifecycle.sh, bloco B2): o último checkpoint do ARQUIVO
+  # pode ser de uma sessão já encerrada — filtra pelo checkpoint DESTA sessão (mesmo corte
+  # de 8 caracteres que o run-log.sh grava em "sessao"). Sem CLAUDE_CODE_SESSION_ID (script
+  # rodado fora do CC), cai no comportamento antigo — não há sessão para filtrar por.
+  sess8="${CLAUDE_CODE_SESSION_ID:0:8}"
+  if [ -n "$sess8" ]; then
+    # `|| true`: sem checkpoint desta sessão o grep sai 1 e, sob `set -euo pipefail` do
+    # chamador, derrubava o script no trap EXIT (visto na bancada da v2.10.1: rodada aberta
+    # por outra sessão). Telemetria nunca derruba quem chamou.
+    et=$(grep "\"sessao\":\"$sess8\"" "$rl" 2>/dev/null | grep '"evento":"checkpoint"' | tail -n1 \
+         | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p' || true)
+  else
+    et=$(grep '"evento":"checkpoint"' "$rl" 2>/dev/null | tail -n1 \
+         | sed -n 's/.*"etapa":"\([^"]*\)".*/\1/p' || true)
+  fi
+  : "${et:=0 abertura}"
+  gad_runlog "$pd" "$nn" script "$et" \
+    --kv script="$1" --kv exit="${2:-0}" ${3:+--kv resumo="$3"} >/dev/null
+  return 0
+}

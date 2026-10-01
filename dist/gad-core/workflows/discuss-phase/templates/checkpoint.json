@@ -1,0 +1,104 @@
+{
+  "_doc": "Schema do NN-DISCUSS-CHECKPOINT.json (fork, tarefas 3b e 35/onda 2). Escrito SOMENTE por bin/nosso/checkpoint-write.py; lido por bin/nosso/context-render.py. Nunca copiado/editado à mão. Apagado no finalize. CONTRATO: as chaves deste molde e as que o writer grava têm de bater 1:1 — tests/test-checkpoint-write.sh afirma isso (paridade molde × writer). `areas` é a lista CANÔNICA (nome + anchors do SPEC + anchors ainda descobertos); `areas_completed`/`areas_remaining` são DERIVADOS dela a cada gravação e existem para o context-render.py e o resto do fork seguirem lendo o que sempre leram.",
+  "phase": "{padded_phase}",
+  "phase_name": "{phase_name}",
+  "date": "{YYYY-MM-DD}",
+  "timestamp": "{ISO, set by the writer}",
+  "areas": [
+    {
+      "name": "Area 1",
+      "anchors": [
+        "R1"
+      ],
+      "anchors_remaining": []
+    },
+    {
+      "name": "Area 2",
+      "anchors": [
+        "R2",
+        "R3"
+      ],
+      "anchors_remaining": [
+        "R3"
+      ]
+    }
+  ],
+  "areas_completed": [
+    "Area 1"
+  ],
+  "areas_remaining": [
+    "Area 2"
+  ],
+  "domain": "{phase boundary — free text → <domain>}",
+  "spec_loaded": true,
+  "spec_path": ".planning/phases/NN-slug/NN-SPEC.md",
+  "req_count": 3,
+  "req_ids": [
+    "R1",
+    "R2",
+    "R3"
+  ],
+  "spec_scope_in": [
+    "{In-scope bullet}"
+  ],
+  "spec_scope_out": [
+    "{Out-of-scope bullet}"
+  ],
+  "decisions": {
+    "Area 1": [
+      {
+        "id": "D-01",
+        "question": "...",
+        "options_presented": [
+          "A",
+          "B"
+        ],
+        "chosen_option": 1,
+        "answer": "{the decision — one line}",
+        "evidence": "path:line | none",
+        "reversibility": "reversible|costly|one-way|null",
+        "reversibility_rationale": "{required when costly/one-way}",
+        "anchor": "R2 | SC1 | none",
+        "anchors": [
+          "R2 (first = anchor; N per decision, e.g. R4,R5 — P09)"
+        ],
+        "origin": "owner|pre-spec|auto|prior-phase|todo",
+        "source_id": "PS-01 — só em decisão vinda do bloco gad:decisoes do PRE-SPEC (map-pre-spec); ausente nas demais",
+        "prose": "{rationale, discarded alternatives, cycle corrections — free form}"
+      }
+    ]
+  },
+  "discretion": [
+    "{'you decide' items and anchor:none areas with the reason}"
+  ],
+  "folded_todos": [
+    "..."
+  ],
+  "reviewed_todos": [
+    "..."
+  ],
+  "deferred_ideas": [
+    "..."
+  ],
+  "canonical_refs": [
+    {
+      "path": "docs/adr-1.md",
+      "topic": "ADRs",
+      "note": "what it decides"
+    }
+  ],
+  "specifics": [
+    "..."
+  ],
+  "code_context": {
+    "reusable": [
+      "..."
+    ],
+    "patterns": [
+      "..."
+    ],
+    "integration": [
+      "..."
+    ]
+  }
+}

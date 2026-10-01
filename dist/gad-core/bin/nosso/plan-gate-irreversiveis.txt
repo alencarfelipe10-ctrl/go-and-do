@@ -1,0 +1,14 @@
+# plan-gate-irreversiveis.txt — uma regex (Python, case-insensitive) por linha.
+# Tarefa cuja <action> casa com alguma destas e não tem <reversibility> reprova com
+# TAREFA-SEM-RATING: o planejador classifica (reversible|costly|one-way); o gate não
+# cria checkpoint sozinho. Falso positivo custa uma classificação, não um bloqueio humano.
+# Linhas em branco e `#` são ignoradas. Acrescente no fim; pt-BR e en.
+drop\s+table
+rm\s+-rf
+git\s+push\s+(--force|-f)\b
+delete\s.*\b(prod|produção|producao)\b
+enviar\s+(e-?mail|mensagem)\s+(a|para)\s+(cliente|aluno|pais|responsáve)
+deploy\s.*\bprod
+truncate\s+table
+git\s+(reset\s+--hard|branch\s+-D|filter-branch)
+apagar\s.*\b(prod|produção|producao|banco)\b

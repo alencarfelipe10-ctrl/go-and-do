@@ -1,0 +1,218 @@
+{
+  "formato": 1,
+  "hooks": {
+    "FileChanged": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-node-runner.sh\" \"\" \"{{GAD_RAIZ}}/hooks/gad-config-reload.js\"",
+            "timeout": 8,
+            "type": "command"
+          }
+        ],
+        "matcher": "config.json"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-node-runner.sh\" \"\" \"{{GAD_RAIZ}}/hooks/gad-read-injection-scanner.js\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Read"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-graphify-update.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-phase-boundary.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-lifecycle.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent|Task|SendMessage"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-node-runner.sh\" \"\" \"{{GAD_RAIZ}}/hooks/gad-prompt-guard.js\"",
+            "timeout": 120,
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-node-runner.sh\" \"\" \"{{GAD_RAIZ}}/hooks/gad-read-guard.js\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-node-runner.sh\" \"\" \"{{GAD_RAIZ}}/hooks/gad-workflow-guard.js\"",
+            "timeout": 120,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash|Edit|Write|MultiEdit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-node-runner.sh\" \"\" \"{{GAD_RAIZ}}/hooks/gad-worktree-path-guard.js\"",
+            "timeout": 120,
+            "type": "command"
+          }
+        ],
+        "matcher": "Write|Edit|MultiEdit"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-node-runner.sh\" \"\" \"{{GAD_RAIZ}}/hooks/gad-agent-isolation-guard.js\"",
+            "timeout": 120,
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent|Task"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-node-runner.sh\" \"\" \"{{GAD_RAIZ}}/hooks/gad-write-guard.js\"",
+            "timeout": 120,
+            "type": "command"
+          }
+        ],
+        "matcher": "Write"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-node-runner.sh\" \"\" \"{{GAD_RAIZ}}/hooks/gad-secret-read-guard.js\"",
+            "timeout": 120,
+            "type": "command"
+          }
+        ],
+        "matcher": "Read|Grep|Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-validate-commit.sh\"",
+            "timeout": 120,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-lifecycle.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Agent|Task|SendMessage"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-bash-guard.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      },
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-gate-guard.sh\"",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "AskUserQuestion"
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-session-state.sh\"",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-lifecycle.sh\"",
+            "timeout": 5,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  },
+  "opcionais": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "bash \"{{GAD_RAIZ}}/hooks/notify-telegram.sh\"",
+            "timeout": 30,
+            "type": "command"
+          }
+        ],
+        "matcher": "permission_prompt"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash \"{{GAD_RAIZ}}/hooks/gad-rtk-worktree.sh\"",
+            "type": "command"
+          }
+        ],
+        "matcher": "Bash"
+      }
+    ]
+  }
+}
