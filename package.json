@@ -1,6 +1,6 @@
 {
   "name": "go-and-do",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "A go-and-do como produto próprio: roda uma fase GSD de ponta a ponta com uma cópia congelada e renomeada do GSD Core (namespace gad), sem ser afetada por updates do Core instalado.",
   "license": "MIT",
   "bin": {
@@ -13,6 +13,7 @@
     "bin/",
     "instalador/",
     "dist/",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ]
 }

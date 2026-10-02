@@ -1,8 +1,9 @@
 # Bounded Stall-Detection Helpers (#2650)
 
-Every planner/plan-checker spawn in `plan-phase.md` dispatches with
-`run_in_background=true`, records `TS=$(date +%s)`, and then repeatedly
-calls `gad_stall_watch` until it returns something other than
+`planner.stall_detection_enabled` controls the wait policy for the five scoped
+planner/plan-checker spawns. It defaults to `true`. In that default-on mode each
+spawn dispatches with `run_in_background=true`, records `TS=$(date +%s)`, and
+then repeatedly calls `gad_stall_watch` until it returns something other than
 `waiting`/`active`. This mirrors the already-shipped `executor.stall_*`
 pattern (`execute-phase.md`, bug #3212, commit `e7942c21b`) but — unlike
 that prose-only surveillance, which cannot run during a *blocking* `Agent()`
@@ -10,6 +11,15 @@ call — each `gad_stall_watch` call is a real, bounded bash subprocess wait
 issued as its own tool call, so it returns control to the orchestrator on
 its own schedule regardless of whether the backgrounded agent's own
 completion notification ever arrives.
+
+When the key is explicitly the JSON boolean `false`, each scoped call instead
+omits `run_in_background`, waits through the runtime-native ordinary Agent()
+completion mechanism, and consumes that real returned result. It never calls
+`gad_stall_watch`, so there are no periodic shell sleeps. This is still a wait,
+not fire-and-forget. It deliberately gives up #2650's bounded automatic
+recovery: if the runtime loses the completion handoff, the user may need to
+interrupt and use the existing filesystem fallback. The completion markers and
+empty/truncated/unrecognized-return fallback remain unchanged.
 
 **Binding `{outputFile}` (load-bearing, not optional):** every `gad_stall_watch`
 call below takes `{outputFile}` as its second argument — a literal token the
@@ -71,10 +81,18 @@ config-get calls.
 This block is independent of, and never gated behind, the `query
 teams-status` / `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` guard used for the
 researcher spawn — the stall path applies on every runtime, teams-active or
-not (AC2).
+not (AC2). The toggle is resolved through the canonical `config-get` seam, so
+root/project/workstream selection stays with the Config Loader rather than a
+workflow-local JSON parser. Only the exact boolean result `false` disables;
+missing, malformed, string, numeric, or otherwise unrecognized values fail safe
+to `true`.
 
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; _gad_id_ok() { case "$("$1" runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') return 0;; *) return 1;; esac; }; _gad_homes() { _gad_at "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; elif _gad_homes; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; _gad_id_ok gad_run && GAD_IDENTITY_STATUS=ok; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+PLANNER_STALL_DETECTION_ENABLED=$(gad_run query config-get planner.stall_detection_enabled --raw 2>/dev/null || echo "true")
+# Defense in depth for hand-edited config and old runtimes: only the exact
+# canonical false token may disable the default-on recovery policy.
+[ "$PLANNER_STALL_DETECTION_ENABLED" = "false" ] || PLANNER_STALL_DETECTION_ENABLED=true
 PLANNER_STALL_INTERVAL_MINUTES=$(gad_run query config-get planner.stall_detect_interval_minutes --raw 2>/dev/null || echo "5")
 PLANNER_STALL_THRESHOLD_MINUTES=$(gad_run query config-get planner.stall_threshold_minutes --raw 2>/dev/null || echo "10")
 # Both values are config-controlled (.planning/config.json, editable by any repo

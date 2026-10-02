@@ -105,8 +105,9 @@ Set `is_re_verification = false`, proceed with Step 1.
 
 ## Step 1: Load Context (Initial Mode Only)
 
+@~/.claude/gad-core/references/gad-run-resolver.md
+
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 ls "$PHASE_DIR"/*-PLAN.md 2>/dev/null
 ls "$PHASE_DIR"/*-SUMMARY.md 2>/dev/null
 gad_run query roadmap.get-phase "$PHASE_NUM"
@@ -293,10 +294,10 @@ grep -r "$artifact_name" "${search_path:-src/}" --include="*.ts" --include="*.ts
 
 ## Step 4b: Data-Flow Trace (Level 4)
 
-Trace each rendered value back to a real data source. Full procedure and shell
-recipes: @gad-core/references/verifier-wiring-patterns.md
+Trace each rendered value back to a real data source. Procedure and
+recipes: @~/.claude/gad-core/references/verifier-wiring-patterns.md
 
-Flag any value whose chain terminates in a static return, a hardcoded literal, or
+Flag any value whose chain ends in a static return, a hardcoded literal, or
 a mock rather than a real query.
 
 **Data-flow status vocabulary:**
@@ -339,8 +340,8 @@ For each link:
 
 ### Wiring patterns
 
-Verify each link below; full per-pattern procedures and shell recipes:
-@gad-core/references/verifier-wiring-patterns.md
+Verify each link below; per-pattern procedures and recipes:
+@~/.claude/gad-core/references/verifier-wiring-patterns.md
 
 - **Component → API** — the component actually calls the endpoint it claims.
 - **API → Database** — the endpoint issues a real query, not a static return.
@@ -415,7 +416,7 @@ grep -n -B 2 -A 2 "console\.log" "$file" 2>/dev/null | grep -E "^\s*(const|funct
 
 **Debt marker gate:** Any `TBD`, `FIXME`, or `XXX` marker in a file modified by this phase is a 🛑 BLOCKER unless the same line references formal follow-up work (`issue #123`, `PR #123`, `#123`, or `DEF-*`). Unreferenced markers mean completion is not auditable; set `status: gaps_found` and list each marker under `gaps`.
 
-**Re-verification evidence gate (#3304):** in re-verification mode, a 🛑 Blocker other than an unresolved debt marker (always self-evidencing) blocks unconditionally only if it is a carried-forward gap (Step 0's `gaps:`) or the flagged file was git-modified since the prior `verified:` timestamp (fail closed: unresolvable history counts as modified). Otherwise it predates the gap-closure round unflagged and needs deterministic evidence — a named test run red, or another concrete reproducible artifact — to stay blocking. Full algorithm: @gad-core/references/verifier-evidence-gate.md. Unevidenced → 📋 Advisory: record in `advisory:` frontmatter, exclude from Step 9 Rule 1, never revert a completed must-have.
+**Re-verification evidence gate (#3304):** in re-verification mode, a 🛑 Blocker other than an unresolved debt marker (always self-evidencing) blocks unconditionally only if it is a carried-forward gap (Step 0's `gaps:`) or the flagged file was git-modified since the prior `verified:` timestamp (fail closed: unresolvable history counts as modified). Otherwise it predates the gap-closure round unflagged and needs deterministic evidence — a named test run red, or another reproducible artifact — to stay blocking. Algorithm: @~/.claude/gad-core/references/verifier-evidence-gate.md. Unevidenced → 📋 Advisory: record in `advisory:` frontmatter, exclude from Step 9 Rule 1, never revert a completed must-have.
 
 Categorize: 🛑 Blocker (prevents goal or unresolved debt marker) | ⚠️ Warning (incomplete) | ℹ️ Info (notable) | 📋 Advisory (re-verification only — new-scope, unevidenced; see above)
 
@@ -672,7 +673,7 @@ If `valid != true`, refuse to verify. Surface the discrepancy and ask the user t
 
 **ALWAYS use the Write tool to create files** — never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
 
-**#4155:** `covered_files`: every phase PLAN/SUMMARY (+superseded, nested `plans/`), mapped requirement, changed impl file — ROOT-relative. `gad_run query verification.fingerprint {phaseDir} {file}...`, copy output — never hand-write `covered_digest`.
+**#4155:** `covered_files`: every phase PLAN/SUMMARY (+superseded, nested `plans/`), changed impl file — ROOT-relative; planning-root docs are inert (#4623). `gad_run query verification.fingerprint {phaseDir} {file}...`, copy output — never hand-write `covered_digest`.
 
 Create `.planning/phases/{phase_dir}/{phase_num}-VERIFICATION.md`:
 
@@ -683,7 +684,7 @@ verified: YYYY-MM-DDTHH:MM:SSZ
 status: passed | gaps_found | human_needed
 score: N/M must-haves verified
 covered_files: [...]
-covered_digest: "v1:sha256:..."
+covered_digest: "v2:sha256:..."
 behavior_unverified: 0 # Count of ⚠️ PRESENT_BEHAVIOR_UNVERIFIED truths (present + wired, behavior not exercised); each is detailed in behavior_unverified_items below (and in human_verification when status is human_needed)
 overrides_applied: 0 # Count of PASSED (override) items included in score
 overrides: # Only if overrides exist — carried forward or newly added

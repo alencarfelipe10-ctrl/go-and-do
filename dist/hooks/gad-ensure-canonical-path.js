@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gad-hook-version: 1.14.0
+// gad-hook-version: 1.15.0
 //
 // gad-ensure-canonical-path — SessionStart hook (#997)
 //

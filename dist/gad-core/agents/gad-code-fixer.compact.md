@@ -120,7 +120,7 @@ After applying each fix:
 <step name="setup_worktree">
 **Isolation: create a dedicated git worktree BEFORE touching any files.** This agent runs as a background process that commits — operating on the main working tree would race the foreground session (shared index/HEAD/files). Every instance runs in its own isolated worktree.
 
-**Honor `workflow.use_worktrees` (the documented opt-out; the same flag the sibling writer workflows `/gad:execute-phase`, `/gad:execute-plan`, `/gad:quick`, `/gad:diagnose-issues` all honor — this is the only writer that hand-rolls its own worktree).** Read it directly via `node` from `.planning/config.json` (NOT the gad-tools CLI — this step runs before the launcher preamble is sourced). When `false`: edit/commit in the main checkout directly — `wt="."`, `reviewfix_branch="$branch"`, no temp branch, no sentinel, no `git worktree add`, skip the whole cleanup tail. The hand-rolled worktree has no `node_modules` and cannot run the project's gates safely, so the opt-out is also the safe path.
+**Honor `workflow.use_worktrees` (the documented opt-out; the same flag the sibling writer workflows `/gad:execute-phase` and `/gad:quick`, plus the `execute-plan` and `diagnose-issues` workflows, all honor — this is the only writer that hand-rolls its own worktree).** Read it directly via `node` from `.planning/config.json` (NOT the gad-tools CLI — this step runs before the launcher preamble is sourced). When `false`: edit/commit in the main checkout directly — `wt="."`, `reviewfix_branch="$branch"`, no temp branch, no sentinel, no `git worktree add`, skip the whole cleanup tail. The hand-rolled worktree has no `node_modules` and cannot run the project's gates safely, so the opt-out is also the safe path.
 
 ```bash
 USE_WORKTREES=$(node -e '
@@ -136,10 +136,11 @@ branch=$(git branch --show-current)
 test -n "$branch" || { echo "Detached HEAD is not supported for review-fix (#2686)"; exit 1; }
 
 # padded_phase is interpolated into a worktree PATH and a git BRANCH NAME —
-# validate at this sink too (defense in depth): digits + one or more dotted
-# numeric segments only (e.g. '02' or '36.14'); reject '../', spaces, shell metachars.
-if ! [[ "$padded_phase" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
-  echo "Invalid padded_phase for review-fix: '$padded_phase' (expected e.g. '02', '36.14', or '23.1.2')"; exit 1
+# validate at this sink too (defense in depth): the canonical phase-number grammar
+# (src/phase-id.cts) — digits, an optional single uppercase letter, then dotted
+# numeric segments (e.g. '02', '36.14', '12A'); reject '../', spaces, shell metachars.
+if ! [[ "$padded_phase" =~ ^[0-9]+[A-Z]?(\.[0-9]+)*$ ]]; then
+  echo "Invalid padded_phase for review-fix: '$padded_phase' (expected e.g. '02', '36.14', '23.1.2', or '12A')"; exit 1
 fi
 
 # Recovery-sentinel: ${phase_dir}/.review-fix-recovery-pending.json existing means
@@ -286,7 +287,7 @@ For each finding in sorted order:
 **f. Commit atomically.** If verification passed, use `gad_run query commit` (message first, then every staged file path):
 
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; _gad_id_ok() { case "$("$1" runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') return 0;; *) return 1;; esac; }; _gad_homes() { _gad_at "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; elif _gad_homes; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; _gad_id_ok gad_run && GAD_IDENTITY_STATUS=ok; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 gad_run query commit \
   "fix({padded_phase}): {finding_id} {short_description}" \
   --files \

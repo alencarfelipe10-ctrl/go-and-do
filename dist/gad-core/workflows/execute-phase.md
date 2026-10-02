@@ -82,15 +82,18 @@ If `--wave` is absent, preserve the current behavior of executing all incomplete
 <step name="initialize" priority="first">
 Load all context in one call:
 
+@~/.claude/gad-core/references/gad-run-resolver.md
+
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 WAVE_PARAM=""; if [[ "$ARGUMENTS" =~ (^|[[:space:]])--wave[[:space:]]+([^[:space:]-][^[:space:]]*) ]]; then WAVE_PARAM="--wave ${BASH_REMATCH[2]}"; fi
 INIT=$(gad_run query init.execute-phase "${PHASE_ARG}" $WAVE_PARAM)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 AGENT_SKILLS=$(gad_run query agent-skills gad-executor)
 ```
 
-Parse JSON for: `executor_model`, `verifier_model`, `commit_docs`, `parallelization`, `branching_strategy`, `branch_name`, `phase_found`, `phase_dir`, `phase_number`, `phase_name`, `phase_slug`, `plans`, `incomplete_plans`, `plan_count`, `incomplete_count`, `state_exists`, `roadmap_exists`, `phase_req_ids`, `response_language`, `requirements_path`, `section_manifest`.
+Parse JSON for: `executor_model`, `verifier_model`, `commit_docs`, `parallelization`, `branching_strategy`, `branch_name`, `phase_found`, `phase_dir`, `phase_number`, `padded_phase`, `phase_name`, `phase_slug`, `plans`, `incomplete_plans`, `plan_count`, `incomplete_count`, `state_exists`, `roadmap_exists`, `phase_req_ids`, `response_language`, `requirements_path`, `section_manifest`, `threat_id_duplicate_count`.
+
+**Threat-ID gate (#4683):** if `threat_id_duplicate_count` is non-zero, read and execute `execute-phase/steps/threat-id-gate.md` BEFORE any dispatch — it is a hard stop (the full duplicate list is in `threat_id_duplicates`).
 
 `section_manifest` (#2932) gates the three `steps/*.md` reads below: read a step file only when its `id` is in `section_manifest.included` (equivalently, its path is in `section_manifest.read`); skip it — without reading — when its `id` is in `section_manifest.excluded`. When `section_manifest` is `null` (degraded: manifest artifact missing/unreadable), read all three unconditionally — the safe superset.
 
@@ -131,7 +134,7 @@ fi
 
 When `USE_WORKTREES` is `false`, `ISOLATION` is forced to `none`: executors run sequentially on the main working tree. The per-plan decision below has no effect when worktrees are project-disabled.
 
-`USE_WORKTREES` and `ISOLATION` are also reset for the run when `worktree base-check` detects the orchestrator HEAD has diverged from the worktree fork base (#683 — e.g. an unmerged milestone branch). This runs for **any** isolated run, not only Claude: fork-base divergence is a property of the repository, so it degrades a GAD-created worktree exactly as a harness-created one. The auto-degrade prints a one-line warning to stderr and falls through to the sequential path so executors do not hit the exit-42 worktree-branch-check halt. Setting `worktree.baseRef:"head"` restores parallel execution only where GAD itself creates the worktrees (orchestrator-managed runtimes — Codex, OpenCode, Kimi, Kimi Code); harness-isolated runtimes (Claude Code, Cursor) do not read the setting (#48, verified 5/5; upstream claude-code#44965), so there the check compares against the real fork base and parallel execution returns once HEAD is merged/pushed so `origin/HEAD` matches it (#3659). The `worktree-branch-check` exit-42 guard inside each executor remains in place as a backstop.
+`USE_WORKTREES` and `ISOLATION` are also reset for the run when `worktree base-check` detects the orchestrator HEAD has diverged from the worktree fork base (#683) — read and follow `execute-phase/steps/worktree-base-check.md` for the degrade semantics and the `worktree.baseRef:"head"` escape hatch (#3659).
 
 Read context window size for adaptive prompt enrichment:
 
@@ -192,8 +195,11 @@ PHASE_NUMBER="{phase_number}"
 # #4619: {phase_number} may be decimal (01.1) or N-segment (23.1.2) — $((10#...))
 # is a hard shell syntax error on a non-integer, so zero-strip only the LEADING
 # integer segment and keep the rest as an escaped-dot string for the ERE below.
-PHASE_INT=${PHASE_NUMBER%%.*}; PHASE_FRAC=${PHASE_NUMBER#"$PHASE_INT"}
-PHASE_N="$((10#$PHASE_INT))${PHASE_FRAC//./\\.}"
+# #4748: it may also carry a letter suffix (03A, 23A.1.2 — the canonical grammar
+# is digits, optional [A-Z], dotted segments), so split at the first NON-DIGIT,
+# not the first dot: the letter rides along in the rest, unescaped.
+PHASE_INT=${PHASE_NUMBER%%[!0-9]*}; PHASE_REST=${PHASE_NUMBER#"$PHASE_INT"}
+PHASE_N="$((10#$PHASE_INT))${PHASE_REST//./\\.}"
 PLAN_N=$((10#{plan_padded}))
 PLAN_SCOPE_RE="^[a-z]+\((0*${PHASE_N})-(0*${PLAN_N})\):"
 MILESTONE_BASE=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
@@ -215,13 +221,21 @@ if [ "$TDD_MODE" = "true" ]; then
     # #4003: same anchored scope and milestone bound as safe_resume_gate — a padded
     # literal grep hard-halts on a correct unpadded RED commit.
     # #4619: PHASE_NUMBER may be decimal/N-segment; zero-strip only the leading
-    # integer segment, escape the rest for the ERE below.
-    PHASE_INT=${PHASE_NUMBER%%.*}; PHASE_FRAC=${PHASE_NUMBER#"$PHASE_INT"}
-    PHASE_N="$((10#$PHASE_INT))${PHASE_FRAC//./\\.}"
+    # integer segment, escape the rest for the ERE below. #4748: it may carry a
+    # letter suffix (03A), so the split is at the first non-digit, not the dot.
+    PHASE_INT=${PHASE_NUMBER%%[!0-9]*}; PHASE_REST=${PHASE_NUMBER#"$PHASE_INT"}
+    PHASE_N="$((10#$PHASE_INT))${PHASE_REST//./\\.}"
     PLAN_N=$((10#${PLAN_ID}))
     PLAN_SCOPE_RE="^[a-z]+\((0*${PHASE_N})-(0*${PLAN_N})\):"  # TDD gate's own scope check
     TDD_MILESTONE_BASE=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-    RED_COMMIT=$(git log --oneline -E ${TDD_MILESTONE_BASE:+"$TDD_MILESTONE_BASE..HEAD"} --grep="${PLAN_SCOPE_RE}" -- "**/*.test.*" "**/*.spec.*" "tests/" | head -1)
+    # #4379: this pathspec IS the gate's definition of "a test file". It was
+    # JS/TS-only, so Go tripped on every task; and `**/` never matches a
+    # root-level path, so a root `foo.test.js` was invisible too. Bare globs
+    # match at every depth. NOT widened to ordinary source — that would make
+    # the gate pass on any in-scope commit. Trade-offs and the Rust gap:
+    # references/tdd.md § Create first test file.
+
+    RED_COMMIT=$(git log --oneline -E ${TDD_MILESTONE_BASE:+"$TDD_MILESTONE_BASE..HEAD"} --grep="${PLAN_SCOPE_RE}" -- "*.test.*" "*.spec.*" "tests/" "__tests__/" "*_test.go" "test_*.py" "*_test.py" "*_test.exs" "*_spec.rb" "*_test.rb" | head -1)
     if [ -z "$RED_COMMIT" ]; then
       gad_run query state.update last_gate_trip "${PLAN_ID}/${TASK_ID}" || true
       echo "TDD GATE TRIPPED: missing RED commit for ${PLAN_ID}/${TASK_ID}"
@@ -356,9 +370,9 @@ Load plan inventory with wave grouping in one call:
 PLAN_INDEX=$(gad_run query phase-plan-index "${PHASE_NUMBER}")
 ```
 
-Parse JSON for: `phase`, `plans[]` (each with `id`, `wave`, `autonomous`, `objective`, `files_modified`, `task_count`, `has_summary`, `halted`, `blocked_by`), `waves` (map of wave number → plan IDs), `incomplete`, `runnable`, `has_checkpoints`.
+Parse JSON for: `phase`, `plans[]`, `waves`, `incomplete`, `runnable`, `ready_plans`, `has_checkpoints` — full per-plan fields and the #4628 readiness rules: read and follow `execute-phase/steps/ready-wave-gate.md`.
 
-**Filtering:** Skip plans where `has_summary: true`. Additionally skip any plan whose `blocked_by` array is non-empty (#2830) — it depends, directly or transitively, on a plan that halted at a designed stop rather than completing — and report it by name: "Skipping {plan.id}: blocked by halted {blocked_by.join(', ')}". Never silently drop a blocked plan from the report; it must appear by name with its reason, not merely vanish from the executable list. This rule is additive to the `has_summary` skip, not a replacement for it. If `--gaps-only`: also skip non-gap_closure plans. If `WAVE_FILTER` is set: also skip plans whose `wave` does not equal `WAVE_FILTER`.
+**Filtering:** Skip plans where `has_summary: true`. Additionally skip any plan whose `blocked_by` array is non-empty (#2830) — it depends, directly or transitively, on a plan that halted at a designed stop rather than completing — and report it by name: "Skipping {plan.id}: blocked by halted {blocked_by.join(', ')}". Never silently drop a blocked plan from the report; it must appear by name with its reason, not merely vanish from the executable list. This rule is additive to the `has_summary` skip, not a replacement for it. Additionally skip any incomplete plan with `ready: false` (#4628 — see `execute-phase/steps/ready-wave-gate.md`; never dispatch a not-ready plan). If `--gaps-only`: also skip non-gap_closure plans. If `WAVE_FILTER` is set: also skip plans whose `wave` does not equal `WAVE_FILTER`.
 
 **Wave safety check:** If `WAVE_FILTER` is set and there are still incomplete plans in any lower wave that match the current execution mode, STOP and tell the user to finish earlier waves first. Do not let Wave 2+ execute while prerequisite earlier-wave plans remain incomplete.
 
@@ -390,8 +404,11 @@ later conditions once one matches:
    because nothing was left to filter. Report:
    `"Phase stuck: {blocked plan ids} blocked by halted {their blocked_by ids} — resolve the halt, do not resume verification."`
    → exit. Do not fall through to condition 3; this is not a completion state.
+2b. **No filter is active, no blocked-plan skip occurred, and at least one filtered plan was skipped because `ready: false` (#4628)** — the phase is WAITING on incomplete predecessors, not finished: report it by name and exit before any completion state (`execute-phase/steps/ready-wave-gate.md`).
 3. **No filter is active, and every filtered plan was filtered by `has_summary` alone** (no
    blocked-plan skip occurred):
+   - **`VERIFY_STATUS == stale` (#4682)**: covered source changed after the verifier ran —
+     re-verify per `execute-phase/steps/stale-reverification.md`.
    - **`VERIFY_STATUS == missing`**: the plans are all summarized but the run never reached the
      tail gates. Report:
      `"All {plan_count} plans are summarized but no VERIFICATION.md exists — resuming at the phase gates (#2868)."`
@@ -443,6 +460,8 @@ executor skips them.
 2. If `CROSS_AI_FORCE` is true (`--cross-ai` flag): mark ALL incomplete plans for cross-AI execution.
 3. Otherwise: check each plan's frontmatter for `cross_ai: true` AND verify config
    `workflow.cross_ai_execution` is `true`. Plans matching both conditions are marked for cross-AI.
+4. **Only `ready` plans are eligible (#4628) — a not-ready plan is never delegated over incomplete predecessors.**
+   Rules 2 and 3 mark only plans with `ready: true` (`execute-phase/steps/ready-wave-gate.md`).
 
 ```bash
 CROSS_AI_ENABLED=$(gad_run query config-get workflow.cross_ai_execution --raw 2>/dev/null || echo "false")
@@ -1173,7 +1192,7 @@ increases monotonically across waves. `{status}` is `complete` (success),
    RETRY_AFTER=$(echo "$CLASS_JSON" | jq -r '.retryAfterSeconds // empty')
    if [ -n "$RETRY_AFTER" ]; then RETRY_HINT="  Provider hinted retry-after: ${RETRY_AFTER}s"; else RETRY_HINT=""; fi
    ```
-   One classifier branch handles sentinels across Claude/Copilot/Codex/Gemini. Reference: `docs/research/provider-rate-limit-signals.md`.
+   One classifier branch handles sentinels across Claude/Copilot/Codex/Antigravity. Reference: `docs/research/provider-rate-limit-signals.md`.
    **Abnormal ends reconcile first (#4217):** an abnormal session end (`turn_aborted`-class) routes through the step-4 artifact reconciliation BEFORE classifying the failure — artifacts decide.
    **Step 7.1 — `class == "quota-exceeded"`:** follow the quota-recovery fragment below.
    **Step 7.2 — `class == "classify-handoff-bug"`:**
@@ -1198,7 +1217,7 @@ AUTO_MODE=$(gad_run query check auto-mode --pick active 2>/dev/null)
 
 When executor returns a checkpoint AND `AUTO_MODE` is `true`:
 - **human-verify** → Auto-spawn continuation agent with `{user_response}` = `"approved"`. Log `⚡ Auto-approved checkpoint`. **Except `blocking-human`.**
-- **decision** → Auto-spawn continuation agent with `{user_response}` = first option from checkpoint details. Log `⚡ Auto-selected: [option]`. **Except `blocking-human`.**
+- **decision** → `auto_select` present: auto-spawn with `{user_response}` = that option, log `⚡ Auto-selected: [option]`. Absent: present to user (#4095). **Except `blocking-human`.**
 - **human-action** → Present to user (existing behavior below). Auth gates cannot be automated.
 
 <!-- gad:protected -->
@@ -1298,18 +1317,11 @@ If no active code-review step hook exists: display "Code review skipped (code-re
 Skill(skill="gad-${ref.skill}", args="${PHASE_NUMBER}")
 ```
 
-**Check results using deterministic path (not glob):**
-```bash
-PADDED=$(printf "%02d" "${PHASE_NUMBER}")
-REVIEW_FILE="${PHASE_DIR}/${PADDED}-REVIEW.md"
-REVIEW_STATUS=$(sed -n '/^---$/,/^---$/p' "$REVIEW_FILE" | grep "^status:" | head -1 | cut -d: -f2 | tr -d ' ')
-```
-
-If REVIEW_STATUS is not "clean" and not "skipped" and not empty, display:
-```
-Code review found issues. Consider running:
-/gad-code-review ${PHASE_NUMBER} --fix
-```
+**Report the review, and record what happened to each finding.** Read and execute `gad-core/workflows/execute-phase/steps/code-review-disposition.md`.
+It parses REVIEW.md's frontmatter, states the per-severity counts, and writes
+`<NN>-REVIEW-DISPOSITION.md` — one row per finding, defaulting to `open` — so a triaged finding is
+distinguishable downstream from a forgotten one. It consumes `PHASE_DIR` and `PHASE_NUMBER`, and is
+advisory throughout: it never blocks.
 
 **Error handling:** If the Skill invocation fails or throws, catch the error, display "Code review encountered an error (non-blocking): {error}" and proceed to gate dispatch. Review failures must never block execution.
 

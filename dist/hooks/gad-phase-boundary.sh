@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gad-hook-version: 1.14.0
+# gad-hook-version: 1.15.0
 # gad-phase-boundary.sh — PostToolUse hook: detect .planning/ file writes
 # Outputs a reminder when planning files are modified outside normal workflow.
 # Uses Node.js for JSON parsing (always available in GAD projects, no jq dependency).

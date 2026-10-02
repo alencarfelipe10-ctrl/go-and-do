@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gad-hook-version: 1.14.0
+// gad-hook-version: 1.15.0
 // GAD Write Guard — PreToolUse hook
 // Blocks a whole-file Write that catastrophically shrinks a curated .planning/
 // artifact (ROADMAP.md, milestone roadmaps, STATE.md).

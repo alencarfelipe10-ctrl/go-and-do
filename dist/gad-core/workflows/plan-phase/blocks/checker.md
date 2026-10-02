@@ -166,7 +166,12 @@ Agent(
 )
 ```
 
-**ORCHESTRATOR RULE — ALL RUNTIMES:** `TS=$(date +%s)`; repeat `CHECKER_STALL_RESULT=$(gad_stall_watch "$TS" "{outputFile}" "${PHASE_DIR}"'/*-PLAN.md' "## VERIFICATION PASSED" "## ISSUES FOUND")` while waiting/active.
+**Dispatch/wait gate — `PLANNER_STALL_DETECTION_ENABLED`:**
+- **`true` (default):** use `run_in_background=true` in the Agent() call above, then use `gad_stall_watch` below.
+
+**ORCHESTRATOR RULE — ALL RUNTIMES (when `PLANNER_STALL_DETECTION_ENABLED` is `true`):** `TS=$(date +%s)`; repeat `CHECKER_STALL_RESULT=$(gad_stall_watch "$TS" "{outputFile}" "${PHASE_DIR}"'/*-PLAN.md' "## VERIFICATION PASSED" "## ISSUES FOUND")` while waiting/active.
+
+- **`false`:** issue the same Agent() call but omit `run_in_background`; await its ordinary runtime-native completion and pass the real returned result to step 11. Skip `gad_stall_watch` entirely. Treat a recognized returned marker exactly like `marker_received`; empty, truncated, or unrecognized returns still use step 11a.
 
 ### Step 11 — thinking partner for architectural tradeoffs (conditional)
 
@@ -260,7 +265,12 @@ Agent(
 )
 ```
 
-**ORCHESTRATOR RULE — ALL RUNTIMES:** (7.99; no marker, mtimes only) `TS=$(date +%s)`; repeat `PLANNER_STALL_RESULT=$(gad_stall_watch "$TS" "{outputFile}" "${PHASE_DIR}"'/*-PLAN.md' "## REVISION_CONFLICT")` while waiting/active — `stalled` -> 1) Accept as revised, to step 13, 2) Retry, 3) Stop. (Marker added: a `## REVISION_CONFLICT` return edits no PLAN.md, so the mtime-only path would report a healthy conflict return as stalled.)
+**Dispatch/wait gate — `PLANNER_STALL_DETECTION_ENABLED`:**
+- **`true` (default):** use `run_in_background=true` in the Agent() call above, then use `gad_stall_watch` below.
+
+**ORCHESTRATOR RULE — ALL RUNTIMES (when `PLANNER_STALL_DETECTION_ENABLED` is `true`):** (7.99; no marker, mtimes only) `TS=$(date +%s)`; repeat `PLANNER_STALL_RESULT=$(gad_stall_watch "$TS" "{outputFile}" "${PHASE_DIR}"'/*-PLAN.md' "## REVISION_CONFLICT")` while waiting/active — `stalled` -> 1) Accept as revised, to step 13, 2) Retry, 3) Stop. (Marker added: a `## REVISION_CONFLICT` return edits no PLAN.md, so the mtime-only path would report a healthy conflict return as stalled.)
+
+- **`false`:** issue the same Agent() call but omit `run_in_background`; await its ordinary runtime-native completion and pass the real returned result into the existing revision-return handling. Skip `gad_stall_watch` entirely; an empty, truncated, or unrecognized result keeps the existing filesystem fallback.
 
 **If the planner returns `## REVISION_CONFLICT`:** follow the shared Conflict Return protocol in
 `gad-core/references/revision-loop.md`, with this workflow's bindings:

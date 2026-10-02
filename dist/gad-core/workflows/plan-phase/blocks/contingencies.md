@@ -141,7 +141,7 @@ Use AskUserQuestion for each gap (or batch if multiple gaps).
 
 ## 11a. Filesystem Fallback (Checker)
 
-**Triggered when:** Checker Agent() returns but the return contains neither `## VERIFICATION PASSED` nor `## ISSUES FOUND`.
+**Triggered when:** Checker Agent() returns but the return contains neither `## VERIFICATION PASSED` nor `## ISSUES FOUND`. With `PLANNER_STALL_DETECTION_ENABLED` `false` (the 1.15.0 dispatch/wait gate in `blocks/checker.md`) the same rule applies to the awaited foreground return: an empty, truncated or unrecognized result still lands here.
 
 ```bash
 # #3218: this asks "did the planner write files to disk at all" — a

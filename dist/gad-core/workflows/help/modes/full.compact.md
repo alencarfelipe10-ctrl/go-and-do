@@ -184,7 +184,7 @@ Usage: `/gad-capture --note promote 3`
 
 Usage: `/gad-capture --list api`
 
-**`/gad-capture --list-seeds [status]`** — Read-only listing of captured seeds (ID, status, scope, trigger, title); optional status filter. Enrich via `/gad-capture --seed --enrich SEED-NNN`.
+**`/gad-capture --list-seeds [status]`** — Read-only listing of captured seeds (ID, status, scope, trigger, title); optional status filter. Enrich via `/gad-capture --seed --enrich SEED-YYMMDD-XXX`.
 
 Usage: `/gad-capture --list-seeds dormant`
 
@@ -202,7 +202,7 @@ Usage: `/gad-ship 4` or `/gad-ship 4 --draft`
 
 ---
 
-**`/gad-review --phase N [--gemini] [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--agy] [--all]`** — Detects available external AI CLIs, each independently reviews the phase's plans with the same structured prompt (CodeRabbit reviews the live diff, up to ~5 min), produces REVIEWS.md with consensus. Feed back via `/gad-plan-phase N --reviews`.
+**`/gad-review --phase N [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--agy] [--all]`** — Detects available external AI CLIs, each independently reviews the phase's plans with the same structured prompt (CodeRabbit reviews the live diff, up to ~5 min), produces REVIEWS.md with consensus. Feed back via `/gad-plan-phase N --reviews`.
 
 Usage: `/gad-review --phase 3 --all`
 
@@ -276,7 +276,7 @@ Every command below is also a live `/gad-*` slash command, grouped by purpose.
 
 - **`/gad-mvp-phase <phase-number>`** — Plans a phase as a vertical MVP slice (user story + SPIDR splitting) before handoff to plan-phase; same end-state as `/gad-plan-phase --mvp` with a guided intro.
 - **`/gad-ultraplan-phase [phase]`** — [BETA] Offload plan phase to Claude Code's ultraplan cloud; review in browser, import back.
-- **`/gad-plan-review-convergence <phase> [--gemini] [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--agy/--antigravity] [--ollama] [--lm-studio] [--llama-cpp] [--kimi-code] [--all] [--text] [--ws <name>] [--max-cycles N]`** — Cross-AI convergence loop: replan with review feedback until no HIGH concerns remain (cloud and local-model reviewers).
+- **`/gad-plan-review-convergence <phase> [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--agy/--antigravity] [--ollama] [--lm-studio] [--llama-cpp] [--kimi-code] [--all] [--text] [--ws <name>] [--max-cycles N]`** — Cross-AI convergence loop: replan with review feedback until no HIGH concerns remain (cloud and local-model reviewers).
 - **`/gad-autonomous [--from N] [--to N] [--only N] [--interactive] [--converge]`** — Runs all remaining phases unattended: discuss → plan → execute per phase; `--converge`/`--cross-ai` routes planning through convergence.
 
 ### Quality, Review & Verification

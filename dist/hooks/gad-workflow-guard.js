@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gad-hook-version: 1.14.0
+// gad-hook-version: 1.15.0
 // GAD Workflow Guard — PreToolUse hook
 // Detects when Claude attempts file edits outside a GAD workflow context
 // (no active /gad- skill or Task subagent) and injects an advisory warning.

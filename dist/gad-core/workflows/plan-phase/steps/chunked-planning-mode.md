@@ -21,7 +21,7 @@ safe default. `dispatch-capacity` is the same negotiated dispatch-capability que
 (reason `missing`/`undocumented`) resolves to the fail-closed floor of `1`, which degrades this
 flag to serial regardless of the config value:
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; _gad_id_ok() { case "$("$1" runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') return 0;; *) return 1;; esac; }; _gad_homes() { _gad_at "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; elif _gad_homes; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; _gad_id_ok gad_run && GAD_IDENTITY_STATUS=ok; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 CHUNKED_PARALLEL_CFG=$(gad_run query config-get planning.chunked_parallel --raw 2>/dev/null || echo "false")
 DISPATCH_CAPACITY=$(gad_run query dispatch-capacity --raw 2>/dev/null || echo "1")
 CHUNKED_PARALLEL=false
@@ -50,6 +50,9 @@ Display:
 Spawn the planner in **outline-only** mode — it must write only the outline manifest, not any
 PLAN.md files:
 
+**Dispatch/wait gate — `PLANNER_STALL_DETECTION_ENABLED`:**
+- **`true` (default):** use `run_in_background=true` in the Agent() call below, then use `gad_stall_watch` after it.
+
 ```javascript
 Agent(
   prompt="{same planning_context as step 8, plus:}
@@ -71,7 +74,9 @@ Agent(
 )
 ```
 
-**ORCHESTRATOR RULE — ALL RUNTIMES:** `TS=$(date +%s)`; repeat `PLANNER_STALL_RESULT=$(gad_stall_watch "$TS" "{outputFile}" "$OUTLINE_FILE" "## OUTLINE COMPLETE")` while waiting/active.
+**ORCHESTRATOR RULE — ALL RUNTIMES (when `PLANNER_STALL_DETECTION_ENABLED` is `true`):** `TS=$(date +%s)`; repeat `PLANNER_STALL_RESULT=$(gad_stall_watch "$TS" "{outputFile}" "$OUTLINE_FILE" "## OUTLINE COMPLETE")` while waiting/active.
+
+- **`false`:** issue the same Agent() call but omit `run_in_background`; await its ordinary runtime-native completion and consume the real returned result. Skip `gad_stall_watch` entirely and treat a recognized `## OUTLINE COMPLETE` return exactly like `marker_received`; empty or unrecognized returns keep the existing Retry/Stop path.
 
 Handle return:
 - **`marker_received`:** Read `PLAN-OUTLINE.md`, extract plan list. Continue to 8.5.2.
@@ -137,7 +142,8 @@ path regardless of `CHUNKED_PARALLEL` — there is nothing to batch.
 4. Spawn the planner in **single-plan** mode — it must write exactly one PLAN.md file. The prompt
    is unchanged per plan; what changes is whether the runnable set's Agent() calls are issued one
    at a time (serial) or together in one message (concurrent, every call still carrying
-   `run_in_background=true` exactly as today):
+   `run_in_background=true` exactly as today when `PLANNER_STALL_DETECTION_ENABLED` is `true`
+   (default)):
    ```javascript
    Agent(
      prompt="{same planning_context as step 8, plus:}
@@ -161,7 +167,7 @@ path regardless of `CHUNKED_PARALLEL` — there is nothing to batch.
    **Concurrent dispatch:** issue every runnable entry's Agent() call together, in this one
    message, before waiting on any of them.
 
-5. **ORCHESTRATOR RULE — ALL RUNTIMES, per batch:** for every entry dispatched in this round,
+5. **ORCHESTRATOR RULE — ALL RUNTIMES, per batch (when `PLANNER_STALL_DETECTION_ENABLED` is `true`):** for every entry dispatched in this round,
    `TS=$(date +%s)`; repeat `PLANNER_STALL_RESULT=$(gad_stall_watch "$TS" "{outputFile}" "$PLAN_FILE" "## PLAN COMPLETE")`
    while waiting/active for THAT entry. Serial dispatch waits on one entry at a time (unchanged).
    Concurrent dispatch waits on every entry issued in step 4 before proceeding — this is the
@@ -169,6 +175,13 @@ path regardless of `CHUNKED_PARALLEL` — there is nothing to batch.
    this round has reached `marker_received` or `stalled`. A `stalled` entry falls into step 7's
    Retry/Stop recovery for that one plan; it does not block verifying/committing sibling entries
    in the same batch that already reached `marker_received`.
+
+   - **`false`:** when `PLANNER_STALL_DETECTION_ENABLED` is `false`, omit `run_in_background`
+     from every call, skip `gad_stall_watch`, and await each real returned result through the
+     ordinary runtime-native completion mechanism. A concurrent batch still issues the runnable
+     calls together and awaits all of their ordinary results before step 6. Treat each recognized
+     `## PLAN COMPLETE` return exactly like `marker_received`; empty or unrecognized returns keep
+     step 8's existing Retry/Stop path. This is never fire-and-forget.
 
 6. **Verify disk, per entry:** check `${PHASE_DIR}/{plan_id}-PLAN.md` exists for each entry that
    reached `marker_received`. Unchanged per-plan check.
@@ -189,4 +202,3 @@ gad_run query commit "docs(${PADDED_PHASE}): plan ${plan_id} (chunked)" --files 
 Move to the next Wave only once every entry in the current Wave is committed or the run was
 stopped. After every Wave's plans are written and committed, treat this as `## PLANNING COMPLETE`
 and continue to step 9.
-

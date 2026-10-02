@@ -37,10 +37,10 @@ Optional flags:
 - `--to N` — stop after phase N completes (halt instead of advancing to next phase).
 - `--only N` — execute only phase N (single-phase mode).
 - `--interactive` — run discuss inline with questions (not auto-answered), then dispatch plan→execute as background agents. Keeps the main context lean while preserving user input on decisions.
-- `--converge` — run each phase's planning step through `gad-plan-review-convergence` instead of plain `gad-plan-phase`. Requires `workflow.plan_review_convergence=true`.
+- `--converge` — run each phase's planning step through `gad-plan-review-convergence` instead of plain `gad-plan-phase`. Works even when `workflow.plan_review_convergence` is `false` — the explicit flag overrides the gate; the gate (`workflow.plan_review_convergence=true` enables it) governs the standalone `gad-plan-review-convergence` command. Without the flag, planning runs `gad-plan-phase`.
 - `--cross-ai` — compatibility alias for `--converge`.
 
-When `--converge` or `--cross-ai` is set, reviewer selector flags supported by `gad-plan-review-convergence` may be passed through: `--codex`, `--gemini`, `--claude`, `--opencode`, `--ollama`, `--lm-studio`, `--llama-cpp`, `--all`, and `--max-cycles N`.
+When `--converge` or `--cross-ai` is set, reviewer selector flags supported by `gad-plan-review-convergence` may be passed through: `--codex`, `--claude`, `--opencode`, `--ollama`, `--lm-studio`, `--llama-cpp`, `--all`, and `--max-cycles N`.
 
 Project context, phase list, and state are resolved inside the workflow using init commands (`gad-tools query init.milestone-op`, `gad-tools query roadmap.analyze`). No upfront context loading needed.
 </context>

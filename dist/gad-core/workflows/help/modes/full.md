@@ -302,7 +302,7 @@ Modes:
 - **default** — progress report + intelligent routing
 - **`--next`** — auto-advance to the next logical step (use `--next --force` to bypass safety gates)
 - **`--next --auto`** — like `--next`, but chains steps automatically until milestone completion or a blocking decision
-- **`--next --converge`** — when the next action is planning, route it through `/gad-plan-review-convergence` instead of `/gad-plan-phase`; requires `workflow.plan_review_convergence=true`. `--cross-ai` is an alias. Reviewer flags (`--codex`, `--gemini`, `--claude`, `--opencode`, `--ollama`, `--lm-studio`, `--llama-cpp`, `--all`) and `--max-cycles N` forward to the convergence loop.
+- **`--next --converge`** — when the next action is planning, route it through `/gad-plan-review-convergence` instead of `/gad-plan-phase`; requires `workflow.plan_review_convergence=true`. `--cross-ai` is an alias. Reviewer flags (`--codex`, `--claude`, `--opencode`, `--ollama`, `--lm-studio`, `--llama-cpp`, `--all`) and `--max-cycles N` forward to the convergence loop.
 - **`--forensic`** — append a 6-check integrity audit after the progress report
 - **`--do "<text>"`** — smart router: dispatch freeform intent to the matching `/gad-*` command (see *Smart Router* above)
 
@@ -444,7 +444,7 @@ List and audit captured seeds (read-only).
 
 - Lists all seeds with ID, status, scope, trigger, and title
 - Optional status filter (e.g., `/gad-capture --list-seeds dormant`)
-- Does not modify any seed — enrich with `/gad-capture --seed --enrich SEED-NNN`
+- Does not modify any seed — enrich with `/gad-capture --seed --enrich SEED-YYMMDD-XXX`
 
 Usage: `/gad-capture --list-seeds`
 Usage: `/gad-capture --list-seeds dormant`
@@ -477,10 +477,10 @@ Usage: `/gad-ship 4` or `/gad-ship 4 --draft`
 
 ---
 
-**`/gad-review --phase N [--gemini] [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--agy] [--all]`**
+**`/gad-review --phase N [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--agy] [--all]`**
 Cross-AI peer review — invoke external AI CLIs to independently review phase plans.
 
-- Detects available CLIs (gemini, claude, codex, coderabbit, agy)
+- Detects available CLIs (claude, codex, coderabbit, agy)
 - Each CLI reviews plans independently with the same structured prompt
 - CodeRabbit reviews the current git diff (not a prompt) — may take up to 5 minutes
 - Produces REVIEWS.md with per-reviewer feedback and consensus summary
@@ -626,7 +626,7 @@ The commands above cover the most common day-to-day flows. Every command listed 
 
 - **`/gad-mvp-phase <phase-number>`** — Plan a phase as a vertical MVP slice (user story + SPIDR splitting) before handing off to plan-phase. Same end-state as `/gad-plan-phase --mvp`, with a guided MVP-shaping intro.
 - **`/gad-ultraplan-phase [phase]`** — [BETA] Offload plan phase to Claude Code's ultraplan cloud; review in browser and import back.
-- **`/gad-plan-review-convergence <phase> [--gemini] [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--agy/--antigravity] [--ollama] [--lm-studio] [--llama-cpp] [--kimi-code] [--all] [--text] [--ws <name>] [--max-cycles N]`** — Cross-AI plan convergence loop — replan with review feedback until no HIGH concerns remain. Supports both cloud reviewers (Gemini/Claude/Codex/CodeRabbit/OpenCode/Qwen/Cursor/Antigravity/Kimi Code) and local model runtimes (Ollama, LM Studio, llama.cpp).
+- **`/gad-plan-review-convergence <phase> [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--agy/--antigravity] [--ollama] [--lm-studio] [--llama-cpp] [--kimi-code] [--all] [--text] [--ws <name>] [--max-cycles N]`** — Cross-AI plan convergence loop — replan with review feedback until no HIGH concerns remain. Supports both cloud reviewers (Claude/Codex/CodeRabbit/OpenCode/Qwen/Cursor/Antigravity/Kimi Code) and local model runtimes (Ollama, LM Studio, llama.cpp).
 - **`/gad-autonomous [--from N] [--to N] [--only N] [--interactive] [--converge]`** — Run all remaining phases autonomously: discuss → plan → execute per phase. `--converge` routes planning through plan-review convergence; `--cross-ai` is an alias.
 
 ### Quality, Review & Verification

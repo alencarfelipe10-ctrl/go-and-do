@@ -75,7 +75,10 @@ fi
 # `unclassified` (#1110). The engine reads `text_en ?? text` (upstream #3717/#4156) and REJECTS
 # an empty `text_en`. When `response_language` is set, populate `text_en` for EVERY requirement,
 # not only the edge-looking ones: the `$APPLICABLE = 0` warning below fires only when ALL are
-# unclassified, so a partly-translated block slips through with no signal. When the project is
+# unclassified, so a partly-translated block slips through with no signal. (#4656) The warning
+# now ALSO fires on the all-unclassified case itself: `coverage.unclassified` counts the
+# soft-signal rows, and the guard below fires when `$UNCLASSIFIED = $APPLICABLE` — the case
+# where the classifier learned nothing about ANY requirement. When the project is
 # English, omit `text_en`. "shapes" is ALWAYS authored by the model — the engine's regex cues
 # are a conference log, not the classifier (#2773). One object per requirement.
 # `id`s are never translated or renumbered — coverage rows join back on `id`. A requirement
@@ -131,12 +134,15 @@ echo "### (end edge-probe coverage report)"
 # applicable:0. Surface it loudly; the author must explicitly confirm "no applicable edges"
 # below rather than silently emitting a green empty ## Edge Coverage section.
 APPLICABLE=$(printf '%s' "$COVERAGE" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let n=0;try{n=JSON.parse(s).coverage.applicable}catch{n=0}process.stdout.write(String(n))})')
-if [ "$APPLICABLE" = "0" ]; then
+UNCLASSIFIED=$(printf '%s' "$COVERAGE" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{let n=0;try{n=JSON.parse(s).coverage.unclassified}catch{n=0}process.stdout.write(String(n))})')
+# #4656: all-unclassified is the accidental-miss case the applicable:0 guard could never
+# reach — #1110's soft-signal rows make applicable non-zero by construction there.
+if [ "$APPLICABLE" = "0" ] || [ "$UNCLASSIFIED" = "$APPLICABLE" ]; then
   echo "WARNING: edge-probe proposed ZERO applicable edges across all requirements — likely a classification miss or malformed requirements, not a genuinely edge-free spec. Do NOT silently write an empty Edge Coverage section." >&2
 fi
 ```
 
-If `$APPLICABLE` is `0`, do NOT proceed silently: ask the author to confirm via AskUserQuestion
+If the guard above fired (`$APPLICABLE` is `0`, or every requirement is unclassified — `$UNCLASSIFIED = $APPLICABLE`, #4656), do NOT proceed silently: ask the author to confirm via AskUserQuestion
 ("The edge probe found no applicable edges for any requirement — is this genuinely an
 edge-free spec, or should we revisit the requirement wording / authored shapes?"). Only write
 an empty `## Edge Coverage` section after explicit confirmation.

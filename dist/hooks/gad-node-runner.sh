@@ -1,5 +1,5 @@
 #!/bin/sh
-# gad-hook-version: 1.14.0
+# gad-hook-version: 1.15.0
 # gad-node-runner.sh — GAD portable node resolver (#3662).
 #
 # Managed JS hook commands under --portable-hooks route through this script:

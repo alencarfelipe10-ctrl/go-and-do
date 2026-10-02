@@ -105,7 +105,11 @@ Exit.
 
 **If `SPEC_ATUAL` says a SPEC already exists:**
 
-**If `--auto`:** Auto-select "Update it". Log: `[auto] SPEC.md exists — updating.`
+**If `--auto`:** Auto-select "Skip" — leave the existing SPEC.md unchanged and exit with the same
+message the interactive "Skip" prints. Log: `[auto] SPEC.md exists — reusing as-is.` An unattended
+run reuses an existing artifact rather than regenerating it (#4776): "Update it" re-scores and
+rewrites the spec, discarding answers a person already recorded in it, and nobody is present to
+notice.
 
 **Otherwise:** Use AskUserQuestion:
 - header: "Spec"
@@ -264,7 +268,6 @@ The block carries its own references and its own `--auto` rules. Return here for
 **Obedience is observability, not prevention** (risk R-2): if the block was not read, the
 SPEC arrives with an empty or hand-waved `## Edge Coverage` / `## Prohibitions` — that is
 what the audit measures.
-
 
 ## Step 6: Generate SPEC.md
 

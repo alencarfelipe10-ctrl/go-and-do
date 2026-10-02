@@ -21,7 +21,9 @@ Read all files referenced by the invoking prompt's execution_context before star
 Extract from $ARGUMENTS: phase number, reviewer flags (the declared reviewer lane flags, plus `--all`), `--max-cycles N`, `--text`, `--ws`.
 
 ```bash
-PHASE=$(echo "$ARGUMENTS" | grep -oE '[0-9]+\.?[0-9]*' | head -1)
+# #4748: canonical phase grammar (digits, optional [A-Z], dotted segments) —
+# `12A` / `23.1.2` extract whole instead of truncating to `12` / `23.1`.
+PHASE=$(echo "$ARGUMENTS" | grep -oE '[0-9]+[A-Z]?(\.[0-9]+)*' | head -1)
 
 # #2315: do NOT default REVIEWER_FLAGS to --codex here. The default is resolved
 # against review.default_reviewers in step 1.5 (after the config gate) so a bare
@@ -36,10 +38,24 @@ echo "$ARGUMENTS" | grep -qE '\-\-ws\s+\S+' && GAD_WS=$(echo "$ARGUMENTS" | grep
 
 ## 1.5. Config Gate (feature disabled by default)
 
+An explicit dispatch from `/gad-autonomous --converge` carries `--override-gate` (#4600): the
+operator's explicit flag overrides this gate for that run. Standalone invocation carries no such
+flag and remains gated by the config below.
+
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
-CONVERGENCE_ENABLED=$(gad_run query config-get workflow.plan_review_convergence --raw 2>/dev/null || echo "false")
+_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; _gad_id_ok() { case "$("$1" runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') return 0;; *) return 1;; esac; }; _gad_homes() { _gad_at "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; elif _gad_homes; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; _gad_id_ok gad_run && GAD_IDENTITY_STATUS=ok; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+# --override-gate is appended ONLY by the autonomous --converge dispatch (#4600); it must be
+# matched token-anchored so no other argument can carry it in.
+if echo "$ARGUMENTS" | grep -qE '(^|[[:space:]])--override-gate([[:space:]]|$)'; then
+  CONVERGENCE_ENABLED="override"
+else
+  CONVERGENCE_ENABLED=$(gad_run query config-get workflow.plan_review_convergence --raw 2>/dev/null || echo "false")
+fi
 ```
+
+**If `CONVERGENCE_ENABLED` is `"override"`:** note it and continue — "Convergence was requested
+explicitly (`--converge` on the autonomous command); the `workflow.plan_review_convergence` gate
+is bypassed for this run (#4600)."
 
 **If `CONVERGENCE_ENABLED` is not `"true"`:** Display and exit:
 
@@ -105,7 +121,7 @@ if [ -z "$REVIEWER_FLAGS" ]; then
   fi
 else
   # Strip the leading space accumulated by the parse block so the banner renders
-  # "Reviewers: --gemini" not "Reviewers:  --gemini" (#2315 review nit).
+  # "Reviewers: --codex" not "Reviewers:  --codex" (#2315 review nit).
   REVIEWER_DISPLAY="${REVIEWER_FLAGS# }"
 fi
 ```
@@ -576,7 +592,7 @@ After plan-phase completes → go back to **step 5a** (review again).
 </process>
 
 <success_criteria>
-- [ ] Config gate checked before running — exits with enable instructions if workflow.plan_review_convergence is false
+- [ ] Config gate checked before running — exits with enable instructions if workflow.plan_review_convergence is false (an explicit `--override-gate` dispatch — how `/gad-autonomous --converge` invokes this workflow — bypasses it for that run, #4600)
 - [ ] Initial planning via inline Skill("gad-plan-phase") if no plans exist — NOT wrapped in Agent() (bug #936: depth-1 Agent has no Agent tool)
 - [ ] Review via Agent → Skill("gad-review") — isolated Agent is correct; gad-review is a Bash leaf with no sub-agent spawns; {GAD_WS} forwarded
 - [ ] Replan via inline Skill("gad-plan-phase --reviews") — NOT wrapped in Agent(); inline lets plan-phase spawn gad-planner/gad-plan-checker at depth 1

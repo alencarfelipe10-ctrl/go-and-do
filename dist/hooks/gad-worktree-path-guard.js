@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gad-hook-version: 1.14.0
+// gad-hook-version: 1.15.0
 // GAD Worktree Path Guard — PreToolUse hook
 // Blocks Edit/Write/MultiEdit tool calls that target absolute paths outside the worktree root.
 //

@@ -32,15 +32,15 @@ Não é preciso instalar o GSD Core: a cópia que a go-and-do usa já vem dentro
 ## Instalação
 
 ```bash
-npx github:alencarfelipe10-ctrl/go-and-do#v3.0.0
+npx github:alencarfelipe10-ctrl/go-and-do#v3.1.0
 ```
 
-O `#ref` (aqui a tag `v3.0.0`) é **obrigatório**: sem ele o npm instala o que estiver no branch padrão naquele
+O `#ref` (aqui a tag `v3.1.0`) é **obrigatório**: sem ele o npm instala o que estiver no branch padrão naquele
 momento, e você deixa de saber qual versão tem. Sem subcomando vale `install`; para os outros, acrescente o nome no
 fim, por exemplo:
 
 ```bash
-npx github:alencarfelipe10-ctrl/go-and-do#v3.0.0 verify
+npx github:alencarfelipe10-ctrl/go-and-do#v3.1.0 verify
 ```
 
 O runtime vai para `~/.claude/go-and-do/runtime/<hash>`, com `~/.claude/go-and-do/current` apontando para ele, e os
@@ -60,7 +60,7 @@ de instalar.
 Opções:
 
 - `--config-dir <dir>`: só aceita `$HOME/.claude` (com ou sem barra final, ou um atalho que resolva para ele). Para
-  instalar numa casa alternativa, troque o `HOME`: `HOME=<casa> npx github:alencarfelipe10-ctrl/go-and-do#v3.0.0`.
+  instalar numa casa alternativa, troque o `HOME`: `HOME=<casa> npx github:alencarfelipe10-ctrl/go-and-do#v3.1.0`.
 - `--dry-run`: mostra o que seria feito, sem escrever nada.
 - `--opcional <script>` registra um hook opcional (`gad-rtk-worktree.sh` ou `notify-telegram.sh`); `--copiar-gsd`
   copia o seu `~/.gsd` para `~/.gad` durante o `install`.

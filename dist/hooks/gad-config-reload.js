@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gad-hook-version: 1.14.0
+// gad-hook-version: 1.15.0
 // gad-config-reload.js — FileChanged hook: hot-reload GAD config context
 // Fires when .planning/config.json is modified, created, or deleted.
 //

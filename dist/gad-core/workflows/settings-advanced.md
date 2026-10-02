@@ -1,8 +1,8 @@
 Apply response_language to all user-facing prose — narration between tool calls, status updates, progress notes, and findings included; preserve code, paths, and identifiers.
 
 <purpose>
-Interactive configuration of GAD power-user knobs — plan bounce, node repair, subagent timeouts,
-inline plan threshold, cross-AI execution, base branch, branch templates, response language,
+Interactive configuration of GAD power-user knobs — plan bounce, planner stall detection, node
+repair, subagent timeouts, inline plan threshold, cross-AI execution, base branch, branch templates, response language,
 context window, gitignored search, graphify build timeout, runtime model tier overrides, and
 model policy configuration (provider + budget → canonical tier mapping, or manual model ID
 assignment per cost tier).
@@ -24,7 +24,7 @@ Read all files referenced by the invoking prompt's execution_context before star
 Ensure config exists and resolve the workstream-aware config path (mirrors `settings.md`):
 
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; _gad_id_ok() { case "$("$1" runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') return 0;; *) return 1;; esac; }; _gad_homes() { _gad_at "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; elif _gad_homes; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; _gad_id_ok gad_run && GAD_IDENTITY_STATUS=ok; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 gad_run query config-ensure-section
 if [[ -z "${GAD_CONFIG_PATH:-}" ]]; then
   if [[ -f .planning/active-workstream ]]; then
@@ -49,6 +49,7 @@ Parse the following current values. If a key is absent, fall back to the documen
 shown in parentheses:
 
 Planning Tuning:
+- `planner.stall_detection_enabled` (default: `true`)
 - `workflow.plan_bounce` (default: `false`)
 - `workflow.plan_bounce_passes` (default: `2`)
 - `workflow.plan_bounce_script` (default: `null`)
@@ -126,8 +127,21 @@ stored verbatim as a string.
 
 ### Section 1 — Planning Tuning
 
+Before offering the disabled choice, display this warning verbatim:
+
+`Warning: disabling planner stall detection gives up bounded automatic recovery if the runtime loses an agent completion handoff. Planning still waits through the runtime-native completion mechanism, but you may need to interrupt and use the filesystem fallback.`
+
 ```text
 AskUserQuestion([
+  {
+    question: "Enable bounded planner/plan-checker stall detection? (current: <value or true>)",
+    header: "Planner Watchdog",
+    multiSelect: false,
+    options: [
+      { label: "Yes (default: true)", description: "Poll for completion markers and plan-file activity, with bounded recovery." },
+      { label: "No (false)", description: "Await runtime-native completion without polling. Gives up bounded automatic recovery if completion handoff is lost." }
+    ]
+  },
   {
     question: "Run external plan-bounce validator against generated PLAN.md? (current: <value or false>)",
     header: "Plan Bounce",
@@ -357,7 +371,6 @@ Built-in tier defaults by runtime:
 |------------|-------------------------------|---------------------------------|-------------------------------|
 | `claude`   | `claude-opus-4-8`             | `claude-sonnet-5`             | `claude-haiku-4-5`            |
 | `codex`    | `gpt-5.6-sol`                 | `gpt-5.6-terra`                 | `gpt-5.6-luna`                |
-| `gemini`   | `gemini-3.1-pro-preview`      | `gemini-3-flash`                | `gemini-2.5-flash-lite`       |
 | `qwen`     | `qwen3-max-2026-01-23`        | `qwen3-coder-plus`              | `qwen3-coder-next`            |
 | `opencode` | `anthropic/claude-opus-4-8`   | `anthropic/claude-sonnet-5`   | `anthropic/claude-haiku-4-5`  |
 | `copilot`  | `claude-opus-4-8`             | `claude-sonnet-5`             | `claude-haiku-4-5`            |
@@ -390,7 +403,7 @@ AskUserQuestion([
     multiSelect: false,
     options: [
       { label: "Keep current (<runtime>)", description: "Configure overrides for the current runtime." },
-      { label: "Common runtimes", description: "claude, codex, gemini, qwen" },
+      { label: "Common runtimes", description: "claude, codex, qwen" },
       { label: "Additional runtimes", description: "opencode, copilot, hermes, kilo" },
       { label: "Other (Group B or custom)", description: "cline, cursor, windsurf, augment, trae, codebuddy, antigravity, or a custom runtime string." }
     ]
@@ -409,7 +422,6 @@ AskUserQuestion([
     options: [
       { label: "claude", description: "Claude Code / Anthropic CLI." },
       { label: "codex", description: "OpenAI Codex CLI." },
-      { label: "gemini", description: "Gemini CLI." },
       { label: "qwen", description: "Qwen CLI." }
     ]
   }
@@ -502,14 +514,16 @@ keys and sibling sub-objects.
 
 ```bash
 # Example — only write keys the user changed. "Keep current" selections are skipped.
+gad_run query config-set planner.stall_detection_enabled false
 gad_run query config-set workflow.plan_bounce_passes 5
 gad_run query config-set workflow.subagent_timeout 300000
 gad_run query config-set git.base_branch main
 gad_run query config-set context_window 1000000
-# Runtime model tier examples:
-gad_run query config-set runtime gemini
-gad_run query config-set model_profile_overrides.gemini.opus gemini-3-ultra
-gad_run query config-set model_profile_overrides.gemini.haiku null
+# Runtime model tier examples (antigravity ships no built-in tier defaults, so
+# overrides are how you pin its models):
+gad_run query config-set runtime antigravity
+gad_run query config-set model_profile_overrides.antigravity.opus gemini-3.1-pro-preview
+gad_run query config-set model_profile_overrides.antigravity.haiku null
 ```
 
 Conceptual shape after merge (unchanged top-level keys like `model_profile`,
@@ -519,6 +533,10 @@ anything not listed in Sections 1–8 MUST survive the update):
 ```json
 {
   ...existing_config,
+  "planner": {
+    ...existing_planner,
+    "stall_detection_enabled": <new|existing>
+  },
   "workflow": {
     ...existing_workflow,
     "plan_bounce": <new|existing>,
@@ -753,6 +771,7 @@ Display:
 
 | Setting                                    | Value |
 |--------------------------------------------|-------|
+| planner.stall_detection_enabled            | {true/false} |
 | workflow.plan_bounce                       | {on/off} |
 | workflow.plan_bounce_passes                | {n} |
 | workflow.plan_bounce_script                | {path/null} |
@@ -806,6 +825,7 @@ UI/AI phase gates), use /gad-settings.
 - [ ] Current config read from resolved `$GAD_CONFIG_PATH`
 - [ ] Eight sections rendered (Planning, Execution, Discussion, Cross-AI, Git, Runtime/Output, Runtime Model Tiers, Model Policy)
 - [ ] Every field pre-selected to its current value (or documented default if absent)
+- [ ] Disabling planner stall detection shows the bounded-recovery warning before writing `false`
 - [ ] Numeric inputs validated — non-numeric rejected and re-prompted
 - [ ] Branch-template inputs validated — non-default must contain a placeholder
 - [ ] Null-allowed fields accept an empty input as a clear

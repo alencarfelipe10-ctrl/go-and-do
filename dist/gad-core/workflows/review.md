@@ -16,9 +16,8 @@ A plan that survives review from 2-3 independent AI systems is more robust.
 Check which AI CLIs are available on the system:
 
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; _gad_id_ok() { case "$("$1" runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') return 0;; *) return 1;; esac; }; _gad_homes() { _gad_at "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; elif _gad_homes; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; _gad_id_ok gad_run && GAD_IDENTITY_STATUS=ok; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 # Check each CLI
-command -v gemini >/dev/null 2>&1 && echo "gemini:available" || echo "gemini:missing"
 command -v claude >/dev/null 2>&1 && echo "claude:available" || echo "claude:missing"
 command -v codex >/dev/null 2>&1 && echo "codex:available" || echo "codex:missing"
 command -v coderabbit >/dev/null 2>&1 && echo "coderabbit:available" || echo "coderabbit:missing"
@@ -62,15 +61,14 @@ that lane. Tell the user to install jq:
 ```
 NOTE: jq is not on PATH — the ollama, lm_studio, llama_cpp, opencode, and
 antigravity reviewer lanes are unavailable. Install jq (https://jqlang.org/download/)
-or select a lane that does not require it (--gemini, --claude, --codex,
+or select a lane that does not require it (--claude, --codex,
 --coderabbit, --qwen, --cursor).
 ```
 
-The remaining lanes (`gemini`, `claude`, `codex`, `coderabbit`, `qwen`, `cursor`)
+The remaining lanes (`claude`, `codex`, `coderabbit`, `qwen`, `cursor`)
 do not require jq and must stay selectable on a jq-less host.
 
 Parse flags from `$ARGUMENTS`:
-- `--gemini` → include Gemini
 - `--claude` → include Claude
 - `--codex` → include Codex
 - `--coderabbit` → include CodeRabbit
@@ -86,7 +84,7 @@ Parse flags from `$ARGUMENTS`:
 - No flags → if `review.default_reviewers` is set, include only configured reviewers that are detected; otherwise include all available
 
 Reviewer-selection precedence:
-1. Individual reviewer flags (`--gemini`, `--codex`, etc.)
+1. Individual reviewer flags (`--claude`, `--codex`, etc.)
 2. `--all`
 3. `review.default_reviewers`
 4. No key + no flags → all detected reviewers
@@ -94,7 +92,7 @@ Reviewer-selection precedence:
 **Explicit reviewer flags are an assertion, not a preference (ADR-2782 D4).** A lane the user
 named on the command line and that cannot run is an **error**, surfaced and non-silent — even
 when other named lanes did run. Do not proceed with a thinner reviewer set and report success:
-`--gemini --qwen` on a host without `qwen` fails, it does not quietly become a Gemini-only
+`--codex --qwen` on a host without `qwen` fails, it does not quietly become a Codex-only
 review. This applies however the lane became unavailable — binary missing, prerequisite `jq`
 absent, or a local server not reachable.
 
@@ -103,7 +101,7 @@ lane somebody asked for is an error.* A user who wants "whatever is available" h
 user who wants a preferred set has `review.default_reviewers`. Both stay lenient below.
 
 `review.default_reviewers` behavior:
-- Value must be a non-empty array of slug strings (configured via `gad config-set review.default_reviewers '["gemini","codex"]'`)
+- Value must be a non-empty array of slug strings (configured via `gad config-set review.default_reviewers '["codex","claude"]'`)
 - Unknown slugs warn and are ignored
 - Known-but-undetected slugs emit an info note and are ignored — a configured default is a
   preference evaluated across many hosts, so a subset being present is expected, not an error
@@ -114,7 +112,6 @@ If `section_manifest` is `null` or `"reviewer-instances-note-1"` is in its `incl
 If no CLIs are available:
 ```
 No external AI CLIs found. Install at least one:
-- gemini: https://github.com/google-gemini/gemini-cli
 - codex: https://github.com/openai/codex
 - claude: https://github.com/anthropics/claude-code
 - opencode: https://opencode.ai (leverages GitHub Copilot subscription models)
@@ -140,7 +137,7 @@ elif [ -n "$CLAUDE_CODE_ENTRYPOINT" ]; then
   # Running inside Claude Code CLI — skip claude for independence
   SELF_CLI="claude"
 else
-  # Other environments (Gemini CLI, Codex CLI, etc.)
+  # Other environments (Codex CLI, Antigravity CLI, etc.)
   # Fall back to AI self-identification to decide which CLI to skip
   SELF_CLI="auto"
 fi
@@ -148,7 +145,7 @@ fi
 
 Rules:
 - If `SELF_CLI="none"` → invoke ALL available CLIs (no skip)
-- If `SELF_CLI="claude"` → skip claude, use gemini/codex
+- If `SELF_CLI="claude"` → skip claude, use codex/antigravity
 - If `SELF_CLI="auto"` → the executing AI identifies itself and skips its own CLI
 - At least one DIFFERENT CLI must be available for the review to proceed.
 </step>
@@ -157,6 +154,7 @@ Rules:
 Collect phase artifacts for the review prompt:
 
 ```bash
+PHASE_ARG=$(echo "$ARGUMENTS" | sed -nE 's/.*--phase[[:space:]]+([A-Za-z0-9._-]+).*/\1/p')
 INIT=$(gad_run query init.review "${PHASE_ARG}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 
@@ -727,7 +725,7 @@ a lane, its `value` already carries a `(reasoning=<level>)` suffix (e.g.
 ```markdown
 ---
 phase: {N}
-reviewers: [gemini, claude, codex, coderabbit, opencode, qwen, cursor, antigravity, ollama, lm_studio, llama_cpp]  # populate at runtime with only the reviewers actually invoked
+reviewers: [claude, codex, coderabbit, opencode, qwen, cursor, antigravity, ollama, lm_studio, llama_cpp]  # populate at runtime with only the reviewers actually invoked
 reviewed_at: {ISO timestamp}
 plans_reviewed: [{list of PLAN.md files}]
 models:                   # resolved model per reviewer; `unknown` when not recoverable
@@ -888,11 +886,28 @@ done
 
 _PRESERVE_OK=true
 if [ ${#_DIAG_MD[@]} -gt 0 ] || [ ${#_DIAG_ERR[@]} -gt 0 ]; then
-  if mkdir -p "$DIAG_DIR"; then
-    if [ ${#_DIAG_MD[@]} -gt 0 ] && ! cp "${_DIAG_MD[@]}" "$DIAG_DIR/"; then
+  # #4351: ONE SUBDIRECTORY PER RUN. A flat copy used each file's SOURCE basename,
+  # and a lane slug is stable across runs — so a second review of the same phase
+  # silently overwrote the first run's evidence for any lane that ran both times.
+  # `cp` over an existing file is a success, so this lost data with no warning, in
+  # the one directory whose entire purpose is to outlive the `rm -rf` below.
+  #
+  # $RUN_DIR is `mktemp -d .../gad-review-XXXXXX`, so its basename is already
+  # unique per run BY CONSTRUCTION — uniqueness never depends on the clock. The
+  # UTC stamp is only a sort key in front of it, and is omitted entirely if `date`
+  # fails. Lane basenames are unchanged INSIDE the subdirectory, so evidence still
+  # correlates back to its lane, and nothing inside $RUN_DIR is renamed (both
+  # `prepare_trimmed_prompt_for_reviewer` and the lane invocation resolver depend
+  # on those exact basenames).
+  _DIAG_STAMP="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || true)"
+  _DIAG_RUN_DIR="$DIAG_DIR/${_DIAG_STAMP:+${_DIAG_STAMP}-}$(basename "$RUN_DIR")"
+  # `mkdir -p` still creates $DIAG_DIR itself, so a plain FILE sitting at
+  # $DIAG_DIR still fails here and still skips the `rm -rf` (#3885).
+  if mkdir -p "$_DIAG_RUN_DIR"; then
+    if [ ${#_DIAG_MD[@]} -gt 0 ] && ! cp "${_DIAG_MD[@]}" "$_DIAG_RUN_DIR/"; then
       _PRESERVE_OK=false
     fi
-    if [ ${#_DIAG_ERR[@]} -gt 0 ] && ! cp "${_DIAG_ERR[@]}" "$DIAG_DIR/"; then
+    if [ ${#_DIAG_ERR[@]} -gt 0 ] && ! cp "${_DIAG_ERR[@]}" "$_DIAG_RUN_DIR/"; then
       _PRESERVE_OK=false
     fi
   else
@@ -903,7 +918,7 @@ fi
 if [ "$_PRESERVE_OK" = "true" ]; then
   rm -rf "$RUN_DIR"
 else
-  echo "WARNING: evidence preservation to $DIAG_DIR failed — leaving the un-preserved run directory intact at: $RUN_DIR" >&2
+  echo "WARNING: evidence preservation to ${_DIAG_RUN_DIR:-$DIAG_DIR} failed — leaving the un-preserved run directory intact at: $RUN_DIR" >&2
 fi
 ```
 </step>

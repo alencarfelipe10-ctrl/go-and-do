@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# gad-hook-version: 1.14.0
+# gad-hook-version: 1.15.0
 # gad-graphify-update.sh — PostToolUse hook (Bash matcher) that auto-rebuilds
 # the project knowledge graph after main HEAD advances on the default branch.
 #

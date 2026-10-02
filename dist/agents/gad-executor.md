@@ -77,8 +77,9 @@ Before executing, discover project context:
 <step name="load_project_state" priority="first">
 Load execution context:
 
+@~/.claude/gad-core/references/gad-run-resolver.md
+
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 INIT=$(gad_run query init.execute-phase "${PHASE}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
@@ -336,7 +337,7 @@ For full automation-first patterns, server lifecycle, CLI handling:
 **Auto-mode checkpoint behavior** (when `AUTO_CFG` is `"true"`):
 
 - **checkpoint:human-verify** → Auto-approve **except package-legitimacy checkpoints**. If checkpoint has `gate="blocking-human"` OR its purpose indicates package legitimacy verification (`what-built` mentions `Package verification required before install` or `Package install failed — human verification required`), do **not** auto-approve. STOP and return checkpoint_return_format for explicit human confirmation. Precondition-unmet checkpoints report `blocking-human` — never auto-approved.
-- **checkpoint:decision** → If checkpoint has `gate="blocking-human"`, do **not** auto-select — STOP and return checkpoint_return_format for an explicit human decision (a `blocking-human` decision exists because its default answer would be wrong to assume). Otherwise auto-select first option (planners front-load the recommended choice), log `⚡ Auto-selected: [option name]`, continue to next task.
+- **checkpoint:decision** → If checkpoint has `gate="blocking-human"`, do **not** auto-select — STOP and return checkpoint_return_format for an explicit human decision (a `blocking-human` decision exists because its default answer would be wrong to assume). Otherwise auto-select `auto_select`'s option (absent → STOP like `blocking-human`, #4095), log `⚡ Auto-selected: [option]`, continue to next task.
 - **checkpoint:human-action** → STOP normally. Auth gates cannot be automated — return structured checkpoint message using checkpoint_return_format.
 
 **Standard checkpoint behavior** (when `AUTO_CFG` is not `"true"`):
@@ -480,9 +481,9 @@ if [[ "$ABS_PATH" != "$WT_ROOT" && "$ABS_PATH" != "$WT_ROOT/"* ]]; then
   exit 1
 fi
 ```
-Prefer **relative paths** for all Edit/Write operations inside a worktree. When an absolute path
-is unavoidable, always derive it from `git rev-parse --show-toplevel` run inside the worktree,
-not from a `pwd` captured in the orchestrator context.
+Prefer **relative paths** for Edit/Write in a worktree; an unavoidable absolute comes from
+`git rev-parse --show-toplevel` inside it, never an orchestrator `pwd`. Same check before each
+`<automated>`: `worktree-path-safety.md` step 0c (#4767).
 
 **0. Pre-commit HEAD safety assertion (MANDATORY — #2924, #3819):**
 Assert HEAD is not the protected/default branch before committing (#3819). If drifted onto it, HALT — never self-recover via `git update-ref refs/heads/<protected>`:
@@ -681,9 +682,11 @@ ledger (protocol 0c — a fresh shell per Bash call; the base comes from disk):
 ```bash
 PLAN_HEAD_BEFORE=$(cat "$(git rev-parse --git-dir)/gad-plan-head-before-{phase}-{plan}")
 COMMITS_ACTUAL=$(git rev-list --count ${PLAN_HEAD_BEFORE}..HEAD)
+PLAN_HEAD_AFTER=$(git rev-parse HEAD)
 ```
-Write BOTH into the frontmatter — `commits: ${COMMITS_ACTUAL}`,
-`plan_head_before: ${PLAN_HEAD_BEFORE}` — including when the count is `0`.
+Write ALL THREE into the frontmatter — `commits: ${COMMITS_ACTUAL}`,
+`plan_head_before: ${PLAN_HEAD_BEFORE}`, `plan_head_after: ${PLAN_HEAD_AFTER}` — including
+when the count is `0`.
 A `0` with code changes means the changes sit UNCOMMITTED: **HALT — do not write the
 SUMMARY with a narrated count**; surface `git status --short` in your return. A `0` with no
 code changes (docs-only) is legitimate. `/gad-verify-work` flags mismatches as BLOCKER.
@@ -809,8 +812,10 @@ gad_run query state.record-metric \
   --tasks "${TASK_COUNT}" --files "${FILE_COUNT}"
 
 # Add decisions (extract from SUMMARY.md key-decisions)
+# --phase is required here: without it the verb falls back to STATE.md's global
+# pointer, which misattributes decisions when plans execute out of pointer order (#4763).
 for decision in "${DECISIONS[@]}"; do
-  gad_run query state.add-decision --summary "${decision}"
+  gad_run query state.add-decision --phase "${PHASE}" --summary "${decision}"
 done
 
 # Update session info (stopped-at, resume-file; timestamp set automatically)

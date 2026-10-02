@@ -9,6 +9,17 @@ Display banner:
 ◆ Spawning plan checker... (runs in a subagent — no output until it returns, ~1–5 min; expected, not a freeze)
 ```
 
+**Verify-command path probe (#2401, #4767).** Before spawning, run the deterministic probe over
+the quick plan's `<automated>` commands and hand its JSON to the checker, exactly as
+`plan-phase.md` does. Quick plans live under `${QUICK_DIR}`, not `.planning/phases/`, so the
+probe takes the directory directly. It never executes command text and never prescribes a
+replacement path.
+
+```bash
+_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; _gad_id_ok() { case "$("$1" runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') return 0;; *) return 1;; esac; }; _gad_homes() { _gad_at "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; elif _gad_homes; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; _gad_id_ok gad_run && GAD_IDENTITY_STATUS=ok; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+VERIFY_PATHS=$(gad_run check verify-command-paths --dir "${QUICK_DIR}" --raw)
+```
+
 Checker prompt:
 
 ```markdown
@@ -22,6 +33,19 @@ Checker prompt:
 
 ${AGENT_SKILLS_CHECKER}
 
+<verify_command_path_probe>
+**Deterministic verify-command path probe (#2401)** — already run; do NOT re-derive these
+verdicts by reading the filesystem yourself. Act on `severity` per the "Verify Command Path
+Resolvability" dimension: `blocker` → BLOCKER, `warning` → WARNING, `none` → silent.
+`status: pending_creation` is not a finding. A non-empty `readError` means the probe could not
+look — a WARNING, not a pass. Report the failing target verbatim; never prescribe a
+replacement path.
+
+```json
+{VERIFY_PATHS}
+```
+</verify_command_path_probe>
+
 **Scope:** This is a quick task, not a full phase. Skip checks that require a ROADMAP phase goal.
 </verification_context>
 
@@ -29,6 +53,7 @@ ${AGENT_SKILLS_CHECKER}
 - Requirement coverage: Does the plan address the task description?
 - Task completeness: Do tasks have files, action, verify, done fields?
 - Key links: Are referenced files real?
+- Verify-command path resolvability: act on the `<verify_command_path_probe>` verdicts above (#2401, #4767)
 - Scope sanity: Is this appropriately sized for a quick task (1-3 tasks)?
 - must_haves derivation: Are must_haves traceable to the task description?
 

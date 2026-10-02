@@ -21,19 +21,22 @@ Read all files referenced by the invoking prompt's execution_context before star
 Parse `$ARGUMENTS` for `--from N`, `--to N`, `--only N`, `--interactive`, `--converge`/`--cross-ai`, reviewer selector flags, and `--max-cycles N`:
 
 ```bash
+# #4748: the phase token is the canonical grammar (src/phase-id.cts) — digits,
+# an optional uppercase letter, any number of dotted segments — so `12A` and
+# `23.1.2` extract whole instead of truncating to `12` / `23.1`.
 FROM_PHASE=""
 if echo "$ARGUMENTS" | grep -qE '\-\-from\s+[0-9]'; then
-  FROM_PHASE=$(echo "$ARGUMENTS" | grep -oE '\-\-from\s+[0-9]+\.?[0-9]*' | awk '{print $2}')
+  FROM_PHASE=$(echo "$ARGUMENTS" | grep -oE '\-\-from\s+[0-9]+[A-Z]?(\.[0-9]+)*' | awk '{print $2}')
 fi
 
 TO_PHASE=""
 if echo "$ARGUMENTS" | grep -qE '\-\-to\s+[0-9]'; then
-  TO_PHASE=$(echo "$ARGUMENTS" | grep -oE '\-\-to\s+[0-9]+\.?[0-9]*' | awk '{print $2}')
+  TO_PHASE=$(echo "$ARGUMENTS" | grep -oE '\-\-to\s+[0-9]+[A-Z]?(\.[0-9]+)*' | awk '{print $2}')
 fi
 
 ONLY_PHASE=""
 if echo "$ARGUMENTS" | grep -qE '\-\-only\s+[0-9]'; then
-  ONLY_PHASE=$(echo "$ARGUMENTS" | grep -oE '\-\-only\s+[0-9]+\.?[0-9]*' | awk '{print $2}')
+  ONLY_PHASE=$(echo "$ARGUMENTS" | grep -oE '\-\-only\s+[0-9]+[A-Z]?(\.[0-9]+)*' | awk '{print $2}')
   FROM_PHASE="$ONLY_PHASE"
 fi
 
@@ -66,7 +69,7 @@ When `PLAN_STRATEGY=converge`, the planning step MUST invoke the plan-review con
 Bootstrap via milestone-level init:
 
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; _gad_id_ok() { case "$("$1" runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') return 0;; *) return 1;; esac; }; _gad_homes() { _gad_at "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; elif _gad_homes; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; _gad_id_ok gad_run && GAD_IDENTITY_STATUS=ok; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 INIT=$(gad_run query init.milestone-op)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 INIT_AUTONOMOUS=$(gad_run query init.autonomous $CONVERGE_PARAM $CROSS_AI_PARAM)
@@ -75,7 +78,7 @@ if [[ "$INIT_AUTONOMOUS" == @file:* ]]; then INIT_AUTONOMOUS=$(cat "${INIT_AUTON
 
 Extract `section_manifest` from `INIT_AUTONOMOUS` (used by the `converge-*` sections below and in step 3).
 
-If `PLAN_STRATEGY` is `converge`, fail fast unless the existing convergence feature gate is enabled:
+If `PLAN_STRATEGY` is `converge`, the dispatch below carries `--override-gate` (#4600): the operator's explicit `--converge`/`--cross-ai` overrides the convergence feature gate for this run. Without the flag, `PLAN_STRATEGY` is `local` and this block never appends it.
 
 ```bash
 # Lane flags derived from the declared roster (#2800/#2272); --all and --text are convergence
@@ -93,6 +96,13 @@ MAX_CYCLES_ARG=""
 if echo "$ARGUMENTS" | grep -qE '\-\-max-cycles\s+[0-9]+'; then
   MAX_CYCLES_ARG=$(echo "$ARGUMENTS" | grep -oE '\-\-max-cycles\s+[0-9]+' | awk '{print $2}')
   CONVERGENCE_ARGS="${CONVERGENCE_ARGS} --max-cycles ${MAX_CYCLES_ARG}"
+fi
+
+# #4600: the dispatched convergence workflow re-checks the feature gate in its own §1.5 —
+# an explicit --converge/--cross-ai must override it, so mark this dispatch explicitly.
+# Conditional on PLAN_STRATEGY: a local-strategy run must never carry the override.
+if [ "${PLAN_STRATEGY}" = "converge" ]; then
+  CONVERGENCE_ARGS="${CONVERGENCE_ARGS} --override-gate"
 fi
 ```
 
@@ -831,7 +841,7 @@ When any phase operation fails or a blocker is detected, present 3 options via A
 - [ ] `--interactive` compatible with `--only`, `--from`, and `--to` flags
 - [ ] `--converge` routes planning through `gad-plan-review-convergence`
 - [ ] `--cross-ai` is accepted as an alias for `--converge`
-- [ ] `--converge` fails fast with enable instructions when `workflow.plan_review_convergence=false`
+- [ ] `--converge` overrides `workflow.plan_review_convergence=false` for the run — the dispatch carries `--override-gate`, which the convergence workflow's §1.5 gate honors (#4600)
 - [ ] `--converge` forwards reviewer selector flags and `--max-cycles N`
 - [ ] Default autonomous planning remains `gad-plan-phase` when convergence is not requested
 </success_criteria>

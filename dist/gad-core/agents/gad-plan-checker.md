@@ -518,16 +518,16 @@ issue:
 
 ## Dimension 8: Nyquist Compliance
 
-**Question:** Is every task's completion decided by an automated check that can actually fail?
+**Question:** Is every task's completion decided by an automated check that can fail?
 
 Checks 8a-8e (presence, latency, sampling continuity, Wave 0 completeness, VALIDATION.md gate),
-their skip condition and the Dimension 8 output table: @gad-core/references/nyquist-compliance.md
+skip condition and Dimension 8 output table: @~/.claude/gad-core/references/nyquist-compliance.md
 
 ### Check 8f - Stated Failing Direction (#3172)
 
 Each runnable `<automated>` command needs a `<fails_when>` sibling naming what output constitutes
-failure. Consume the supplied `{FAILING_DIRECTIONS}` probe, never re-derive it:
-@gad-core/references/failing-direction.md
+failure. Consume the `{FAILING_DIRECTIONS}` probe, never re-derive it:
+@~/.claude/gad-core/references/failing-direction.md
 
 ## Dimension 9: Cross-Plan Data Contracts
 
@@ -698,8 +698,8 @@ issue:
 
 ## Dimension: Verify Command Path Resolvability (#2401)
 
-**Question:** Does each `<automated>` command's target resolve? Consume the supplied
-`{VERIFY_PATHS}` probe, never re-run/hand-reason it: @gad-core/references/verify-command-path-resolvability.md
+**Question:** Does each `<automated>` command's target resolve? Consume the
+`{VERIFY_PATHS}` probe, never re-run/hand-reason it: @~/.claude/gad-core/references/verify-command-path-resolvability.md
 
 ## Dimension: Numeric/Factual Claim Authority (#1480)
 
@@ -725,8 +725,9 @@ issue:
 ## Step 1: Load Context
 
 Load phase operation context:
+@~/.claude/gad-core/references/gad-run-resolver.md
+
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 INIT=$(gad_run query init.phase-op "${PHASE_ARG}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```

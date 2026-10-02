@@ -39,7 +39,7 @@ Parse `$ARGUMENTS` for:
 After parsing, normalize: if `$DISCUSS_MODE` and `$RESEARCH_MODE` and `$VALIDATE_MODE` are all true, set `$FULL_MODE=true`. This ensures `--discuss --research --validate` is treated identically to `--full`.
 
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; _gad_id_ok() { case "$("$1" runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') return 0;; *) return 1;; esac; }; _gad_homes() { _gad_at "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; elif _gad_homes; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; _gad_id_ok gad_run && GAD_IDENTITY_STATUS=ok; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 RESPONSE_LANGUAGE=$(gad_run query config-get response_language --raw --default "" 2>/dev/null || echo "")
 ```
 
@@ -47,7 +47,7 @@ RESPONSE_LANGUAGE=$(gad_run query config-get response_language --raw --default "
 
 If `$DESCRIPTION` is empty after parsing, prompt user interactively:
 
-**Text mode (`workflow.text_mode: true` in config or `--text` flag):** Set `TEXT_MODE=true` if `--text` is present in `$ARGUMENTS` OR `text_mode` from init JSON is `true`. When TEXT_MODE is active, replace every `AskUserQuestion` call with a plain-text numbered list and ask the user to type their choice number. This is required for non-Claude runtimes (OpenAI Codex, Gemini CLI, etc.) where `AskUserQuestion` is not available.
+**Text mode (`workflow.text_mode: true` in config or `--text` flag):** Set `TEXT_MODE=true` if `--text` is present in `$ARGUMENTS` OR `text_mode` from init JSON is `true`. When TEXT_MODE is active, replace every `AskUserQuestion` call with a plain-text numbered list and ask the user to type their choice number. This is required for non-Claude runtimes (OpenAI Codex, Antigravity, etc.) where `AskUserQuestion` is not available.
 
 ```
 AskUserQuestion(
@@ -323,6 +323,7 @@ ${AGENT_SKILLS_PLANNER}
 <constraints>
 - Create a SINGLE plan with 1-3 focused tasks
 - Quick tasks should be atomic and self-contained
+- PATH FORM (#4767): every path in the plan BODY — `files`, `verify`, `<automated>`, task actions — is repo-root-relative, and every `<automated>` command assumes cwd at the checkout root. Only the `<required_reading>` inputs above are absolute (#2376). An absolute path copied from this context into `<automated>` pins the command to THIS checkout; a worktree-isolated executor then runs it against the main tree and it passes on unchanged code.
 - MUTABLE-SCOPE AUTHORITY (#3786): when concrete edit or verification scope depends on mutable external state (a merge index, PR/base diffs, the working tree), authorize scope ONLY from a live observation made at planning time — for conflict resolution that is the fresh merge index via `git diff --name-only --diff-filter=U` — or keep `files`/`verify` CONDITIONAL on that observation. Historical STATE.md entries, recovery notes, and cached PR/base diff paths may guide investigation only; they are never edit or verification authority, and a plan must not enumerate them as authorized files "pending replacement".
 ${RESEARCH_MODE ? '- Research findings are available — use them to inform library/pattern choices' : '- No research phase'}
 ${VALIDATE_MODE ? '- Target ~40% context usage (structured for verification)' : '- Target ~30% context usage (simple, focused)'}
@@ -630,19 +631,30 @@ Insert after `### Blockers/Concerns` section:
 
 **7c. Append new row to table:**
 
-Use `date` from init:
+Append the row through the schema-backed `gad_run quick-tasks-append` command (`appendQuickTaskRow`,
+#2133/#3356, ADR-2143 §3/§7) rather than authoring the row as raw markdown — this shares the exact
+escaping the reader (`parseMarkdownTable`) requires, so a `${DESCRIPTION}` containing a literal `|`
+(a Jinja filter, an Ansible task name) can never permanently rag the table (#4906 Phase 3, #4736).
+Do NOT use the Edit tool to write this row directly; that raw-interpolation path is the defect this
+step now avoids.
 
 **If `$VALIDATE_MODE` (or table has Status column):**
-```markdown
-| ${quick_id} | ${DESCRIPTION} | ${date} | ${commit_hash} | ${VERIFICATION_STATUS} | [${quick_id}-${slug}](./quick/${quick_id}-${slug}/) |
+```bash
+gad_run quick-tasks-append --quick-id "${quick_id}" --slug "${slug}" --task "${DESCRIPTION}" --status "${VERIFICATION_STATUS}"
 ```
 
 **If NOT `$VALIDATE_MODE` (and table has no Status column):**
-```markdown
-| ${quick_id} | ${DESCRIPTION} | ${date} | ${commit_hash} | [${quick_id}-${slug}](./quick/${quick_id}-${slug}/) |
+```bash
+gad_run quick-tasks-append --quick-id "${quick_id}" --slug "${slug}" --task "${DESCRIPTION}"
 ```
 
-For a schema-safe append outside this workflow (e.g. from fast.md, which has neither a quick id nor a task directory), `gad_run quick-tasks-append --task <text>` performs an equivalent-shape write via the shared, schema-backed `appendQuickTaskRow` helper (#2133, ADR-2143 §3/§7) — the `#` cell is a positional ordinal and `Directory` reads `—`, since no id/directory was supplied. A caller that DOES have a real `${quick_id}` and task directory can pass `--quick-id <id> --slug <slug>` (or `--directory <link>` directly) to get the byte-identical row this step renders above (#3356).
+Both forms emit the row this step previously authored by hand: `--quick-id`/`--slug` derive the same
+`[${quick_id}-${slug}](./quick/${quick_id}-${slug}/)` permalink (#3356), and `date`/commit are
+computed by the command itself — from the current day and the current `HEAD` (already the executor's
+own commit from Step 6 at this point in the workflow) — never passed explicitly. For a schema-safe
+append outside this workflow, with neither a quick id nor a task directory (e.g. `fast.md`),
+`gad_run quick-tasks-append --task <text>` alone remains the fallback shape (#2133) — the `#` cell is
+a positional ordinal and `Directory` reads `—`.
 
 **7d. Update "Last activity" line:**
 
@@ -651,7 +663,7 @@ Use `date` from init:
 Last activity: ${date} - Completed quick task ${quick_id}: ${DESCRIPTION}
 ```
 
-Use Edit tool to make these changes atomically
+Use the Edit tool for 7a/7b/7d (section creation and the Last activity line). 7c above writes through `gad_run quick-tasks-append`, not the Edit tool.
 
 ---
 

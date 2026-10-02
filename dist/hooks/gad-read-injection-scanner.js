@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// gad-hook-version: 1.14.0
+// gad-hook-version: 1.15.0
 // GAD Read Injection Scanner — PostToolUse hook (#2201)
 // Pattern-based pre-filter / blocklist: scans content returned by Read, WebFetch,
 // and WebSearch for known prompt-injection patterns (regex + heuristic rules).

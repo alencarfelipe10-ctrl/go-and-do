@@ -1,7 +1,7 @@
 ---
 name: gad:plan-review-convergence
 description: "Cross-AI plan convergence - replan until review concerns are resolved."
-argument-hint: "<phase> [--gemini] [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--antigravity] [--agy] [--ollama] [--lm-studio] [--llama-cpp] [--kimi-code] [--text] [--ws <name>] [--all] [--max-cycles N]"
+argument-hint: "<phase> [--claude] [--codex] [--coderabbit] [--opencode] [--qwen] [--cursor] [--antigravity] [--agy] [--ollama] [--lm-studio] [--llama-cpp] [--kimi-code] [--text] [--ws <name>] [--all] [--max-cycles N]"
 allowed-tools:
   - Read
   - Write
@@ -11,7 +11,7 @@ allowed-tools:
   - Agent
   - Skill
   - AskUserQuestion
-requires: [phase, review]
+requires: [phase, review, autonomous]
 ---
 
 <objective>
@@ -20,7 +20,7 @@ Repeatedly: review plans with external AI CLIs → if HIGH or actionable non-HIG
 
 **Flow:** Skill("gad-plan-phase") → Agent→Skill("gad-review") → check unresolved HIGH + actionable non-HIGH → Skill("gad-plan-phase --reviews") → Agent→Skill("gad-review") → ... → Converge or escalate
 
-Replaces gad-plan-phase's internal gad-plan-checker with external AI reviewers (codex, gemini, etc.). Plan-phase runs **inline** (bare Skill at depth 0) so it can spawn gad-planner/gad-plan-checker at depth 1. Review runs inside an isolated Agent (gad-review is a Bash leaf — no sub-agents needed). Orchestrator only does loop control.
+Replaces gad-plan-phase's internal gad-plan-checker with external AI reviewers (codex, claude, etc.). Plan-phase runs **inline** (bare Skill at depth 0) so it can spawn gad-planner/gad-plan-checker at depth 1. Review runs inside an isolated Agent (gad-review is a Bash leaf — no sub-agents needed). Orchestrator only does loop control.
 
 **Orchestrator role:** Parse arguments, validate phase, run plan-phase inline (Skill at depth 0), spawn an Agent for gad-review, check unresolved HIGH and actionable non-HIGH counts, stall detection, escalation gate.
 </objective>
@@ -41,8 +41,7 @@ Phase number: extracted from $ARGUMENTS (required)
 
 **Flags:**
 - `--codex` — Use Codex CLI as reviewer (default if no reviewer flag given AND `review.default_reviewers` is unset; otherwise `review.default_reviewers` wins per ADR-0011 — #2315)
-- `--gemini` — Use Gemini CLI as reviewer
-- `--agy` / `--antigravity` — Use Antigravity CLI as reviewer (successor to the discontinued Gemini CLI)
+- `--agy` / `--antigravity` — Use Antigravity CLI as reviewer
 - `--claude` — Use Claude CLI as reviewer (separate session)
 - `--coderabbit` — Use CodeRabbit as reviewer (reviews the working-tree diff, not the source tree)
 - `--opencode` — Use OpenCode as reviewer
@@ -56,7 +55,8 @@ Phase number: extracted from $ARGUMENTS (required)
 - `--max-cycles N` — Maximum replan→review cycles (default: 3)
 
 **Feature gate:** This command requires `workflow.plan_review_convergence=true`. Enable with:
-`gad config-set workflow.plan_review_convergence true`
+`gad config-set workflow.plan_review_convergence true`. A dispatch carrying `--override-gate` —
+how `/gad:autonomous --converge` invokes this workflow (#4600) — bypasses the gate for that run.
 </context>
 
 <process>

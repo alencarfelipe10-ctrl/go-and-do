@@ -25,7 +25,7 @@ Parse `$ARGUMENTS` for target branch. If no argument is supplied, detect the
 default branch via the single resolver (#1146).
 
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; _gad_id_ok() { case "$("$1" runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') return 0;; *) return 1;; esac; }; _gad_homes() { _gad_at "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; elif _gad_homes; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; _gad_id_ok gad_run && GAD_IDENTITY_STATUS=ok; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 CURRENT_BRANCH=$(git branch --show-current)
 TARGET=${1:-$(gad_run query git.base-branch)}
 ```
@@ -238,11 +238,13 @@ Classify commits:
 git log --oneline "$TARGET".."$CURRENT_BRANCH" --no-merges
 ```
 
-**Canonical path declarations.** These two lines are the single source of truth for the
+**Canonical path declarations.** These three lines are the single source of truth for the
 whole command. `create_pr_branch` derives *which paths it removes* from them, and `verify`
-derives *which paths must not appear* from the same two lines — so the two steps cannot
+derives *which paths must not appear* from the same three lines — so the two steps cannot
 disagree about what the filter promised. Declare them exactly once; do not restate either
-list anywhere else in this file.
+list anywhere else in this file. Their literal values are drift-guarded (`npm run lint:ci`,
+`scripts/lint-pr-branch-pattern-drift.cjs`) against the canonical `src/pr-branch-patterns.cts`
+constants — change one side and update the other, or the guard fails.
 
 ```bash
 # Transient planning subdirectories — reviewer noise (PLAN.md, SUMMARY.md, CONTEXT.md,
@@ -251,8 +253,20 @@ TRANSIENT_DIRS="phases quick research threads todos debug seeds codebase ui-revi
 
 # Structural planning files — repository planning state. Preserved in default mode,
 # filtered out in strict mode. Anchored on both alternatives so `.planning/STATEX.md`
-# and `.planning/STATE.md.bak` are NOT treated as structural.
-STRUCTURAL_RE="^\.planning/(STATE|ROADMAP|MILESTONES|PROJECT|REQUIREMENTS)\.md$|^\.planning/milestones/"
+# and `.planning/STATE.md.bak` are NOT treated as structural. The milestones
+# alternative matches only FILES directly under `.planning/milestones/` (e.g.
+# `v1.0-ROADMAP.md`) — not a `<milestone>-phases/` subdirectory nested there. That
+# subdirectory is reviewer noise, not structural state (#4605); it falls through to
+# `$MILESTONE_PHASES_RE` below instead.
+STRUCTURAL_RE="^\.planning/(STATE|ROADMAP|MILESTONES|PROJECT|REQUIREMENTS)\.md$|^\.planning/milestones/[^/]+\.md$"
+
+# Milestone-scoped phase-plan directories — the same reviewer noise as
+# `$TRANSIENT_DIRS`'s `phases` entry, but nested per-milestone once a project has
+# passed at least one milestone: `.planning/milestones/<milestone>-phases/`. The
+# milestone slug (`v1.0`, `m2`, ...) varies per project, so this is declared as a
+# shape, not a literal path — a single path segment standing in for the slug,
+# anchored the same way `$STRUCTURAL_RE`'s alternatives are (#4605).
+MILESTONE_PHASES_RE="^\.planning/milestones/[^/]+-phases/"
 ```
 
 Derive the mode's two projections — `FILTER_PATHS` (what `create_pr_branch` removes from
@@ -263,11 +277,36 @@ if [ "$PR_STRICT" = "true" ]; then
   FILTER_PATHS=".planning/"
   FORBIDDEN_RE="^\.planning/"
 else
-  # Rewrapped through unquoted command substitution (gad-core#4109): a bare
-  # `$VAR` word-splits under bash but not zsh, collapsing every element onto
-  # one iteration there.
-  FILTER_PATHS=$(for d in $(printf '%s' "$TRANSIENT_DIRS"); do printf '.planning/%s/ ' "$d"; done)
-  FORBIDDEN_RE="^\.planning/($(echo "$TRANSIENT_DIRS" | tr ' ' '|'))/"
+  # One path per LINE, not per space (#4605) — see create_pr_branch's consumption
+  # loop: a discovered `<milestone>-phases/` directory can contain a space, so
+  # whitespace cannot be the delimiter. Rewrapped through unquoted command
+  # substitution (gad-core#4109): a bare `$VAR` word-splits under bash but not
+  # zsh, collapsing every element onto one iteration there.
+  FILTER_PATHS=$(for d in $(printf '%s' "$TRANSIENT_DIRS"); do printf '.planning/%s/\n' "$d"; done)
+  FORBIDDEN_RE="^\.planning/($(echo "$TRANSIENT_DIRS" | tr ' ' '|'))/|$MILESTONE_PHASES_RE"
+
+  # $MILESTONE_PHASES_RE is a shape, not a path — create_pr_branch's filter loop
+  # needs concrete paths to `git rm`, so resolve which `<milestone>-phases/`
+  # directories actually exist in this worktree (#4605). A project with no
+  # milestones yet (`.planning/milestones/` absent) yields nothing here, same as
+  # any other empty FILTER_PATHS entry. `-exec printf ... \;` rather than
+  # `for D in $(find ...)`: a `for` over unquoted `find` output word-splits a
+  # milestone slug containing a space into two spurious entries (ShellCheck
+  # SC2044) — the exact class of bug #4109 already fixed once in this file.
+  # `2>/dev/null` also swallows a genuine `find` failure (e.g. an unreadable
+  # `.planning/milestones/`), not just the expected-absent case — the unsafe
+  # direction, since a real failure then silently leaves those paths
+  # unfiltered rather than aborting. Accepted here because `$FORBIDDEN_RE`
+  # still asserts their absence downstream in `verify`, catching what this
+  # step misses.
+  MILESTONE_PHASE_DIRS=$(find .planning/milestones -mindepth 1 -maxdepth 1 -type d -name '*-phases' -exec printf '%s/\n' {} \; 2>/dev/null)
+  # Appended as its own LINE, and only when non-empty so no blank entry is
+  # introduced. The separator is a literal newline inside the quotes — `$(...)`
+  # has already stripped the trailing one off each side.
+  if [ -n "$MILESTONE_PHASE_DIRS" ]; then
+    FILTER_PATHS="${FILTER_PATHS}
+${MILESTONE_PHASE_DIRS}"
+  fi
 fi
 ```
 
@@ -347,10 +386,71 @@ for HASH in $(printf '%s' "$INCLUDED_COMMITS"); do
   # filtered path is absent from HEAD by construction. Do not treat it as a failure here.
   git cherry-pick --no-commit "$HASH" || true
 
-  for P in $(printf '%s' "$FILTER_PATHS"); do
+  # One path per LINE, not per space (#4605) — a discovered `<milestone>-phases/`
+  # directory can contain a space, so `for P in $(printf ...)` would word-split it
+  # into spurious entries. `while IFS= read -r` reads $FILTER_PATHS one line at a
+  # time instead, matching the newline-safe pattern used to build $FILTER_PATHS above.
+  while IFS= read -r P; do
+    [ -n "$P" ] || continue
     git rm -r -f -q --ignore-unmatch -- "$P" 2>/dev/null || true
     git checkout HEAD -- "$P" 2>/dev/null || true
-  done
+  done <<FILTER_PATHS_EOF
+$FILTER_PATHS
+FILTER_PATHS_EOF
+
+  # #4606: a conflict on a "third bucket" path (`.planning/` — not `$FORBIDDEN_RE`
+  # transient, not `$STRUCTURAL_RE` structural — the same bucket `verify`'s
+  # `$OTHER` reports) is not a real conflict either, and needs its own
+  # resolution distinct from the filter loop above. Such a path is never
+  # per-commit replayed by classification — a commit touching ONLY a
+  # third-bucket path is EXCLUDEd — so when a LATER included commit (structural
+  # or code + that same path) reuses it, the diff's context can predate
+  # whatever the PR branch actually has, and cherry-pick reports a genuine
+  # content conflict on a path this command was never asked to filter.
+  # `git checkout --theirs` resolves it correctly by construction: in a
+  # cherry-pick's 3-way merge, "theirs" IS $HASH's own content for that path —
+  # exactly the chained final value the path is owed, the same guarantee
+  # `create_pr_branch` already gives structural files. A path $HASH deletes has
+  # no "theirs" blob to check out, so fall back to accepting the deletion (the
+  # `verify` step's `$PLANNING_DELETIONS` gate independently catches this if
+  # `$TARGET` ever legitimately tracked that path).
+  #
+  # The deleted-by-$HASH case is checked explicitly with `git cat-file -e`
+  # rather than inferred from `checkout --theirs` failing, so an unrelated
+  # checkout failure (I/O, permissions, a stale index lock) can't be
+  # misread as a deletion and silently `git rm`-ed — it falls through to the
+  # unmerged-path halt below instead.
+  #
+  # The `git add` below restages a path already committed to $CURRENT_BRANCH's
+  # own history onto the disposable $PR_BRANCH; not a commit_docs bypass
+  # (#1783/#3585), which guards against staging .planning/ content that was
+  # never committed at all.
+  #
+  # The unmerged list is snapshotted, then read one path PER LINE. `for P in
+  # $(git diff --name-only --diff-filter=U)` would split it on IFS instead: a
+  # third-bucket path containing a space (`.planning/My Notes.md`) becomes the
+  # fragments `.planning/My` and `Notes.md`, neither of which names the real
+  # conflicted file, so nothing is resolved and the run aborts with exactly the
+  # #4606 failure this block exists to prevent. Same word-split class as #4109.
+  # Snapshot-then-iterate (rather than piping) both keeps the list stable while
+  # the body restages paths and keeps the body in THIS shell, not a subshell.
+  UNMERGED_PATHS=$(git diff --name-only --diff-filter=U)
+  while IFS= read -r P; do
+    [ -n "$P" ] || continue
+    case "$P" in
+      .planning/*) ;;
+      *) continue ;;
+    esac
+    if echo "$P" | grep -Eq "$FORBIDDEN_RE"; then continue; fi
+    if echo "$P" | grep -Eq "$STRUCTURAL_RE"; then continue; fi
+    if git cat-file -e "$HASH:$P" 2>/dev/null; then
+      git checkout --theirs -- "$P" && git add -- "$P" # gad-scan-ignore: #4606 -- see block comment above
+    else
+      git rm -f -q -- "$P" 2>/dev/null || true
+    fi
+  done <<UNMERGED_PATHS_EOF
+$UNMERGED_PATHS
+UNMERGED_PATHS_EOF
 
   # Anything still unmerged is a REAL conflict, outside the filter. Halt — do not
   # improvise a resolution and do not continue, which would drop the rest of the queue.

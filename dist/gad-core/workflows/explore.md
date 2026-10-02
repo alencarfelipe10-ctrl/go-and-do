@@ -40,7 +40,7 @@ a problem you're trying to solve, or something you're not sure about yet.
 Bootstrap the GAD launcher once for this session — later steps reach the launcher through the PATH this persists, and Step 5's commit must not depend on the optional research offer having run:
 
 ```bash
-_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
+_GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; _gad_id_ok() { case "$("$1" runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') return 0;; *) return 1;; esac; }; _gad_homes() { _gad_at "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; elif _gad_homes; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; _gad_id_ok gad_run && GAD_IDENTITY_STATUS=ok; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 # Canonical resolver (gad-core/workflows/_runtime-launcher.snippet.sh). Exactly one per
 # workflow: define here, use in later blocks. Placed in Step 1 rather than Step 3 so
 # declining the research offer cannot leave Step 5's commit call unbootstrapped.
@@ -201,7 +201,7 @@ When the conversation reaches natural conclusions or the developer signals readi
 |------|-------------|-----------------|
 | Note | `.planning/notes/{slug}.md` | Observations, context, decisions worth remembering |
 | Todo | `.planning/todos/pending/{slug}.md` | Concrete actionable tasks identified |
-| Seed | `.planning/seeds/{slug}.md` | Forward-looking ideas with trigger conditions |
+| Seed | `.planning/seeds/` via the plant-seed workflow (`SEED-…`) | Forward-looking ideas with trigger conditions |
 | Research question | `.planning/research/questions.md` (append) | Open questions that need deeper investigation |
 | Requirement | `REQUIREMENTS.md` (append) | Clear requirements that emerged from discussion |
 | New phase | `ROADMAP.md` (append) | Scope large enough to warrant its own phase |
@@ -244,7 +244,7 @@ For each selected output, write the file:
 
 - **Notes:** Create `.planning/notes/{slug}.md` with frontmatter (title, date, context)
 - **Todos:** Create `.planning/todos/pending/{slug}.md` with frontmatter (title, date, priority)
-- **Seeds:** Create `.planning/seeds/{slug}.md` with frontmatter (title, trigger_condition, planted_date)
+- **Seeds:** Use the existing `/gad-capture --seed` command via SlashCommand, passing the idea with its trigger in the text (#4648) — capture routes to the plant-seed workflow, which mints the next `SEED-` id and writes the canonical frontmatter (`status`, `trigger_when`, `planted_during`, `scope`) that `list-seeds`, `audit-open` and `/gad-new-milestone` read. Carry the #2543 B3 untrusted-input fence rules into the idea text you pass. Do NOT hand-write `.planning/seeds/{slug}.md`: that shape has no `SEED-` prefix, `status`, or `trigger_when`, so every seed reader misses it
 - **Research questions:** Append to `.planning/research/questions.md`
 - **Requirements:** Append to `.planning/REQUIREMENTS.md` with next available REQ ID
 - **Phases:** Use existing `/gad-add-phase` command via SlashCommand

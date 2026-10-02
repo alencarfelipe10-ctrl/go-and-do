@@ -100,7 +100,7 @@ The three layers compose: `models` defaults a phase, `model_overrides` carves an
 - **Required when using non-Anthropic providers** (OpenRouter, local models, etc.) — otherwise GAD may call Anthropic models directly, incurring unexpected costs
 - Use when: you want GAD to follow your currently selected runtime model
 
-## Using Non-Claude Runtimes (Codex, OpenCode, Gemini CLI, Kilo)
+## Using Non-Claude Runtimes (Codex, OpenCode, Antigravity CLI, Kilo)
 
 When installed for a non-Claude runtime, the GAD installer sets `resolve_model_ids: "omit"` in `~/.gad/defaults.json`. This returns an empty model parameter for all agents, so each agent uses the runtime's default model. No manual setup is needed.
 
