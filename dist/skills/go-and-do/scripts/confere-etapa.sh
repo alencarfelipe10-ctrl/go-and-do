@@ -1558,36 +1558,51 @@ def da_etapa(et):
 def chave(et):
     return et.split()[0] if et.split() else et
 
+# A ordem vem do `seq` (monotônico no run-log; na falta dele, a posição da linha), não do
+# `ts`: o `ts` tem resolução de 1 s e o pre-despacho.sh grava o `end` da janela anterior e
+# o `checkpoint` da nova no MESMO segundo (Fase 1, seq 461/462 em 09:51:47) — por `ts`
+# estrito o checkpoint sumia e os incidentes da janela nova viravam «tardios».
 ends, eventos, cps = {}, [], {}
-for linha in open(sys.argv[1], encoding="utf-8", errors="replace"):
+for n, linha in enumerate(open(sys.argv[1], encoding="utf-8", errors="replace"), 1):
     linha = linha.strip()
     if not linha: continue
     try: e = json.loads(linha)
     except Exception: continue
     t = ts(e.get("ts") or e.get("timestamp") or e.get("hora"))
+    sq = e.get("seq")
+    sq = sq if isinstance(sq, (int, float)) and not isinstance(sq, bool) else n
     et = str(e.get("etapa") or "")
     if e.get("evento") == "end" and t is not None and et:
-        # `substitui`: um `end` re-emitido aposenta o anterior — fica o mais recente
-        ends[et] = max(ends.get(et, 0.0), t)
-    if e.get("evento") == "checkpoint" and t is not None and et:
-        cps.setdefault(chave(et), []).append(t)
+        # `substitui`: um `end` re-emitido aposenta o anterior — fica o mais recente (por seq)
+        if et not in ends or sq >= ends[et][0]:
+            ends[et] = (sq, t)
+    if e.get("evento") == "checkpoint" and et:
+        cps[chave(et)] = max(cps.get(chave(et), sq), sq)
     if e.get("evento") == "incidente" and da_etapa(et):
-        eventos.append((t, et, (e.get("detalhe") or e.get("kv", {}).get("detalhe") or "")[:70]))
+        eventos.append((t, sq, et, (e.get("detalhe") or e.get("kv", {}).get("detalhe") or "")[:70]))
 
 # t59 (L10): a etapa que roda a cerca mais de uma vez com o MESMO rótulo (5.4 → 5.5
 # --fix-cycle / 5.6 --reuat; 3 → 3.5; 4.1 iteração 2+) abre uma janela nova pelo
 # `checkpoint` do pre-despacho.sh. Incidente gravado na hora DENTRO dessa janela nova é
 # posterior ao `end` da passada anterior e não é tardio: só conta como tardio o que não
 # tem checkpoint da mesma etapa entre o `end` e ele.
+# Mede contra o ÚLTIMO checkpoint da etapa: se ele vem depois do último `end` (por seq), a
+# etapa foi reaberta e aquele `end` é de uma passada anterior — nada depois dele é tardio,
+# nem o que veio antes do checkpoint novo (Fase 3: a 3.5 abre com um REPLAN do gad-plan,
+# sem checkpoint próprio; o hook gravou na hora o incidente seq 378, depois do `end` 357 da
+# 1ª execução e antes do checkpoint 390). Tardio é o que vem depois de um `end` que fecha a
+# janela vigente — o último checkpoint da etapa é anterior a ele.
 tardios, rajadas = [], []
-for t, et, det in eventos:
-    fim = ends.get(et)
-    if t is not None and fim is not None and t > fim + 1:
-        if any(fim < c <= t for c in cps.get(chave(et), [])):
-            continue
+for t, sq, et, det in eventos:
+    if et not in ends:
+        continue
+    fim_sq, fim = ends[et]
+    if cps.get(chave(et), -1) > fim_sq:
+        continue
+    if t is not None and sq > fim_sq and t > fim + 1:
         tardios.append("%s (+%ds do end)" % (det or et, int(t - fim)))
 
-por_segundo = collections.Counter(int(t) for t, _, _ in eventos if t is not None)
+por_segundo = collections.Counter(int(t) for t, _, _, _ in eventos if t is not None)
 for seg, n in por_segundo.items():
     if n >= 3:
         rajadas.append("%d incidentes no mesmo segundo (%d)" % (n, seg))
@@ -1771,14 +1786,20 @@ case "${RUNLOG_ETAPA%% *}" in
       H41=$(jq -r '.head // ""' "$F41" 2>/dev/null || echo "")
       if [ -n "$H41" ] && git -C "$ROOT" cat-file -e "$H41^{commit}" 2>/dev/null; then
         # `:!.planning` tira os artefatos da rodada: recibo vencido é CÓDIGO que mudou.
-        DEPOIS=$( { git -C "$ROOT" log --format='%h %s' "$H41..HEAD" -- . ':!.planning' 2>/dev/null \
-                    | head -5; } || true )
-        if [ -n "$DEPOIS" ]; then
+        # Compara o CONTEÚDO da árvore (diff head aprovado × HEAD), não commits por
+        # ancestralidade: o squash-merge do PR reescreve o histórico, o head aprovado deixa
+        # de ser ancestral e o próprio merge contava como «código novo» (Fase 3, 4987c97 ×
+        # 75c5bc8, com `git diff` vazio). Diff vazio = o aprovado é o que está no HEAD.
+        MUDOU=$( { git -C "$ROOT" diff --name-only "$H41" HEAD -- . ':!.planning' 2>/dev/null; } || true )
+        if [ -n "$MUDOU" ]; then
+          n_arq=$( { printf '%s\n' "$MUDOU" | grep -c . || true; } )
+          DEPOIS=$( { git -C "$ROOT" log --format='%h %s' "$H41..HEAD" -- . ':!.planning' 2>/dev/null \
+                      | head -5; } || true )
           n_dep=$( { printf '%s\n' "$DEPOIS" | grep -c . || true; } )
-          RES=$(jq -c --arg d "recibo do 4.1 vencido: $n_dep commit(s) de código depois do head aprovado ($H41) — o gate reabre (novo fiscal 4.1 → novo end → novo recibo; warning/critical pedem re-review estreitado, mecanismo do 4.1b): $(printf '%s · ' $DEPOIS | cut -c1-300)" \
+          RES=$(jq -c --arg d "recibo do 4.1 vencido: $n_arq arquivo(s) de código diferentes do head aprovado ($H41), em $n_dep commit(s) — o gate reabre (novo fiscal 4.1 → novo end → novo recibo; warning/critical pedem re-review estreitado, mecanismo do 4.1b): $(printf '%s · ' $(printf '%s\n' "$MUDOU" | head -5) $DEPOIS | cut -c1-300)" \
             '. + [{id:"recibo_4_1_vencido", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
-          EXTRAI=$(jq -c --arg h "$H41" --argjson n "$n_dep" \
-            '. + {recibo_4_1: {head:$h, commits_depois:$n}}' <<<"$EXTRAI")
+          EXTRAI=$(jq -c --arg h "$H41" --argjson n "$n_dep" --argjson a "$n_arq" \
+            '. + {recibo_4_1: {head:$h, commits_depois:$n, arquivos_diferentes:$a}}' <<<"$EXTRAI")
         fi
       fi
     fi ;;

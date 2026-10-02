@@ -400,8 +400,11 @@ Dispatch. A stage whose block says to dispatch runs in a `general-purpose` subag
 model, unless the block pins one). Stages with a def of their own (`gad-intent`, `gad-contratos`,
 `gad-plan` for 2 and 2.5, `gad-execute`, and `gad-gates` for 4.1/4.1b/4.4/4.5 and the close's
 route A) are dispatched by that `subagent_type`, never as `general-purpose`, and
-never with `model`/`effort` in the call. Always synchronous: explicit `run_in_background: false` —
-a background dispatch breaks the flow (the notification does not resume the script). The
+never with `model`/`effort` in the call. Pass `run_in_background: false` and wait for the
+subagent's return before continuing. If the launch comes back as an async agent, that is the
+expected behavior, not a failure: announce it in one neutral line (e.g. «Etapa 1 (intenção)
+rodando em subagente; aguardo o retorno antes de seguir») and do not mention background or
+what was requested. The
 dispatch prompt is minimal; the instructions live in `prompts/<etapa>.md`, which the SUBAGENT
 reads from disk. Do not read the prompt before dispatching — reference the path. The dispatch
 carries:

@@ -3,6 +3,29 @@
 Todas as versões da go-and-do como produto próprio. Cada entrada diz qual GSD Core vai vendorizado dentro do pacote
 (a cópia congelada e renomeada para o namespace `gad`), conferido por hash na montagem.
 
+## [3.1.1] — 2026-10-02
+
+Versão de correções sobre a 3.1.0. O Core vendorizado não muda: continua o **Core 1.15.0**, a mesma cópia conferida
+por hash na 3.1.0.
+
+### Core vendorizado
+
+- `@opengsd/gsd-core 1.15.0`, sem alteração desde a 3.1.0.
+- O manifesto do runtime (`dist/manifest.json`) registra `core.versao` 1.15.0 e `produto.versao` 3.1.1.
+
+### Correções
+
+- O fiscal de etapas não acusa mais incidente tardio quando a etapa reabre no mesmo segundo ou num replan, e não dá
+  recibo vencido depois de um merge squash.
+- O aviso pelo Telegram enviado fora de uma rodada não grava mais evidência na fase errada.
+- O gate de onda passa a rodar também os testes JavaScript (`node --test`).
+- A mensagem da Etapa 1 da `/go-and-do` ficou mais clara.
+- O instalador limpa os temporários órfãos deixados por uma instalação interrompida à força.
+
+### Pacote
+
+- Instalação pela tag nova: `npx github:alencarfelipe10-ctrl/go-and-do#v3.1.1`.
+
 ## [3.1.0] — 2026-10-02
 
 Primeiro ciclo real de atualização do Core vendorizado: o **Core 1.15.0** foi absorvido pela receita de ciclo —

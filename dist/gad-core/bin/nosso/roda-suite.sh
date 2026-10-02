@@ -320,10 +320,16 @@ else:
     fechadas = [w for w, ids in waves.items() if ids and all(planos.get(i, {}).get("has_summary") for i in ids)]
     onda = max(fechadas) if fechadas else 0
 arqs = []
+arqs_js = []         # testes JS/TS (node --test, vitest...): rodam pelo runner do projeto, não pelo pytest
 modulos = set()      # "parsing.base" para src/parsing/base.py
 pacotes = set()      # "parsing" — usado para "todos os golden do módulo"
 for pid in waves.get(onda, []):
     for f in (planos.get(pid, {}).get("files_modified") or []):
+        # (Fase 1/3 do gad-project) projeto que testa com `node --test` em *.test.mjs dava 0
+        # arquivos em toda onda: o gate saía rc=0 sem rodar nada. Teste JS/TS vai para lista própria.
+        if re.search(r"\.(test|spec)\.(mjs|cjs|js|ts|mts|cts|jsx|tsx)$", os.path.basename(f)):
+            arqs_js.append(f)
+            continue
         if not f.endswith(".py"):
             continue
         base = os.path.basename(f); d = os.path.dirname(f)
@@ -416,27 +422,47 @@ for pid in waves.get(onda, []):
     esperados += [(pid, e) for e in _frontmatter_lista(achados[0], "vermelho_esperado")]
 alvo_esperado = {e.split("—")[0].strip() for _pid, e in esperados}
 
-vistos = []
-for a in arqs:
-    if a in alvo_esperado:
-        continue
-    if a not in vistos and os.path.isfile(os.path.join(raiz, a)):
-        vistos.append(a)
+def _filtra(lista):
+    vistos = []
+    for a in lista:
+        if a in alvo_esperado:
+            continue
+        if a not in vistos and os.path.isfile(os.path.join(raiz, a)):
+            vistos.append(a)
+    return vistos
 print(onda)
-print(" ".join(vistos))
+print(" ".join(_filtra(arqs)))
 print(" · ".join("%s: %s" % (pid, e) for pid, e in esperados))
+print(" ".join(_filtra(arqs_js)))
 PY
 )
     ONDA_R=$(printf '%s\n' "$LISTA" | sed -n 1p); ARQS=$(printf '%s\n' "$LISTA" | sed -n 2p)
-    ESPERADOS=$(printf '%s\n' "$LISTA" | sed -n 3p)
+    ESPERADOS=$(printf '%s\n' "$LISTA" | sed -n 3p); ARQS_JS=$(printf '%s\n' "$LISTA" | sed -n 4p)
     [ -z "$ESPERADOS" ] || echo "vermelho esperado (declarado no PLAN.md, fora do gate): $ESPERADOS"
-    if [ -z "$ARQS" ]; then
+    if [ -z "$ARQS" ] && [ -z "$ARQS_JS" ]; then
       echo "gate da onda $ONDA_R (fase $FASE): nenhum arquivo de teste em files_modified — nada a rodar; a suíte completa é do host, depois da última onda"
       echo "rc=0"; exit 0
     fi
     TAG="gate-onda-$ONDA_R"; ST="$COMMON/gad-suite/$TAG"; mkdir -p "$ST"; F_LOG="$ST/log"; F_RC="$ST/rc"
-    CMD="$CMD_BASE $ARQS"
-    printf '%s' "$CMD" | grep -qE '(^|[[:space:]])-r[A-Za-z]*[fa]' || CMD="$CMD -rf"
+    # Python: o cmd-base (pytest) com -rf, como sempre. JS/TS: o runner do projeto
+    # (workflow.test_command da config; sem ela, `node --test`) com os arquivos no fim.
+    CMD_PY=""; CMD_JS=""
+    if [ -n "$ARQS" ]; then
+      CMD_PY="$CMD_BASE $ARQS"
+      printf '%s' "$CMD_PY" | grep -qE '(^|[[:space:]])-r[A-Za-z]*[fa]' || CMD_PY="$CMD_PY -rf"
+    fi
+    if [ -n "$ARQS_JS" ]; then
+      RUNNER_JS=$(cd "$DIR" && node "$GAD" config-get workflow.test_command --raw 2>/dev/null) || RUNNER_JS=""
+      case "$RUNNER_JS" in ""|null|undefined) RUNNER_JS="node --test" ;; esac
+      CMD_JS="$RUNNER_JS $ARQS_JS"
+    fi
+    if [ -n "$CMD_PY" ] && [ -n "$CMD_JS" ]; then
+      # os dois rodam; o rc é o do primeiro vermelho
+      CMD="{ $CMD_PY; }; _r1=\$?; { $CMD_JS; }; _r2=\$?; [ \$_r1 -ne 0 ] && exit \$_r1; exit \$_r2"
+    else
+      CMD="$CMD_PY$CMD_JS"
+    fi
+    ARQS="$ARQS $ARQS_JS"
     printf '%s\n' "$CMD" > "$ST/cmd"; date -Is > "$ST/iniciado"
     if [ "$IMPORTADORES" = "true" ]; then
       echo "gate da onda $ONDA_R (fase $FASE): $(printf '%s\n' $ARQS | wc -w) arquivo(s) de teste (declarados + importadores dos módulos tocados + goldens do pacote — 46s)"

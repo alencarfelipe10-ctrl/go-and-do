@@ -83,13 +83,38 @@ else
 fi
 [ -n "$DETALHE" ] || DETALHE="O Claude Code está esperando você no terminal."
 
-# ── Enriquecimento opcional: fase/etapa do run-log da go-and-do, se houver. ──
+# ── Enriquecimento opcional: fase/etapa da rodada ATIVA da go-and-do, se houver. ──
+# A fase vem do ponteiro da rodada (.planning/.gad/rodada-ativa.json, via gad-caminhos.sh
+# — a mesma fonte dos outros scripts), nunca do run-log mais recente em disco: o `ls -t`
+# antigo gravava evidência e rotulava a mensagem com a fase errada fora de rodada (caso de
+# 27/09: avisos do /gad-pre-spec 2 caíram no 01-NOTIFICACOES.jsonl da Fase 1 já fechada).
+# Ponteiro de OUTRA sessão não conta (mesma régua do hooks/gad-lifecycle.sh).
 FASE_INFO=""
 RL=""
-if [ -n "$CWD" ] && [ -d "$CWD/.planning/phases" ]; then
-  RL=$(ls -t "$CWD"/.planning/phases/*/*-RUN-LOG.jsonl 2>/dev/null | head -n 1)
+RAIZ=""
+SESS=$(printf '%s' "$PAYLOAD" | jq -r '.session_id // empty' 2>/dev/null)
+CAMINHOS_LIB="$(dirname -- "${BASH_SOURCE[0]:-$0}")/../skills/go-and-do/scripts/lib/gad-caminhos.sh"
+if [ -n "$CWD" ] && [ -d "$CWD" ]; then
+  RAIZ=$(git -C "$CWD" rev-parse --show-toplevel 2>/dev/null) || RAIZ="$CWD"
+  P=""
+  if [ -r "$CAMINHOS_LIB" ]; then
+    # shellcheck source=/dev/null
+    source "$CAMINHOS_LIB" 2>/dev/null && P=$(gad_rodada_ativa "$RAIZ" 2>/dev/null) || P=""
+  else
+    # resguardo (instalação parcial): os mesmos dois caminhos, o novo com precedência
+    for c in "$RAIZ/.planning/.gad/rodada-ativa.json" "$RAIZ/.planning/.gad-rodada-ativa.json"; do
+      [ -f "$c" ] && { P="$c"; break; }
+    done
+  fi
+  if [ -n "$P" ]; then
+    PSESS=$(jq -r '.session_id // empty' "$P" 2>/dev/null)
+    if [ -z "$SESS" ] || [ -z "$PSESS" ] || [ "$SESS" = "$PSESS" ]; then
+      RL=$(jq -r '.runlog // empty' "$P" 2>/dev/null)
+      PD=$(jq -r '.phase_dir // empty' "$P" 2>/dev/null)
+    fi
+  fi
   if [ -n "$RL" ]; then
-    FASE=$(basename "$(dirname "$RL")" | html_esc)
+    FASE=$(basename "${PD:-$(dirname "$RL")}" | html_esc)
     ETAPA=$(tail -n 1 "$RL" 2>/dev/null | jq -r '.etapa // empty' 2>/dev/null | html_esc)
     FASE_INFO="📂 ${FASE}${ETAPA:+ · ${ETAPA}}"
   fi
@@ -142,8 +167,19 @@ fi
 # NN-NOTIFICACOES.jsonl ao lado do run-log — arquivo próprio, para não poluir a
 # numeração de seq do NN-RUN-LOG.jsonl. Auditoria distingue "notificou e o dono
 # demorou" de "hook mudo" (2 auditorias seguidas ficaram sem_evidencia).
+# Sem rodada ativa: nenhum sidecar de fase — a evidência vai para um log neutro no estado
+# ignorado da rodada (.planning/.gad/notificacoes.jsonl), se o projeto tiver .planning/.
+EVID=""
 if [ -n "$RL" ]; then
   EVID="${RL%-RUN-LOG.jsonl}-NOTIFICACOES.jsonl"
+elif [ -n "$RAIZ" ] && [ -d "$RAIZ/.planning" ]; then
+  if declare -F gad_estado_garante >/dev/null 2>&1; then
+    gad_estado_garante "$RAIZ" >/dev/null 2>&1 && EVID="$(gad_estado_dir "$RAIZ")/notificacoes.jsonl"
+  elif [ -d "$RAIZ/.planning/.gad" ]; then
+    EVID="$RAIZ/.planning/.gad/notificacoes.jsonl"
+  fi
+fi
+if [ -n "$EVID" ]; then
   OK=$(jq -r 'if .ok == true then "true" else "false" end' "$STATE_DIR/last-send.json" 2>/dev/null)
   TIPO="permissao"; case "$TITULO" in *Pergunta*) TIPO="pergunta";; esac
   printf '{"evento":"notify","canal":"telegram","ts":"%s","tipo":"%s","silencioso":%s,"enviado_ok":%s}\n' \

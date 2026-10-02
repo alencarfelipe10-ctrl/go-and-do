@@ -27,6 +27,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { Falha, REL_RECIBO, executar, imprimirPlano, lerRecibo, novoPlano } from './plano.mjs';
 import { escreverAtomico } from './lib/arvore.mjs';
 import { resolverCasa } from './casa.mjs';
+import { limparOrfaos } from './orfaos.mjs';
 import { checarPrereqs } from './prereqs.mjs';
 import { AVISO_REINICIAR, lerPacote, planejarRuntime, raizDoPacote } from './install.mjs';
 import { checarAncestrais, classificarDestino, planejarAtalhos, planejarRecibosDoMotor } from './destinos.mjs';
@@ -193,6 +194,9 @@ export async function executarSubcomando(opcoes) {
     for (const aviso of plano.avisos) escrever(`aviso: ${aviso}\n`);
     return;
   }
+  // Todo 2026-09-30: temporários .tmp-<pid>-* de pid morto (SIGKILL entre o temporário e o rename) saem antes de
+  // executar; o --dry-run já voltou acima e não remove nada.
+  for (const orfao of limparOrfaos({ cfg: plano.cfg, home: plano.home })) escrever(`temporário órfão removido: ${orfao}\n`);
   if (plano.nadaAFazer) {
     escrever(`go-and-do já está no runtime ${plano.recibo.runtime} em ${plano.cfg}; nada foi escrito.\n`);
   } else {

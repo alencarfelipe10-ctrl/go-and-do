@@ -1892,7 +1892,7 @@
     },
     "gad-core/bin/nosso/roda-suite.sh": {
       "modo": "755",
-      "sha256": "ae900970452c05a3abacee66b0a991c8231a0d7fb489e34407bcbdc609021444",
+      "sha256": "7d20257e0c61f6909e01de406a926eddc4c4356b663a82868484bb2949a3232f",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/scout.py": {
@@ -4337,7 +4337,7 @@
     },
     "hooks/notify-telegram.sh": {
       "modo": "755",
-      "sha256": "787e54f43f4ba2156c3a8c838bea4040cbad981545419cb2040077bac2a6b17d",
+      "sha256": "4f1a0714b77369a25b9ad9ee922fa2602e95bd66346ce5e43e399f4b0c29e7fc",
       "tipo": "arquivo"
     },
     "hooks/package.json": {
@@ -4902,7 +4902,7 @@
     },
     "skills/go-and-do/scripts/confere-etapa.sh": {
       "modo": "755",
-      "sha256": "138d7a0ac0b2c39ec4bcc847db50c2244623caeae6faa2744754fadbf2eba246",
+      "sha256": "feb0fc225780d97b135e75c51576198891fcb06ca38e24df957d11f250d406ea",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/confere-plano.sh": {
@@ -5252,7 +5252,7 @@
     },
     "skills/go-and-do/workflow.md": {
       "modo": "644",
-      "sha256": "7b9017d42156967bcd71684e4e6e4505cdddf7908a97c3c428c12b9873f4993d",
+      "sha256": "5bedacb0fe4ad5a6ccd5279a834b4018751e21a1c411febc6a66527a3a5dd1ce",
       "tipo": "arquivo"
     }
   },
@@ -5267,6 +5267,6 @@
     "commit": "be4bf9f9a654f103c1713618b9d662e9f44eb605"
   },
   "produto": {
-    "versao": "3.1.0"
+    "versao": "3.1.1"
   }
 }

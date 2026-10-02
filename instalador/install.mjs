@@ -34,6 +34,7 @@ import { fileURLToPath } from 'node:url';
 import { Falha, checarDiretoriosDoRuntime, executar, imprimirPlano, lerRecibo, novoPlano } from './plano.mjs';
 import { NOME_MANIFESTO, conferirManifesto, sha256Hex, validarCaminhoRelativo } from './lib/arvore.mjs';
 import { resolverCasa } from './casa.mjs';
+import { limparOrfaos } from './orfaos.mjs';
 import { checarPrereqs } from './prereqs.mjs';
 import { checarAncestrais, classificarDestino, planejarAtalhos, planejarRecibosDoMotor } from './destinos.mjs';
 import { planejarSettings } from './settings.mjs';
@@ -255,6 +256,9 @@ export async function executarSubcomando(opcoes) {
     for (const aviso of plano.avisos) escrever(`aviso: ${aviso}\n`);
     return;
   }
+  // Todo 2026-09-30: temporários .tmp-<pid>-* de pid morto (SIGKILL entre o temporário e o rename) saem antes de
+  // executar; o --dry-run já voltou acima e não remove nada.
+  for (const orfao of limparOrfaos({ cfg: plano.cfg, home: plano.home })) escrever(`temporário órfão removido: ${orfao}\n`);
   executar(plano);
   if (copia) executar(copia);
   for (const linha of plano.fim) escrever(`${linha}\n`);
