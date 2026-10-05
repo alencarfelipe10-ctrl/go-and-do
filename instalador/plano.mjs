@@ -44,6 +44,32 @@ export class Falha extends Error {
 }
 
 export const REL_RECIBO = 'go-and-do/recibo.json';
+
+/**
+ * passoSemRecibo(cfg) → o próximo passo quando o recibo está ilegível ou inválido (WR-05 do code review da fase 6):
+ * update, uninstall, install e verify recusam todos com Falha 8, e sem este passo o usuário não tinha saída. Sem o
+ * recibo, o install conflita com o que só o recibo citava: os recibos do motor com conteúdo diferente do pacote
+ * (destinos.mjs, RECIBOS_DO_MOTOR) e o go-and-do/current de outro runtime (planejarPonteiros). Desde o CR-02 da
+ * iteração 2, o install sem recibo adota o runtime/<hash> que confere, os ponteiros e atalhos certos, os recibos do
+ * motor de bytes idênticos e os grupos de hook do pacote — mas não os contêineres que já existiam (diretórios, eventos
+ * e o objeto hooks, WR-01 da iteração 3); a pasta <cfg>/go-and-do sai inteira mesmo assim (o runtime é
+ * só-leitura: chmod -R u+w antes) porque um runtime que diverge do manifesto é recusado (Falha 5) e nunca regravado
+ * por cima. Provado ponta a ponta, até o uninstall, em testes/instalador/uninstall.test.mjs (WR-05 e CR-02), com e sem
+ * update A → B. Também é dito pelo install, pelo update e pelo verify diante de um recibo sem runtime (CR-02 da
+ * iteração 2) e pelo uninstall diante de um recibo completo sem runtime (CR-01 da iteração 3). `cfg` pode ser o texto
+ * <cfg>.
+ */
+export function passoSemRecibo(cfg) {
+  return (
+    `para sair: mova ${cfg}/${REL_RECIBO} para fora de ${cfg}/go-and-do, apague a pasta ${cfg}/go-and-do inteira ` +
+    `(o runtime é só-leitura: chmod -R u+w ${cfg}/go-and-do antes) e os arquivos ${cfg}/gad-file-manifest.json e ` +
+    `${cfg}/.gad-profile (são do go-and-do; o .gad-profile guarda a escolha feita com /gad-surface, que volta ao ` +
+    'padrão — copie-o antes se quiser refazê-la), e rode go-and-do install; se o install ainda recusar com «conflito ' +
+    'de destino», confira o caminho que ele nomear: se for um atalho do go-and-do (symlink para …/go-and-do/current/…) ' +
+    'ou um arquivo que o go-and-do grava, apague só ele e rode o install de novo; se for seu (uma skill ou um agente ' +
+    `que você trocou por uma versão própria), mova-o para fora de ${cfg} antes e rode o install de novo`
+  );
+}
 const REL_DIR_PRODUTO = 'go-and-do';
 const PREFIXO_RUNTIME = 'go-and-do/runtime/';
 const RAIZES = new Set(['cfg', 'home']);
@@ -152,16 +178,16 @@ export function lerRecibo(cfg) {
     texto = fs.readFileSync(abs, 'utf8');
   } catch (e) {
     if (e.code === 'ENOENT') return null;
-    throw new Falha(8, `recibo ilegível: ${abs} (${e.code || e.message})`);
+    throw new Falha(8, `recibo ilegível: ${abs} (${e.code || e.message}); ${passoSemRecibo(cfg)}`);
   }
   let recibo;
   try {
     recibo = JSON.parse(texto);
   } catch (e) {
-    throw new Falha(8, `recibo não é JSON válido: ${abs} (${e.message})`);
+    throw new Falha(8, `recibo não é JSON válido: ${abs} (${e.message}); ${passoSemRecibo(cfg)}`);
   }
   if (!recibo || typeof recibo !== 'object' || Array.isArray(recibo) || recibo.formato !== 1) {
-    throw new Falha(8, `recibo com formato desconhecido (esperado formato 1): ${abs}`);
+    throw new Falha(8, `recibo com formato desconhecido (esperado formato 1): ${abs}; ${passoSemRecibo(cfg)}`);
   }
   return recibo;
 }

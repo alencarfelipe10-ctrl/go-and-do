@@ -318,7 +318,7 @@ SKETCH_FINDINGS_PATH=$(ls ./.claude/skills/sketch-findings-*/SKILL.md 2>/dev/nul
 PHASE_DIR_FOR_SPEC=$(_gad_field "$INIT" phase_dir)
 SPEC_FILE=$(ls "${PHASE_DIR_FOR_SPEC}"/*-SPEC.md 2>/dev/null | grep -Ev -- '-(AI|UI|PRE)-SPEC\.md$' | head -1)   # PRE-SPEC = insumo da /go-and-do, não é o SPEC
 # documento único (gad v3.2.0): sem SPEC antigo, o CONTEXT marcado é a fonte de Edge Coverage/Prohibitions/gsd:acs; fase antiga lida como está
-[ -z "$SPEC_FILE" ] && [ -n "$CONTEXT_PATH" ] && [ "$(sed -n '2p' "$CONTEXT_PATH" 2>/dev/null)" = '<!-- gad:documento-unico: v1 -->' ] && SPEC_FILE="$CONTEXT_PATH"
+[ -z "$SPEC_FILE" ] && [ -n "$CONTEXT_PATH" ] && [ "$(LC_ALL=C sed -n '2{s/\r$//;s/^[[:space:]]*//;s/[[:space:]]*$//;p;q}' "$CONTEXT_PATH" 2>/dev/null)" = '<!-- gad:documento-unico: v1 -->' ] && SPEC_FILE="$CONTEXT_PATH"
 SPEC_PATH="${SPEC_FILE}"
 # Resolve the phase UI-SPEC separately (the glob above excludes -UI-SPEC.md); it carries the
 # ## UI Considerations section the planner lifts by the same rule as ## Edge Coverage (#1867).

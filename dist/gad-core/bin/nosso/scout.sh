@@ -3,7 +3,7 @@
 #
 # Uso: bash scout.sh <fase> [--spec <SPEC.md>] [--out <arquivo>] [--goal-file <arquivo>] [--root <dir>]
 #
-# Faz, em ordem e sem julgamento: (1) entrada — objetivo da fase (goal.txt do spec-init/discuss-init
+# Faz, em ordem e sem julgamento: (1) entrada — objetivo da fase (goal.txt do discuss-init
 # ou `gad-tools roadmap get-phase`), arquivos citados na SPEC, termos-chave; (2) frescor — compara o
 # commit gravado no graph.db com o HEAD e roda `code-review-graph update --skip-flows` se divergiu;
 # (3) consulta ao grafo (scout.py, sqlite3 embutido, sem MCP); (4) reserva em grep sem grafo;
@@ -26,9 +26,11 @@ cd "$ROOT" || exit 2
 AQUI="$(dirname "$(readlink -f "$0")")"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
-# (1) objetivo: arquivo dado > goal.txt dos init > roadmap get-phase
+# (1) objetivo: arquivo dado > goal.txt do discuss-init > roadmap get-phase. O .planning/.spec-tmp/
+# saiu da lista: desde o 06-21 nada o grava nem o limpa, então um goal.txt ali é sempre de uma fase
+# antiga (CR-01 do review iter4 da fase 06).
 if [ -z "$GOAL" ]; then
-  for c in .planning/.spec-tmp/goal.txt .planning/.discuss-tmp/goal.txt; do
+  for c in .planning/.discuss-tmp/goal.txt; do
     [ -s "$c" ] && { GOAL="$c"; break; }
   done
 fi

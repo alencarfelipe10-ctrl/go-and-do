@@ -10,7 +10,13 @@
 //   diretório, symlink para outro alvo) → Falha(7).
 //   `esperado` { sha256, registrado } = arquivo regular que o produto grava (recibo do motor): ausente → 'criar';
 //   arquivo regular cujo sha256 é o `registrado` no recibo anterior → 'manter' se já é o `sha256` desejado, senão
-//   'regravar'; qualquer outra coisa → Falha(7) (o recibo anterior é a única fonte de «nosso»).
+//   'regravar'; com `adotar: true` (install sem recibo anterior, CR-02 da iteração 2 do code review da fase 6), arquivo
+//   regular com exatamente o `sha256` do pacote → 'manter'; qualquer outra coisa → Falha(7) (o recibo anterior é a
+//   única fonte de «nosso», fora essa adoção de bytes idênticos).
+// - adotando(ctx, plano): install sem recibo anterior. Nesse caso install.mjs adota runtime/<hash> e os ponteiros, e
+//   planejarAtalhos e planejarRecibosDoMotor adotam os atalhos e os recibos do motor que conferem. Contêiner que já
+//   existia (skills/, agents/) nunca é adotado em recibo.criados: sem recibo não há como saber se era do usuário antes
+//   da primeira instalação, e o uninstall não apaga o que estava lá (WR-01 da iteração 3 do code review da fase 6).
 // - checarAncestrais(ctx): skills, agents, go-and-do e go-and-do/runtime de <cfg> symlink para fora de realpath(<cfg>),
 //   quebrados ou que não são diretório → Falha(7) nomeando o caminho (AC-28, c3-01, D-10); roda antes de qualquer
 //   planejamento de ação.
@@ -73,6 +79,10 @@ export function classificarDestino(ctx, rel, esperado) {
     if (atual === esperado.registrado) return atual === esperado.sha256 ? 'manter' : 'regravar';
     throw recusa(rel, 'já existe e foi mudado depois da instalação registrada no recibo');
   }
+  // CR-02 (iteração 2 do code review da fase 6): no install sem recibo anterior, arquivo regular com exatamente os bytes
+  // do pacote é adotado ('manter', entra em recibo.arquivos) — é o que uma instalação anterior gravou e só o recibo
+  // perdido citava. Qualquer outro conteúdo continua recusado.
+  if (st.isFile() && esperado.adotar === true && sha256Hex(fs.readFileSync(abs)) === esperado.sha256) return 'manter';
   throw recusa(rel, `já existe como ${descreverTipo(st)} que o recibo não cita`);
 }
 
@@ -131,13 +141,20 @@ function realOu(abs, alternativa) {
   }
 }
 
-function registrarLink(plano, caminho, alvo) {
+export function registrarLink(plano, caminho, alvo) {
   if (!plano.recibo) return;
   const i = plano.recibo.links.findIndex((l) => l.caminho === caminho);
   const entrada = { caminho, alvo };
   if (i >= 0) plano.recibo.links[i] = entrada;
   else plano.recibo.links.push(entrada);
 }
+
+/**
+ * CR-02 (iteração 2 do code review da fase 6): install sem recibo anterior (o recibo foi apagado ou movido). O que o
+ * install confere e mantém entra no recibo novo em vez de ficar fora dele — senão o verify reprova e o uninstall deixa
+ * para trás. update e uninstall sempre têm recibo anterior, então nunca adotam.
+ */
+export const adotando = (ctx, plano) => Boolean(plano.recibo) && !ctx.reciboAnterior;
 
 export function planejarAtalhos(ctx, plano) {
   const { cfg, pacote } = ctx;
@@ -150,6 +167,8 @@ export function planejarAtalhos(ctx, plano) {
     if (!existe) plano.acoes.push({ tipo: 'diretorio', raiz: 'cfg', caminho: tipo });
     // Alvo relativo ao diretório real onde o link mora; sem symlink no meio vale ../go-and-do/current/<tipo>/<nome>.
     const dirReal = existe ? realOu(dirAbs, path.join(realCfg, tipo)) : path.join(realCfg, tipo);
+    // WR-01 (iteração 3): skills/ ou agents/ que já existe não entra em recibo.criados, nem no install sem recibo
+    // anterior — o uninstall deixa a pasta (vazia, se só tinha atalhos do produto) em vez de apagar a do usuário.
     for (const nome of nomes[tipo]) {
       const rel = `${tipo}/${nome}`;
       const alvo = path.relative(dirReal, path.join(realCfg, ...REL_CURRENT.split('/'), tipo, nome)).split(path.sep).join('/');
@@ -175,7 +194,7 @@ export function planejarRecibosDoMotor(ctx, plano) {
     }
     const sha256 = sha256Hex(conteudo);
     const registrado = anteriores.find((a) => a && a.caminho === caminho)?.sha256 ?? null;
-    const classe = classificarDestino(ctx, caminho, { sha256, registrado });
+    const classe = classificarDestino(ctx, caminho, { sha256, registrado, adotar: adotando(ctx, plano) });
     if (classe !== 'manter') plano.acoes.push({ tipo: 'arquivo', raiz: 'cfg', caminho, conteudo, modo: 0o644 });
     arquivos.push({ caminho, sha256 });
   }

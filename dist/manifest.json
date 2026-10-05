@@ -1822,7 +1822,7 @@
     },
     "gad-core/bin/nosso/confere-documento.py": {
       "modo": "755",
-      "sha256": "bf3bb6e6f576d73dc422afe56ec9243a3a10597f727d3b00a0c5129d79aa031b",
+      "sha256": "0d443374a28d8b516c3abd1eec4dc6dba82d87f96118565e06bdc6c4e37ebaba",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/confere-pii.sh": {
@@ -1847,7 +1847,7 @@
     },
     "gad-core/bin/nosso/discuss-finalize.sh": {
       "modo": "755",
-      "sha256": "f26fc1ebb5cbe4988cf23fbc55f067086ebd6fa8b5a90632babbc5777d549cde",
+      "sha256": "f50f25ff7673e53937e95b85ad4fcb0d1fe82c7bda9ceee971ef769a3ac3c4de",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/discuss-hooks-filter.sh": {
@@ -1857,7 +1857,7 @@
     },
     "gad-core/bin/nosso/discuss-init.sh": {
       "modo": "644",
-      "sha256": "ad10b979b58c3b78b9dc1ffe0b613152f89cd160f236874ecbdefd2d5aa151dd",
+      "sha256": "c8a055e850e3eb7a89473f8807eda45024e28295318ad34fb24a27325a09bd2b",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/discuss-render-guard.sh": {
@@ -1892,7 +1892,7 @@
     },
     "gad-core/bin/nosso/scout.sh": {
       "modo": "755",
-      "sha256": "57c400164768fa23e1e4baba460838727c446c07b7fc4d2b39fceceba75e2cd5",
+      "sha256": "77c34533fc9502408608a0b8e1872bcdc33aeb5a6b0ead3c7fb8834eeee41c2b",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/varre-pares.py": {
@@ -3347,7 +3347,7 @@
     },
     "gad-core/workflows/discuss-phase.md": {
       "modo": "644",
-      "sha256": "9dcd23c0436fce5f85773c7e0c1d0cd860a8cc089a81fedfe46f1e02ecc0647d",
+      "sha256": "0e939efff9b8fad89bcdd40f7ab2e319e2b1fa3e7851995f81bf28880f0408db",
       "tipo": "arquivo"
     },
     "gad-core/workflows/discuss-phase/blocks/finish.md": {
@@ -3357,7 +3357,7 @@
     },
     "gad-core/workflows/discuss-phase/blocks/probes.md": {
       "modo": "644",
-      "sha256": "d632eae33cab4bc39afd30ed28edf253002fbebc16bfcecb2556388cf3ddbf5b",
+      "sha256": "cf74e639ac35d5e4d3c4e2c91f3b13bbefb2a50f1e6859957ddb1da289cce996",
       "tipo": "arquivo"
     },
     "gad-core/workflows/discuss-phase/modes/default.md": {
@@ -3712,7 +3712,7 @@
     },
     "gad-core/workflows/plan-phase.md": {
       "modo": "644",
-      "sha256": "f35285e3cd6e6ee1711187dc44dd7e602125880002dfb533dcd6d0c6357912df",
+      "sha256": "52f354f4b17889bd90d636c35629c606bc3b58d89329f6ef6ad1b8c64d68de99",
       "tipo": "arquivo"
     },
     "gad-core/workflows/plan-phase/blocks/auto-advance.md": {
@@ -4082,7 +4082,7 @@
     },
     "gad-file-manifest.json": {
       "modo": "644",
-      "sha256": "d47426793a8b1d56625f9a63c3352cc91ef45e410a17d5e69bb79520905d8c69",
+      "sha256": "56c46e740b66f0b4b3005073b1f3d910ddb84846383413da455944ab4d707c73",
       "tipo": "arquivo"
     },
     "hooks.json": {
@@ -4737,7 +4737,7 @@
     },
     "skills/go-and-do/scripts/abre-rodada.sh": {
       "modo": "755",
-      "sha256": "fa35483345d23a25453998ece422b3439018bf884f59f11b7a743256eea8561f",
+      "sha256": "1bc65d5284ca3a23771cd4e6194a829653120c089a480d8d18e406995b87de81",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/briefing-build.sh": {
@@ -4797,7 +4797,7 @@
     },
     "skills/go-and-do/scripts/confere-reconciliacao.sh": {
       "modo": "755",
-      "sha256": "06ad1a56161151f7bdbb57330744ca1e9f785992e9b3c8f5c2a2bdc66f97da86",
+      "sha256": "7c4928b1fd01c7838614e90c58e86ee10c2982b3942bb314b32cdb80d85042bd",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/confere-rotas.sh": {
@@ -5127,6 +5127,6 @@
     "commit": "be4bf9f9a654f103c1713618b9d662e9f44eb605"
   },
   "produto": {
-    "versao": "3.2.0"
+    "versao": "3.2.1"
   }
 }

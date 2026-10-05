@@ -32,15 +32,15 @@ Não é preciso instalar o GSD Core: a cópia que a go-and-do usa já vem dentro
 ## Instalação
 
 ```bash
-npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0
+npx github:alencarfelipe10-ctrl/go-and-do#v3.2.1
 ```
 
-O `#ref` (aqui a tag `v3.2.0`) é **obrigatório**: sem ele o npm instala o que estiver no branch padrão naquele
+O `#ref` (aqui a tag `v3.2.1`) é **obrigatório**: sem ele o npm instala o que estiver no branch padrão naquele
 momento, e você deixa de saber qual versão tem. Sem subcomando vale `install`; para os outros, acrescente o nome no
 fim, por exemplo:
 
 ```bash
-npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0 verify
+npx github:alencarfelipe10-ctrl/go-and-do#v3.2.1 verify
 ```
 
 O runtime vai para `~/.claude/go-and-do/runtime/<hash>`, com `~/.claude/go-and-do/current` apontando para ele, e os
@@ -57,31 +57,29 @@ Para cada fase, dois comandos dentro do Claude Code:
 
 Ou seja: `/gad-discuss-phase NN` → `/go-and-do NN`.
 
-## Voltar para a v3.1.1
+## Voltar para a v3.2.0
 
-Se a v3.2.0 não servir, reinstale a versão anterior por cima, com o comando exato:
+Se a v3.2.1 não servir, reinstale a versão anterior por cima, com o comando exato:
 
 ```bash
-npx github:alencarfelipe10-ctrl/go-and-do#v3.1.1 update
+npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0 update
 ```
 
-O `update` troca o runtime pelo da v3.1.1 e ajusta os hooks registrados pela go-and-do; o que você já escreveu nas
+O `update` troca o runtime pelo da v3.2.0 e ajusta os hooks registrados pela go-and-do; o que você já escreveu nas
 fases (`.planning/`) fica.
 
 Se esse `update` for interrompido no meio (o terminal fechou, a máquina desligou), rodá-lo de novo não conserta: ele
-recusa e manda desinstalar. Rode `npx github:alencarfelipe10-ctrl/go-and-do#v3.1.1 uninstall` e depois
-`npx github:alencarfelipe10-ctrl/go-and-do#v3.1.1 install`. A v3.1.1 não tem o conserto de queda da v3.2.0: se o
-`install` recusar com «conflito de destino» nomeando um arquivo, esse arquivo é sobra do update interrompido — apague
-só ele e rode o `install` de novo.
+recusa e manda desinstalar. Rode `npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0 uninstall` e depois
+`npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0 install`.
 
 ## Se um update cair no meio
 
-Um `update` para a v3.2.0 interrompido no meio deixa a instalação incompleta: o `verify` avisa, e rodar o `update` de
+Um `update` para a v3.2.1 interrompido no meio deixa a instalação incompleta: o `verify` avisa, e rodar o `update` de
 novo recusa e manda desinstalar. O caminho é desinstalar e instalar de novo:
 
 ```bash
-npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0 uninstall
-npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0 install
+npx github:alencarfelipe10-ctrl/go-and-do#v3.2.1 uninstall
+npx github:alencarfelipe10-ctrl/go-and-do#v3.2.1 install
 ```
 
 O `uninstall` tira o que é da go-and-do, da versão anterior ou da nova; o que você mudou à mão fica, com aviso.
@@ -99,7 +97,7 @@ O `uninstall` tira o que é da go-and-do, da versão anterior ou da nova; o que 
 Opções:
 
 - `--config-dir <dir>`: só aceita `$HOME/.claude` (com ou sem barra final, ou um atalho que resolva para ele). Para
-  instalar numa casa alternativa, troque o `HOME`: `HOME=<casa> npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0`.
+  instalar numa casa alternativa, troque o `HOME`: `HOME=<casa> npx github:alencarfelipe10-ctrl/go-and-do#v3.2.1`.
 - `--dry-run`: mostra o que seria feito, sem escrever nada.
 - `--opcional <script>` registra um hook opcional (`gad-rtk-worktree.sh` ou `notify-telegram.sh`); `--copiar-gsd`
   copia o seu `~/.gsd` para `~/.gad` durante o `install`.

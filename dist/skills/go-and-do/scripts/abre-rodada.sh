@@ -113,13 +113,17 @@ fi
 }
 
 # Documento único de intenção (06-07): a marca de formato é a linha 2 do NN-CONTEXT.md,
-# exatamente `<!-- gad:documento-unico: v1 -->` (o mesmo literal do conferidor do fork).
+# `<!-- gad:documento-unico: v1 -->` (o mesmo literal do conferidor do fork). Regra única da marca (WR-03 do
+# code review da fase 6): tira `\r` e o [[:space:]] ASCII (espaço, tab, VT, FF) das pontas da linha 2 e compara com a
+# marca — a mesma do discuss-init.sh, do confere-reconciliacao.sh, do plan-phase.md e do confere-documento.py
+# (`.strip(" \t\r\n\x0b\x0c")`). O `LC_ALL=C` fixa o [[:space:]] no ASCII em qualquer locale: num locale UTF-8 ele
+# casaria também U+3000, U+2028… e a regra mudaria com o terminal (WR-02 da iteração 3).
 # Inventário da fase (D7): só relata o que existe no disco; a barreira do estágio 5 é
 # quem decide parar.
 CTX_F="$PHASE_DIR/$NN-CONTEXT.md"
 MARCA_DOC='<!-- gad:documento-unico: v1 -->'
 if [ ! -f "$CTX_F" ]; then FORMATO_CTX=ausente
-elif [ "$(sed -n '2{s/\r$//;p;q}' "$CTX_F" 2>/dev/null)" = "$MARCA_DOC" ]; then FORMATO_CTX=novo
+elif [ "$(LC_ALL=C sed -n '2{s/\r$//;s/^[[:space:]]*//;s/[[:space:]]*$//;p;q}' "$CTX_F" 2>/dev/null)" = "$MARCA_DOC" ]; then FORMATO_CTX=novo
 else FORMATO_CTX=antigo
 fi
 INVENTARIO="context=$([ -f "$CTX_F" ] && echo sim || echo nao) formato=$FORMATO_CTX"

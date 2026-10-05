@@ -119,6 +119,47 @@ OK=false
 if [ "$COMMITTED" = true ] || [ "$SKIPPED" = true ]; then OK=true; fi
 [ "$SKIPPED" = true ] && log "[commit] skipped by commit_docs policy (${REASON:--})"
 
+# 3b. marcador da geração para a salvaguarda T3 da Go & Do (setup-intencao.sh): o `git hash-object` do CONTEXT
+#     que o dono aprovou e este fecho conferiu. Sem ele a T3 nunca sela a base (`intent/base-CONTEXT.txt`) numa fase
+#     nova e o `confere-reconciliacao.sh --final` fica sempre `n/a`. O caminho segue o layout da Go & Do
+#     (lib/gad-caminhos.sh, gad_fase_formato/gad_fase_tem_legado/gad_fase_caminho):
+#       - `.gad/FORMATO` presente, ou fase sem nenhuma evidência do formato antigo (a abertura da rodada a fará
+#         formato novo) → `.gad/intent/gerado-CONTEXT.txt`;
+#       - fase antiga que já tem `.intent/` → `.intent/.gerado-CONTEXT.txt`;
+#       - fase antiga sem `.intent/` → não grava (a T3 segue `nao_medido`, como antes).
+#     NUNCA cria `.intent/` (viraria evidência de formato antigo e prenderia a fase nele) nem `.gad/` numa fase antiga
+#     (sujeira que a cerca do confere-etapa cobraria). Melhor esforço: falha só vira aviso no log; o exit e o `files`
+#     não mudam. _tem_legado espelha gad_fase_tem_legado — mudou lá, muda aqui.
+_tem_legado() { # <pd> → exit 0 = há evidência no formato antigo
+  local pd="$1" f
+  for f in "$pd/.intent" "$pd/.convergencia" "$pd/.plan-checker"; do [ -e "$f" ] && return 0; done
+  compgen -G "$pd/.fence-*.ok" >/dev/null 2>&1 && return 0
+  compgen -G "$pd/.gate-fail-*" >/dev/null 2>&1 && return 0
+  compgen -G "$pd/.pos-ship-*" >/dev/null 2>&1 && return 0
+  compgen -G "$pd/.uat-*" >/dev/null 2>&1 && return 0
+  [ -d "$pd/pareceres" ] && [ -n "$(find "$pd/pareceres" -name '.*' ! -name '.gitkeep' -print -quit 2>/dev/null)" ] && return 0
+  return 1
+}
+if [ "$OK" = true ]; then
+  GERADO=""
+  if [ -f "${phase_dir}/.gad/FORMATO" ] || ! _tem_legado "$phase_dir"; then
+    GERADO="${phase_dir}/.gad/intent/gerado-CONTEXT.txt"
+  elif [ -d "${phase_dir}/.intent" ]; then
+    GERADO="${phase_dir}/.intent/.gerado-CONTEXT.txt"
+  fi
+  if [ -z "$GERADO" ]; then
+    log "[finalize] marcador da geração não gravado: fase no formato antigo sem .intent/"
+  else
+    H_GERADO=$(git hash-object -- "$CONTEXT_PATH" 2>/dev/null || true)
+    if [ -n "$H_GERADO" ] && mkdir -p "$(dirname "$GERADO")" 2>/dev/null \
+       && printf '%s\n' "$H_GERADO" > "$GERADO" 2>/dev/null; then
+      log "[finalize] marcador da geração gravado: $GERADO"
+    else
+      log "[warn] marcador da geração não gravado ($GERADO) — a salvaguarda T3 da Go & Do sai nao_medido"
+    fi
+  fi
+fi
+
 # 4. limpeza — SÓ no fim, após sucesso
 CLEANED=false
 if [ "$OK" = true ] && [ "$CLEAN" = 1 ]; then

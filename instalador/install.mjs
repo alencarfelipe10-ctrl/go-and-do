@@ -15,7 +15,11 @@
 //   rodada 4) runtime/<hash> que é symlink, para dentro ou para fora de <cfg>, sai Falha(7) antes de conferir — nunca
 //   é reusado através do link, porque o verify reprova esse estado.
 // - planejarPonteiros(ctx, plano): link go-and-do/current → runtime/<hash> e link gad-core → go-and-do/current/gad-core;
-//   link já existente com o alvo esperado → nenhuma ação.
+//   link já existente com o alvo esperado → nenhuma ação, mas entra em recibo.links (CR-02 da iteração 2 do code review
+//   da fase 6). No install sem recibo anterior (adotando, destinos.mjs), planejarRuntime adota em recibo.runtime o
+//   runtime/<hash> que conferiu; os diretórios go-and-do e go-and-do/runtime que já existiam não entram em
+//   recibo.criados (WR-01 da iteração 3); e um recibo completo sem runtime em texto é recusado com o passo de saída
+//   (passoSemRecibo).
 // - planejarInstall(opcoes) → plano: resolverCasa (PS-04) e checarPrereqs (R2) antes de ler o pacote; os avisos de
 //   consultoria vão para plano.avisos e saem antes da linha de reiniciar; executarSubcomando(opcoes) imprime o plano e para no --dry-run, ou executa e
 //   termina com AVISO_REINICIAR (AC-07). Depois do runtime e dos ponteiros (plano 03-04): planejarAtalhos e
@@ -31,12 +35,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { Falha, checarDiretoriosDoRuntime, executar, imprimirPlano, lerRecibo, novoPlano } from './plano.mjs';
+import { Falha, checarDiretoriosDoRuntime, executar, imprimirPlano, lerRecibo, novoPlano, passoSemRecibo } from './plano.mjs';
 import { NOME_MANIFESTO, conferirManifesto, sha256Hex, validarCaminhoRelativo } from './lib/arvore.mjs';
 import { resolverCasa } from './casa.mjs';
 import { limparOrfaos } from './orfaos.mjs';
 import { checarPrereqs } from './prereqs.mjs';
-import { checarAncestrais, classificarDestino, planejarAtalhos, planejarRecibosDoMotor } from './destinos.mjs';
+import {
+  adotando, checarAncestrais, classificarDestino, planejarAtalhos, planejarRecibosDoMotor, registrarLink,
+} from './destinos.mjs';
 import { planejarSettings } from './settings.mjs';
 import { obterConsentimento, planejarCopiaGsd } from './copiar-gsd.mjs';
 
@@ -131,6 +137,9 @@ export function planejarRuntime(ctx, plano) {
     plano.acoes.push({ tipo: 'diretorio', raiz: 'home', caminho: rel });
   }
   for (const rel of ['go-and-do', 'go-and-do/runtime']) {
+    // WR-01 (iteração 3 do code review da fase 6): go-and-do e go-and-do/runtime que já existem não entram em
+    // recibo.criados, nem no install sem recibo anterior — sem recibo não há como saber se existiam antes da primeira
+    // instalação, e o uninstall não apaga o que estava lá (pode sobrar a pasta vazia do produto).
     if (!existe(path.join(cfg, ...rel.split('/')))) plano.acoes.push({ tipo: 'diretorio', raiz: 'cfg', caminho: rel });
   }
   const relRuntime = `go-and-do/runtime/${pacote.hash}`;
@@ -150,6 +159,10 @@ export function planejarRuntime(ctx, plano) {
       throw new Falha(7, `runtime: <cfg>/${relRuntime} é symlink; o runtime não é reusado através dele — nada foi escrito`);
     }
     conferirRuntimeExistente(runtimeAbs, relRuntime, pacote);
+    // CR-02 (iteração 2): o runtime reusado sem ação nenhuma não passava por registrar (plano.mjs), e o install sem
+    // recibo gravava runtime: null — o verify, o install e o update recusavam esse recibo em laço. Sem recibo anterior,
+    // o runtime que conferiu é adotado; com recibo, ele já é o runtime registrado (checarReciboAnterior).
+    if (adotando(ctx, plano)) plano.recibo.runtime = pacote.hash;
     return;
   }
   const temporario = `go-and-do/runtime/.tmp-${process.pid}-${crypto.randomBytes(4).toString('hex')}`;
@@ -180,7 +193,13 @@ export function planejarPonteiros(ctx, plano) {
     { caminho: 'gad-core', alvo: 'go-and-do/current/gad-core' },
   ];
   for (const { caminho, alvo } of ponteiros) {
-    if (linkJaCerto(path.join(cfg, ...caminho.split('/')), alvo)) continue;
+    // CR-02 (iteração 2): ponteiro já certo fica sem ação, mas entra no recibo (registrarLink, como os atalhos que
+    // classificarDestino mantém) — sem isso, o install sem recibo deixava go-and-do/current e gad-core fora do recibo
+    // e o uninstall não os removia. Com recibo anterior, ele já está lá com o mesmo alvo (troca no mesmo caminho).
+    if (linkJaCerto(path.join(cfg, ...caminho.split('/')), alvo)) {
+      registrarLink(plano, caminho, alvo);
+      continue;
+    }
     // Plano 03-04 (AC-28): pasta, arquivo ou symlink alheio no caminho do ponteiro é recusado antes de escrever.
     if (classificarDestino(ctx, caminho, alvo) !== 'criar') continue;
     plano.acoes.push({ tipo: 'link', raiz: 'cfg', caminho, alvo });
@@ -196,6 +215,11 @@ function checarReciboAnterior(cfg, recibo, pacote) {
       `instalação anterior incompleta em ${cfg} (recibo com completo: false); rode go-and-do uninstall --config-dir ` +
         `${cfg} e instale de novo — nada foi escrito`,
     );
+  }
+  // CR-02 (iteração 2): recibo completo sem runtime em texto — o que o install sem recibo da v3.2.0 gravava ao reusar
+  // runtime/<hash>. O update também o recusa, então «use update» era um laço: a recusa diz o passo de saída.
+  if (typeof recibo.runtime !== 'string') {
+    throw new Falha(8, `recibo em ${cfg} sem runtime registrado (runtime: ${JSON.stringify(recibo.runtime ?? null)}); ${passoSemRecibo(cfg)}`);
   }
   if (recibo.runtime !== pacote.hash) {
     throw new Falha(

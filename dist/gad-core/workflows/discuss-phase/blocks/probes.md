@@ -3,7 +3,7 @@
 Lazy block do `/gad-discuss-phase` (comando único). Lido ao chegar no passo das sondas —
 DEPOIS da entrevista com o dono e DEPOIS do rascunho `gsd:reqs` —, nunca antes: uma rodada
 que para na entrevista não paga por este texto. O workflow principal leva só o ponteiro para cá.
-Herdado do `spec-phase/blocks/probes.md` (Steps 5.5 e 5.6): as duas sondas são as mesmas; o
+Herdado do antigo comando de especificação (Steps 5.5 e 5.6): as duas sondas são as mesmas; o
 que muda é onde o rascunho mora e para onde o resultado vai (o documento único `NN-CONTEXT.md`).
 
 **Preconditions carried with the text (they break the probe silently if lost):**

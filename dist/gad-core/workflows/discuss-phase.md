@@ -38,7 +38,7 @@ Número da fase no argumento (obrigatório). Uma chamada resolve o motor e roda 
 
 ```bash
 GAD_TOOLS="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/gad-tools.cjs"
-[ -n "$GAD_TOOLS" ] && [ -f "$GAD_TOOLS" ] || { echo "ERROR: gad-tools not found. Run the go-and-do installer (`go-and-do install`)" >&2; exit 1; }
+[ -n "$GAD_TOOLS" ] && [ -f "$GAD_TOOLS" ] || { echo "ERROR: gad-tools not found. Run the go-and-do installer ('go-and-do install')" >&2; exit 1; }
 NOSSO="$(dirname "$(readlink -f "$GAD_TOOLS")")/nosso"; [ -d "$NOSSO" ] || NOSSO="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/nosso"
 GAD_TOOLS="$GAD_TOOLS" ARGUMENTS="$ARGUMENTS" bash "$NOSSO/discuss-init.sh" "${PHASE}"   # + --insumo <arquivo> …
 ```
@@ -108,7 +108,7 @@ Uma chamada substitui a varredura manual (o funil está em `references/scout-cod
 
 ```bash
 . .planning/.discuss-tmp/env.sh
-bash "$NOSSO/scout.sh" "$PHASE" --out "$T/scout.md"
+bash "$NOSSO/scout.sh" "$PHASE" --goal-file "$T/goal.txt" --out "$T/scout.md"
 ```
 
 Leia `$T/scout.md` (≤ 8 KB: origem `grafo <commit>` ou `grep`, arquivos com símbolos e vizinhos, testes existentes, esqueleto `## reusable` / `## patterns` / `## integration`). Quando o host lhe entregou um arquivo de exploração, leia a conclusão lá em vez da fonte; senão confirme o fato você mesmo. Cada arquivo aberto é relido a cada turno desta janela.
@@ -158,7 +158,7 @@ python3 "$NOSSO/checkpoint-write.py" set-secao "$CKPT" --secao reqs_json --file 
 </step>
 
 <step name="ambiguity_gate">
-Régua interna, a do spec-phase: nota de 0 a 1 para quatro quesitos — objetivo (peso 35%, mínimo 0,75), limites (25%, 0,70), restrições (20%, 0,65) e critérios de aceite (20%, 0,70). Ambiguidade = 1 − soma ponderada; passa com ambiguidade ≤ 0,20 e todo quesito no mínimo. A nota nunca vai ao documento nem ao dono como número.
+Régua interna: nota de 0 a 1 para quatro quesitos — objetivo (peso 35%, mínimo 0,75), limites (25%, 0,70), restrições (20%, 0,65) e critérios de aceite (20%, 0,70). Ambiguidade = 1 − soma ponderada; passa com ambiguidade ≤ 0,20 e todo quesito no mínimo. A nota nunca vai ao documento nem ao dono como número.
 
 - Passou → siga.
 - Não passou → diga ao dono, em linguagem leiga, o que ainda está vago e o efeito de gravar assim (o planner vai supor). Recomende mais perguntas (volte a `interview`) ou grave só com a ordem do dono.

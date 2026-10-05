@@ -27,7 +27,10 @@
 //   <cfg>/settings.json.gad-backup-<AAAAMMDDTHHMMSSZ> só na primeira escrita sobre um settings.json que existia antes
 //   do install (D-13), nomeado em plano.fim. Recibo: hooks (grupos acrescentados ou já registrados), opcionais e
 //   settings { antes: 'ausente'|'existente', backup, hooks_criado, eventos_criados } — os campos de settings de uma
-//   instalação anterior prevalecem.
+//   instalação anterior prevalecem. CR-01 da iteração 2 do code review da fase 6: no install sem recibo anterior, o
+//   grupo do pacote já presente (comandos em <cfg>/go-and-do/current/hooks/) é adotado em hooks e o opcional do pacote
+//   já presente conta como pedido; `antes` e `backup` não são inferidos. WR-01 da iteração 3: nem eventos_criados nem
+//   hooks_criado são inferidos — evento (mesmo vazio) e objeto hooks que já existiam ficam depois do uninstall.
 // - Plano 03-13 (D-15, exceção da D-14): antes da mescla, cada entrada v2 da lista fechada (detectarV2) é trocada no
 //   mesmo índice pelo grupo do produto de mesmo evento e mesmo script (trocarEntradasV2); a entrada v2 de um script
 //   opcional passa a contar como pedida. recibo.v2.hooks guarda { evento, indice, valor_anterior, valor_novo } (sem
@@ -245,15 +248,40 @@ function registrarHooksV2(plano, itens, desejados) {
   }
 }
 
+/**
+ * CR-01 (iteração 2 do code review da fase 6): no install sem recibo anterior, os opcionais cujo grupo do pacote (com o
+ * marcador trocado por raizGad) já está no settings.json, por igualdade profunda, contam como pedidos — foram aceitos
+ * numa instalação anterior cujo recibo se perdeu. Sem isso, o grupo ficava no settings.json como se fosse do usuário.
+ */
+function opcionaisJaPresentes(hooksJson, raizGad, valor) {
+  const hooks = ehObjeto(valor.hooks) ? valor.hooks : {};
+  const presentes = [];
+  for (const [evento, lista] of Object.entries(hooksJson.opcionais ?? {})) {
+    if (!Array.isArray(hooks[evento])) continue;
+    for (const grupo of lista) {
+      const g = trocarMarcador(grupo, raizGad);
+      if (hooks[evento].some((h) => isDeepStrictEqual(h, g))) presentes.push(...scriptsDoGrupo(grupo));
+    }
+  }
+  return presentes;
+}
+
 export function planejarSettings(ctx, plano) {
   const hooksJson = lerHooksJson(ctx.pacote);
   const lido = lerSettings(ctx);
   // Plano 03-13 (D-15): entradas v2 da lista fechada presentes no settings.json lido.
   const entradasV2 = ctx.home ? detectarV2(ctx, lido.valor).entradas : [];
-  const opcionais = [
-    ...new Set([...opcionaisDoPlano(hooksJson, ctx.opcionais ?? [], ctx.reciboAnterior), ...opcionaisDaV2(hooksJson, entradasV2)]),
-  ];
   const raizGad = path.join(ctx.cfg, ...REL_CURRENT.split('/'));
+  // CR-01 (iteração 2): install sem recibo anterior (o recibo foi apagado ou movido pelo passo de saída). update e
+  // uninstall sempre têm recibo anterior, então nunca adotam.
+  const semReciboAnterior = Boolean(plano.recibo) && !ctx.reciboAnterior;
+  const opcionais = [
+    ...new Set([
+      ...opcionaisDoPlano(hooksJson, ctx.opcionais ?? [], ctx.reciboAnterior),
+      ...opcionaisDaV2(hooksJson, entradasV2),
+      ...(semReciboAnterior ? opcionaisJaPresentes(hooksJson, raizGad, lido.valor) : []),
+    ]),
+  ];
   const desejados = gruposDoPacote(hooksJson, raizGad, opcionais);
   for (const { evento } of desejados) {
     const v = lido.valor.hooks?.[evento];
@@ -274,10 +302,21 @@ export function planejarSettings(ctx, plano) {
   const eraRegistrado = ({ evento, grupo }) =>
     registrados.some((r) => r && r.evento === evento && isDeepStrictEqual(r.grupo, grupo));
   const eventosCriados = Object.keys(novo.hooks ?? {}).filter((ev) => !Array.isArray(hooksAntes?.[ev]));
+  // CR-01 (iteração 2): sem recibo anterior, grupo do pacote já presente antes era lido como do usuário e ficava fora
+  // de recibo.hooks — o uninstall seguinte deixava os comandos …/go-and-do/current/hooks/* pendurados. Grupo desejado
+  // presente cujos comandos apontam para <cfg>/go-and-do/current/hooks/ é do produto e é adotado. O `antes` não é
+  // inferido: um settings.json que o produto criou volta como {}, não ausente.
+  // WR-01 (iteração 3): o contêiner não é adotado. Evento que já existia (mesmo vazio, ou só com grupos do pacote) não
+  // entra em eventos_criados, e o objeto hooks que já existia (mesmo {}) não vira hooks_criado: sem recibo não há como
+  // saber se o usuário os tinha antes da primeira instalação, e o uninstall não apaga o que estava lá — pode sobrar
+  // um array vazio do produto, que é inofensivo.
+  const raizHooks = path.join(raizGad, 'hooks') + path.sep;
+  const adotado = (d) =>
+    semReciboAnterior && presenteAntes(d) && scriptsDoGrupo(d.grupo).length > 0 && JSON.stringify(d.grupo).includes(raizHooks);
 
   if (plano.recibo) {
     registrarHooksV2(plano, trocaV2.itens, desejados);
-    plano.recibo.hooks = desejados.filter((d) => eraRegistrado(d) || !presenteAntes(d));
+    plano.recibo.hooks = desejados.filter((d) => eraRegistrado(d) || !presenteAntes(d) || adotado(d));
     plano.recibo.opcionais = opcionais;
     plano.recibo.settings = {
       antes,

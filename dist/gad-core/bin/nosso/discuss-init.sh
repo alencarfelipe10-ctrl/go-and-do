@@ -126,7 +126,9 @@ print(json.dumps({k: d.get(k) for k in ("areas_completed", "areas_remaining", "i
   elif [ -f "$CONTEXT_PATH" ] && [ "$(_sha "$CONTEXT_PATH")" = "$APROV" ]; then ESTADO_INTENCAO=finalizar
   else ESTADO_INTENCAO=gravar; fi
 elif [ -f "$CONTEXT_PATH" ]; then
-  _L2=$(sed -n 2p "$CONTEXT_PATH" | tr -d '\r'); _L2="${_L2#"${_L2%%[![:space:]]*}"}"; _L2="${_L2%"${_L2##*[![:space:]]}"}"
+  # Regra única da marca (WR-02 da iteração 3 do code review da fase 6): o mesmo sed com LC_ALL=C dos outros leitores —
+  # a expansão de parâmetro usava o [[:space:]] do locale do shell, que num locale UTF-8 apara também U+3000, U+2028….
+  _L2=$(LC_ALL=C sed -n '2{s/\r$//;s/^[[:space:]]*//;s/[[:space:]]*$//;p;q}' "$CONTEXT_PATH" 2>/dev/null)
   if [ "$_L2" = "$MARCA" ]; then ESTADO_INTENCAO=existe-novo; else ESTADO_INTENCAO=existe-antigo; fi
 else
   ESTADO_INTENCAO=nova

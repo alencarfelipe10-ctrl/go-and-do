@@ -27,7 +27,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { Falha, REL_RECIBO, executar, imprimirPlano, lerRecibo, novoPlano } from './plano.mjs';
+import { Falha, REL_RECIBO, executar, imprimirPlano, lerRecibo, novoPlano, passoSemRecibo } from './plano.mjs';
 import { escreverAtomico } from './lib/arvore.mjs';
 import { resolverCasa } from './casa.mjs';
 import { limparOrfaos } from './orfaos.mjs';
@@ -96,7 +96,8 @@ function checarReciboAnterior(cfg, recibo) {
     );
   }
   if (typeof recibo.runtime !== 'string' || !RE_SHA256.test(recibo.runtime)) {
-    throw new Falha(8, `recibo em ${cfg} sem runtime registrado válido (64 hex); nada foi escrito`);
+    // CR-02 (iteração 2 do code review da fase 6): o install também recusa esse recibo, então a recusa diz o passo de saída.
+    throw new Falha(8, `recibo em ${cfg} sem runtime registrado válido (64 hex); nada foi escrito; ${passoSemRecibo(cfg)}`);
   }
 }
 

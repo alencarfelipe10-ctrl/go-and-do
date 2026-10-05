@@ -305,6 +305,8 @@ fi
 # Só lê git e arquivos; os blobs vão para um mktemp apagado no EXIT.
 CONFERE="${GAD_CONFERE_DOCUMENTO:-$GAD_CFG_DIR/gad-core/bin/nosso/confere-documento.py}"
 MARCA_DU='<!-- gad:documento-unico: v1 -->'
+# Regra única da marca (WR-03 do code review da fase 6): linha 2 sem `\r` e sem espaço nas pontas == a marca —
+# a mesma do abre-rodada.sh, do discuss-init.sh, do confere-documento.py e do plan-phase.md.
 erro_uso=0; coer_rodou=0; coer_achados=""
 ROOT_GIT=$(git -C "$PD" rev-parse --show-toplevel 2>/dev/null || true)
 NN_PD=$(basename -- "$PD" | sed -nE 's/^([0-9]+(\.[0-9]+)*[A-Za-z]?)-.*$/\1/p')
@@ -312,7 +314,7 @@ if [ -n "$NN_PD" ]; then CTX_NOME="$NN_PD-CONTEXT.md"
 else CTX_NOME=$(ls "$PD" 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+)*[A-Za-z]?-CONTEXT\.md$' | head -1 || true); fi
 NNF="${CTX_NOME%-CONTEXT.md}"
 relativo() { python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$1" "$2" 2>/dev/null || true; }
-tem_marca() { [ "$(sed -n 2p "$1" 2>/dev/null)" = "$MARCA_DU" ]; }
+tem_marca() { [ "$(LC_ALL=C sed -n '2{s/\r$//;s/^[[:space:]]*//;s/[[:space:]]*$//;p;q}' "$1" 2>/dev/null)" = "$MARCA_DU" ]; }
 registra() { # <linha de achado> — imprime e guarda para o resumo
   printf '%s\n' "$1"; coer_achados="${coer_achados}${1}"$'\n'; falha=1
 }

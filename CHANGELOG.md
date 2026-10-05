@@ -3,6 +3,72 @@
 Todas as versões da go-and-do como produto próprio. Cada entrada diz qual GSD Core vai vendorizado dentro do pacote
 (a cópia congelada e renomeada para o namespace `gad`), conferido por hash na montagem.
 
+## [3.2.1] — 2026-10-05
+
+Consertos feitos depois da publicação da 3.2.0, saídos do code review e do UAT da fase 6. O Core vendorizado não
+muda: continua o **Core 1.15.0**, a mesma cópia conferida por hash desde a 3.1.0.
+
+### Recibo perdido ou ilegível: sempre há um passo de saída
+
+- Com o recibo da instalação (`<cfg>/go-and-do/recibo.json`) corrompido, ilegível ou de formato desconhecido, o
+  `update`, o `uninstall`, o `install` e o `verify` recusam como antes, e agora dizem o passo de saída com o caminho
+  da sua casa: mover o recibo para fora de `<cfg>/go-and-do`, apagar a pasta `<cfg>/go-and-do` (com `chmod -R u+w`
+  antes, porque o runtime é só-leitura) e os arquivos `gad-file-manifest.json` e `.gad-profile`, e rodar o `install`.
+  Se o `install` ainda recusar com «conflito de destino», o passo manda conferir o caminho nomeado: se for um atalho
+  ou um arquivo do go-and-do, apague só ele; se for seu, mova-o para fora antes. O passo avisa também que apagar o
+  `.gad-profile` devolve ao padrão a escolha feita com `/gad-surface`.
+- O recibo sem runtime registrado, que a 3.2.0 grava quando o recibo foi apagado e o produto reinstalado, deixava o
+  `install`, o `update` e o `verify` recusando em laço, um mandando para o outro. Agora os quatro subcomandos recusam
+  esse recibo com o mesmo passo de saída. Antes, o `uninstall` dizia «desinstalado» e deixava o runtime, os ponteiros
+  e os hooks do go-and-do ativos no `settings.json`.
+- O `install` sem recibo (o recibo foi apagado) passa a reconhecer o que já é do go-and-do e confere com o pacote: o
+  runtime, os ponteiros, os atalhos, os recibos do motor e os grupos de hook do pacote no `settings.json`, inclusive
+  um hook opcional aceito antes. Com isso, o `verify` passa e o `uninstall` seguinte tira tudo; antes ficavam 27
+  comandos de hook do go-and-do apontando para um runtime que já não existia.
+- Sem recibo, o `install` não tem como saber se as pastas `skills/`, `agents/` e `go-and-do/`, o objeto `hooks` ou
+  um evento de hook já eram seus antes da primeira instalação. Por isso ele não os toma como do go-and-do: o
+  `uninstall` nunca apaga uma pasta ou uma entrada que estava lá antes. Pode sobrar uma pasta vazia ou um evento
+  vazio (`[]`) do produto, que não fazem nada.
+- Entraram testes de que o `uninstall` de um `update` interrompido recusa, sem remover nada, um link ou recibo do
+  motor da versão anterior com caminho fora de `<cfg>`. O comportamento não muda.
+
+### Documento único de intenção
+
+- A marca do documento único (a linha 2 do `NN-CONTEXT.md`) é lida pela mesma regra nos cinco leitores: a linha sem
+  o `\r` do fim e sem espaço ASCII (espaço, tab) nas pontas. Antes, um `CONTEXT` salvo com CRLF ou com um espaço
+  sobrando era lido como fase antiga por um leitor e como documento novo por outro. Espaço Unicode (NBSP, U+3000)
+  não conta como espaço em nenhum deles, qualquer que seja o idioma do terminal.
+- O fecho do `/gad-discuss-phase` volta a registrar a versão aprovada do documento. Sem esse registro, a
+  conferência que acusa um critério de aceite sumido do documento depois da aprovação nunca rodava nas fases novas.
+- Quando o motor do go-and-do falta, a mensagem de erro do `/gad-discuss-phase` citava `go-and-do install` entre
+  crases dentro de aspas duplas, e o shell **executava** o `go-and-do install` em vez de só mostrar o texto. Agora a
+  mensagem só mostra o comando.
+- Num projeto que já tinha usado o `/gad-spec-phase` antes da 3.2.0, o `/gad-discuss-phase` montava o mapa do código
+  com o objetivo da fase antiga, que ficou guardado numa pasta escondida, e não com o da fase em discussão. Isso
+  acontecia sem nenhum aviso, e a «Situação de hoje» da entrevista saía apontando para os arquivos errados. Agora o
+  mapa usa sempre o objetivo da fase em discussão. A pasta antiga pode ser apagada à mão, mas não precisa: ela não é
+  mais lida.
+
+### Correção da nota da 3.2.0
+
+- A nota da 3.2.0 lista `text` entre os modos do discuss que saíram. Só o arquivo do modo (`modes/text.md`) saiu: a
+  opção `--text` do `/gad-discuss-phase` continua aceita, e faz as perguntas em lista numerada, sem menus.
+
+### Texto do `/gad-discuss-phase` que ainda citava o comando que saiu
+
+- Duas frases internas do roteiro do `/gad-discuss-phase` ainda diziam que a régua de clareza e as sondas de casos
+  de borda e de proibições vinham do `/gad-spec-phase`, o comando que saiu na 3.2.0. A régua e as sondas continuam
+  as mesmas: só a menção ao comando que saiu foi tirada. Uma instalação nova a partir deste repositório já vem sem
+  essas menções; quem tem a 3.2.0 instalada as perde ao atualizar para a 3.2.1.
+
+### Voltar para a v3.2.0
+
+Se a 3.2.1 não servir, reinstale a versão anterior por cima, com o comando exato:
+
+```bash
+npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0 update
+```
+
 ## [3.2.0] — 2026-10-05
 
 A intenção de uma fase passa a ser um **documento único**, aberto por um comando só. O Core vendorizado não muda:

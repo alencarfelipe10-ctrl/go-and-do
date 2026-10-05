@@ -20,7 +20,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { Falha, lerRecibo } from './plano.mjs';
+import { Falha, lerRecibo, passoSemRecibo } from './plano.mjs';
 import { NOME_MANIFESTO, conferirManifesto, sha256Hex } from './lib/arvore.mjs';
 import { resolverCasa } from './casa.mjs';
 import { lerSettings, scriptsDoGrupo } from './settings.mjs';
@@ -199,7 +199,8 @@ function exigirRecibo(cfg) {
     );
   }
   if (typeof recibo.runtime !== 'string' || !RE_SHA256.test(recibo.runtime)) {
-    throw new Falha(8, `recibo sem o hash do runtime (64 hex) em ${cfg}/go-and-do/recibo.json`);
+    // CR-02 (iteração 2 do code review da fase 6): install e update também recusam esse recibo — a recusa diz o passo.
+    throw new Falha(8, `recibo sem o hash do runtime (64 hex) em ${cfg}/go-and-do/recibo.json; ${passoSemRecibo(cfg)}`);
   }
   return recibo;
 }

@@ -312,7 +312,11 @@ class Conferencia:
         if not self.L or not RE_TITULO.match(self.L[0]):
             self.falha("DOC-SEM-TITULO", 1,
                        "a linha 1 tem de ser `# Especificação da fase NN — <nome>`")
-        if len(self.L) < 2 or self.L[1].strip() != MARCA:
+        # WR-01 (iteração 2 do code review da fase 6): a regra única da marca é a dos leitores de shell (abre-rodada,
+        # confere-reconciliacao, plan-phase, discuss-init) — aparar só o [[:space:]] ASCII. O .strip() sem argumento
+        # tirava também NBSP/U+3000, e o conferidor aprovava o que a go-and-do lê como «antigo». Os leitores rodam o
+        # sed com LC_ALL=C (WR-02 da iteração 3): sem isso, num locale UTF-8 o [[:space:]] casava também U+3000.
+        if len(self.L) < 2 or self.L[1].strip(" \t\r\n\x0b\x0c") != MARCA:
             self.falha("DOC-SEM-MARCA", 2, f"a linha 2 tem de ser `{MARCA}`")
 
     def esqueleto(self):

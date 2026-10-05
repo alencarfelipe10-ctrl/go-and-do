@@ -9,7 +9,9 @@
 //   (links, arquivos e, no recibo incompleto de um update, links_anteriores e arquivos_anteriores)
 //   (absoluto, com . ou .., atravessando symlink intermediário; criados_home que não é o próprio <cfg>; runtime, runtime
 //   anterior ou temporário fora de go-and-do/runtime/<um segmento>) → Falha(8) nomeando o caminho. Roda antes da primeira ação (c1-02, AC-14).
-//   Recibo com completo: false é aceito (D-13): item registrado que não existe vira «nada a fazer».
+//   Recibo com completo: false é aceito (D-13): item registrado que não existe vira «nada a fazer». Recibo com
+//   completo: true e runtime que não é texto (o que a v3.2.0 gravava no install sem recibo) → Falha(8) com o passo de
+//   saída (passoSemRecibo), como no install, no update e no verify (CR-01 da iteração 3 do code review da fase 6).
 // - planejarUninstall(opcoes) → plano (novoPlano com semRecibo: o executor não regrava o recibo). Ordem das ações:
 //   settings (removerGrupos sobre a união sem repetição de hooks e hooks_anteriores, sem backup novo; remover-arquivo quando o install o criou e ele ficou {}) → remover-link dos links do recibo, do último registrado ao primeiro
 //   (atalhos, gad-core, go-and-do/current) → remover-arquivo dos recibos do motor →
@@ -29,7 +31,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { Falha, REL_RECIBO, executar, imprimirPlano, lerRecibo, novoPlano } from './plano.mjs';
+import { Falha, REL_RECIBO, executar, imprimirPlano, lerRecibo, novoPlano, passoSemRecibo } from './plano.mjs';
 import { sha256Hex, validarCaminhoRelativo } from './lib/arvore.mjs';
 import { resolverCasa } from './casa.mjs';
 import { limparOrfaos } from './orfaos.mjs';
@@ -141,7 +143,10 @@ function planejarRuntime(ctx, plano, recibo) {
 }
 
 function recusaRecibo(detalhe) {
-  return new Falha(8, `recibo inválido: ${detalhe}; o uninstall só remove caminhos relativos a <cfg> — nada foi removido`);
+  return new Falha(
+    8,
+    `recibo inválido: ${detalhe}; o uninstall só remove caminhos relativos a <cfg> — nada foi removido; ${passoSemRecibo('<cfg>')}`,
+  );
 }
 
 function listaOuVazia(recibo, campo) {
@@ -199,6 +204,18 @@ export function validarRecibo(ctx, recibo) {
     );
   }
   if (!ehObjeto(recibo)) throw recusaRecibo('o recibo não é objeto');
+  // CR-01 (iteração 3 do code review da fase 6): recibo completo sem runtime em texto — o que o install sem recibo da
+  // v3.2.0 gravava ao reusar runtime/<hash>, sem os ponteiros e sem os hooks. Aceito, o uninstall dizia «desinstalado»
+  // e deixava o runtime, go-and-do/current, gad-core e os hooks ativos. O install, o update e o verify já o recusam com
+  // o passo de saída; o uninstall também. O recibo completo: false com runtime null (install interrompido antes da
+  // cópia, D-13) continua aceito.
+  if (recibo.completo === true && typeof recibo.runtime !== 'string') {
+    throw new Falha(
+      8,
+      `recibo em ${cfg} sem runtime registrado (runtime: ${JSON.stringify(recibo.runtime ?? null)}): o uninstall ` +
+        `deixaria o runtime, os ponteiros e os hooks — nada foi removido; ${passoSemRecibo(cfg)}`,
+    );
+  }
   const aValidar = [];
   const naCfg = (rel) => aValidar.push({ raizAbs: cfg, rel });
   for (const item of listaOuVazia(recibo, 'links')) naCfg(caminhoDe('links', item));
