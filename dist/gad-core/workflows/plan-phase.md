@@ -234,7 +234,7 @@ Check `context_path` from init JSON.
 
 If `context_path` is not null, display: `Using phase context from: ${context_path}`
 
-**If `context_path` is null (no CONTEXT.md exists):** **Read** `workflows/plan-phase/blocks/contingencies.md` and run its "Step 4 — no CONTEXT.md" branch (it either continues to step 5 or exits the workflow so the user runs discuss-phase first).
+**If `context_path` is null (no CONTEXT.md exists):** **Read** `workflows/plan-phase/blocks/contingencies.md` and run its "Step 4 — no CONTEXT.md" branch (it exits the workflow so the user runs discuss-phase first — no plan without the owner's document).
 
 ## 4.5. Resolve AI-SPEC Artifact
 
@@ -317,6 +317,8 @@ SKETCH_FINDINGS_PATH=$(ls ./.claude/skills/sketch-findings-*/SKILL.md 2>/dev/nul
 # non-AI phases; gating it there starves the planner, #550). Excludes -AI/-UI/-PRE-SPEC.md.
 PHASE_DIR_FOR_SPEC=$(_gad_field "$INIT" phase_dir)
 SPEC_FILE=$(ls "${PHASE_DIR_FOR_SPEC}"/*-SPEC.md 2>/dev/null | grep -Ev -- '-(AI|UI|PRE)-SPEC\.md$' | head -1)   # PRE-SPEC = insumo da /go-and-do, não é o SPEC
+# documento único (gad v3.2.0): sem SPEC antigo, o CONTEXT marcado é a fonte de Edge Coverage/Prohibitions/gsd:acs; fase antiga lida como está
+[ -z "$SPEC_FILE" ] && [ -n "$CONTEXT_PATH" ] && [ "$(sed -n '2p' "$CONTEXT_PATH" 2>/dev/null)" = '<!-- gad:documento-unico: v1 -->' ] && SPEC_FILE="$CONTEXT_PATH"
 SPEC_PATH="${SPEC_FILE}"
 # Resolve the phase UI-SPEC separately (the glob above excludes -UI-SPEC.md); it carries the
 # ## UI Considerations section the planner lifts by the same rule as ## Edge Coverage (#1867).

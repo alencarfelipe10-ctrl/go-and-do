@@ -17,7 +17,6 @@ workflow-advance command.
 | User wants | Invoke |
 |---|---|
 | Gather context before planning | gad-discuss-phase |
-| Clarify what a phase delivers | gad-spec-phase |
 | Create a PLAN.md | gad-plan-phase |
 | Execute plans in a phase | gad-execute-phase |
 | Verify built features through UAT | gad-verify-work |

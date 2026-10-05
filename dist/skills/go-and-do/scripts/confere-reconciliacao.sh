@@ -53,39 +53,57 @@
 # mais recente do ciclo com a data do commit registrado em `.correcoes-c<C>.aplicado`.
 # Correção promovida DEPOIS da releitura = correção que ninguém releu → ORDEM-VIOLADA.
 #
-# D-NN-DESATUALIZADA (C3, plano 2 / 05/09/2026) — mexeu no SPEC, tem de olhar o CONTEXT.
-# Na F24.4 quatro dos cinco ciclos emendaram critérios do SPEC sem tocar o CONTEXT, e seis
-# decisões continuaram citando critérios que já não existiam. Dois detectores, ambos
-# INFORMATIVOS (a lista é insumo da releitura, que devolve `ok: false` e dispara a correção
-# `c<C>b`; um exit 1 aqui reprovaria a etapa antes do laço que conserta):
-#   · por ciclo: `git diff -U20 <commit>^..<commit> -- <SPEC>` do `.correcoes-c<C>.aplicado`;
-#     colhe os `AC-nn`/`R-n` citados nas linhas +/- e o AC dono de cada hunk; toda D-NN do
-#     CONTEXT vigente que cita um desses ids, não foi tocada no mesmo commit (CONTEXT fora
-#     dos `caminhos`, ou dentro mas com o bullet intacto) e não traz a tag `superada-c<N>`
-#     → `D-NN-DESATUALIZADA c<C> <D-NN> — cita <ids> (SPEC mudou em <sha>); <motivo>`.
-#   · `--final`: mesma régua entre os blobs selados `.intent/.base-SPEC.txt` /
-#     `.base-CONTEXT.txt` (o original) e o worktree — pega o que mudou fora de um `.aplicado`
-#     (o passe «b»): linhas `D-NN-DESATUALIZADA final <D-NN> — …`. Fase sem base selada →
-#     `final: n/a`.
-#   Uma linha por decisão, o id como terceiro token (a releitura e o plano 3 leem assim), e
-#   a contagem em `informativos: D-NN-DESATUALIZADA=<n>`. Nunca entra no `exit`.
+# COERÊNCIA DO DOCUMENTO ÚNICO (AC-40, plano 06-15 — substitui o detector D-NN-DESATUALIZADA
+# de SPEC × CONTEXT: numa fase nova não há SPEC, e a deriva que sobra mora DENTRO do
+# NN-CONTEXT.md, entre o texto e o bloco da máquina). Escrita livre + conferidor ao fim de
+# cada ciclo: as emendas da consultoria continuam entrando por `correcoes.*` aplicados pelo
+# coordenador, e a régua é o `confere-documento.py --coerencia` do fork, chamado pelo caminho
+# do runtime `${GAD_CONFERE_DOCUMENTO:-$GAD_CFG_DIR/gad-core/bin/nosso/confere-documento.py}`
+# (a variável é a costura do teste). Só vale para o NN-CONTEXT.md com a marca
+# `<!-- gad:documento-unico: v1 -->` na linha 2; sem ela a coerência sai `n/a` (fase anterior
+# ao ADR 0001 — o formato é cobrado pelo abre-rodada.sh e pela cancela da etapa 1).
+#   · por ciclo (`<phase_dir> <C>`, a chamada do coordenador ao fim do ciclo): os commits de
+#     correções do ciclo são o `commit`/`commits` do `.correcoes-c<C>.aplicado` mais os de
+#     mensagem canônica `docs(fase NN): correções do ciclo C —` (a passada «b» sobrescreve o
+#     .aplicado). Base do ciclo = pai do commit mais antigo; fim = o mais novo. Três réguas:
+#       DOC-INTENCAO-EXTRA c<C> <arquivo> — entre os documentos de intenção da fase
+#         (`*-CONTEXT.md`, `*-SPEC.md` exceto UI/AI, `*-PRE-SPEC.md`) algum commit do ciclo
+#         mudou outro que não o NN-CONTEXT.md;
+#       PROSA-BLOCO-DIVERGE|BLOCO-INVALIDO|ID-DUPLICADO c<C> <arquivo>:<linha> … — o
+#         conferidor `--coerencia` sobre o NN-CONTEXT.md COMO FICOU no fim do ciclo (o blob
+#         do commit, não o worktree: repetir a conferência depois dá o mesmo resultado, R7);
+#       AC-RENUMERADO c<C> <AC-nn> — id presente na prosa («Critérios de aceite», linha
+#         `- [ ] AC-nn`) E no gsd:acs da base do ciclo e ausente dos DOIS no fim (o sumiço de
+#         um lado só já é PROSA-BLOCO-DIVERGE). Os ids AC-nn são estáveis depois de emenda.
+#     Ciclo sem commit de correções, ou com o NN-CONTEXT.md intacto → `c<C>: sem emenda`
+#     (R8 empty); limpo → `c<C>: só NN-CONTEXT.md mudou; coerência ok`.
+#   · `--final`: a mesma régua sobre o documento VIGENTE (worktree) — o conferidor
+#     `--coerencia` e o AC-RENUMERADO contra a base selada `.base-CONTEXT.txt` (sem base
+#     resolvível, só o AC-RENUMERADO sai n/a). Linhas `<CODIGO> final …`; limpo → `final:
+#     coerência ok`. A cancela da etapa 1 lê o `--final` como aviso.
+#   · sem recorte de ciclo e sem `--final` (a chamada `--ordem` do R5 da cancela) a coerência
+#     não roda — `coerencia: n/a (sem recorte de ciclo …)`: um ciclo antigo que fechou
+#     divergente e foi consertado depois seria uma reprovação sem saída.
 #
 # SAÍDA: uma linha por achado fora do `ok`, mais um resumo com a contagem de cada classe
-# e `reconciliacao: ok|falha` (e `ordem: ok|violada|n/a` quando --ordem).
+# e `reconciliacao: ok|falha` (e `ordem: ok|violada|n/a` quando --ordem; `coerencia:
+# ok|falha (<contagens>)` quando a coerência rodou).
 #
 # EXIT: 0 = tudo ok (ou n/a) · 1 = INVERSAO, CONFIRMADO-NAO-APLICADO,
-#       APLICADO-SEM-VEREDITO, VEREDITO-ILEGIVEL, ORDEM-VIOLADA ou RELEITURA-ABERTA · 2 = uso inválido.
-#       D-NN-DESATUALIZADA, DISPENSADO-APLICADO e CONFIRMADO-FORA-DE-ESCOPO nunca mudam o
-#       exit (informativos por desenho).
+#       APLICADO-SEM-VEREDITO, VEREDITO-ILEGIVEL, ORDEM-VIOLADA, RELEITURA-ABERTA,
+#       PROSA-BLOCO-DIVERGE, BLOCO-INVALIDO, ID-DUPLICADO, DOC-INTENCAO-EXTRA ou AC-RENUMERADO ·
+#       2 = uso inválido ou conferidor do documento ausente/ilegível (ausência de garantia).
+#       DISPENSADO-APLICADO e CONFIRMADO-FORA-DE-ESCOPO nunca mudam o exit (informativos).
 #
 # SOMENTE LEITURA: o script não escreve nada no projeto — por isso NÃO sourceia o
 # lib/gad-shim.sh nem instala o trap `gad_autoregistro` que os outros gates usam (aquele
 # helper grava no run-log da fase; aqui isso violaria a regra 7 do item A5a e sujaria a
 # telemetria de uma fase que a auditoria lê a posteriori). A única escrita é um
-# `mktemp -d` em $TMPDIR para os diffs do detector C3, apagado no EXIT.
+# `mktemp -d` em $TMPDIR para os blobs da coerência, apagado no EXIT.
 
 set -u
 
+GAD_CFG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 PD=""; CICLO=""; ORDEM=0; FINAL=0
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -136,9 +154,9 @@ if [ -z "$ciclos" ]; then
   # especializada pulada ainda tem ciclo 0 (`.correcoes-c0.aplicado` + `.releitura-c0.json`)
   # e uma correção promovida depois daquela releitura é exatamente o que este gate existe
   # para pegar. Sair 0 aqui seria reportar verde no caso a conferir (fail-open).
-  # Idem para o detector de D-NN desatualizadas: o c0 da 24.4 não tem vereditos e é
-  # justamente onde o SPEC mais mudou.
-  [ "$ORDEM" = 1 ] || [ "$FINAL" = 1 ] || [ -n "$(gad_fase_glob "$PD" 'intent/c*/correcoes.aplicado')" ] || exit 0
+  # Idem para a coerência do documento único: com recorte de ciclo ela roda mesmo sem
+  # vereditos (é o ciclo sem emenda que registra «sem emenda», R8), e o --final também.
+  [ "$ORDEM" = 1 ] || [ "$FINAL" = 1 ] || [ -n "$CICLO" ] || [ -n "$(gad_fase_glob "$PD" 'intent/c*/correcoes.aplicado')" ] || exit 0
 fi
 
 # ── helpers ─────────────────────────────────────────────────────────────────────
@@ -283,132 +301,204 @@ if [ -n "$ciclos" ]; then
   if [ "$falha" -eq 0 ]; then echo "reconciliacao: ok"; else echo "reconciliacao: falha"; fi
 fi
 
-# ── C3 — D-NN desatualizadas (informativo; ver cabeçalho) ───────────────────────
-# Um bloco python por ser leitura de diff com estado (AC dono do hunk, bullet dono da linha);
-# só lê git e arquivos — nada é escrito.
-n_desat=0
+# ── coerência do documento único (AC-40, plano 06-15; ver cabeçalho) ────────────
+# Só lê git e arquivos; os blobs vão para um mktemp apagado no EXIT.
+CONFERE="${GAD_CONFERE_DOCUMENTO:-$GAD_CFG_DIR/gad-core/bin/nosso/confere-documento.py}"
+MARCA_DU='<!-- gad:documento-unico: v1 -->'
+erro_uso=0; coer_rodou=0; coer_achados=""
 ROOT_GIT=$(git -C "$PD" rev-parse --show-toplevel 2>/dev/null || true)
-CTX_VIG=$(ls "$PD"/*-CONTEXT.md 2>/dev/null | head -1 || true)
-SPEC_VIG=$(ls "$PD"/*-SPEC.md 2>/dev/null | grep -v -E 'AI-SPEC|PRE-SPEC' | head -1 || true)
-desatualizadas() { # <rótulo: c<C>|final> <diff do SPEC (arquivo)> <diff do CONTEXT (arquivo, pode ser vazio)> <sha curto> <motivo quando o CONTEXT não mudou>
-  python3 - "$@" "$CTX_VIG" <<'PYD'
-import re, sys
-rot, dspec, dctx, sha, motivo_ctx, ctx = sys.argv[1:7]
-AC = re.compile(r"\bAC-\d+\b"); RN = re.compile(r"\bR-?(\d+)\b")
-def ids(t):
-    return set(AC.findall(t)) | {"R" + n for n in RN.findall(t)}
-mudados = set()
-for ln in open(dspec, encoding="utf-8", errors="replace"):
-    if ln.startswith(("+++", "---", "diff ", "index ")):
-        continue
-    if ln.startswith("@@"):
-        dono = None; continue
-    corpo = ln[1:] if ln[:1] in "+- " else ln
-    m = AC.search(corpo)
-    if m:
-        dono = m.group(0)          # AC dono do hunk = último id visto no contexto (-U20)
-    if ln[:1] in "+-":
-        mudados |= ids(corpo)
-        if dono:
-            mudados.add(dono)
-if not mudados:
-    print(f"nota {rot}: nenhum AC-nn/R-n mudou no SPEC — nada a conferir")
-    sys.exit(0)
-tocadas = set()
-if dctx:
-    dono = None
-    for ln in open(dctx, encoding="utf-8", errors="replace"):
-        if ln.startswith(("+++", "---", "diff ", "index ")):
-            continue
-        if ln.startswith("@@"):
-            dono = None; continue
-        corpo = ln[1:] if ln[:1] in "+- " else ln
-        m = re.match(r"^\s*-\s+\*\*(D-[0-9A-Za-z_-]+)", corpo)
-        if m:
-            dono = m.group(1)
-        if ln[:1] in "+-" and dono:
-            tocadas.add(dono)
-try:
-    texto = open(ctx, encoding="utf-8").read()
-except Exception:
-    print(f"nota {rot}: CONTEXT vigente ausente — nada a conferir"); sys.exit(0)
-m = re.search(r"<decisions>\n(.*?)\n</decisions>", texto, re.S)
-bul, cur = [], None
-for ln in (m.group(1) if m else "").splitlines():
-    h = re.match(r"^\s*-\s+\*\*(D-[0-9A-Za-z_-]+)((?:\s*\[[^\]]*\])?)[^:*]*:\*\*", ln)
-    if h:
-        cur = [h.group(1), h.group(2), [ln]]; bul.append(cur); continue
-    if cur and ln.startswith("  "):
-        cur[2].append(ln)
-    elif ln.startswith("###") or not ln.strip():
-        cur = None
-n = 0
-for did, tags, lines in bul:
-    if re.search(r"superada-c\d+", tags):
-        continue
-    cita = ids("\n".join(lines)) & mudados
-    if not cita:
-        continue
-    if did in tocadas:
-        continue
-    n += 1
-    motivo = motivo_ctx if not dctx else "bullet intacto no commit que mudou o SPEC"
-    print(f"D-NN-DESATUALIZADA {rot} {did} — cita {', '.join(sorted(cita))} (SPEC mudou em {sha}); {motivo}")
-print(f"desatualizadas {rot}: {n} (ids mudados no SPEC: {len(mudados)})")
-PYD
+NN_PD=$(basename -- "$PD" | sed -nE 's/^([0-9]+(\.[0-9]+)*[A-Za-z]?)-.*$/\1/p')
+if [ -n "$NN_PD" ]; then CTX_NOME="$NN_PD-CONTEXT.md"
+else CTX_NOME=$(ls "$PD" 2>/dev/null | grep -E '^[0-9]+(\.[0-9]+)*[A-Za-z]?-CONTEXT\.md$' | head -1 || true); fi
+NNF="${CTX_NOME%-CONTEXT.md}"
+relativo() { python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$1" "$2" 2>/dev/null || true; }
+tem_marca() { [ "$(sed -n 2p "$1" 2>/dev/null)" = "$MARCA_DU" ]; }
+registra() { # <linha de achado> — imprime e guarda para o resumo
+  printf '%s\n' "$1"; coer_achados="${coer_achados}${1}"$'\n'; falha=1
 }
-if [ -n "$ROOT_GIT" ] && [ -n "$CTX_VIG" ]; then
-  TMPD=$(mktemp -d "${TMPDIR:-/tmp}/gad-desat-XXXXXX"); trap 'rm -rf "$TMPD"' EXIT
-  while IFS= read -r A; do
-    [ -f "$A" ] || continue
-    c=$(gad_fase_curinga "$PD" 'intent/c*/correcoes.aplicado' "$A"); case "$c" in ''|*[!0-9]*) continue ;; esac
-    [ -z "$CICLO" ] || [ "$c" = "$CICLO" ] || continue
-    commit=$(campo_json "$A" commit); [ -n "$commit" ] || continue
-    git -C "$ROOT_GIT" cat-file -e "$commit^{commit}" 2>/dev/null || { echo "nota c$c: commit $(curto "$commit") não está no repositório — D-NN desatualizadas não conferidas"; continue; }
-    # A passada «b» sobrescreve o .aplicado IN-PLACE (correcoes-commit.sh, cabeçalho): o commit
-    # registrado é o último do ciclo. Os anteriores têm a mensagem canônica do mesmo script
-    # (`… correções do ciclo C — …`) e entram pelo grep no histórico — cada um com o seu diff.
-    NNF=$(basename "$SPEC_VIG" | sed -nE 's/^([0-9]+(\.[0-9]+)*)-.*$/\1/p')   # `docs(fase 24.4): correções do ciclo C — …`
-    commits=$( { git -C "$ROOT_GIT" log --format=%H --fixed-strings --grep="(fase ${NNF:-?}): correções do ciclo $c —" HEAD 2>/dev/null; printf '%s\n' "$commit"; } | awk '!v[$0]++' )
-    SPEC_REL=$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$SPEC_VIG" "$ROOT_GIT" 2>/dev/null || true)
-    CTX_REL=$(python3 -c 'import os,sys; print(os.path.relpath(os.path.realpath(sys.argv[1]), os.path.realpath(sys.argv[2])))' "$CTX_VIG" "$ROOT_GIT" 2>/dev/null || true)
-    for cm in $commits; do
-      git -C "$ROOT_GIT" cat-file -e "$cm^{commit}" 2>/dev/null || continue
-      spec_c=$(git -C "$ROOT_GIT" diff --name-only "$cm^..$cm" -- "$SPEC_REL" 2>/dev/null | head -1 || true)
-      ctx_c=$(git -C "$ROOT_GIT" diff --name-only "$cm^..$cm" -- "$CTX_REL" 2>/dev/null | head -1 || true)
-      [ -n "$spec_c" ] || { echo "nota c$c: SPEC fora dos caminhos do commit $(curto "$cm") — nada a conferir"; continue; }
-      git -C "$ROOT_GIT" diff -U20 "$cm^..$cm" -- "$spec_c" > "$TMPD/spec-c$c.diff" 2>/dev/null || : > "$TMPD/spec-c$c.diff"
-      dctx=""
-      if [ -n "$ctx_c" ]; then dctx="$TMPD/ctx-c$c.diff"; git -C "$ROOT_GIT" diff -U0 "$cm^..$cm" -- "$ctx_c" > "$dctx" 2>/dev/null || : > "$dctx"
-      else echo "nota c$c: CONTEXT ausente dos caminhos do commit $(curto "$cm")"; fi
-      out=$(desatualizadas "c$c" "$TMPD/spec-c$c.diff" "$dctx" "$(curto "$cm")" "CONTEXT fora dos caminhos do ciclo")
-      printf '%s\n' "$out"
-      n_desat=$((n_desat + $(printf '%s\n' "$out" | grep -c '^D-NN-DESATUALIZADA ')))
-    done
-  done < <(gad_fase_glob "$PD" 'intent/c*/correcoes.aplicado')
-  if [ "$FINAL" = 1 ]; then
-    BS=$(cat "$(IC base-SPEC.txt)" 2>/dev/null | tr -d ' \n'); BC=$(cat "$(IC base-CONTEXT.txt)" 2>/dev/null | tr -d ' \n')
-    if [ -z "$BS" ] || [ -z "$SPEC_VIG" ] || ! git -C "$ROOT_GIT" cat-file -e "$BS" 2>/dev/null; then
-      echo "final: n/a (sem .base-SPEC.txt resolvível — fase anterior à selagem)"
+
+# Conferidor do fork sobre um arquivo; reescreve `CODIGO caminho:linha msg` como
+# `CODIGO <rótulo> <basename>:<linha> msg` (o caminho do mktemp nunca aparece na saída).
+coerencia_arq() { # <rótulo c<C>|final> <arquivo>  → return 0 ok · 1 achados · 2 erro
+  local rot="$1" arq="$2" out rc=0 l
+  if [ ! -f "$CONFERE" ]; then
+    echo "ERRO: conferidor do documento único ausente: $CONFERE (GAD_CONFERE_DOCUMENTO ou o runtime)"
+    return 2
+  fi
+  out=$(python3 "$CONFERE" --coerencia "$arq" 2>&1) || rc=$?
+  case "$rc" in
+    0) return 0 ;;
+    1)
+      while IFS= read -r l; do
+        [ -n "$l" ] && registra "$l"
+      done < <(printf '%s\n' "$out" | awk -v r="$rot" '
+        $1 ~ /^(BLOCO-INVALIDO|ID-DUPLICADO|PROSA-BLOCO-DIVERGE)$/ { n = split($2, p, "/"); $2 = p[n]; $1 = $1 " " r; print }')
+      falha=1; return 1 ;;
+    *)
+      echo "ERRO: confere-documento.py saiu $rc em $rot: $(printf '%s' "$out" | head -2 | tr '\n' ' ' | cut -c1-200)"
+      return 2 ;;
+  esac
+}
+
+# ids AC-nn presentes na prosa E no gsd:acs da base e ausentes dos DOIS no atual.
+ac_perdidos() { # <base> <atual>
+  python3 - "$1" "$2" <<'PYA'
+import json, re, sys
+def ids(caminho):
+    try:
+        t = open(caminho, encoding="utf-8").read()
+    except Exception:
+        return None
+    prosa, dentro = set(), False
+    for ln in t.splitlines():
+        if ln.startswith("## "):
+            dentro = ln.startswith("## Critérios de aceite")
+            continue
+        m = re.match(r"^- \[[ xX]\] (AC-\d+)\b", ln) if dentro else None
+        if m:
+            prosa.add(m.group(1))
+    bloco = set()
+    m = re.search(r"<!-- gsd:acs:begin -->(.*?)<!-- gsd:acs:end -->", t, re.S)
+    if m:
+        try:
+            bloco = {str(i.get("id")) for i in json.loads(m.group(1)) if isinstance(i, dict)}
+        except Exception:
+            bloco = set(re.findall(r'"id"\s*:\s*"(AC-\d+)"', m.group(1)))
+    return prosa, bloco
+b, a = ids(sys.argv[1]), ids(sys.argv[2])
+if b is None or a is None:
+    sys.exit(0)
+for i in sorted((b[0] & b[1]) - (a[0] | a[1]), key=lambda x: int(re.sub(r"\D", "", x) or 0)):
+    print(i)
+PYA
+}
+
+if [ -z "$CICLO" ] && [ "$FINAL" != 1 ]; then
+  echo "coerencia: n/a (sem recorte de ciclo — a coerência é por ciclo, <phase_dir> <C>, ou do documento vigente, --final)"
+elif [ -z "$CTX_NOME" ]; then
+  echo "coerencia: n/a (sem NN-CONTEXT.md em $PD)"
+else
+  TMPD=$(mktemp -d "${TMPDIR:-/tmp}/gad-coer-XXXXXX"); trap 'rm -rf "$TMPD"' EXIT
+
+  # ── por ciclo ──
+  if [ -n "$CICLO" ]; then
+    c="$CICLO"
+    if [ -z "$ROOT_GIT" ]; then
+      echo "coerencia c$c: n/a (phase_dir fora de um repositório git)"
     else
-      # blob selado × ARQUIVO do worktree (não `git diff <blob> <blob>`: o worktree sujo não tem blob
-      # no object store e o diff morreria em "bad object" — fail-open com «nada mudou»). Só leitura.
-      git -C "$ROOT_GIT" cat-file blob "$BS" > "$TMPD/spec-base" 2>/dev/null || : > "$TMPD/spec-base"
-      diff -U20 "$TMPD/spec-base" "$SPEC_VIG" > "$TMPD/spec-final.diff" 2>/dev/null || true
-      dctx=""
-      if [ -n "$BC" ] && git -C "$ROOT_GIT" cat-file -e "$BC" 2>/dev/null; then
-        dctx="$TMPD/ctx-final.diff"; git -C "$ROOT_GIT" cat-file blob "$BC" > "$TMPD/ctx-base" 2>/dev/null || : > "$TMPD/ctx-base"
-        diff -U0 "$TMPD/ctx-base" "$CTX_VIG" > "$dctx" 2>/dev/null || true
+      CTX_REL=$(relativo "$PD/$CTX_NOME" "$ROOT_GIT"); PD_REL=$(relativo "$PD" "$ROOT_GIT")
+      A="$(IC "c$c/correcoes.aplicado")"
+      listados=$( { if [ -f "$A" ]; then
+                      if command -v jq >/dev/null 2>&1; then jq -r '(.commits // [])[]? // empty' "$A" 2>/dev/null || true; fi
+                      campo_json "$A" commit
+                    fi
+                    git -C "$ROOT_GIT" log --format=%H --fixed-strings --grep="(fase ${NNF}): correções do ciclo $c —" HEAD 2>/dev/null || true
+                  } | awk 'NF && !v[$0]++' )
+      validos=""; fora=""
+      for cm in $listados; do
+        if git -C "$ROOT_GIT" cat-file -e "$cm^{commit}" 2>/dev/null; then validos="$validos $(git -C "$ROOT_GIT" rev-parse "$cm^{commit}")"
+        else fora="$fora $(curto "$cm")"; fi
+      done
+      validos=$(printf '%s\n' $validos | awk 'NF && !v[$0]++' | tr '\n' ' ')
+      if [ -z "$validos" ] && [ -n "$fora" ]; then
+        echo "nota c$c: commit(s) do ciclo fora do repositório ($fora ) — coerência não conferida"
+      elif [ -z "$validos" ]; then
+        echo "c$c: sem emenda — nenhum commit de correções no ciclo"
+      else
+        # fim = o commit de que todos os outros descendem; início = o ancestral de todos
+        # (ancestralidade, não data: dois commits da passada «b» no mesmo segundo empatariam).
+        # Histórico não linear cai na data do commit (`rev-list --no-walk=sorted`).
+        fim=""; ini=""
+        for x in $validos; do
+          e_fim=1; e_ini=1
+          for y in $validos; do
+            [ "$x" = "$y" ] && continue
+            git -C "$ROOT_GIT" merge-base --is-ancestor "$y" "$x" 2>/dev/null || e_fim=0
+            git -C "$ROOT_GIT" merge-base --is-ancestor "$x" "$y" 2>/dev/null || e_ini=0
+          done
+          [ "$e_fim" = 1 ] && [ -z "$fim" ] && fim="$x"
+          [ "$e_ini" = 1 ] && [ -z "$ini" ] && ini="$x"
+        done
+        ordem_c=$(git -C "$ROOT_GIT" rev-list --no-walk=sorted $validos 2>/dev/null)
+        [ -n "$fim" ] || fim=$(printf '%s\n' "$ordem_c" | head -1)
+        [ -n "$ini" ] || ini=$(printf '%s\n' "$ordem_c" | tail -1)
+        base=$(git -C "$ROOT_GIT" rev-parse --verify -q "$ini^" 2>/dev/null || git -C "$ROOT_GIT" hash-object -t tree /dev/null)
+        mkdir -p "$TMPD/c$c"; ARQ_FIM="$TMPD/c$c/$CTX_NOME"
+        if ! git -C "$ROOT_GIT" show "$fim:$CTX_REL" > "$ARQ_FIM" 2>/dev/null; then
+          echo "coerencia c$c: n/a ($CTX_NOME ausente no fim do ciclo, commit $(curto "$fim"))"
+        elif ! tem_marca "$ARQ_FIM"; then
+          echo "coerencia c$c: n/a ($CTX_NOME fora do formato do documento único — fase anterior ao ADR 0001)"
+        else
+          coer_rodou=1; antes="$coer_achados"
+          # (1) só o NN-CONTEXT.md muda entre os documentos de intenção da fase
+          extras=$(for cm in $validos; do
+                     git -C "$ROOT_GIT" diff-tree --no-commit-id --name-only -r --root "$cm" -- "$PD_REL" 2>/dev/null \
+                       | while IFS= read -r p; do
+                           [ "$(dirname -- "$p")" = "$PD_REL" ] || continue
+                           b=$(basename -- "$p")
+                           case "$b" in
+                             "$CTX_NOME"|*-UI-SPEC.md|*-AI-SPEC.md) ;;
+                             *-CONTEXT.md|*-SPEC.md) printf '%s\t%s\n' "$b" "$(curto "$cm")" ;;
+                           esac
+                         done
+                   done | sort -u -t$'\t' -k1,1)
+          while IFS=$'\t' read -r b sha; do
+            [ -n "$b" ] || continue
+            registra "DOC-INTENCAO-EXTRA c$c $b — documento de intenção mudado no commit $sha; no ciclo só o $CTX_NOME pode mudar"
+          done <<<"$extras"
+          # (2) texto × bloco e (3) ids estáveis — só quando o documento mudou no ciclo
+          if [ -z "$(git -C "$ROOT_GIT" diff --name-only "$base" "$fim" -- "$CTX_REL" 2>/dev/null)" ]; then
+            [ "$coer_achados" = "$antes" ] && echo "c$c: sem emenda — $CTX_NOME não mudou no ciclo"
+          else
+            coerencia_arq "c$c" "$ARQ_FIM"; rcc=$?
+            [ "$rcc" -ge 2 ] && erro_uso=1
+            if git -C "$ROOT_GIT" show "$base:$CTX_REL" > "$TMPD/c$c/base" 2>/dev/null; then
+              while IFS= read -r id; do
+                [ -n "$id" ] && registra "AC-RENUMERADO c$c $id — estava na prosa e no gsd:acs na base do ciclo ($(curto "$base")) e sumiu dos dois em $(curto "$fim")"
+              done < <(ac_perdidos "$TMPD/c$c/base" "$ARQ_FIM")
+            fi
+            [ "$rcc" = 0 ] && [ "$coer_achados" = "$antes" ] && echo "c$c: só $CTX_NOME mudou; coerência ok"
+          fi
+        fi
       fi
-      out=$(desatualizadas "final" "$TMPD/spec-final.diff" "$dctx" "$(curto "$BS")→worktree" "CONTEXT sem base selada")
-      printf '%s\n' "$out"
-      n_desat=$((n_desat + $(printf '%s\n' "$out" | grep -c '^D-NN-DESATUALIZADA ')))
     fi
   fi
-  echo "informativos: D-NN-DESATUALIZADA=$n_desat"
-elif [ "$FINAL" = 1 ]; then
-  echo "final: n/a (phase_dir fora de um repositório git ou sem CONTEXT)"
+
+  # ── --final: o documento vigente contra a base selada ──
+  if [ "$FINAL" = 1 ]; then
+    VIG="$PD/$CTX_NOME"
+    if [ ! -f "$VIG" ]; then
+      echo "final: n/a (sem $CTX_NOME em $PD)"
+    elif ! tem_marca "$VIG"; then
+      echo "final: n/a ($CTX_NOME fora do formato do documento único — fase anterior ao ADR 0001)"
+    else
+      coer_rodou=1; antes="$coer_achados"
+      coerencia_arq final "$VIG"; rcf=$?
+      [ "$rcf" -ge 2 ] && erro_uso=1
+      BC=$(cat "$(IC base-CONTEXT.txt)" 2>/dev/null | tr -d ' \n\r' || true)
+      if [ -n "$BC" ] && [ -n "$ROOT_GIT" ] && git -C "$ROOT_GIT" cat-file -e "$BC" 2>/dev/null \
+         && git -C "$ROOT_GIT" cat-file blob "$BC" > "$TMPD/base-final" 2>/dev/null; then
+        while IFS= read -r id; do
+          [ -n "$id" ] && registra "AC-RENUMERADO final $id — estava na prosa e no gsd:acs da base selada ($(curto "$BC")) e sumiu dos dois no documento vigente"
+        done < <(ac_perdidos "$TMPD/base-final" "$VIG")
+      else
+        echo "final: AC-RENUMERADO n/a (sem .base-CONTEXT.txt resolvível)"
+      fi
+      [ "$rcf" = 0 ] && [ "$coer_achados" = "$antes" ] && echo "final: coerência ok"
+    fi
+  fi
+
+  if [ "$coer_rodou" = 1 ]; then
+    cnt() { printf '%s' "$coer_achados" | { grep -c "^$1 " || true; }; }
+    resumo_c="PROSA-BLOCO-DIVERGE=$(cnt PROSA-BLOCO-DIVERGE) BLOCO-INVALIDO=$(cnt BLOCO-INVALIDO) ID-DUPLICADO=$(cnt ID-DUPLICADO) DOC-INTENCAO-EXTRA=$(cnt DOC-INTENCAO-EXTRA) AC-RENUMERADO=$(cnt AC-RENUMERADO)"
+    if [ "$erro_uso" = 1 ]; then echo "coerencia: erro (conferidor indisponível) — $resumo_c"
+    elif [ -n "$coer_achados" ]; then echo "coerencia: falha ($resumo_c)"
+    else echo "coerencia: ok ($resumo_c)"; fi
+  fi
 fi
+
+# exit 2 (ausência de garantia) vence o 1: o chamador não pode ler «reprovou» como «conferiu».
+codigo_saida() { if [ "$erro_uso" = 1 ]; then echo 2; else echo "$falha"; fi; }
 
 # ── A5b — trava de ordem na saída ───────────────────────────────────────────────
 if [ "$ORDEM" = 1 ]; then
@@ -426,7 +516,7 @@ if [ "$ORDEM" = 1 ]; then
   if [ -z "$C" ]; then
     C=$(ciclos_de 'c*/correcoes.aplicado' | sort -n | tail -1)
   fi
-  [ -n "$C" ] || { echo "ordem: n/a (nenhum ciclo com releitura ou correção em $IN)"; exit "$falha"; }
+  [ -n "$C" ] || { echo "ordem: n/a (nenhum ciclo com releitura ou correção em $IN)"; exit "$(codigo_saida)"; }
   # FM-F4RLR-10INT: lê a rodada MAIS RECENTE do ciclo — a de letra mais alta
   # (.releitura-c<C>b.json, .releitura-c<C>c.json, …) quando existir, senão a normal
   # (.releitura-c<C>.json, 1ª rodada) — mesmo resolvedor do briefing-build.sh
@@ -487,4 +577,4 @@ if [ "$ORDEM" = 1 ]; then
   fi
 fi
 
-exit "$falha"
+exit "$(codigo_saida)"

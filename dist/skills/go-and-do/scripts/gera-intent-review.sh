@@ -18,7 +18,10 @@
 #     `achados-verificados.json`; alegação e evidência verbatim do verificador (caminho
 #     completo); veredito = a palavra seca do `vereditos.txt` (o arquivo selado que o fiscal
 #     conta); `proposição` (T3) derivada de `correcoes.aplicado` + `correcoes.py` (lido por
-#     AST, nunca executado) + a versão do artefato de antes do ciclo;
+#     AST, nunca executado) + a versão do artefato de antes do ciclo. O artefato sai do
+#     caminho declarado no `.aplicado`: numa fase nova (documento único, AC-40) é sempre o
+#     NN-CONTEXT.md (`artefato: CONTEXT`); NN-SPEC.md só aparece em fase antiga. O gerador não
+#     recebe lista de artefatos — quem a recebe (`--artefatos`) é o correcoes-commit.sh;
 #   · linhas da «## Dívidas registradas» para os `confirmado_irrelevante` e os `confirmado`
 #     com `vinculo_goal: nenhum`.
 #

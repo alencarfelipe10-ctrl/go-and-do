@@ -309,7 +309,7 @@ if [ "$POR_JANELA" = 0 ] && grep -q '"etapa_por_janela":true' "$RL" 2>/dev/null;
 fi
 
 AGN="${AG%% *}"   # nome puro do agente/alvo (o AG do SendMessage pode vir com sufixo) —
-# adiantado para o FM-02EXE logo abaixo; os gates E7/E3 mais adiante reusam a variável.
+# adiantado para o FM-02EXE logo abaixo; o gate E7 mais adiante reusa a variável.
 
 # FM-02EXE: 2ª defesa. Quando o despacho bloqueado é aceito pelo dono, o checkpoint da etapa
 # só é gravado quando o workflow reabre a fase (texto em C3, fora desta lane) — até lá o
@@ -341,7 +341,7 @@ if [ "$TIPO" = despacho ] && [ -n "$ET_TIPO" ] && [ "${ET%% *}" != "${ET_TIPO%% 
   ET_CORRIGIDA=1
 fi
 
-# ══ GATES DE PREVENÇÃO (E7 + E3 — v2.2.0, plano dos 27 ajustes da intenção) ═══════════
+# ══ GATES DE PREVENÇÃO (E7 — v2.2.0, plano dos 27 ajustes da intenção; E3 saiu no 06-18) ═══
 # Rodam ANTES de qualquer escrita no run-log. Um despacho negado NÃO pode deixar um
 # evento `despacho` órfão: a camada_heuristica() conta despachos sem retorno, e o órfão
 # jogaria o PRÓXIMO despacho legítimo para camada 2. Por isso a negativa grava só
@@ -380,59 +380,39 @@ gad_nega() { # $1 = detalhe (vai para o incidente, o stderr e a razão do deny)
   exit 0
 }
 
-if [ "$TIPO" = despacho ]; then
-  if [ "$TOOL" = SendMessage ]; then
-    # ── E3(a): retomada de filho ENCERRADO da etapa de intenção ──────────────────
-    # O alvo é resolvido: nome literal, ou id `a<hex>` → agentType do meta.json (mesma
-    # fonte que o bloco de camada usa mais abaixo). A decisão usa o tipo RESOLVIDO.
-    ALVO="$AGN"
-    case "$ALVO" in
-      a[0-9a-f]*)
-        _m=$(ls "$SUBDIR/agent-$ALVO"*.meta.json 2>/dev/null | head -n1)
-        if [ -n "$_m" ]; then
-          _at=$(jq -r '.agentType // empty' "$_m" 2>/dev/null)
-          [ -n "$_at" ] && ALVO="$_at"
-        fi ;;
-    esac
-    case "$ALVO" in
-      gad-spec|gad-discuss)
-        gad_nega "filho_encerrado: SendMessage para $ALVO (to=$AGN). Filho que devolveu 'done' não é acordado — a janela dele já morreu e a retomada recusta o contexto inteiro (203 k na F24.3). Correção de decisão = coordenador via checkpoint-write.py/context-render.py; pergunta de código nova = Agent(gad-explorador)." ;;
-    esac
-  else
-    # ── E7(b): model/effort na chamada divergindo da def que os pina ─────────────
-    # ESCOPO: só os `gad-*`. O plano diz "agentes com def que pina" E "general-purpose/
-    # gad-* seguem livres" — e as duas cláusulas colidem: `gad-mempalace-curator` pina
-    # `model:` e é despachado pela capability do GAD, fora do nosso controle. Prevalece a
-    # cláusula explícita: o gate cobre exatamente o que o E7(a) proíbe (`Agent` de gad-*
-    # com model/effort). Dos 43 defs em $GAD_CFG_DIR/agents, 10 pinam model; 6 são gad-*.
-    _cm=""; _ce=""
-    case "$AGN" in gad-*)
-      _cm=$(jq -r '.tool_input.model // empty' <<<"$IN")
-      _ce=$(jq -r '.tool_input.effort // empty' <<<"$IN") ;;
-    esac
-    if [ -n "$_cm" ] || [ -n "$_ce" ]; then
-      if _def=$(gad_def "$AGN"); then
-        _dm=$(grep -m1 -E '^model:' "$_def" | sed 's/^model:[[:space:]]*//' | tr -d ' \r')
-        _de=$(grep -m1 -E '^(effort|reasoning_effort):' "$_def" \
-              | sed 's/^[a-z_]*:[[:space:]]*//' | tr -d ' \r')
-        # só agentes cuja def PINA o modelo. `general-purpose` (sem def) e os `gad-*`
-        # (def sem `model:`, recebem o modelo por parâmetro do orquestrador) ficam livres.
-        if [ -n "$_dm" ]; then
-          _viola=""
-          [ -n "$_cm" ] && [ "$(gad_norm "$_cm")" != "$(gad_norm "$_dm")" ] \
-            && _viola="model=$_cm≠$_dm"
-          [ -n "$_ce" ] && [ "$(gad_norm "$_ce")" != "$(gad_norm "$_de")" ] \
-            && _viola="${_viola:+$_viola }effort=$_ce≠${_de:-<ausente>}"
-          [ -n "$_viola" ] && gad_nega "modelo_override: chamada≠def em Agent($AGN) — $_viola. O modelo/effort dos agentes gad-* é pinado no frontmatter da def; passar model/effort na chamada é proibido (E7). Redespache sem os campos."
-        fi
+# As regras E3 — E3(a), SendMessage a filho de autoria encerrado, e E3(b), 2º despacho do
+# mesmo filho com o artefato já no disco — saíram no plano 06-18 da Fase 6 junto com os
+# filhos gad-spec/gad-discuss: a intenção é um documento único escrito pelo comando único
+# /gad-discuss-phase, e a rodada não despacha mais filho de autoria. O SendMessage não tem
+# gate; só a E7(b) abaixo, sobre Agent/Task.
+if [ "$TIPO" = despacho ] && [ "$TOOL" != SendMessage ]; then
+  # ── E7(b): model/effort na chamada divergindo da def que os pina ─────────────
+  # ESCOPO: só os `gad-*`. O plano diz "agentes com def que pina" E "general-purpose/
+  # gad-* seguem livres" — e as duas cláusulas colidem: `gad-mempalace-curator` pina
+  # `model:` e é despachado pela capability do GAD, fora do nosso controle. Prevalece a
+  # cláusula explícita: o gate cobre exatamente o que o E7(a) proíbe (`Agent` de gad-*
+  # com model/effort). Dos 43 defs em $GAD_CFG_DIR/agents, 10 pinam model; 6 são gad-*.
+  _cm=""; _ce=""
+  case "$AGN" in gad-*)
+    _cm=$(jq -r '.tool_input.model // empty' <<<"$IN")
+    _ce=$(jq -r '.tool_input.effort // empty' <<<"$IN") ;;
+  esac
+  if [ -n "$_cm" ] || [ -n "$_ce" ]; then
+    if _def=$(gad_def "$AGN"); then
+      _dm=$(grep -m1 -E '^model:' "$_def" | sed 's/^model:[[:space:]]*//' | tr -d ' \r')
+      _de=$(grep -m1 -E '^(effort|reasoning_effort):' "$_def" \
+            | sed 's/^[a-z_]*:[[:space:]]*//' | tr -d ' \r')
+      # só agentes cuja def PINA o modelo. `general-purpose` (sem def) e os `gad-*`
+      # (def sem `model:`, recebem o modelo por parâmetro do orquestrador) ficam livres.
+      if [ -n "$_dm" ]; then
+        _viola=""
+        [ -n "$_cm" ] && [ "$(gad_norm "$_cm")" != "$(gad_norm "$_dm")" ] \
+          && _viola="model=$_cm≠$_dm"
+        [ -n "$_ce" ] && [ "$(gad_norm "$_ce")" != "$(gad_norm "$_de")" ] \
+          && _viola="${_viola:+$_viola }effort=$_ce≠${_de:-<ausente>}"
+        [ -n "$_viola" ] && gad_nega "modelo_override: chamada≠def em Agent($AGN) — $_viola. O modelo/effort dos agentes gad-* é pinado no frontmatter da def; passar model/effort na chamada é proibido (E7). Redespache sem os campos."
       fi
     fi
-    # ── E3(b): 2º despacho do mesmo filho na mesma fase (artefato já existe) ─────
-    # phase_dir e NN vêm do ponteiro da rodada (PD/NN) — 1 stat cada.
-    case "$AGN" in
-      gad-discuss) [ -f "$PD/$NN-CONTEXT.md" ] && gad_nega "filho_encerrado: 2º Agent(gad-discuss) na fase $NN — $NN-CONTEXT.md já existe. A etapa de discuss já produziu o artefato; reabrir o filho refaz o trabalho. Edite o CONTEXT e re-rode context-guard.sh." ;;
-      gad-spec)    [ -f "$PD/$NN-SPEC.md" ]    && gad_nega "filho_encerrado: 2º Agent(gad-spec) na fase $NN — $NN-SPEC.md já existe. A etapa de spec já produziu o artefato; reabrir o filho refaz o trabalho. Corrija o SPEC no coordenador." ;;
-    esac
   fi
 fi
 # ══ fim dos gates ═════════════════════════════════════════════════════════════════════

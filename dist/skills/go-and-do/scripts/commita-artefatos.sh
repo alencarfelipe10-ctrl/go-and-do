@@ -15,6 +15,10 @@
 #            FM-F27INS-01UAT: fase sem tela prova com texto). Teto de segurança: mais
 #            de 20 arquivos na seleção → RECUSA, nada é adicionado, exit 1 (C4 —
 #            é melhor falhar visível do que arrastar centenas de arquivos em silêncio).
+#   intencao — commit da etapa 1 (consultoria de intenção): o documento único NN-CONTEXT.md
+#            e o NN-INTENT-REVIEW.md, mais os pareceres `NN-parecer-*.md` e os arquivos de
+#            trabalho dos ciclos (evidência dura sem pareceres). NN-SPEC.md e NN-PRE-SPEC.md
+#            só entram quando existem — fase antiga, anterior ao documento único (AC-40).
 #   runlog — NN-RUN-LOG.jsonl + NN-DECISOES.md (fecho da rodada, 6.5) + evidência dura
 #   evidencia — só a evidência dura (FM-06INT): .intent/, pareceres/, atestados
 #            (.fence-*.ok), NN-RUN-LOG.jsonl, deferred-items.md e NN-DECISOES.md.
@@ -143,7 +147,12 @@ case "$MODO" in
     # M6 (F24.5): `git commit --only` recusa arquivo NOVO (pareceres do 1º ciclo). `git add`
     # com pathspec explícito aceita novo e rastreado, e continua sem tocar no resto do
     # worktree sujo do usuário — que é o motivo de o `--only` ter sido escolhido em 2026-07.
-    for f in "$PD/$NN-PRE-SPEC.md" "$PD/$NN-SPEC.md" "$PD/$NN-CONTEXT.md" "$PD/$NN-INTENT-REVIEW.md"; do
+    # Documento único (AC-40): numa fase nova a intenção mora só no NN-CONTEXT.md.
+    for f in "$PD/$NN-CONTEXT.md" "$PD/$NN-INTENT-REVIEW.md"; do
+      [ -f "$f" ] && { git add -- "$f" 2>/dev/null || true; }
+    done
+    # Fase antiga: SPEC e PRE-SPEC só entram se existirem — nunca são exigidos.
+    for f in "$PD/$NN-SPEC.md" "$PD/$NN-PRE-SPEC.md"; do
       [ -f "$f" ] && { git add -- "$f" 2>/dev/null || true; }
     done
     PAR=()

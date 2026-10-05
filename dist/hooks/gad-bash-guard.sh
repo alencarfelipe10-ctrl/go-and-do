@@ -176,8 +176,9 @@ def _comando_simples(texto, i):
     """Do ponto i até o primeiro `;`, `|`, `&` ou quebra de linha FORA de aspas — o alvo
     do `sed -i`/`patch` mora no mesmo comando simples, não no seguinte.
 
-    FM-F27INS-10INT (F27 INS, run-log seq 15 e 92): `sed -i … arquivo-da-fase; bash
-    <skill>/confere-pre-spec.sh` era lido como escrita no script, que só é EXECUTADO. O
+    FM-F27INS-10INT (F27 INS, run-log seq 15 e 92): `sed -i … arquivo-da-fase; python3
+    <gad-core>/bin/nosso/confere-documento.py` era lido como escrita no script (na F27 era um
+    conferidor da skill, removido no 06-18), que só é EXECUTADO. O
     teto continua sendo o fim da linha (`_segmento`): o recorte novo é sempre um pedaço do
     antigo, nunca mais largo. Aspa sem fechamento → recorte antigo inteiro. Separador
     dentro de `$( … )` ou de crase também não corta: `sed -i s/a/$(x;y)/ <alvo>`."""

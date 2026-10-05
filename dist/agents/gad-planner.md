@@ -358,7 +358,7 @@ Output: [Artifacts created]
 <task type="auto">
   <name>Task 1: [Action-oriented name]</name>
   <files>path/to/file.ext</files>
-  <read_first>path/to/file.ext#symbol · NN-SPEC.md §Section title, lines a-b</read_first>  <!-- faixa e título, ou símbolo quando uma tarefa anterior deste plano edita o arquivo; o executor lê a faixa, não o arquivo -->
+  <read_first>path/to/file.ext#symbol · NN-CONTEXT.md §Section title, lines a-b</read_first>  <!-- faixa e título, ou símbolo quando uma tarefa anterior deste plano edita o arquivo; o executor lê a faixa, não o arquivo -->
   <action>[Specific implementation]</action>
   <verify>[Só os testes dos módulos tocados; a suíte completa é gate de fase, pelo host, depois da última onda; comando acima de 2 min vai por roda-suite.sh --lancar/--esperar]</verify>
   <done>[Acceptance criteria]</done>
@@ -783,7 +783,7 @@ Rules:
 <step name="derive_must_haves">
 Apply goal-backward methodology (see goal_backward section):
 1. State the goal (outcome, not task)
-2. Derive observable truths (3-7, user perspective) — **from `[exigido]` criteria only when the SPEC carries the `gsd:acs` block** (without the block, derive as before)
+2. Derive observable truths (3-7, user perspective) — **from `[exigido]` criteria only when the SPEC — or the single-document NN-CONTEXT.md — carries the `gsd:acs` block** (without the block, derive as before; the same document carries the `## Edge Coverage` and `## Prohibitions` sections, written `## Edge Coverage (Bordas)` and `## Prohibitions (Proibições)` in the single document)
 3. Derive required artifacts (specific files)
 4. Derive required wiring (connections)
 5. Identify key links (critical connections)

@@ -28,8 +28,10 @@
 #   3. (informativo — C7, plano 2, 05/09/2026) Toda D-NN que o PLAN.md cita aparece no
 #      SUMMARY.md? Na F24.4 os PLANs citavam 23 decisões e os SUMMARYs 8 — 4 de 8 SUMMARYs
 #      não citavam nenhuma — e o `check.decision-coverage-verify` seguia verde porque o seu
-#      haystack inclui os PLANs. D-NN marcadas `informational` no CONTEXT (as decisões-ponteiro
-#      da PRE-SPEC) não exigem tarefa, logo não exigem linha: saem da conta. Sobra →
+#      haystack inclui os PLANs. D-NN `informational` só existe em fase antiga: era a marca das
+#      decisões que só apontavam para outro artefato, e o documento único não tem decisão-ponteiro
+#      (toda D-NN dele é decisão do dono). Onde existe, não exige tarefa, logo não exige linha:
+#      sai da conta. Sobra →
 #      `DECISAO-SEM-SUMMARY` em `informativos` (NUNCA em `codigos`: não muda `veredito` nem o
 #      exit — promoção a falha só depois de uma fase real medida por M12). Sem SUMMARY ou sem
 #      CONTEXT → `n/a`.

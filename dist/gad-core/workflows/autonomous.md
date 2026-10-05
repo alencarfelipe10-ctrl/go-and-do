@@ -245,98 +245,13 @@ Phase ${PHASE_NUM}: Context exists — skipping discuss.
 
 Proceed to 3b.
 
-**If has_context is false:** Check if discuss is disabled via settings:
-
-```bash
-SKIP_DISCUSS=$(gad_run query config-get workflow.skip_discuss --raw 2>/dev/null || echo "false")
-```
-
-**If SKIP_DISCUSS is `true`:** Skip discuss entirely — the ROADMAP phase description is the spec. Display:
+**If has_context is false:** Stop and hand the phase back to its owner (fork gad-project, Fase 6, AC-04 — no intent without the owner). In every mode — `--interactive` or not, `workflow.skip_discuss` true or not — do NOT write any CONTEXT file, do NOT commit, do NOT run the smart_discuss step and do NOT invoke the discuss skill. Display:
 
 ```
-Phase ${PHASE_NUM}: Discuss skipped (workflow.skip_discuss=true) — using ROADMAP phase goal as spec.
+A fase ${PHASE_NUM} ainda não tem o documento de intenção. Ele só nasce com você presente: rode `/gad-discuss-phase ${PHASE_NUM}` e depois `/gad-autonomous` de novo para continuar.
 ```
 
-Write a minimal CONTEXT.md so downstream plan-phase has valid input. Get phase details:
-
-```bash
-DETAIL=$(gad_run query roadmap.get-phase ${PHASE_NUM})
-```
-
-Extract `goal` and `requirements` from JSON. Write `${phase_dir}/${padded_phase}-CONTEXT.md` with:
-
-```markdown
-# Phase {PHASE_NUM}: {Phase Name} - Context
-
-**Gathered:** {date}
-**Status:** Ready for planning
-**Mode:** Auto-generated (discuss skipped via workflow.skip_discuss)
-
-<domain>
-## Phase Boundary
-
-{goal from ROADMAP phase description}
-
-</domain>
-
-<decisions>
-## Implementation Decisions
-
-### Claude's Discretion
-All implementation choices are at Claude's discretion — discuss phase was skipped per user setting. Use ROADMAP phase goal, success criteria, and codebase conventions to guide decisions.
-
-</decisions>
-
-<code_context>
-## Existing Code Insights
-
-Codebase context will be gathered during plan-phase research.
-
-</code_context>
-
-<specifics>
-## Specific Ideas
-
-No specific requirements — discuss phase skipped. Refer to ROADMAP phase description and success criteria.
-
-</specifics>
-
-<deferred>
-## Deferred Ideas
-
-None — discuss phase skipped.
-
-</deferred>
-```
-
-Commit the minimal context:
-
-```bash
-gad_run query commit "docs(${PADDED_PHASE}): auto-generated context (discuss skipped)" --files "${phase_dir}/${padded_phase}-CONTEXT.md"
-```
-
-Proceed to 3b.
-
-**If SKIP_DISCUSS is `false` (or unset):**
-
-**IMPORTANT — Discuss must be single-pass in autonomous mode.**
-The discuss step in `--auto` mode MUST NOT loop. If CONTEXT.md already exists after discuss completes, do NOT re-invoke discuss for the same phase. The `has_context` check below is authoritative — once true, discuss is done for this phase regardless of perceived "gaps" in the context file.
-
-**If `INTERACTIVE` is set:** Run the standard discuss-phase skill inline (asks interactive questions, waits for user answers). This preserves user input on all design decisions while keeping plan+execute out of the main context:
-
-```
-Skill(skill="gad-discuss-phase", args="${PHASE_NUM}")
-```
-
-**If `INTERACTIVE` is NOT set:** Execute the smart_discuss step for this phase (batch table proposals, auto-optimized).
-
-After discuss completes (either mode), verify context was written:
-
-```bash
-PHASE_STATE=$(gad_run query init.phase-op ${PHASE_NUM})
-```
-
-Check `has_context`. If false → go to handle_blocker: "Discuss for phase ${PHASE_NUM} did not produce CONTEXT.md."
+Then end the autonomous loop: do not proceed to 3b, do not iterate to the next phase, do not go to handle_blocker and do not run lifecycle. If a background plan/execute agent dispatched for an earlier phase is still running, wait for it to finish and report its result before exiting.
 
 **3a.5. UI Design Contract (Frontend Phases)**
 
@@ -572,6 +487,8 @@ Display the review result summary and score from UI-REVIEW.md if produced. Conti
 <step name="smart_discuss">
 
 ## Smart Discuss
+
+> **Fork gad-project (Fase 6, AC-04): this step is unreachable** — 3a no longer calls it; a phase without CONTEXT.md stops the loop and goes back to its owner. The upstream text below is kept only to keep the rebase cheap.
 
 > Full instructions are in `gad-core/references/autonomous-smart-discuss.md`. Read that file now and follow it exactly.
 

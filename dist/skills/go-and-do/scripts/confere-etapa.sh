@@ -47,13 +47,16 @@
 #   ocorrências) · sdk (gad_run query + jq + espera) · ou (passa se qualquer sub-assert
 #   passar). Placeholders: {fase}=phase_dir · {nn}=NN · {n}=fase · {root}=raiz.
 #
-# Blocos MECÂNICOS fora do manifest (a DSL só sabe glob/grep/sdk/json): etapa 1 = R2
-# (`confere-pre-spec.sh --exige-origem [--reqs REQUIREMENTS.md] <SPEC> <PRE-SPEC>`: falhas
-# reprovam — inclusive AC-SEM-ORIGEM e AC-ORIGEM-INEXISTENTE, P12 —; EXTENSAO-SUSPEITA e
-# ORIGEM-NAO-CONFERIDA viram aviso em `extrai.r2_avisos`) + R6 (`setup-intencao.sh --r6`: cada issue estruturada exige id
-# no REQUIREMENTS.md OU sino `req_ausente: <id>` / `fase_sem_req` — nos `.sinos-*.txt` ou
-# no NN-INTENT-REVIEW.md, que é onde o conteúdo sobrevive à limpeza 1.5); etapa 5 = UAT;
-# etapa 6 = self-check.
+# Blocos MECÂNICOS fora do manifest (a DSL só sabe glob/grep/sdk/json): etapa 1 = documento
+# único (plano 06-15: `confere-documento.py [--reqs REQUIREMENTS.md] <NN-CONTEXT.md>` do fork,
+# pelo caminho do runtime — falhas reprovam `documento_unico`, avisos vão a
+# `extrai.documento_unico.avisos`) + `etapa1_sem_autoria` (o run-log da rodada não tem despacho
+# dos filhos de autoria gad-spec/gad-discuss nem registro de ciclo 0; a pasta da intenção não
+# tem artefato de ciclo 0: a etapa começa no ciclo 1 da consultoria) + coerência final
+# (`confere-reconciliacao.sh --final`, aviso) + R6 (`setup-intencao.sh --r6`: cada issue
+# estruturada exige id no REQUIREMENTS.md OU sino `req_ausente: <id>` / `fase_sem_req` — nos
+# `.sinos-*.txt` ou no NN-INTENT-REVIEW.md, que é onde o conteúdo sobrevive à limpeza 1.5);
+# etapa 5 = UAT; etapa 6 = self-check.
 #
 # No pass (fora do --dry-run): mede a etapa com mede-tokens.py (janela desde o
 # checkpoint aberto pelo pre-despacho) e grava o evento `end` com tokens_reais/custo —
@@ -64,6 +67,7 @@
 set -euo pipefail
 shopt -s nullglob
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/gad-shim.sh"
+GAD_CFG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 . "$(dirname -- "${BASH_SOURCE[0]}")/lib/veredito-end.sh"
 
 ETAPA="${1:-}"; shift || true
@@ -1132,61 +1136,97 @@ PYPROVA
   EXTRAI=$(jq -c --argjson p "$PROVA" '. + {prova_avisos: $p.avisos, prova_falhas: $p.falhas}' <<<"$EXTRAI")
 fi
 
-# ── etapa 1 (intenção): R2 (SPEC × PRE-SPEC) + R6 (ROADMAP × REQUIREMENTS) ───
-# Os dois asserts são MECÂNICOS e vivem aqui (não no manifest) porque dependem de rodar
-# outro script e de casar id a id — a DSL do manifest só sabe glob/grep/sdk.
+# ── etapa 1 (intenção): documento único + autoria/ciclo 0 + R6 (ROADMAP × REQUIREMENTS) ───
+# Os asserts são MECÂNICOS e vivem aqui (não no manifest) porque dependem de rodar outro
+# script e de casar id a id — a DSL do manifest só sabe glob/grep/sdk.
 if [ "$ETAPA" = "1" ]; then
   SETUP_I="$GAD_SCRIPTS_DIR/setup-intencao.sh"
-  CPS="$GAD_SCRIPTS_DIR/confere-pre-spec.sh"
-  SPEC_F="$PHASE_DIR/$NN-SPEC.md"; PRE_F="$PHASE_DIR/$NN-PRE-SPEC.md"
-  ROTA_F="$(gad_fase_caminho "$PHASE_DIR" intent/pre-spec-route.json)"
+  CTX_F="$PHASE_DIR/$NN-CONTEXT.md"
+  # Conferidor do documento único do fork, pelo caminho do runtime (o motor renomeia o
+  # `gad-core` da fonte); GAD_CONFERE_DOCUMENTO é a costura do teste — a mesma do
+  # confere-reconciliacao.sh.
+  CONFERE_DOC="${GAD_CONFERE_DOCUMENTO:-$GAD_CFG_DIR/gad-core/bin/nosso/confere-documento.py}"
 
-  # ── R2: as falhas do confere-pre-spec.sh ((a) MARCA-SEM-ID, (b) ID-INEXISTENTE e as
-  # demais, inclusive AC-SEM-ORIGEM / AC-ORIGEM-INEXISTENTE — P12) REPROVAM;
-  # EXTENSAO-SUSPEITA (c) e ORIGEM-NAO-CONFERIDA são AVISO — vão para `extrai.r2_avisos`,
-  # que o coordenador põe no briefing do revisor. Sem PRE-SPEC, o SPEC é conferido contra
-  # o REQUIREMENTS (modo sem pré-spec, id `r2_spec_sem_pre_spec`): o SPEC do dono e o SPEC
-  # gerado sem insumo passam pelas mesmas conferências de forma (D7c).
-  # `--exige-origem` sempre (a go-and-do exige origem nos ACs a partir da v2.4.0) e
-  # `--reqs` quando o REQUIREMENTS.md existe — sem ele `CANC-v3x-03` e afins entrariam
-  # sem conferência. Flag de classe não é passada: a classe liga só pelo marcador
-  # `<!-- spec-classe: v1 -->` do SPEC (com a flag aqui, todo SPEC anterior ao molde
-  # reprovaria no dia da instalação). Sinos de classe na família das falhas: AC-SEM-CLASSE,
-  # EXIGIDO-SEM-MOTIVO, EXIGIDO-SEM-REGUA, EXIGIDO-DIVERGE-SEM-MOTIVO, GOAL-SEM-COBERTURA;
-  # AC-ORIGEM-REPETIDA é bandeira (aviso) e vai ao briefing do revisor.
-  R2_ST=nao_aplicavel; R2_AVISOS="[]"
-  if [ -f "$SPEC_F" ] && [ -f "$CPS" ]; then
-    REQS_F="$ROOT/.planning/REQUIREMENTS.md"
-    R2_ARGS=(--exige-origem); [ -f "$REQS_F" ] && R2_ARGS+=(--reqs "$REQS_F")
-    if [ -f "$PRE_F" ]; then
-      R2_ID=r2_pre_spec
-      r2rc=0; r2out=$(bash "$CPS" "${R2_ARGS[@]}" "$SPEC_F" "$PRE_F" 2>&1) || r2rc=$?
+  # ── documento_unico (plano 06-15, AC-35): no lugar da conferência SPEC × PRE-SPEC (o SPEC
+  # saiu com o ADR 0001), o NN-CONTEXT.md INTEIRO passa no confere-documento.py — forma,
+  # conteúdo e coerência texto × bloco —, com `--reqs` quando o REQUIREMENTS.md existe (sem
+  # ele, ids de requisito entram pelo padrão e sai o aviso ORIGEM-NAO-CONFERIDA). Falhas
+  # reprovam; as linhas `AVISO …` vão a `extrai.documento_unico.avisos` (insumo do briefing do
+  # revisor). Sem NN-CONTEXT.md o assert não roda: o `context` do manifest já reprova a
+  # ausência. Conferidor ausente ou exit 2 → FALHA (ausência de garantia, critério do R5).
+  DU_ST=nao_aplicavel; DU_AVISOS="[]"
+  if [ -f "$CTX_F" ]; then
+    DU_ARGS=(); [ -f "$ROOT/.planning/REQUIREMENTS.md" ] && DU_ARGS=(--reqs "$ROOT/.planning/REQUIREMENTS.md")
+    if [ ! -f "$CONFERE_DOC" ]; then
+      DU_ST=falha
+      RES=$(jq -c --arg d "conferidor do documento único ausente: $CONFERE_DOC" \
+        '. + [{id:"documento_unico", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
     else
-      R2_ID=r2_spec_sem_pre_spec
-      r2rc=0; r2out=$(bash "$CPS" --sem-pre-spec "${R2_ARGS[@]}" "$SPEC_F" 2>&1) || r2rc=$?
+      durc=0; duout=$(python3 "$CONFERE_DOC" ${DU_ARGS[@]+"${DU_ARGS[@]}"} "$CTX_F" 2>&1) || durc=$?
+      DU_AVISOS=$(printf '%s\n' "$duout" | { grep -E '^AVISO ' || true; } | jq -R . | jq -cs .)
+      if [ "$durc" = 0 ]; then
+        DU_ST=ok
+        RES=$(jq -c --arg d "confere-documento.py sem falhas em $NN-CONTEXT.md ($(printf '%s' "$DU_AVISOS" | jq 'length') aviso(s))" \
+          '. + [{id:"documento_unico", resultado:"ok", detalhe:$d}]' <<<"$RES")
+      elif [ "$durc" = 1 ]; then
+        DU_ST=falha
+        dufal=$(printf '%s\n' "$duout" | { grep -vE '^(AVISO |resumo:|…)' || true; } | sed "s#$PHASE_DIR/##" | head -3 | tr '\n' ' ' | cut -c1-300)
+        RES=$(jq -c --arg d "confere-documento.py reprovou $NN-CONTEXT.md: $dufal" \
+          '. + [{id:"documento_unico", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      else
+        DU_ST=falha
+        RES=$(jq -c --arg d "confere-documento.py não pôde conferir (rc=$durc): $(printf '%s' "$duout" | tr '\n' ' ' | cut -c1-300)" \
+          '. + [{id:"documento_unico", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+      fi
     fi
-    # O script emite falha e aviso no mesmo formato; um código de classe sem o marcador sai
-    # como aviso com o sufixo literal abaixo. Separar pelo sufixo, não pelo nome: senão o gate
-    # promoveria o aviso a falha e a classe viraria incondicional aqui (resposta 2 do dono).
-    AVISO_CLASSE='(aviso: SPEC sem `<!-- spec-classe: v1 -->`'
-    AVISO_CLASSE_RX='\(aviso: SPEC sem `<!-- spec-classe: v1 -->`'
-    R2_AVISOS=$(printf '%s\n' "$r2out" | { grep -E "^(EXTENSAO-SUSPEITA|ORIGEM-NAO-CONFERIDA|AC-ORIGEM-REPETIDA) |$AVISO_CLASSE_RX" || true; } | jq -R . | jq -cs .)
-    r2fal=$(printf '%s\n' "$r2out" | { grep -v -F "$AVISO_CLASSE" || true; } | { grep -E '^(MARCA-SEM-ID|ID-INEXISTENTE|FATO-SEM-EVIDENCIA|RESSALVA-SEM-LIMITACAO|AC-POR-PONTEIRO|AC-SEM-ORIGEM|AC-ORIGEM-INEXISTENTE|AC-SEM-CLASSE|EXIGIDO-SEM-MOTIVO|EXIGIDO-SEM-REGUA|EXIGIDO-DIVERGE-SEM-MOTIVO|GOAL-SEM-COBERTURA|BLOCO-AUSENTE|BLOCO-INVALIDO) ' || true; })
-    ROTA_MODO=""; [ -f "$ROTA_F" ] && ROTA_MODO=$(jq -r '.mode // empty' "$ROTA_F" 2>/dev/null || true)
-    if [ -z "$r2fal" ]; then
-      R2_ST=ok
-      RES=$(jq -c --arg id "$R2_ID" --arg d "confere-pre-spec.sh sem falhas ($(printf '%s' "$R2_AVISOS" | jq 'length') aviso(s) EXTENSAO-SUSPEITA/ORIGEM-NAO-CONFERIDA/AC-ORIGEM-REPETIDA)" \
-        '. + [{id:$id, resultado:"ok", detalhe:$d}]' <<<"$RES")
-    elif [ "$ROTA_MODO" = legacy ] && printf '%s' "$r2fal" | grep -q '^BLOCO-AUSENTE'; then
-      # rota antiga autorizada pelo dono (§0.5): o bloco não existe por decisão dele —
-      # a conferência não se aplica, e o sino `pre_spec_sem_bloco` é que carrega o custo.
-      R2_ST=pulado_legacy
-      RES=$(jq -c '. + [{id:"r2_pre_spec", resultado:"aviso", detalhe:"PRE-SPEC sem bloco com rota `legacy` autorizada pelo dono — R2 não se aplica (sino pre_spec_sem_bloco)"}]' <<<"$RES")
-    else
-      R2_ST=falha
-      RES=$(jq -c --arg id "$R2_ID" --arg d "confere-pre-spec.sh reprovou: $(printf '%s' "$r2fal" | head -3 | tr '\n' ' ' | cut -c1-300)" \
-        '. + [{id:$id, resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
-    fi
+  fi
+
+  # ── etapa1_sem_autoria (plano 06-15, AC-35): a etapa 1 começa direto no ciclo 1 da
+  # consultoria — ninguém escreve o SPEC nem o CONTEXT aqui (o documento chega aprovado pelo
+  # dono via /gad-discuss-phase) e não há ciclo 0. Reprova quando o run-log DA RODADA (as
+  # linhas depois do último `"evento":"run"` — o `0 abertura` do abre-rodada.sh —; o arquivo
+  # inteiro se não houver) tem despacho de `gad-spec`/`gad-discuss` (os filhos de autoria,
+  # nomes que o hook grava em `agente`) ou registro de ciclo 0 (campo `ciclo` 0, descrição
+  # «ciclo 0», origem `intent/c0`, resumo de script `c0 …`), ou quando a pasta da intenção
+  # tem artefato de ciclo 0 (`c0/ciclo.json`, `c0/correcoes.aplicado`, `c0/releitura.json`).
+  RL1="$PHASE_DIR/$NN-RUN-LOG.jsonl"
+  AUT=$(python3 - "$RL1" <<'PYAUT' 2>/dev/null || true
+import json, re, sys
+try:
+    linhas = open(sys.argv[1], encoding="utf-8").read().splitlines()
+except Exception:
+    linhas = []
+evs = []
+for l in linhas:
+    try:
+        e = json.loads(l)
+    except Exception:
+        continue
+    if isinstance(e, dict):
+        evs.append(e)
+ult = max([i for i, e in enumerate(evs) if e.get("evento") == "run"], default=-1)
+c0 = re.compile(r"(?i)\bciclo 0\b")
+achados = []
+for e in evs[ult + 1:]:
+    seq = e.get("seq", "?")
+    if e.get("evento") == "despacho" and e.get("agente") in ("gad-spec", "gad-discuss"):
+        achados.append(f"despacho do filho de autoria {e.get('agente')} (seq {seq})")
+    elif (str(e.get("ciclo", "")) == "0" or c0.search(str(e.get("descricao", "")))
+          or str(e.get("origem", "")) == "intent/c0"
+          or (e.get("evento") == "script" and str(e.get("resumo", "")).startswith("c0 "))):
+        achados.append(f"registro de ciclo 0 no run-log (seq {seq})")
+print("; ".join(achados))
+PYAUT
+)
+  for _c0 in c0/ciclo.json c0/correcoes.aplicado c0/releitura.json; do
+    _p="$(gad_fase_caminho "$PHASE_DIR" "intent/$_c0")"
+    [ -e "$_p" ] && AUT="${AUT:+$AUT; }artefato de ciclo 0 na pasta da intenção ($(basename -- "$_p"))"
+  done
+  if [ -n "$AUT" ]; then
+    RES=$(jq -c --arg d "a etapa 1 começa no ciclo 1 da consultoria, sem autoria nem ciclo 0: $(printf '%s' "$AUT" | cut -c1-360)" \
+      '. + [{id:"etapa1_sem_autoria", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
+  else
+    RES=$(jq -c '. + [{id:"etapa1_sem_autoria", resultado:"ok", detalhe:"run-log da rodada sem despacho de gad-spec/gad-discuss nem registro de ciclo 0"}]' <<<"$RES")
   fi
 
   # ── R5 (A5, consertos F24.4): reconciliação VEREDITO × APLICADO + trava de ordem.
@@ -1294,7 +1334,9 @@ if [ "$ETAPA" = "1" ]; then
     fi
   fi
 
-  # ── FM-05INT (metade fiscal): diff em SPEC/CONTEXT sem selo ──
+  # ── FM-05INT (metade fiscal): diff no NN-CONTEXT.md sem selo ──
+  # (plano 06-15: o documento único é o único documento de intenção — o NN-SPEC.md saiu da
+  # conta; o texto abaixo é o histórico da F4 RLR, quando os dois existiam.)
   # Achado F4 RLR: 4 linhas entraram no 04-SPEC.md por fora do correcoes-commit.sh (dentro de
   # um commit de artefatos, sem id nem selo). O `.correcoes-c<C>.aplicado` de cada ciclo grava
   # `blobs[].blob_commit` — o blob do arquivo COMO FICOU depois daquele selo. Pega, por path
@@ -1327,7 +1369,7 @@ if [ "$ETAPA" = "1" ]; then
     while IFS=$'\t' read -r bp bc; do
       [ -n "$bp" ] || continue
       case "$bp" in
-        */"$NN"-SPEC.md|*/"$NN"-CONTEXT.md) ;;
+        */"$NN"-CONTEXT.md) ;;
         *) continue ;;
       esac
       prev="${SELO_BLOB[$bp]:-}"
@@ -1346,7 +1388,7 @@ if [ "$ETAPA" = "1" ]; then
     [ "$atual" = "$bc" ] || SEM_SELO+=("$(basename "$bp"): selado $bc, agora $atual")
   done
   if [ "${#SEM_SELO[@]}" -gt 0 ]; then
-    d="SPEC/CONTEXT.md mudou depois do último selo do correcoes-commit.sh — ${SEM_SELO[*]}"
+    d="NN-CONTEXT.md mudou depois do último selo do correcoes-commit.sh — ${SEM_SELO[*]}"
     RES=$(jq -c --arg d "${d:0:400}" '. + [{id:"spec_context_sem_selo", resultado:"AVISO", detalhe:$d}]' <<<"$RES")
   fi
 
@@ -1375,17 +1417,24 @@ if [ "$ETAPA" = "1" ]; then
     done < <(gad_fase_glob "$PHASE_DIR" 'intent/c*/vereditos.txt')
   fi
 
-  # ── C3 (plano 2, 05/09/2026): D-NN que citam critério mudado desde a base selada e não foram
-  # emendadas nem marcadas superada-c<N>. Informativo até a métrica M9 medir uma fase real.
+  # ── decisoes_desatualizadas → coerência final do documento único (plano 06-15). O detector
+  # D-NN × SPEC saiu com o SPEC; o resíduo de deriva mora DENTRO do NN-CONTEXT.md (texto ×
+  # bloco da máquina, ids AC-nn estáveis), e a régua é o `confere-reconciliacao.sh --final`
+  # (documento vigente contra a base selada). Aviso, como antes: o laço da consultoria é que
+  # conserta, e o `documento_unico` acima já reprova a divergência no documento vigente. O id
+  # do assert fica, para não quebrar quem lê a extração.
+  CREC="$GAD_SCRIPTS_DIR/confere-reconciliacao.sh"
   if [ -f "$CREC" ]; then
     recfin=$(bash "$CREC" "$PHASE_DIR" --final 2>/dev/null || true)
-    ndes=$(printf '%s\n' "$recfin" | { grep -c '^D-NN-DESATUALIZADA final ' || true; })
-    ids=$(printf '%s\n' "$recfin" | { grep '^D-NN-DESATUALIZADA final ' || true; } | awk '{print $3}' | tr '\n' ' ')
+    CF_RX='^(PROSA-BLOCO-DIVERGE|BLOCO-INVALIDO|ID-DUPLICADO|AC-RENUMERADO) final '
+    ndes=$(printf '%s\n' "$recfin" | { grep -cE "$CF_RX" || true; })
+    ids=$(printf '%s\n' "$recfin" | { grep -E "$CF_RX" || true; } | awk '{print $1 ":" $3}' | tr '\n' ' ')
     if [ "${ndes:-0}" -gt 0 ]; then
-      RES=$(jq -c --arg d "D-NN-DESATUALIZADA: $ndes decisão(ões) citam critério do SPEC mudado desde a base selada e não foram emendadas: $ids— emende ou marque superada-c<N>" \
+      RES=$(jq -c --arg d "coerência final do documento único: $ndes achado(s) no $NN-CONTEXT.md vigente — $(printf '%s' "$ids" | cut -c1-300)— emende pela esteira do ciclo" \
         '. + [{id:"decisoes_desatualizadas", resultado:"aviso", detalhe:$d}]' <<<"$RES")
     else
-      RES=$(jq -c '. + [{id:"decisoes_desatualizadas", resultado:"ok", detalhe:"nenhuma D-NN cita critério mudado sem emenda"}]' <<<"$RES")
+      RES=$(jq -c --arg d "$(printf '%s\n' "$recfin" | { grep -E '^(final|coerencia)' || true; } | tr '\n' ' ' | cut -c1-300)" \
+        '. + [{id:"decisoes_desatualizadas", resultado:"ok", detalhe:(if $d == "" then "coerência final sem achados" else $d end)}]' <<<"$RES")
     fi
     EXTRAI=$(jq -c --argjson n "${ndes:-0}" --arg ids "$ids" '. + {decisoes_desatualizadas:{n:$n, ids:$ids}}' <<<"$EXTRAI")
   fi
@@ -1494,29 +1543,11 @@ if [ "$ETAPA" = "1" ]; then
       '. + {r7_confirmados: $t, r7_com_proposicao: $k}' <<<"$EXTRAI")
   fi
 
-  # ── C3 (consertos F24.4): nenhum sino do ciclo 0 fica `aberto` no fecho da etapa.
-  # Na F24.4 o sino c0-14 chegou ao fim `aberto` e a etapa fechou assim mesmo.
-  CSIN="$GAD_SCRIPTS_DIR/confere-sinos.sh"
-  if [ -x "$CSIN" ]; then
-    csrc=0; csout=$(bash "$CSIN" "$PHASE_DIR" 2>&1) || csrc=$?
-    if [ "$csrc" = 0 ]; then
-      RES=$(jq -c --arg d "$(printf '%s' "$csout" | head -1)" \
-        '. + [{id:"c3_sinos_abertos", resultado:"ok", detalhe:$d}]' <<<"$RES")
-    elif [ "$csrc" = 1 ]; then
-      RES=$(jq -c --arg d "$(printf '%s' "$csout" | tr '\n' ' ' | cut -c1-400)" \
-        '. + [{id:"c3_sinos_abertos", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
-    else
-      # exit 2 (.ciclo0.json ilegível): mesmo critério do R5 — ausência de garantia reprova.
-      RES=$(jq -c --arg d "confere-sinos.sh não pôde conferir (rc=$csrc): $(printf '%s' "$csout" | tr '\n' ' ' | cut -c1-300)" \
-        '. + [{id:"c3_sinos_abertos", resultado:"FALHA", detalhe:$d}]' <<<"$RES"); FALHAS=$((FALHAS+1))
-    fi
-  fi
-
-  EXTRAI=$(jq -c --argjson r6 "$R6" --arg st "$R2_ST" --argjson av "$R2_AVISOS" \
+  EXTRAI=$(jq -c --argjson r6 "$R6" --arg st "$DU_ST" --argjson av "$DU_AVISOS" \
     '. + {goal_roadmap: ($r6.goal_roadmap // null),
           issues: ($r6.issues // []),
           req_ids: ($r6.req_ids // []),
-          r2_status: $st, r2_avisos: $av}' <<<"$EXTRAI")
+          documento_unico: {status: $st, avisos: $av}}' <<<"$EXTRAI")
 fi
 
 # ════════════════════════════════════════════════════════════════════════════

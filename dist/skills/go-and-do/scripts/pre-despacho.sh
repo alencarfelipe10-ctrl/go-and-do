@@ -40,7 +40,7 @@
 # Campos informativos: `janela_silencio` (23h–07h local — hard gate vira pausa graciosa,
 # S.I) · `revisores` (2.5: presença individual; UM ausente = segue com o outro, disclosed)
 # · `git_remote` (6: gatilho da rota B de ship, 6.E — julgamento fica na camada 0) ·
-# `sino_tamanho` (só etapa 2, S-9/48j: SPEC/CONTEXT > GAD_TETO_BRIEFING_KB KB, default 60 —
+# `sino_tamanho` (só etapa 2, S-9/48j: documento da intenção — NN-CONTEXT.md; NN-SPEC.md só em fase antiga — > GAD_TETO_BRIEFING_KB KB, default 60 —
 # alarme, não muro) · `user_setup` (só etapa 2.5, S-8/48i: espelho do
 # confere-user-setup.sh — informativo, nunca bloqueia sozinho).
 #
@@ -325,8 +325,10 @@ if [ "$(jq -r '.pre.paralelismo // false' "$MANIFEST")" = "true" ]; then
   extras=$(jq -cn --argjson prev "$extras" --argjson par "$PAR" '$prev + {paralelismo: $par}')
 fi
 
-# ── etapa 2 (S-9, tarefa 48j): sino de tamanho — SPEC/CONTEXT grandes demais para o filho
-# ler de uma vez sem fatiar. Alarme, não muro (mesmo padrão do `sino_esquecimento` acima):
+# ── etapa 2 (S-9, tarefa 48j): sino de tamanho — documento da intenção (NN-CONTEXT.md;
+# NN-SPEC.md só em fase antiga) grande demais para o filho ler de uma vez sem fatiar. O laço
+# mede o que existe: numa fase só com o documento único não há aviso de SPEC ausente (LEIT-01,
+# plano 06-16). Alarme, não muro (mesmo padrão do `sino_esquecimento` acima):
 # nunca bloqueia o despacho, só avisa; teto default 60 KB, configurável por
 # GAD_TETO_BRIEFING_KB (a regra permanente do projeto — teto de tamanho é alarme, não muro).
 if [ "$ETAPA" = "2" ]; then
@@ -344,7 +346,7 @@ if [ "$ETAPA" = "2" ]; then
   done
   if [ -n "$GRANDES" ]; then
     extras=$(jq -cn --argjson prev "$extras" --arg g "$GRANDES" --argjson t "$TETO_KB" \
-      '$prev + {sino_tamanho: ($g + " passa do teto de leitura (" + ($t|tostring) + " KB) — leia em fatias e confira a última linha contra o tamanho declarado. Esquecimento de recorte?")}')
+      '$prev + {sino_tamanho: ("documento da intenção grande demais — " + $g + " passa do teto de leitura (" + ($t|tostring) + " KB) — leia em fatias e confira a última linha contra o tamanho declarado. Esquecimento de recorte?")}')
   fi
 fi
 

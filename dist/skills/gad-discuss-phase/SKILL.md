@@ -1,7 +1,7 @@
 ---
 name: gad-discuss-phase
-description: "Gather phase context through adaptive questioning before planning."
-argument-hint: "<phase> [--all] [--auto] [--chain] [--batch] [--analyze] [--text] [--power] [--assumptions]"
+description: "Comando único de intenção: entrevista o dono só sobre negócio e grava o documento único da fase (NN-CONTEXT.md) com o «ok» dele."
+argument-hint: "<phase> [--insumo <arquivo>] [--text]"
 allowed-tools:
   - Read
   - Write
@@ -10,28 +10,27 @@ allowed-tools:
   - Grep
   - AskUserQuestion
   - Agent
-  - mcp__context7__resolve-library-id
-  - mcp__context7__query-docs
 ---
 
 
 <objective>
-Extract implementation decisions that downstream agents need — researcher and planner will use CONTEXT.md to know what to investigate and what choices are locked.
+Comando único de intenção da fase: entrevista o dono só sobre negócio (o que é entregue, o que fica público, o que é irreversível, custo, prazo, risco de perder algo), grava cada resposta assim que ela é dada e escreve o documento único «Especificação da fase NN — <nome>» (`NN-CONTEXT.md`). Antes de gravar, explica em linguagem leiga o que a fase entrega, o que fica de fora e o que o dono decidiu, e só grava com o «ok» dele.
 
-**How it works:**
-1. Load prior context (PROJECT.md, REQUIREMENTS.md, STATE.md, prior CONTEXT.md files)
-2. Scout codebase for reusable assets and patterns
-3. Analyze phase — skip gray areas already decided in prior phases
-4. Present remaining gray areas — user selects which to discuss
-5. Deep-dive each selected area until satisfied
-6. Create CONTEXT.md with decisions that guide research and planning
+**Como funciona:**
+1. Confere a barreira sem dono e o estado da intenção (nova, retomada, gravação interrompida, documento existente)
+2. Abre a fase se ela ainda não está no ROADMAP
+3. Explica a fase, investiga e mede o código, lê os insumos como texto de apoio
+4. Entrevista o dono pela consequência, com a recomendação primeiro
+5. Escreve as seções, roda as sondas de bordas e proibições e a régua interna de ambiguidade
+6. Explica, recebe o «ok», promove o documento e faz o commit
 
-**Output:** `{phase_num}-CONTEXT.md` — decisions clear enough that downstream agents can act without asking the user again
+**Saída:** `{phase_num}-CONTEXT.md` — o único documento de intenção da fase; nunca `NN-SPEC.md` nem `NN-PRE-SPEC.md`.
+
+**Barreira sem dono:** com `--auto`, `--chain`, `--batch`, `--assumptions`, `--power`, `--all`, `--analyze` ou numa cadeia automática, o comando não grava nada e para com a frase «Este comando só roda com você presente: rode `/gad-discuss-phase N` você mesmo, sem modo automático.»
 </objective>
 
 <execution_context>
-Workflow files are loaded on-demand in the <process> section below — not upfront.
-Do not pre-load any workflow files before reading the mode routing instructions.
+O workflow é carregado sob demanda no <process> abaixo — não antes.
 </execution_context>
 
 <runtime_note>
@@ -39,13 +38,13 @@ Do not pre-load any workflow files before reading the mode routing instructions.
 </runtime_note>
 
 <context>
-Phase number: $ARGUMENTS (required)
+Número da fase: $ARGUMENTS (obrigatório), mais `--insumo <arquivo>` (repetível) e `--text`.
 
-Context files are resolved in-workflow using `init phase-op` and roadmap/state tool calls.
+O contexto da fase é resolvido dentro do workflow (`discuss-init.sh`).
 </context>
 
 <process>
-**Mode routing:**
+**Roteamento (único):**
 ```bash
 # Fast path: reuse the gad-tools location resolved earlier this session (state file namespaced per config-home [C2-31][C3-39]; never PATH) before the full cascade.
 GAD_TOOLS=""; _GAD_STATE=""; _GAD_HOME=""
@@ -56,20 +55,9 @@ if [ -n "$GAD_TOOLS" ]; then case "$GAD_TOOLS" in *.cjs) gad_run() { node "$GAD_
 _GAD_SHIM_NAME="gad-tools.cjs"; _GAD_RUNTIME_ROOT="${GAD_RUNTIME_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"; GAD_TOOLS="${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}"; _gad_at() { for _p; do if [ -f "$_p" ]; then GAD_TOOLS="$_p"; return 0; fi; done; return 1; }; if _gad_at "${_GAD_RUNTIME_ROOT}/gad-core/bin/${_GAD_SHIM_NAME}" "${_GAD_RUNTIME_ROOT}/.claude/gad-core/bin/${_GAD_SHIM_NAME}" "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/${_GAD_SHIM_NAME}"; then gad_run() { node "$GAD_TOOLS" "$@"; }; else echo "ERRO: motor do go-and-do (gad-core) não encontrado — rode o instalador do go-and-do (go-and-do install) e reinicie a sessão" >&2; exit 1; fi; GAD_IDENTITY_STATUS=unverified; case "$(gad_run runtime-identity --raw 2>/dev/null || true)" in '{"packageName":"go-and-do"'*'}') GAD_IDENTITY_STATUS=ok;; esac; export GAD_IDENTITY_STATUS; [ "$GAD_IDENTITY_STATUS" = ok ] || { echo "ERRO: \"$GAD_TOOLS\" não é o motor do go-and-do (runtime-identity divergente ou ausente) — rode o instalador do go-and-do (go-and-do install)" >&2; exit 1; }; if [ -n "${CLAUDE_ENV_FILE:-}" ] && [ -n "${GAD_TOOLS:-}" ]; then printf "export PATH='%s':\"\$PATH\"\n" "${GAD_TOOLS%/*}" >> "$CLAUDE_ENV_FILE" 2>/dev/null || true; fi
 fi
 [ -n "$_GAD_STATE" ] && { printf '%s\n' "$GAD_TOOLS" > "$_GAD_STATE" 2>/dev/null || true; }
-DISCUSS_MODE=$(gad_run query config-get workflow.discuss_mode --raw 2>/dev/null || echo "discuss")
 ```
 
-If `--assumptions` is in $ARGUMENTS:
-Read and execute `$HOME/.claude/gad-core/workflows/list-phase-assumptions.md` end-to-end.
-Stop here.
+Leia e execute `$HOME/.claude/gad-core/workflows/discuss-phase.md` do começo ao fim — sempre, qualquer que seja o `workflow.discuss_mode` da config (ignorado: é sempre o comando único). O workflow é a fonte da verdade; este arquivo é só o resumo.
 
-Otherwise, if `DISCUSS_MODE` is `"assumptions"`:
-Read and execute `$HOME/.claude/gad-core/workflows/discuss-phase-assumptions.md` end-to-end.
-
-Otherwise (`"discuss"` / unset / any other value):
-Read and execute `$HOME/.claude/gad-core/workflows/discuss-phase.md` end-to-end.
-
-Read the appropriate workflow file first — it is the source of truth. The objective section in this command file is a summary; the workflow file contains the complete step-by-step process with all required behaviors, config checks, and interaction patterns.
-
-**Lazy loading:** `templates/context.md` is loaded inside the `write_context` step of the active workflow. `discuss-phase-power.md` is loaded inside `discuss-phase.md` when `--power` is detected. Do not load either here.
+As flags da barreira não são tratadas aqui: o `discuss-init.sh` do workflow para antes de qualquer escrita e o workflow dá a mensagem ao dono.
 </process>

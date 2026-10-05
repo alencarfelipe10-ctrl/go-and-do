@@ -87,7 +87,7 @@ fi
 # A fase vem do ponteiro da rodada (.planning/.gad/rodada-ativa.json, via gad-caminhos.sh
 # — a mesma fonte dos outros scripts), nunca do run-log mais recente em disco: o `ls -t`
 # antigo gravava evidência e rotulava a mensagem com a fase errada fora de rodada (caso de
-# 27/09: avisos do /gad-pre-spec 2 caíram no 01-NOTIFICACOES.jsonl da Fase 1 já fechada).
+# 27/09: avisos de uma sessão da Fase 2 fora de rodada caíram no 01-NOTIFICACOES.jsonl da Fase 1 já fechada).
 # Ponteiro de OUTRA sessão não conta (mesma régua do hooks/gad-lifecycle.sh).
 FASE_INFO=""
 RL=""

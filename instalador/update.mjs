@@ -15,11 +15,14 @@
 //   último. O recibo novo nasce do anterior (novoPlano: settings, opcionais, criados, criados_home e v2 passam adiante)
 //   com runtime = <hashB>; enquanto incompleto, leva runtime_anterior = <hashA> quando o runtime troca e
 //   hooks_anteriores = os grupos registrados de A (recibo.hooks anterior) quando os grupos planejados diferem deles
-//   (D-13, 03-15: o uninstall de um update interrompido tira os dois); o update nunca cria backup do settings.json
-//   (D-13). Mesmo hash → nenhuma ação de runtime nem de current; plano.nadaAFazer quando não há ação e o recibo
+//   (D-13, 03-15: o uninstall de um update interrompido tira os dois) e, quando há ação, links_anteriores e
+//   arquivos_anteriores = os links e os recibos do motor registrados de A (AC-50, conserto pós-onda 7 do 06-25: o
+//   uninstall de um update que morreu no meio aceita o estado de A ou o de B); o update nunca cria backup do
+//   settings.json (D-13). Mesmo hash → nenhuma ação de runtime nem de current; plano.nadaAFazer quando não há ação e o recibo
 //   planejado é igual ao lido.
 // - executarSubcomando(opcoes): --dry-run imprime o plano (imprimirPlano) e para; nadaAFazer → não escreve nada, nem o
-//   recibo; senão executa, tira runtime_anterior e hooks_anteriores do recibo completo numa regravação só e termina com
+//   recibo; senão executa, tira runtime_anterior, hooks_anteriores, links_anteriores e arquivos_anteriores do recibo
+//   completo numa regravação só e termina com
 //   AVISO_REINICIAR (AC-07).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -36,6 +39,8 @@ import { planejarSettings } from './settings.mjs';
 const REL_CURRENT = 'go-and-do/current';
 const PREFIXO_RUNTIME = 'go-and-do/runtime/';
 const RE_SHA256 = /^[0-9a-f]{64}$/;
+// Campos que o recibo de um update só leva enquanto incompleto (o uninstall de um update interrompido os lê).
+const CAMPOS_SO_DO_INCOMPLETO = Object.freeze(['runtime_anterior', 'hooks_anteriores', 'links_anteriores', 'arquivos_anteriores']);
 
 function lerLink(abs) {
   try {
@@ -178,6 +183,19 @@ export function planejarUpdate(opcoes) {
   // Depois da troca de current: só o runtime registrado, abaixo de go-and-do/runtime/ (o executor confere o prefixo e
   // devolve u+w só aos diretórios dele antes de remover — Pitfall 4).
   if (troca) plano.acoes.push({ tipo: 'remover-runtime', raiz: 'cfg', caminho: `${PREFIXO_RUNTIME}${hashA}` });
+  // AC-50 (conserto pós-onda 7 do 06-25): o recibo incompleto registra links e recibos do motor de B antes de o disco
+  // os ter (planejarRecibosDoMotor e planejarAtalhosQueSairam já gravam o estado final; o executor registra cada link
+  // antes de trocá-lo). Uma queda no meio deixaria o uninstall ver o conteúdo de A como «mudado pelo usuário» e o
+  // atalho que sai fora de qualquer recibo. Enquanto incompleto, o recibo leva também os links e os recibos do motor
+  // de A; o uninstall aceita qualquer um dos dois. Sem ação, o recibo nunca fica incompleto no disco: nada a guardar
+  // (e o nadaAFazer abaixo segue comparando só o recibo planejado). O delete é obrigatório pelo mesmo motivo de acima.
+  if (plano.acoes.length > 0) {
+    plano.recibo.links_anteriores = structuredClone(Array.isArray(reciboAnterior.links) ? reciboAnterior.links : []);
+    plano.recibo.arquivos_anteriores = structuredClone(Array.isArray(reciboAnterior.arquivos) ? reciboAnterior.arquivos : []);
+  } else {
+    delete plano.recibo.links_anteriores;
+    delete plano.recibo.arquivos_anteriores;
+  }
   plano.fim.push(`go-and-do atualizado em ${cfg} (runtime ${pacote.hash}).`);
   // Sem ação e com o recibo planejado igual ao lido: nada a escrever, nem o recibo (AC-09, Pitfall 8).
   plano.nadaAFazer = plano.acoes.length === 0 && isDeepStrictEqual({ ...plano.recibo, completo: true }, reciboAnterior);
@@ -201,11 +219,10 @@ export async function executarSubcomando(opcoes) {
     escrever(`go-and-do já está no runtime ${plano.recibo.runtime} em ${plano.cfg}; nada foi escrito.\n`);
   } else {
     executar(plano);
-    // O executor grava o recibo completo com o que plano.recibo tem; runtime_anterior e hooks_anteriores só valem
-    // enquanto incompleto: saem os dois numa regravação só.
-    if (plano.recibo.runtime_anterior !== undefined || plano.recibo.hooks_anteriores !== undefined) {
-      delete plano.recibo.runtime_anterior;
-      delete plano.recibo.hooks_anteriores;
+    // O executor grava o recibo completo com o que plano.recibo tem; runtime_anterior, hooks_anteriores,
+    // links_anteriores e arquivos_anteriores só valem enquanto incompleto: saem todos numa regravação só.
+    if (CAMPOS_SO_DO_INCOMPLETO.some((c) => plano.recibo[c] !== undefined)) {
+      for (const c of CAMPOS_SO_DO_INCOMPLETO) delete plano.recibo[c];
       escreverAtomico(path.join(plano.cfg, ...REL_RECIBO.split('/')), `${JSON.stringify(plano.recibo, null, 2)}\n`);
     }
     for (const linha of plano.fim) escrever(`${linha}\n`);

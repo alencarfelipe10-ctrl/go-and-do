@@ -4,47 +4,19 @@ Lazy block of `workflows/plan-phase.md` for the branches a normal run never take
 
 ### Step 4 — no CONTEXT.md exists
 
-**If `context_path` is null (no CONTEXT.md exists):**
+**If `context_path` is null (no CONTEXT.md exists):** the phase has no intent document approved by the owner
+(documento único, gad v3.2.0 — AC-04). There is no planning without it: no question, no "continue without context",
+no assumptions route, no planner dispatch. Show, in plain language, the message below and stop.
 
-Read discuss mode for context gate label:
-```bash
-DISCUSS_MODE=$(gad_run query config-get workflow.discuss_mode --raw 2>/dev/null || echo "discuss")
+**IMPORTANT:** Do NOT invoke discuss-phase as a nested Skill/Task call — interactive questions do not work correctly
+in nested subcontexts (#1009). Display the command so the user runs it as a top-level command:
 ```
+A fase {X} ainda não tem o documento de intenção aprovado por você — sem ele não há o que planejar.
+Rode este comando como comando de topo (com você presente) e depois /gad-plan-phase {X} ${GAD_WS} de novo:
 
-If `TEXT_MODE` is true, present as a plain-text numbered list:
+/gad-discuss-phase {X} ${GAD_WS}
 ```
-No CONTEXT.md found for Phase {X}. Plans will use research and requirements only — your design preferences won't be included.
-
-1. Continue without context — Plan using research + requirements only
-[If DISCUSS_MODE is "assumptions":]
-2. Gather context (assumptions mode) — Analyze codebase and surface assumptions before planning
-[If DISCUSS_MODE is "discuss" or unset:]
-2. Run discuss-phase first — Capture design decisions before planning
-
-Enter number:
-```
-
-Otherwise use AskUserQuestion:
-- header: "No context"
-- question: "No CONTEXT.md found for Phase {X}. Plans will use research and requirements only — your design preferences won't be included. Continue or capture context first?"
-- options:
-  - "Continue without context" — Plan using research + requirements only
-  If `DISCUSS_MODE` is `"assumptions"`:
-  - "Gather context (assumptions mode)" — Analyze codebase and surface assumptions before planning
-  If `DISCUSS_MODE` is `"discuss"` (or unset):
-  - "Run discuss-phase first" — Capture design decisions before planning
-
-If "Continue without context": Proceed to step 5.
-If "Run discuss-phase first":
-  **IMPORTANT:** Do NOT invoke discuss-phase as a nested Skill/Task call — AskUserQuestion
-  does not work correctly in nested subcontexts (#1009). Instead, display the command
-  and exit so the user runs it as a top-level command:
-  ```
-  Run this command first, then re-run /gad-plan-phase {X} ${GAD_WS}:
-
-  /gad-discuss-phase {X} ${GAD_WS}
-  ```
-  **Exit the plan-phase workflow. Do not continue.**
+**Exit the plan-phase workflow. Do not continue.**
 
 ## 9a. Filesystem Fallback (Planner)
 

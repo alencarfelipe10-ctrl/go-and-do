@@ -6,12 +6,16 @@
 //
 // Contrato:
 // - validarRecibo(ctx, recibo): recibo ausente, campo de tipo errado ou qualquer caminho a remover fora de <cfg>
+//   (links, arquivos e, no recibo incompleto de um update, links_anteriores e arquivos_anteriores)
 //   (absoluto, com . ou .., atravessando symlink intermediário; criados_home que não é o próprio <cfg>; runtime, runtime
 //   anterior ou temporário fora de go-and-do/runtime/<um segmento>) → Falha(8) nomeando o caminho. Roda antes da primeira ação (c1-02, AC-14).
 //   Recibo com completo: false é aceito (D-13): item registrado que não existe vira «nada a fazer».
 // - planejarUninstall(opcoes) → plano (novoPlano com semRecibo: o executor não regrava o recibo). Ordem das ações:
 //   settings (removerGrupos sobre a união sem repetição de hooks e hooks_anteriores, sem backup novo; remover-arquivo quando o install o criou e ele ficou {}) → remover-link dos links do recibo, do último registrado ao primeiro
-//   (atalhos, gad-core, go-and-do/current) → remover-arquivo dos recibos do motor → remover-runtime do runtime, do
+//   (atalhos, gad-core, go-and-do/current) → remover-arquivo dos recibos do motor →
+//   (AC-50, conserto pós-onda 7 do 06-25: no recibo incompleto de um update, link com o alvo de A em links_anteriores
+//   e recibo do motor com o sha256 de A em arquivos_anteriores também saem, e o link só de A — o atalho que o update
+//   tiraria — também; o que não bate nem com A nem com B fica, com aviso) → remover-runtime do runtime, do
 //   runtime anterior (update interrompido) e do temporário registrados → remover-diretorio-vazio dos diretórios criados, do mais fundo ao mais raso, menos
 //   go-and-do → remover-arquivo do próprio recibo → go-and-do (se foi criado) → diretórios criados em HOME.
 // - executarSubcomando(opcoes): imprime o plano e para no --dry-run; senão executa e diz o que foi removido, o que
@@ -75,29 +79,48 @@ function planejarSettingsUninstall(ctx, plano, recibo) {
   plano.acoes.push({ tipo: 'settings', raiz: 'cfg', caminho: REL_SETTINGS, valor: novo });
 }
 
+/**
+ * Junta os itens de `campo` e de `campoAnterior` (AC-50: o recibo incompleto de um update leva também os de A) por
+ * caminho, na ordem de registro: [{ caminho, aceitos: [valor de B, valor de A] }]. Os só de A vêm antes (o
+ * planejarLinks os percorre de trás para a frente, então saem depois dos de B).
+ */
+function porCaminho(recibo, campo, campoAnterior, chave) {
+  const atual = Array.isArray(recibo[campo]) ? recibo[campo] : [];
+  const anterior = Array.isArray(recibo[campoAnterior]) ? recibo[campoAnterior] : [];
+  const mapa = new Map();
+  for (const item of [...anterior.filter((a) => !atual.some((b) => b.caminho === a.caminho)), ...atual, ...anterior]) {
+    if (!mapa.has(item.caminho)) mapa.set(item.caminho, { caminho: item.caminho, aceitos: [] });
+    const aceitos = mapa.get(item.caminho).aceitos;
+    if (!aceitos.includes(item[chave])) aceitos.push(item[chave]);
+  }
+  return [...mapa.values()];
+}
+
 function planejarLinks(ctx, plano, recibo) {
-  const links = Array.isArray(recibo.links) ? recibo.links : [];
   const v2 = caminhosV2(recibo);
-  for (const { caminho, alvo } of [...links].reverse()) {
+  // AC-50: link registrado com o alvo de B ou, no recibo incompleto de um update, com o de A (links_anteriores) é do
+  // gad e sai; qualquer outro alvo é do usuário e fica.
+  for (const { caminho, aceitos } of porCaminho(recibo, 'links', 'links_anteriores', 'alvo').reverse()) {
     if (v2.has(caminho)) continue;
     const abs = absCfg(ctx.cfg, caminho);
     const st = lstatOuNull(abs);
     if (!st) continue;
-    if (st.isSymbolicLink() && fs.readlinkSync(abs) === alvo) {
+    if (st.isSymbolicLink() && aceitos.includes(fs.readlinkSync(abs))) {
       plano.acoes.push({ tipo: 'remover-link', raiz: 'cfg', caminho });
     } else {
-      plano.avisos.push(`${abs} ficou: foi mudado depois do install (não é mais o symlink para ${alvo})`);
+      plano.avisos.push(`${abs} ficou: foi mudado depois do install (não é mais o symlink para ${aceitos.join(' nem ')})`);
     }
   }
 }
 
 function planejarArquivos(ctx, plano, recibo) {
-  const arquivos = Array.isArray(recibo.arquivos) ? recibo.arquivos : [];
-  for (const { caminho, sha256 } of arquivos) {
+  // AC-50: conteúdo com o sha256 de B ou, no recibo incompleto de um update, com o de A (arquivos_anteriores) é do gad
+  // e sai; qualquer outro conteúdo é do usuário e fica.
+  for (const { caminho, aceitos } of porCaminho(recibo, 'arquivos', 'arquivos_anteriores', 'sha256')) {
     const abs = absCfg(ctx.cfg, caminho);
     const st = lstatOuNull(abs);
     if (!st) continue;
-    if (st.isFile() && sha256Hex(fs.readFileSync(abs)) === sha256) {
+    if (st.isFile() && aceitos.includes(sha256Hex(fs.readFileSync(abs)))) {
       plano.acoes.push({ tipo: 'remover-arquivo', raiz: 'cfg', caminho });
     } else {
       plano.avisos.push(`${abs} ficou: foi mudado depois do install (conteúdo diferente do registrado)`);
@@ -180,6 +203,9 @@ export function validarRecibo(ctx, recibo) {
   const naCfg = (rel) => aValidar.push({ raizAbs: cfg, rel });
   for (const item of listaOuVazia(recibo, 'links')) naCfg(caminhoDe('links', item));
   for (const item of listaOuVazia(recibo, 'arquivos')) naCfg(caminhoDe('arquivos', item));
+  // AC-50: links e recibos do motor de A no recibo incompleto de um update — o mesmo confinamento dos de B.
+  for (const item of listaOuVazia(recibo, 'links_anteriores')) naCfg(caminhoDe('links_anteriores', item));
+  for (const item of listaOuVazia(recibo, 'arquivos_anteriores')) naCfg(caminhoDe('arquivos_anteriores', item));
   for (const rel of listaOuVazia(recibo, 'criados')) naCfg(rel);
   listaOuVazia(recibo, 'hooks');
   // D-13 (03-15): hooks_anteriores só existe no recibo incompleto de um update; presente e não lista → recusa.

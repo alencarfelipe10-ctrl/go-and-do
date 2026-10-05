@@ -276,9 +276,33 @@ Prior decisions: {prior_decisions_summary}
 Codebase scout hints: {codebase_context_summary}
 Calibration: {calibration_tier}
 
-Glob/Grep for files related to: {phase_relevant_terms}
+Your job:
+1. Read ROADMAP.md phase {PHASE} description
+2. Read any prior CONTEXT.md files from earlier phases
+3. Glob/Grep for files related to: {phase_relevant_terms}
+4. Read 5-15 most relevant source files
+5. Return structured assumptions
 
-Return structured assumptions per your output format, calibrated to the tier above.
+## Output Format
+
+Return EXACTLY this structure:
+
+## Assumptions
+
+### [Area Name] (e.g., "Technical Approach")
+- **Assumption:** [Decision statement]
+  - **Why this way:** [Evidence from codebase — cite file paths]
+  - **If wrong:** [Concrete consequence of this being wrong]
+  - **Confidence:** Confident | Likely | Unclear
+
+(3-5 areas, calibrated by tier:
+- full_maturity: 3-5 areas, 2-3 alternatives per Likely/Unclear item
+- standard: 3-4 areas, 2 alternatives per Likely/Unclear item
+- minimal_decisive: 2-3 areas, decisive single recommendation per item)
+
+## Needs External Research
+[Topics where codebase alone is insufficient — library version compatibility,
+ecosystem best practices, etc. Leave empty if codebase provides enough evidence.]
 
 ${AGENT_SKILLS_ANALYZER}
 """)

@@ -15,7 +15,9 @@
 #
 # USO
 #   correcoes-commit.sh <phase_dir> <C> --inicio \
-#       --artefatos <SPEC> <CONTEXT> <INTENT-REVIEW> [--docs <ROADMAP> <REQUIREMENTS>]
+#       --artefatos <CONTEXT> <INTENT-REVIEW> [--docs <ROADMAP> <REQUIREMENTS>]
+#       (fase nova: só o documento único NN-CONTEXT.md. Fase antiga: --artefatos <SPEC>
+#        <CONTEXT> <INTENT-REVIEW> — a lista é livre e o SPEC só entra se a fase o tiver; AC-40)
 #       → grava `git hash-object -w` do estado pré-ciclo de TODOS os alvos e o patch
 #         pré-ciclo do usuário (`HEAD..worktree`) em `.intent/.correcoes-c<C>.base.json`
 #         + `.intent/.correcoes-c<C>.pre-<n>.patch`. Exit 3 se um alvo estiver
@@ -23,7 +25,11 @@
 #         não do índice — um alvo staged tornaria a promoção ambígua).
 #
 #   correcoes-commit.sh <phase_dir> <C> --ids "<id[:caminho]>[,...]" [--adiados "<id>,..."] \
-#       --artefatos <SPEC> <CONTEXT> <INTENT-REVIEW> [--docs <ROADMAP> <REQUIREMENTS>]
+#       --artefatos <CONTEXT> <INTENT-REVIEW> [--docs <ROADMAP> <REQUIREMENTS>]
+#       (fase antiga: <SPEC> <CONTEXT> <INTENT-REVIEW>, como no --inicio)
+#       Correções do mesmo ciclo vindas de revisores diferentes (R8) chegam todas ao mesmo
+#       NN-CONTEXT.md: o coordenador as aplica em série (um correcoes.py, uma edição por id)
+#       e este fecho comita o arquivo final com todas elas — nenhuma se perde.
 #       → fecha o ciclo: monta a árvore candidata, VALIDA, e só então promove.
 #       O `--ids` aceita DUAS formas (C1, conserto de 01/09/2026):
 #         · `"c1-01,c1-02"`         → só os ids. Forma CANÔNICA.

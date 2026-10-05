@@ -1,22 +1,20 @@
 #!/usr/bin/env bash
-# discuss-finalize.sh — D4 [v3] da onda 2 (fork seletivo do gad-discuss-phase).
+# discuss-finalize.sh — D4 [v3] da onda 2 (fork seletivo do gad-discuss-phase); documento único desde o 06-11.
 #
-# Fecho determinístico do discuss, em UMA chamada, na ordem fixa:
-#   0. context-guard.sh — com --spec/--reqs do env.sh (P09). Exit 2 da guarda ⇒
-#                      aborta ANTES de qualquer efeito (sem índice, sem state, sem
-#                      commit, sem limpeza): `rejected_path` = o CONTEXT, `reason: guard`.
-#                      Motivo: o render-guard roda antes do for-humans e dos hooks; uma
-#                      edição entre ele e o commit ficava sem conferência (caso 24.4).
-#   1. fh-render.py  — SÓ se o FH .md existe (o .html precisa existir antes de
-#                      montar o FILES do commit)
-#   2. decisions-index.py .planning
-#   3. gad_run query state.record-session
-#   4. gad_run query commit … --files …   (respeita commit_docs: `skipped:true`
-#      quando a política nega — NUNCA um `git commit` improvisado, R-1)
-#   5. grava <phase_dir>/.discuss-guard-args (uma linha: --spec "…" --reqs "…") —
-#      os argumentos da guarda sobrevivem ao env.sh, para a guarda pós-commit
-#      (blocks/finish.md, reconcile_existing) nunca rodar nua.
-#   6. limpeza de $CKPT e $T — só no fim, após sucesso.
+# Fecho determinístico do /gad-discuss-phase sobre o documento único promovido
+# (`<phase_dir>/<NN>-CONTEXT.md`, «Especificação da fase NN — <nome>»), em UMA chamada, na ordem fixa:
+#   0. confere-documento.py "$CONTEXT_PATH" — o conferidor do documento único (mesmo diretório).
+#                      Exit ≠ 0 ⇒ aborta ANTES de qualquer efeito (sem índice, sem state, sem
+#                      commit, sem limpeza): `rejected_path` = o CONTEXT, `reason: guard`, exit 2.
+#                      Motivo: uma edição entre a promoção e o commit não pode ir ao git sem
+#                      conferência (caso 24.4).
+#   1. decisions-index.py .planning — o índice segue gerado: lê `<decisions>` e o título novo
+#   2. gad_run query state.record-session
+#   3. gad_run query commit … --files CONTEXT STATE [DECISIONS-INDEX]   (respeita commit_docs:
+#      `skipped:true` quando a política nega — NUNCA um `git commit` improvisado, R-1)
+#   4. limpeza de $CKPT e $T — só no fim, após sucesso.
+# Não há mais render de documento para humanos nem argumentos de guarda guardados: o conferidor
+# só precisa do documento.
 #
 # NUNCA despacha hook: o despacho é do modelo, antes deste script (D4 × D1 × D6).
 #
@@ -31,8 +29,8 @@
 #   `msgs` = as ÚLTIMAS 60 linhas do log (teto de 20 KB no stdout, P18); o log inteiro
 #   fica em $T/finalize.log e, quando a limpeza apaga $T, em <phase_dir>/.discuss-finalize.log.
 #
-# `rejected_path` só é preenchido pela guarda do passo 0 (o CONTEXT reprovado, não
-# movido: o checkpoint sobrevive, corrija pelo writer e re-rode o render-guard).
+# `rejected_path` só é preenchido pelo conferidor do passo 0 (o CONTEXT reprovado, não
+# movido: o checkpoint sobrevive, corrija pelo writer e re-rode o fecho).
 #
 # `gad_tools` volta no JSON porque a limpeza apaga o $T/env.sh — os passos
 # seguintes (`auto_advance`) precisam de um `gad_run` e não têm mais o env.sh.
@@ -85,39 +83,23 @@ print(json.dumps({
 PY
 }
 
-# 0. guarda com a spec — mesmos argumentos do discuss-render-guard.sh
-G_ARGS=(); [ -n "${SPEC_PATH:-}" ] && G_ARGS+=(--spec "$SPEC_PATH")
-[ -n "${REQ_IDS:-}" ] && G_ARGS+=(--reqs "$REQ_IDS")
-GUARD_LINE=$(printf -- '--spec "%s" --reqs "%s"' "${SPEC_PATH:-}" "${REQ_IDS:-}")
-if ! bash "$NOSSO/context-guard.sh" "$CONTEXT_PATH" "${G_ARGS[@]}" --root "$ROOT" >>"$LOG" 2>&1; then
-  log "[finalize] guarda reprovou o CONTEXT (${GUARD_LINE}) — nada commitado, \$T e \$CKPT preservados"
+# 0. conferência do documento promovido — o conferidor do documento único, sem argumentos guardados
+if ! python3 "$NOSSO/confere-documento.py" "$CONTEXT_PATH" >>"$LOG" 2>&1; then
+  log "[finalize] o conferidor reprovou o documento ($CONTEXT_PATH) — nada commitado, \$T e \$CKPT preservados"
   REASON=guard REJECTED="$CONTEXT_PATH" emite_json
   exit 2
 fi
 
-# 1. for-humans — só se o .md existe
-FH_MD="${phase_dir}/for-humans/${padded_phase}-CONTEXT-FH.md"
-if [ -f "$FH_MD" ]; then
-  python3 "$NOSSO/fh-render.py" "$FH_MD" >>"$LOG" 2>&1 || log "[warn] fh-render falhou (segue: o .html é opcional no FILES)"
-else
-  log "[finalize] sem FH — fh-render pulado"
-fi
-
-# 2. índice de decisões
+# 1. índice de decisões
 python3 "$NOSSO/decisions-index.py" .planning >>"$LOG" 2>&1 || log "[warn] decisions-index falhou"
 
-# 3. estado
+# 2. estado
 gad_run query state.record-session --stopped-at "Phase ${PHASE} context gathered" \
   --resume-file "$CONTEXT_PATH" >>"$LOG" 2>&1 || log "[warn] state.record-session falhou"
 
-# 4. commit — mesmos FILES de hoje (discuss-phase.md:298-299)
+# 3. commit — o documento, o STATE e o índice
 FILES=("$CONTEXT_PATH" .planning/STATE.md)
 [ -f .planning/DECISIONS-INDEX.md ] && FILES+=(.planning/DECISIONS-INDEX.md)
-for f in "${phase_dir}/for-humans/${padded_phase}-CONTEXT-FH.md" \
-         "${phase_dir}/for-humans/${padded_phase}-CONTEXT-FH.html" \
-         "${phase_dir}/${padded_phase}-DISCUSSION-LOG.md"; do
-  [ -f "$f" ] && FILES+=("$f")
-done
 
 # sem --raw: `query commit` devolve o JSON {committed, skipped?, hash, reason}
 COMMIT_JSON=$(gad_run query commit "$MSG" --files "${FILES[@]}" 2>>"$LOG") || true
@@ -137,16 +119,10 @@ OK=false
 if [ "$COMMITTED" = true ] || [ "$SKIPPED" = true ]; then OK=true; fi
 [ "$SKIPPED" = true ] && log "[commit] skipped by commit_docs policy (${REASON:--})"
 
-# 5. argumentos da guarda persistidos — antes da limpeza, só após sucesso
-if [ "$OK" = true ]; then
-  printf '%s\n' "$GUARD_LINE" > "${phase_dir}/.discuss-guard-args" \
-    || log "[warn] não gravou ${phase_dir}/.discuss-guard-args"
-fi
-
-# 6. limpeza — SÓ no fim, após sucesso
+# 4. limpeza — SÓ no fim, após sucesso
 CLEANED=false
 if [ "$OK" = true ] && [ "$CLEAN" = 1 ]; then
-  # o log sobrevive à limpeza ao lado do .discuss-guard-args
+  # o log sobrevive à limpeza, na pasta da fase
   mv -f "$LOG" "${phase_dir}/.discuss-finalize.log" 2>/dev/null && LOG="${phase_dir}/.discuss-finalize.log"
   rm -f "$CKPT"; rm -rf "$T"; CLEANED=true
 elif [ "$OK" != true ]; then

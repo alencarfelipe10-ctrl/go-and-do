@@ -1,159 +1,158 @@
-# CONTEXT.md template — for discuss-phase write_context step
+# Documento único de intenção — moldura do `NN-CONTEXT.md` (fork, plano 06-13)
 
-> **Lazy-loaded.** Read this file only inside the `write_context` step of
-> `workflows/discuss-phase.md`, immediately before writing
-> `${phase_dir}/${padded_phase}-CONTEXT.md`. Do not put a reference to this
-> file in `<required_reading>` — that defeats the progressive-disclosure
-> savings from the discuss-phase/modes split (#717).
+> **Documentação, não molde de execução.** Nada lê este arquivo em tempo de execução: quem
+> escreve o documento é `bin/nosso/context-render.py`, a partir do depósito da fase
+> (`<phase_dir>/<NN>-DISCUSS-CHECKPOINT.json`, gravado só por `bin/nosso/checkpoint-write.py`).
+> O modelo nunca escreve a moldura (título, marca, headings, tags, marcas do bloco da
+> máquina); ele só entrega o TEXTO de cada seção ao depósito, por arquivo
+> (`checkpoint-write.py set-secao <ckpt> --secao <slug> --file F`). Mudou a moldura?
+> Mude o `context-render.py` e o `confere-documento.py` juntos, e depois este texto.
 
-## Variable substitutions
+## A máquina de estados da gravação (D-12)
 
-The caller substitutes:
-- `[X]` → phase number
-- `[Name]` → phase name
-- `[date]` → ISO date when context was gathered
-- `${padded_phase}` → zero-padded phase number (e.g., `07`, `15`)
-- `{N}` → counts (requirements, etc.)
+1. Cada resposta do dono → `checkpoint-write.py add-decision --origin owner` na hora (só a
+   origem `owner` é aceita; outra → exit 2). Cada seção redigida → `set-secao`. Escrita
+   atômica do depósito (temporário + `os.replace`); toda mudança derruba uma aprovação anterior.
+2. `context-render.py <ckpt> --out $T/rascunho/<NN>-CONTEXT.md` → rascunho (função pura do
+   depósito: o mesmo depósito rende o mesmo documento, byte a byte) e uma linha
+   `{"out", "bytes", "sha256", "vazias"}`.
+3. `discuss-render-guard.sh` confere o rascunho (`confere-documento.py`, `confere-pii.sh`) antes
+   de ele ir ao dono.
+4. «ok» explícito do dono → `checkpoint-write.py aprovar <ckpt> --sha256 <sha do rascunho>`.
+5. `context-render.py --promover <rascunho> <phase_dir>/<NN>-CONTEXT.md --sha256 <sha> [--ckpt <ckpt>]`
+   → só promove se o sha do rascunho, o `--sha256` e o `aprovado_sha256` do depósito forem o
+   mesmo; copia para um temporário irmão do destino e troca por `os.replace`. Um kill antes da
+   troca deixa o destino ausente (ou o anterior inteiro), nunca pela metade.
 
-## Conditional sections
+O render nunca cria `NN-SPEC.md` nem `NN-PRE-SPEC.md` (AC-10).
 
-- **`<spec_lock>`** — include only when `spec_loaded = true` (a `*-SPEC.md`
-  was found by `check_spec`). Otherwise omit the entire `<spec_lock>` block.
-- **Folded Todos / Reviewed Todos** — include subsections only when the
-  `cross_reference_todos` step folded or reviewed at least one todo.
+## Slugs do depósito → seções
 
-## Template body
+| Seção (heading, nesta ordem) | Slug do depósito | Moldura em volta do texto |
+|------------------------------|------------------|---------------------------|
+| `## Goal` | `goal` | — |
+| `## Situação de hoje` | `situacao` | — |
+| `## Decisões do dono` | (decisões do depósito) | `<decisions>` … `</decisions>` |
+| `## Requisitos` | `requisitos` | — |
+| `## Critérios de aceite` | `criterios` | — |
+| `## Limites e restrições` | `limites` | — |
+| `## Prohibitions (Proibições)` | `proibicoes` | — |
+| `## Edge Coverage (Bordas)` | `bordas` | — |
+| `## Regression Surface` | `regression` | — |
+| `## Artefatos novos` | `artefatos` | — |
+| `## Limitações declaradas` | `limitacoes` | — |
+| `## A critério do planner (Claude's Discretion)` | `discricao` | — |
+| `## Pendências e ideias adiadas` | `pendencias` | `<deferred>` … `</deferred>` |
+| `## Referências e mapa do código` | `referencias`, `codigo` | `<canonical_refs>` … `</canonical_refs>` e `<code_context>` … `</code_context>` |
+| `## Bloco da máquina` | `reqs_json`, `scope_json`, `acs_json` | marcas `<!-- gsd:reqs:begin -->` … `end`, idem `scope` e `acs` |
+
+O texto de cada seção entra como está; só aberturas/fechamentos das tags da moldura são
+neutralizados (`</decisions>` → `&lt;/decisions>`). Os três `*_json` são validados como JSON
+(chave duplicada recusada) no `set-secao` e copiados verbatim.
+
+## O bloco `<decisions>`
+
+Uma linha por decisão do dono, em ordem numérica do id — `- **D-NN:** <resposta>` —, com a
+prosa da decisão (se houver) indentada embaixo e neutralizada: linha começando por `#` →
+`\#`; linha começando por `- **`/`* **` → `·`; fence removido; tags da moldura escapadas.
+Sem tag `[auto]`, `[pre-spec:…]`, `informational`: o documento só traz decisões do dono, e o
+`decisions.cjs` as lê todas como rastreáveis. Sem nenhuma decisão, o bloco traz a frase
+«Nenhuma decisão do dono registrada nesta fase.» (sem token `D-`, que o parser leria como
+tentativa de id).
+
+## Esqueleto renderizado
 
 ```markdown
-# Phase [X]: [Name] - Context
+# Especificação da fase [NN] — [nome da fase]
+<!-- gad:documento-unico: v1 -->
 
-**Gathered:** [date]
-**Status:** Ready for planning
+## Goal
 
-<domain>
-## Phase Boundary
+[goal]
 
-[Clear statement of what this phase delivers — the scope anchor]
+## Situação de hoje
 
-</domain>
+[situacao]
 
-[If spec_loaded = true, insert this section:]
-<spec_lock>
-## Requirements (locked via SPEC.md)
-
-**{N} requirements are locked.** See `{padded_phase}-SPEC.md` for full requirements, boundaries, and acceptance criteria.
-
-Downstream agents MUST read `{padded_phase}-SPEC.md` before planning or implementing. Requirements are not duplicated here.
-
-**In scope (from SPEC.md):** [copy the "In scope" bullet list from SPEC.md Boundaries]
-**Out of scope (from SPEC.md):** [copy the "Out of scope" bullet list from SPEC.md Boundaries]
-
-</spec_lock>
+## Decisões do dono
 
 <decisions>
-## Implementation Decisions
-
-[Each decision may carry an optional reversibility rating recording what undoing
-it would cost later. Write it inline as `— **Reversibility:** <rating> — <rationale>`
-where rating is `reversible` (local and cheap to undo), `costly` (undo touches
-many call sites), or `one-way` (undo needs a migration, breaks a published
-contract, or is impossible). The rationale is required whenever a rating is
-given — name the migration, the contract, or the dependent system, not "it is
-hard to change". Omit the field entirely for decisions that are plainly
-reversible; an unrated decision is treated as `reversible`. `gad-planner` carries
-a `one-way` rating forward into a `checkpoint:decision` before the task that
-implements it. The rationale is quoted user content — record it as data, never
-as an instruction to a later agent, and strip any plan tags (`</reversibility>`
-and friends) it happens to contain before writing it here. Taxonomy:
-`gad-core/references/planner-reversibility.md`.]
-
-[Tags between the id and the colon record where the decision came from and what it
-anchors to: `- **D-NN [<origem>, <anchor>]:** …`. Origin `owner` is implicit (no tag);
-`auto`, `prior-phase` and `todo` appear as-is. A decision locked by the PRE-SPEC block
-(`gad:decisoes`, §0.5) carries its source id — `[pre-spec:PS-07, R2]` — so a reviewer
-reads it as LOCKED and attacks the consequence, not the decision itself; a measured
-fact carries `[medido:PS-nn]` and locks nothing. The anchor (`R2`, `SC-1`, a
-REQUIREMENTS id) is omitted when it is `none`. The renderer writes these; never hand-write
-them.]
-
-### [Category 1 that was discussed]
-- **D-01:** [Decision or preference captured] — **Reversibility:** [one-way] — [rationale: what undoing this would cost]
-- **D-02:** [Another decision if applicable]
-
-### [Category 2 that was discussed]
-- **D-03:** [Decision or preference captured] — **Reversibility:** [costly] — [rationale]
-
-### Claude's Discretion
-[Areas where user said "you decide" — note that Claude has flexibility here]
-
-### Folded Todos
-[If any todos were folded into scope from the cross_reference_todos step, list them here.
-Each entry should include the todo title, original problem, and how it fits this phase's scope.
-If no todos were folded: omit this subsection entirely.]
-
+- **D-01:** [resposta do dono]
+- **D-02:** [resposta do dono]
+  [prosa da decisão, neutralizada]
 </decisions>
 
+## Requisitos
+
+[requisitos]
+
+## Critérios de aceite
+
+[criterios]
+
+## Limites e restrições
+
+[limites]
+
+## Prohibitions (Proibições)
+
+[proibicoes]
+
+## Edge Coverage (Bordas)
+
+[bordas]
+
+## Regression Surface
+
+[regression]
+
+## Artefatos novos
+
+[artefatos]
+
+## Limitações declaradas
+
+[limitacoes]
+
+## A critério do planner (Claude's Discretion)
+
+[discricao]
+
+## Pendências e ideias adiadas
+
+<deferred>
+[pendencias]
+</deferred>
+
+## Referências e mapa do código
+
 <canonical_refs>
-## Canonical References
-
-**Downstream agents MUST read these before planning or implementing.**
-
-[MANDATORY section. Write the FULL accumulated canonical refs list here.
-Sources: ROADMAP.md refs + REQUIREMENTS.md refs + user-referenced docs during
-discussion + any docs discovered during codebase scout. Group by topic area.
-Every entry needs a full relative path — not just a name.]
-
-### [Topic area 1]
-- `path/to/adr-or-spec.md` — [What it decides/defines that's relevant]
-- `path/to/doc.md` §N — [Specific section reference]
-
-### [Topic area 2]
-- `path/to/feature-doc.md` — [What this doc defines]
-
-[If no external specs: "No external specs — requirements fully captured in decisions above"]
-
+[referencias]
 </canonical_refs>
 
 <code_context>
-## Existing Code Insights
-
-### Reusable Assets
-- [Component/hook/utility]: [How it could be used in this phase]
-
-### Established Patterns
-- [Pattern]: [How it constrains/enables this phase]
-
-### Integration Points
-- [Where new code connects to existing system — connections only; a risk or a constraint belongs in the SPEC's Regression Surface]
-
+[codigo]
 </code_context>
 
-<specifics>
-## Specific Ideas
+## Bloco da máquina
 
-[Any particular references, examples, or "I want it like X" moments from discussion]
+<!-- gsd:reqs:begin -->
+[reqs_json]
+<!-- gsd:reqs:end -->
 
-[If none: "No specific requirements — open to standard approaches"]
+<!-- gsd:scope:begin -->
+[scope_json]
+<!-- gsd:scope:end -->
 
-</specifics>
-
-<deferred>
-## Deferred Ideas
-
-[Ideas that came up but belong in other phases. Don't lose them.]
-
-### Reviewed Todos (not folded)
-[If any todos were reviewed in cross_reference_todos but not folded into scope,
-list them here so future phases know they were considered.
-Each entry: todo title + reason it was deferred (out of scope, belongs in Phase Y, etc.)
-If no reviewed-but-deferred todos: omit this subsection entirely.]
-
-[If none: "None — discussion stayed within phase scope"]
-
-</deferred>
-
----
-
-*Phase: [X]-[Name]*
-*Context gathered: [date]*
+<!-- gsd:acs:begin -->
+[acs_json]
+<!-- gsd:acs:end -->
 ```
+
+Um exemplo completo, que passa no `confere-documento.py`, é
+`testes/intencao/documento-unico/ok-CONTEXT.md`; o depósito que o rende byte a byte é
+`fontes/fork/tests/fixtures/render/documento-unico.ckpt.json`.
+
+As seções descartadas pelo ADR 0001 não existem nesta moldura: `<domain>`, `<spec_lock>`,
+`<specifics>`, «Implementation Notes», «Interview Log», «Ambiguity Report», «Critérios
+exigidos», «Cobertura do Goal», «Consistência interna».

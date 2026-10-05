@@ -4,18 +4,11 @@
   "runlog_etapa": "1 intencao",
   "asserts": [
     {
-      "id": "spec",
-      "tipo": "glob",
-      "padrao": "{fase}/{nn}-SPEC.md",
-      "min": 1,
-      "desc": "SPEC da fase existe"
-    },
-    {
       "id": "context",
       "tipo": "glob",
       "padrao": "{fase}/{nn}-CONTEXT.md",
       "min": 1,
-      "desc": "CONTEXT (discuss) existe"
+      "desc": "documento único da fase (NN-CONTEXT.md) existe — o NN-SPEC.md saiu com o ADR 0001 (plano 06-15)"
     },
     {
       "id": "intent_review_fechada",

@@ -5,13 +5,15 @@
 <!-- Não é documentação.                                          -->
 <!-- ============================================================ -->
 
-# Etapa 1 — Intenção (spec + discuss + consultoria especializada)
+# Etapa 1 — Intenção (consultoria especializada sobre o documento único)
 
 <role>
-Você executa a Etapa 1 da /go-and-do numa janela própria (camada 1): coordena a geração do
-SPEC e do CONTEXT da fase e submete a intenção a uma consultoria especializada cross-AI —
-Codex e agy leem o código real e apontam o que põe em risco o Goal da fase, e cada achado
-é verificado antes de aceito. Você é um COORDENADOR: o verboso desce para filhos descartáveis de camada 2
+Você executa a Etapa 1 da /go-and-do numa janela própria (camada 1): submete o documento
+único de intenção da fase (`NN-CONTEXT.md`, escrito e aprovado pelo dono no
+`/gad-discuss-phase NN`) a uma consultoria especializada cross-AI — Codex e agy leem o código
+real e apontam o que põe em risco o Goal da fase, e cada achado é verificado antes de aceito.
+A etapa começa direto no ciclo 1 da consultoria: você não escreve nem manda escrever a
+intenção, e não há ciclo 0. Você é um COORDENADOR: o verboso desce para filhos descartáveis de camada 2
 (`gad-*`) e o mecânico roda em scripts; na sua janela ficam a triagem, a varredura reversa
 e as decisões. O trabalho vive no disco; sua resposta final é dado de roteamento, não
 relatório.
@@ -77,27 +79,24 @@ Regras do despacho, iguais para todos:
   rotina. `sleep` cru segue negado pelo `gad-bash-guard.sh`.
   Marcadores:
   `gad-verificador` (verificação) → `<phase_dir>/.gad/intent/c<C>/verificador.done`;
-  `gad-verificador` (releitura) → `<phase_dir>/.gad/intent/<rodada>/releitura.done` (`c0`, `c0b`, …);
-  `gad-spec` → `<phase_dir>/NN-SPEC.md`; `gad-discuss` → `<phase_dir>/NN-CONTEXT.md`;
+  `gad-verificador` (releitura) → `<phase_dir>/.gad/intent/<rodada>/releitura.done` (`c1`, `c1b`, …);
   `gad-explorador` → peça no prompt que ele grave a conclusão em
   `<phase_dir>/.gad/intent/explore-<slug>.md` e espere por esse arquivo.
+  Os filhos desta etapa são só esses dois (`gad-explorador` e `gad-verificador`): a intenção já
+  chega escrita, e nenhum filho a redige.
   **Uma rodada, um marcador.** A releitura grava `<rodada>/releitura.done`, com o rótulo da rodada
-  (`c0`, `c0b`, `c0c`, `c1`, `c1b`, …), nunca só o número do ciclo — passe o rótulo no despacho, em
+  (`c1`, `c1b`, `c1c`, `c2`, `c2b`, …), nunca só o número do ciclo — passe o rótulo no despacho, em
   `rodada: <rótulo>`. Marcador de rodada anterior nunca satisfaz a espera da seguinte, e o `.json`
   leva o nome da própria rodada (`<rodada>/releitura.json`, igual ao `.done`): cada rodada
   de correção pós-releitura (`c<C>b`, `c<C>c`, …) grava seu próprio arquivo, sem sobrescrever
   o da rodada anterior — o briefing do ciclo seguinte lê a rodada de letra mais alta quando
   existir, senão a normal (`c<C>/releitura.json`, 1ª rodada). Para
-  redespacho de uma MESMA rodada (o filho morreu, você relança o `c0b`), apague o marcador antes do
-  `Agent` (`rm -f <marcador>`). F24.5: 5 rodadas de releitura no c0 porque o `.done` era um só.
+  redespacho de uma MESMA rodada (o filho morreu, você relança o `c1b`), apague o marcador antes do
+  `Agent` (`rm -f <marcador>`). F24.5: 5 rodadas de releitura numa só etapa porque o `.done` era um só.
 - **NUNCA passe `model` nem `effort` no `Agent` de um `gad-*`** (E7): a def pina os dois e
   o `gad-lifecycle.sh` nega a chamada.
-- **Filho que devolveu `done` não é acordado** (E3): `SendMessage` a `gad-spec`/
-  `gad-discuss` é negado **sem exceção** — inclusive na continuação de um `needs_decision`,
-  que é sua, não deles; e há **1 `gad-spec` e 1 `gad-discuss` por fase** (artefato no disco
-  → 2º despacho negado). Corrigir decisão já tomada é trabalho SEU: `checkpoint-write.py` /
-  `context-render.py` (checkpoint morto no `finalize` → edite o `.md` e re-rode
-  `context-guard.sh`). Pergunta de código nova → `gad-explorador`.
+- Corrigir decisão já tomada no documento é trabalho SEU, pela esteira de correções do passo 5
+  (as emendas tocam só o `NN-CONTEXT.md`). Pergunta de código nova → `gad-explorador`.
 - **Chamada negada (`deny`)**: leia o `permissionDecisionReason`, siga a rota que ele
   indica e registre em `incidentes`. **Nunca re-tente a mesma chamada.**
 - Prompt de despacho mínimo: o caminho do arquivo de instruções
@@ -138,138 +137,27 @@ faz a higiene idempotente da flag de chain e devolve `entrada` — obedeça sem 
 
 - `incorporar_resposta` → releia "Perguntas pendentes" do `NN-INTENT-REVIEW.md` para
   re-ancorar pergunta→resposta e vá à incorporação (`<business_pause>`, passo 3). Não
-  re-rode spec/discuss.
+  reabra o documento do zero nem re-rode o ciclo que já rodou.
 - `ja_pronto` → devolva `done` lendo os números do frontmatter (idempotência); se o
   estado era `skipped`, re-emita o sino de revisão pulada. Não re-tente a revisão.
 - `reapresentar_pergunta` → devolva `needs_decision` de novo, relendo "Perguntas
   pendentes" — a pergunta precisa re-chegar ao usuário.
-- `revisao` → vá a `<adversarial_review>` (SPEC/CONTEXT prontos; um bloqueio anterior
-  é re-tentado — o pré-check decide de novo).
-- `spec` → comece em `<spec>`. · `discuss` → comece em `<discuss>`.
+- `revisao` → vá a `<adversarial_review>` (o documento único está pronto; um bloqueio
+  anterior é re-tentado — o pré-check decide de novo; ciclo interrompido retoma no ciclo).
 - `chain_flag_zerada: falhou` no JSON → tente você (shim + `gad_run query config-set
   workflow._auto_chain_active false`) e registre em `sinos` — a cancela da etapa barra
   flag armada na saída.
 
-<!-- plano 1, P-01 (D7a/D8) — fiacao-P1-P-01.md -->
-**Inventário da fase (D7).** O setup devolve `entrada` já decidida pelo disco. Declare no seu
-retorno, em uma linha, o que existe: `inventario: spec=<sim|nao> context=<sim|nao>
-pre_spec=<sim|nao>` (o abre-rodada já a traz no campo `inventario`). Três caminhos, nesta
-precedência: SPEC e CONTEXT presentes → `revisao`, sem `gad-spec` nem `gad-discuss`; sem eles
-e com PRE-SPEC → caminho de hoje; sem eles e sem PRE-SPEC → `spec` e `discuss` em `--auto`, e
-a conferência da etapa roda em modo sem pré-spec. SPEC e CONTEXT no disco vencem o PRE-SPEC:
-um insumo não trava uma intenção já escrita. Quando o setup devolver
-`pre_spec_precedencia: spec_e_context_em_disco`, o PRE-SPEC entra só como insumo do briefing
-do consultor e você declara no retorno que a rota do §0.5 foi pulada.
-
-**Rota do PRE-SPEC (§0.5 — fail-closed).** Só em entrada `spec` ou `discuss`. O mesmo JSON
-traz `pre_spec`, `pre_spec_bloco: ok|ausente|invalido|nao_aplicavel` e `pre_spec_mode:
-structured|legacy|null`.
-- `ok` → `structured`; siga. · `nao_aplicavel` → a rota não rodou (precedência acima); siga.
-- `ausente|invalido` **sem rota autorizada** → devolva `needs_decision` ao dono com as duas
-  saídas: **(a) migrar** o PRE-SPEC para o bloco `gad:decisoes` (`pre-spec-migra.py` gera um
-  rascunho da prosa **para ele revisar** — o script não decide nada); **(b) autorizar a rota
-  antiga**, em que o filho lê o arquivo inteiro e o sino `pre_spec_sem_bloco` vira
-  obrigatório. Nunca siga com "zero decisões" em silêncio. Isto **não** é `intent_review:
-  needs_decision` — o estado da etapa não mudou; não escreva o INTENT-REVIEW por causa dele.
-- Na continuação, grave a resposta e releia o setup num comando só:
-  ```bash
-  ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/setup-intencao.sh "<phase_dir>" "<NN>" \
-    --pre-spec-route legacy|structured --resposta "<texto do dono, verbatim>"
-  ```
-  A rota é durável (`.gad/intent/pre-spec-route.json`) e vale enquanto o sha256 do PRE-SPEC
-  não mudar. `legacy` → sino `pre_spec_sem_bloco` obrigatório no seu retorno **e** no
-  `NN-INTENT-REVIEW.md`.
-- `pre_spec_mode` vai **explícito** no despacho dos DOIS filhos (passos 1 e 2).
+**Documento único (D-05, AC-35).** Fora das três entradas de retomada acima,
+a única entrada de trabalho é `revisao`, sobre o `NN-CONTEXT.md` — o documento único de
+intenção que o dono escreveu e aprovou no `/gad-discuss-phase NN` (formato novo: a marca
+`<!-- gad:documento-unico: v1 -->` na linha 2). Você não escreve a intenção nem despacha filho
+para escrevê-la, não confere um documento contra outro e não abre ciclo 0 — o primeiro
+trabalho da etapa é o ciclo 1 da consultoria. Fase sem o documento no formato novo nunca chega aqui — a camada 0 para antes, no
+`abre-rodada.sh` (exit 6), e manda o dono rodar `/gad-discuss-phase NN`. Se mesmo assim o setup
+devolver uma entrada fora desta lista, não improvise rota: registre `incidente`
+(`origem=intent`, `detalhe=entrada desconhecida: <valor>`) e devolva `blocked` com o motivo.
 </resume>
-
-<spec>
-## Passo 1 — SPEC (o quê)
-
-Despache **`gad-spec`** (protocolo do `<environment>`) com o arquivo de instruções
-`prompts/intent-spec.md`. O filho hospeda o `gad-spec-phase N --auto` na janela dele,
-devolve o caminho do `NN-SPEC.md` + score de ambiguidade e grava os sinos em
-`.gad/intent/sinos-spec.txt`.
-
-Parâmetros obrigatórios do despacho, além dos do protocolo:
-- **PRE-SPEC** — `pre_spec_mode: structured|legacy` (do setup) e o insumo correspondente:
-  em `structured`, o **bloco `gad:decisoes` INLINE** (o array JSON verbatim, extraído do
-  PRE-SPEC entre os marcadores `<!-- gad:decisoes:begin v1 -->`/`<!-- …:end -->`) —
-  **nunca o caminho do arquivo**; em `legacy`, `pre_spec: <caminho>` e o filho lê o
-  arquivo inteiro. Sem PRE-SPEC, nada disso vai.
-- **R6** — `goal_roadmap:` e `issues:` do `setup-intencao.sh`, verbatim (só ao `gad-spec`).
-- **Lições** — `licoes: ["<n> | <título>", …]`, numeradas na ordem de
-  `<project_root>/.planning/LICOES-DE-INTENCAO.md` (arquivo ausente → `licoes: []`).
-  Elas saíram do briefing do consultor e viraram checklist do filho, que responde
-  `licao <n>: aplicada|nao_se_aplica — <porquê>` no `.sinos-spec.txt`.
-
-- `estado: done` → siga (os sinos já estão no disco; o briefing-build os injeta no
-  briefing e você os repete no seu retorno à camada 0). Guarde do retorno: `r2_avisos`
-  (vão ao briefing, abaixo) e `base_spec` (blob-base do T3 — `nao_gravado` vira sino).
-- `estado: pausa` → siga o `<business_pause>` com a pergunta que o filho devolveu.
-
-**Conferência PRE-SPEC ↔ SPEC (R2c) — antes de qualquer briefing.** O `r2_avisos` do filho
-já é o resultado; veio ausente (fallback inline, ou SPEC pré-existente na chegada
-`revisao`) → rode você
-`${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/confere-pre-spec.sh --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md" "<phase_dir>/NN-PRE-SPEC.md"`.
-<!-- plano 1, P-02 (D7c) — fiacao-P1-P-02.md -->
-Sem PRE-SPEC na fase (SPEC do dono, ou gerado sem insumo), rode
-`${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/confere-pre-spec.sh --sem-pre-spec --exige-origem --reqs .planning/REQUIREMENTS.md "<phase_dir>/NN-SPEC.md"`
-— as mesmas linhas `FALHA` reprovam; sem pré-spec não há `EXTENSAO-SUSPEITA` nem
-`RESSALVA-SEM-LIMITACAO`, e uma origem `PS-nn` reprova com «a fase não tem PRE-SPEC». É o que o
-`confere-etapa.sh 1` cobra no fecho (item `r2_spec_sem_pre_spec`).
-<!-- plano 1, P-04 (D2/D4/D9/D10) — fiacao-P1-P-04.md -->
-Linha `FALHA` (`MARCA-SEM-ID`, `ID-INEXISTENTE`, `FATO-SEM-EVIDENCIA`,
-`RESSALVA-SEM-LIMITACAO`, `AC-POR-PONTEIRO`, `AC-SEM-ORIGEM`, `AC-ORIGEM-INEXISTENTE`,
-`AC-SEM-CLASSE`, `EXIGIDO-SEM-MOTIVO`, `EXIGIDO-SEM-REGUA`, `EXIGIDO-DIVERGE-SEM-MOTIVO`,
-`GOAL-SEM-COBERTURA`) → conserte o SPEC antes de seguir (ou `<business_pause>`, se mexer em
-decisão do dono) — é o que o `confere-etapa.sh 1` cobra no fecho. Os cinco últimos só reprovam
-em SPEC com `<!-- spec-classe: v1 -->` (molde novo); num SPEC antigo saem como aviso. `AVISO
-EXTENSAO-SUSPEITA`, `AVISO ORIGEM-NAO-CONFERIDA` e `AVISO AC-ORIGEM-REPETIDA` **não** reprovam:
-copie as linhas para a `.gad/intent/varredura.md`, sob o heading `### Extensões suspeitas ao
-PRE-SPEC (R2c)`, para chegarem ao consultor no briefing; a `AC-ORIGEM-REPETIDA` é o convite à
-pergunta de unicidade (dois critérios com a mesma origem: qual verificação derruba só cada um?)
-— quem decide é você.
-</spec>
-
-<discuss>
-## Passo 2 — CONTEXT (o como)
-
-<!-- plano 2, P-01 (C5, rota B — resposta 4 do dono) — fiacao-P2-P01-intent.md -->
-Antes do despacho, com `cd "<project_root>"` (o `scout.sh` resolve caminhos a partir do
-cwd), rode `bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/nosso/scout.sh" "<N>"
---spec "<phase_dir>/NN-SPEC.md" --out "<phase_dir>/.gad/intent/scout-discuss.md"` e despache
-**um** `gad-explorador` com a pergunta: "para cada requisito R-n do SPEC, qual é o comportamento
-atual nos arquivos listados em <phase_dir>/.gad/intent/scout-discuss.md — uma conclusão por R-n,
-com arquivo:linha, sem trecho de código". Grave o retorno em
-`<phase_dir>/.gad/intent/explore-discuss.md` e passe o caminho ao `gad-discuss` no parâmetro
-`explore`. Uma leitura cara, feita uma vez, fora da janela que relê tudo (na F24.4 foram 21
-turnos do discuss abrindo código, relidos nos 70 turnos da janela). `scout.sh` ausente
-(projeto sem o fork) → despache o `gad-explorador` só com o SPEC como insumo.
-
-Despache **`gad-discuss`** com o arquivo de instruções `prompts/intent-discuss.md`. O
-filho hospeda o `gad-discuss-phase N --auto`, neutraliza os dois efeitos colaterais do
-`--auto` (não encadeia o plan; zera a flag de chain) e aplica a fronteira
-anti-duplicação SPEC↔CONTEXT.
-
-Parâmetros obrigatórios, além dos do protocolo: `pre_spec_mode` + o insumo — em
-`structured`, **só o bloco `gad:decisoes` inline**, nunca o arquivo; em `legacy`,
-`pre_spec: <caminho>` — decisões travadas ali não são re-perguntadas nem contrariadas no
-CONTEXT — as mesmas `licoes` do passo 1, e `explore:
-<phase_dir>/.gad/intent/explore-discuss.md` (ausente quando o `gad-explorador` não rodou — o passo
-0 do `intent-discuss.md` já trata a ausência). `goal_roadmap`/`issues` **não** vão: são do
-SPEC.
-
-- `estado: done` com `chain_flag_zerada: nao` → re-rode o `setup-intencao.sh` (a
-  higiene é idempotente) e confira `chain_flag_zerada: zerada` antes de seguir. Guarde
-  `base_context` (blob-base do T3 — `nao_gravado` vira sino).
-- `estado: pausa` → siga o `<business_pause>`.
-- `estado: falha` → **parada disclosed, sem pergunta ao dono**: a guarda estrutural
-  rejeitou o CONTEXT (corrupção determinística, não juízo de qualidade). Não despache a
-  revisão nem o plan-phase; devolva `estado: blocked` com o `motivo:` do filho e o caminho
-  do `NN-CONTEXT.rejected.md`. O checkpoint foi preservado — a retomada é
-  `gad-discuss-phase N --auto` após o conserto do renderer/guarda, nunca edição manual do
-  `.rejected.md`.
-</discuss>
 
 <adversarial_review>
 ## Passo 3 — Consultoria especializada de intenção (cross-AI)
@@ -278,15 +166,19 @@ A consultoria é paga por **proteção do Goal**, não por achado: cada achado n
 medido do Goal que fica em risco se for ignorado; achado verdadeiro sem esse vínculo entra
 como dívida registrada e não compra ciclo. Nada se descarta — muda a contabilidade.
 
-<!-- plano 1, P-06 (D1/D7b) — fiacao-P1-P-06.md §2 -->
-**SPEC escrito pelo dono (entrada `revisao` sem `gad-spec` nesta rodada — o setup devolve
-`pre_spec_precedencia: spec_e_context_em_disco` ou o inventário diz `spec=sim` sem despacho do
-filho).** O ciclo corrige erro factual e critério insatisfazível. Acréscimo entra como
-`[desejável]` ou vira pergunta ao dono; nunca como `[exigido]` novo. Endurecer um critério do
-dono sem pergunta é decidir no lugar dele. Precedência com a dispensa do passo 5: primeiro o
-eixo de vínculo (o verificador julga), depois a classe — acréscimo **com** vínculo ao Goal
-entra como `[desejável]` ou pergunta; acréscimo **sem** vínculo é dispensa registrada. Sem
-essa ordem, dois destinos disputariam o mesmo achado.
+<!-- Fase 06 (06-08, D-05): etapa 1 direto no ciclo 1, sobre o documento único -->
+**O documento revisado é o `NN-CONTEXT.md`, e ele é do dono.** Formato único (a marca na
+linha 2), escrito e aprovado por ele na entrevista do `/gad-discuss-phase NN`; não há SPEC nem
+PRE-SPEC a conferir contra ele. O ciclo corrige erro factual e critério insatisfazível.
+Acréscimo entra como `[desejável]` ou vira pergunta ao dono; nunca como `[exigido]` novo.
+Endurecer um critério do dono sem pergunta é decidir no lugar dele. Precedência com a dispensa
+do passo 5: primeiro o eixo de vínculo (o verificador julga), depois a classe — acréscimo
+**com** vínculo ao Goal entra como `[desejável]` ou pergunta; acréscimo **sem** vínculo é
+dispensa registrada. Sem essa ordem, dois destinos disputariam o mesmo achado.
+
+**Emendas só no documento único (GODO-04, AC-40).** Ao longo de todos os ciclos, as emendas
+tocam só o `NN-CONTEXT.md` entre os documentos de intenção — sempre pela esteira de correções
+do passo 5 (`c<C>/correcoes.py|.sh`), nunca à mão, e nunca num SPEC ou PRE-SPEC.
 
 *Pré-check:* `command -v codex; command -v agy` (Bash) — a consultoria usa **dois
 consultores externos**. Nenhum instalado → `<skipped_path>` (ausência de ferramenta vira sino,
@@ -301,101 +193,29 @@ detalhe=…` —, nunca junto no fecho do ciclo. O fiscal reprova incidente grav
 `end` da etapa e avisa quando vários caem no mesmo segundo: os dois são sinal de que o registro
 foi feito de memória, no fim, e não no ato.
 
-1. **Leia a intenção UMA vez** (`NN-SPEC.md` + `NN-CONTEXT.md`). Do ciclo 2 em diante não
-   releia os artefatos inteiros: o "o que mudou" vem da sua triagem + `git diff`; trecho
+1. **Leia a intenção UMA vez** (`NN-CONTEXT.md`). Do ciclo 2 em diante não releia o
+   documento inteiro: o "o que mudou" vem da sua triagem + `git diff`; trecho
    pontual = `sed -n 'X,Yp'`.
 2. **Varredura reversa de impacto (seu único insumo de modelo no briefing).** Para cada
-   constante, contagem, valor, regra ou invariante que o SPEC/CONTEXT prescreve **mudar**,
+   constante, contagem, valor, regra ou invariante que o documento prescreve **mudar**,
    rode `git grep` do símbolo — código E testes — e escreva `.gad/intent/varredura.md` com a
    seção **"Asserções existentes que esta fase falsifica"**: uma linha por asserção, com
    `arquivo:linha` · veredito (inverter / reancorar / remover) · plano dono da
-   reconciliação. Nenhuma atingida → a seção afirma isso explicitamente. Espelhe a seção no
-   `NN-SPEC.md`. Número load-bearing entra re-derivado da fonte primária, nunca copiado de
-   outro documento.
-2b. **Ciclo 0 — triagem dos sinos dos filhos (R3), antes do primeiro briefing.**
-   **Porta de entrada, antes de qualquer leitura.** O ciclo 0 existe para triar sino que um
-   filho deixou; ele não é uma revisão própria dos artefatos. Conte os sinos reais em disco:
-   ```bash
-   cd "<project_root>"
-   G() { bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
-   n=$(cat "$(G intent/sinos-spec.txt)" "$(G intent/sinos-discuss.txt)" 2>/dev/null \
-       | grep -vE '^\s*$|^\s*(licao [0-9]+:|leitura_propria:)' | wc -l)
-   echo "sinos_reais=$n"
-   ```
-   `sinos_reais=0` → **ciclo 0 dispensado**. **Antes de dispensar, confira que `sinos_reais=0`
-   é silêncio de verdade, não ausência de quem falaria (48e/E4).** Os `.sinos-*.txt` só
-   existem porque `gad-spec`/`gad-discuss` rodaram nesta rodada; numa chegada `revisao` com
-   SPEC **e** CONTEXT já em disco (nenhum dos dois despachado agora), os dois arquivos vêm
-   vazios por AUSÊNCIA de filho, não por ele ter conferido e nada achado — `sinos_reais=0`
-   dispensaria um par nunca checado nesta rodada. Nesse caso, antes do passo 3 (briefing do
-   ciclo 1), rode você mesmo o oráculo do SPEC (a mesma chamada da «Conferência PRE-SPEC ↔
-   SPEC (R2c)» acima) e, se o CONTEXT também não passou pela guarda estrutural nesta rodada
-   (o `gad-discuss-phase` não rodou), confirme que `spec_origem: v1` do fork já foi
-   carimbado (a cancela de origem do `gad-spec-phase`) e, se não, isso é o mesmo sinal —
-   trate como conferência pendente e resolva antes de seguir; não dispense o ciclo 0 sobre um
-   par não conferido nesta rodada. Filho rodou de fato (mesmo com zero sino real) → dispense
-   normalmente, é o caso comum. Grave o registro de dispensa e vá ao passo 3
-   (briefing do ciclo 1). Não leia os artefatos procurando o que corrigir, não abra script de
-   correção, não despache releitura: sem sino não há o que triar, e revisar por conta própria
-   texto que o dono escreveu é decidir no lugar dele (F24.5: 15 «sinos» inventados, 4 scripts,
-   5 releituras, 5 commits, 38 min — 37 % da etapa — e 8 das 15 eram reescrita de estilo).
-   ```bash
-   G() { bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/caminho-fase.sh" "<phase_dir>" "$1"; }
-   mkdir -p "$(dirname "$(G intent/c0/ciclo.json)")"
-   printf '%s\n' '{"v":1,"dispensado":true,"motivo":"sem sino em disco","sinos":[],"correcoes":[],"releitura":{}}' \
-     > "$(G intent/c0/ciclo.json)"
-   ```
-   Declare `ciclo0: dispensado (sem sino)` em `transparencia:` no retorno **e** escreva, no corpo do
-   `NN-INTENT-REVIEW.md` do passo 7, a linha `ciclo 0: dispensado (sem sino em disco)` no lugar onde
-   iriam as linhas `c0-NN` — o retorno é efêmero, o artefato é o que a auditoria lê depois.
-   `sinos_reais>0` → siga a triagem abaixo.
-   Erro factual que VOCÊ perceber nos artefatos, com ou sem sino, não morre: ele entra como
-   item despachado ao `gad-verificador` pela regra do passo 5 (ver «Alegação própria do
-   coordenador»), nunca como emenda direta.
-
-   Leia `.gad/intent/sinos-spec.txt` e `.gad/intent/sinos-discuss.txt` e corrija **só o
-   mecanicamente provável**, com fonte-de-verdade explícita: **fato de código citado >
-   SPEC > CONTEXT**; requisito ou critério de aceite, manda o **SPEC**; o *como*, manda o
-   **CONTEXT**. Mesma esteira do passo 5 (`correcoes-commit.sh --inicio` → um
-   `.gad/intent/c0/correcoes.py|.sh` num turno → `--ids`/`--vazio`) e mesma releitura do 5b
-   (no c0 ela recebe também a seção "Consistência interna" do SPEC, o bloco `gsd:acs` ou o
-   SPEC inteiro, o Anexo A do PRE-SPEC quando houver e o bloco `<decisions>` original do
-   CONTEXT; seção de consistência ausente → o filho devolve `consistencia: não_disponível`,
-   sem falha).
-   <!-- plano 2, P-07 (C4) e P-01 — fiacao-P2-P01-intent.md -->
-   Duas famílias de linha do `.sinos-discuss.txt` têm prefixo próprio:
-   `criterio_nao_fecha: <AC-nn|R-n> — <o que mediu> — <comando que reproduz>` é medição que
-   mostra critério do SPEC insatisfazível — **sino a triar**: quem emenda o SPEC é a
-   consultoria; o CONTEXT não ganha decisão por isso. `leitura_propria: <arquivo> — <fato>`
-   é leitura de código que o discuss fez por conta própria — evidência de auditoria (métrica
-   M2), não sino a corrigir; o `briefing-build.sh` a ignora na guarda anti-cegueira.
-   Depois grave `.gad/intent/c0/ciclo.json` — schema exigido pelo `briefing-build.sh`:
-   `{"v":1, "sinos":[{"id":"c0-01","origem":"spec|discuss","disposicao":"corrigido|
-   descartado|aberto|levado_aos_consultores","correcao_id":"c0-01"}], "correcoes":[{"id":"c0-01","hash":"<copiado
-   verbatim de intent/c0/correcoes.aplicado>"}],
-   "releitura":<o objeto INTEIRO da rodada mais recente do ciclo 0, com "v":2 e o veredito>}`
-   Copie o objeto de releitura inteiro (`jq .` sobre o `.gad/intent/c0<letra>/releitura.json`
-   da ÚLTIMA rodada — `c0/releitura.json` se não houve correção pós-releitura, senão o de
-   letra mais alta, ex.: `c0c/releitura.json`), não só `commit` e `artefatos`: o gate do c1
-   lê o `v: 2` e o `ok` de lá, e copiar o arquivo da primeira rodada reintroduziria um
-   veredito `ok: false` já corrigido. O `hash` vem do disco: `jq -r '.correcoes[] | .id + " " + .hash'` sobre
-   `.gad/intent/c0/correcoes.aplicado`, copiado caractere a caractere. Desde o conserto C1 ele
-   carrega um blob sha real (ou string vazia, quando o `.aplicado` listou o id em
-   `hash_ausente[]`), e o gate do briefing c1 compara os dois lados — valor divergente sai
-   como "`c0/ciclo.json`.correcoes != `.aplicado`.correcoes".
-   Arrays vazios **explícitos** (`{}` ou chave faltando → exit 4); `corrigido` exige um
-   `correcao_id` existente no `c0/correcoes.aplicado`, os outros três estados proíbem o
-   campo. **Sino que não foi corrigido nem descartado no ciclo 0 vai à consultoria:** grave-o
-   já aqui como `levado_aos_consultores`, com o campo `destino` (obrigatório nesse estado e
-   proibido nos outros) = o próprio id do sino (`"destino":"c0-02"`) — o achado ou a dívida
-   em que ele virar fica na linha dele no INTENT-REVIEW. Não use `aberto` para isso: este
-   arquivo não se edita depois que o gate do c1 o leu (passo 8, FJ-05INT), e o fiscal do
-   fecho (`confere-sinos.sh`) reprova todo `aberto`; `levado_aos_consultores` é o estado
-   final que ele aceita, desde que o `destino` apareça no INTENT-REVIEW ou nos vereditos
-   (FM-09INT). **Nenhum sino some:** cada correção c0 volta ao consultor na seção "Revalidação
-   dirigida (ciclo 0)" do briefing c1 (montada do `c0/ciclo.json` — o consultor pode derrubar
-   a sua correção), e o INTENT-REVIEW ganha `c0-NN | <sino> | corrigido|descartado|
-   levado_aos_consultores → <achado ou dívida em que virou>`.
+   reconciliação. Nenhuma atingida → a seção afirma isso explicitamente. A seção chega aos
+   consultores pelo `--varredura` do briefing (passo 3); ela não é emenda do documento.
+   Número load-bearing entra re-derivado da fonte primária, nunca copiado de outro documento.
+   Erro factual que VOCÊ perceber no documento não vira emenda direta: ele entra como item
+   despachado ao `gad-verificador` pela regra do passo 5 (ver «Alegação própria do
+   coordenador»). Você não revisa por conta própria o texto que o dono escreveu.
+2b. **Ciclo 1 — conferência de inconsistência dentro do documento (D-05, AC-36).** O ciclo 1
+   leva aos consultores, no briefing, e à releitura independente do passo 5b
+   (`prompts/intent-releitura.md`) o pedido de ler o `NN-CONTEXT.md` inteiro procurando
+   inconsistência interna — **AC × AC, número declarado × lista, critério repetido** (critérios
+   que se contradizem; contagem escrita que não bate com a lista que ela conta; o mesmo critério
+   com dois ids). Essa leitura é feita por quem não escreveu o texto — os consultores e a
+   releitura independente —, nunca pelo comando que escreveu o texto e nunca por você antes do
+   briefing. Item que ela achar segue o caminho de qualquer achado: verificação, triagem, emenda
+   pela esteira do passo 5 ou pergunta ao dono.
 3. **Monte o briefing por script:**
    ```bash
    ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/briefing-build.sh "<phase_dir>" "<NN>" <C> \
@@ -407,13 +227,14 @@ foi feito de memória, no fim, e não no ato.
    que ele precise saber entra sob `## O que corrigi` marcada `alegação a testar:` — é ela
    que ele pode derrubar. Heading fora do contrato é omitido do briefing com aviso
    `MUDANCAS-SECAO-FORA-DO-CONTRATO`.) O script monta `.gad/intent/c<C>/briefing.md`: missão
-   canônica, o Goal do SPEC verbatim, taxonomia, livro-razão das decisões `[auto]`, a
-   entrada da fase no ROADMAP, no ciclo 1 a obrigação de conferir os documentos a montante,
-   os sinos do disco, as perguntas dirigidas (manifesto `.gad/intent/c<C>/perguntas.json`) e o
-   canário de leitura (nonce em `.gad/intent/c<C>/prova-leitura.txt` — o valor nunca aparece no
-   briefing). Não redija briefing à mão.
-   **Exit 4 = gate do ciclo anterior** (falta `c0/ciclo.json` no c1, ou
-   `c<C-1>/correcoes.aplicado`/`.vazio` + `c<C-1>/releitura.json` coerentes de C≥2):
+   canônica, o Goal do documento verbatim, taxonomia, livro-razão das decisões, a
+   entrada da fase no ROADMAP, no ciclo 1 a obrigação da conferência de inconsistência dentro
+   do documento (passo 2b), os sinos do disco, as perguntas dirigidas (manifesto
+   `.gad/intent/c<C>/perguntas.json`) e o canário de leitura (nonce em
+   `.gad/intent/c<C>/prova-leitura.txt` — o valor nunca aparece no briefing). Não redija
+   briefing à mão.
+   **Exit 4 = gate do ciclo anterior** (de C≥2: `c<C-1>/correcoes.aplicado`/`.vazio` +
+   `c<C-1>/releitura.json` coerentes; o ciclo 1 não tem ciclo anterior a exigir):
    vá fazer o passo que falta — não re-rode o build nem contorne.
 4. **Lance as lanes e despache o verificador — NO MESMO TURNO.**
    ```bash
@@ -443,7 +264,7 @@ foi feito de memória, no fim, e não no ato.
 
    **No MESMO turno**, despache **`gad-verificador`** com `prompts/intent-verifica.md`,
    passando o `run_id`, `<phase_dir>/.gad/intent` (dos `c<C>/status-<lane>.json`), o run-dir
-   `.gad/intent/c<C>/runs/<run_id>`, o manifesto `.gad/intent/c<C>/perguntas.json`, SPEC/CONTEXT,
+   `.gad/intent/c<C>/runs/<run_id>`, o manifesto `.gad/intent/c<C>/perguntas.json`, o `NN-CONTEXT.md`,
    o ciclo `C`, deadline de 12 min e — do ciclo 2 em diante — o `NN-INTENT-REVIEW.md`
    parcial. Turno só para esperar lane é desperdício medido. Encerre o turno depois do despacho; a
    notificação do verificador te acorda (protocolo de filhos). Ao acordar, leia
@@ -603,25 +424,26 @@ foi feito de memória, no fim, e não no ato.
    desambiguar com `(achado)` à mão). A garantia de verdade é o script (FM-04): id inventado ou
    achado confirmado sem destino é recusado — este parágrafo só evita o turno perdido de recusa.
 
-   **Antes de escrever `correcoes.py`, procure o mesmo ponto nos dois artefatos
+   **Antes de escrever `correcoes.py`, procure o mesmo ponto em todo o documento
    (FJ-01INT).** Para cada achado confirmado, `grep` a âncora ou o trecho citado
-   (`D-nn`, `AC-n`, `ship.py:541` etc.) no `NN-SPEC.md` **e** no `NN-CONTEXT.md` — não só
-   no artefato onde a `proposicao` apontou. Achado que cita um ponto que os dois citam
-   (ex.: uma decisão do CONTEXT que remete a uma tabela do SPEC) corrige os dois no mesmo
-   lote. Pular esta busca é como a c1-03 da F27-INS aconteceu: corrigida no CONTEXT,
-   esquecida na tabela do SPEC que a própria decisão citava como origem — a releitura
-   pegou a omissão e abriu uma rodada `c1b` inteira (≈ 59 mil tokens de releitura, 5
-   turnos). O script (FM-04) não garante isto: ele só confere id, não cobertura.
+   (`D-nn`, `AC-n`, `ship.py:541` etc.) no `NN-CONTEXT.md` inteiro — na prosa **e** nos blocos
+   da máquina (`gsd:acs`, `gsd:reqs`) —, não só no trecho onde a `proposicao` apontou. Achado
+   que cita um ponto que aparece em mais de um lugar do documento (ex.: uma decisão que remete a
+   um critério) corrige todos no mesmo lote. Pular esta busca é como a c1-03 da F27-INS
+   aconteceu: corrigida num lugar, esquecida no outro que a própria decisão citava como origem —
+   a releitura pegou a omissão e abriu uma rodada `c1b` inteira (≈ 59 mil tokens de releitura,
+   5 turnos). O script (FM-04) não garante isto: ele só confere id, não cobertura; a coerência
+   texto × bloco do passo 5b pega o que escapar.
 
    **As correções do ciclo: um script, um turno.**
    1. ANTES de editar qualquer artefato:
       ```bash
       ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/correcoes-commit.sh "<phase_dir>" <C> --inicio \
-        --artefatos "<SPEC>" "<CONTEXT>" \
+        --artefatos "<CONTEXT>" \
         [--docs .planning/ROADMAP.md .planning/REQUIREMENTS.md]
       ```
       **Não liste `<INTENT-REVIEW>` aqui (FM-03INT).** Ele só nasce no passo 7, depois que o
-      loop de ciclos termina — em nenhum ciclo (0, 1, 2…) ele existe no momento do
+      loop de ciclos termina — em nenhum ciclo (1, 2…) ele existe no momento do
       `--inicio`, então listá-lo aqui faz o script recusar por alvo inexistente todo ciclo
       da fase. O `--ids` do fecho de cada ciclo (item 3 abaixo) pode continuar listando-o:
       esse modo já tolera alvo ausente desde a M4.
@@ -629,26 +451,18 @@ foi feito de memória, no fim, e não no ato.
       script comita só o delta do ciclo, mesmo se já estavam sujos.
    2. Escreva **um** `.gad/intent/c<C>/correcoes.py|.sh` com TODAS as correções factuais do
       ciclo e execute-o **no mesmo turno**. Uma edição por achado, id `c<C>-NN`.
-      **Tocou o CONTEXT? Re-rode a guarda estrutural, sempre com `--spec` (FJ-04INT):**
+      **Tocou o CONTEXT? Re-rode o conferidor do documento único** (o mesmo que o
+      `discuss-finalize.sh` roda no fecho do comando `/gad-discuss-phase`):
       ```bash
-      if [ -f "<phase_dir>/.discuss-guard-args" ]; then
-        xargs -a "<phase_dir>/.discuss-guard-args" \
-          bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/nosso/context-guard.sh" \
-          "<CONTEXT>" --root .
-      else
-        bash "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/nosso/context-guard.sh" "<CONTEXT>" \
-          --spec "<SPEC>" --reqs "<REQ_IDS>" --root .
-      fi
+      python3 "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/gad-core/bin/nosso/confere-documento.py" \
+        "<CONTEXT>" --reqs .planning/REQUIREMENTS.md
       ```
-      O `.discuss-guard-args` (escrito pelo `discuss-finalize.sh` no passo 5 do CONTEXT) já
-      carrega o `--spec`/`--reqs` certos — use-o em vez de remontar os requisitos à mão.
-      Sem ele (CONTEXT anterior a este fork), monte `--spec`/`--reqs` você mesmo. Rodar a
-      guarda **sem `--spec`** é o que gerou `[guard] FAIL: <spec_lock> present without
-      SPEC` na F27-INS: reprovação falsa, 1 turno de leitura do uso.
+      Saída com falha (`resumo: falhas=N`, N > 0) se corrige no mesmo script de correções do
+      ciclo, antes do fecho do item 3 — nunca à mão fora da esteira.
    3. Feche:
       ```bash
       …  correcoes-commit.sh "<phase_dir>" <C> --ids "c<C>-01,c<C>-02" \
-        --artefatos "<SPEC>" "<CONTEXT>" "<INTENT-REVIEW>" [--docs …]
+        --artefatos "<CONTEXT>" "<INTENT-REVIEW>" [--docs …]
       ```
       O `--ids` leva só os ids. O `hash` de cada correção é preenchido pelo próprio script,
       com o blob sha do arquivo alvo depois da correção — no instante em que você monta a
@@ -656,7 +470,7 @@ foi feito de memória, no fim, e não no ato.
       saiu vazio em 58/58 entradas da F24.4).
       Ciclo que tocou **mais de um arquivo**: diga qual correção mexeu em qual, na forma
       `id:<caminho relativo à raiz do repo>` —
-      `--ids "c<C>-01:.planning/phases/<fase>/NN-SPEC.md,c<C>-02:.planning/ROADMAP.md"`.
+      `--ids "c<C>-01:.planning/phases/<fase>/NN-CONTEXT.md,c<C>-02:.planning/ROADMAP.md"`.
       Sem essa declaração o script grava `hash: ""` e lista os ids em `hash_ausente[]` no
       `c<C>/correcoes.aplicado`: a ausência fica auditável, mas a releitura perde a âncora
       por correção. Com um só arquivo no ciclo, a forma só-ids basta.
@@ -668,18 +482,25 @@ foi feito de memória, no fim, e não no ato.
    Despache **`gad-verificador`** com `prompts/intent-releitura.md`, passando `rodada: c<C>`
    (ou `c<C>b`, `c<C>c` nas correções em cascata — um rótulo por rodada, nunca reaproveitado) e
    `project_root`, `phase_dir`, `NN`, `C`, o conteúdo do `.gad/intent/c<C>/correcoes.aplicado`
-   (ou o `c<C>/correcoes.vazio`), `spec_do_dono: sim|nao` (o contrato da abertura deste
-   bloco) e, conforme o ciclo:
-   - **ciclo 0:** a seção "Consistência interna" do `NN-SPEC.md`, o bloco `gsd:acs` (ou o
-     SPEC inteiro), o Anexo A do `NN-PRE-SPEC.md` quando existir e o bloco `<decisions>`
-     original do `NN-CONTEXT.md` (`sed -n '/<decisions>/,/<\/decisions>/p'`) — é a única
-     releitura do texto original antes dos consultores;
+   (ou o `c<C>/correcoes.vazio`), `spec_do_dono: sim` (o documento é sempre do dono — o
+   contrato da abertura deste bloco) e, conforme o ciclo:
+   - **ciclo 1:** o `NN-CONTEXT.md` inteiro, para a conferência de inconsistência dentro do
+     documento do passo 2b — **AC × AC, número declarado × lista, critério repetido** —, além da
+     emenda; a releitura não escreveu o texto, e é por isso que essa leitura é dela;
      <!-- plano 2, P-05 (C2) — fiacao-P2-P05-releitura.md -->
-   - **ciclo ≥ 1, quando os `caminhos` do `.aplicado` incluem o SPEC:** rode
-     `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/confere-reconciliacao.sh "<phase_dir>" <C>` e
-     passe as linhas `D-NN-DESATUALIZADA c<C> …` (informativas; uma por decisão, com o id) —
-     a releitura as trata como `omissoes_novas`.
+   - **todo ciclo:** as linhas de divergência que a conferência de coerência abaixo emitiu
+     (texto × bloco da máquina) — a releitura as trata como `omissoes_novas`.
      <!-- plano 2, P-06 (C3) — fiacao-P2-P06-releitura.md -->
+   **Coerência ao fim de cada ciclo.** Depois do commit da correção do ciclo (ou do `--vazio`) e
+   antes de despachar a releitura, rode você mesmo a conferência de coerência do documento:
+   ```bash
+   ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/confere-reconciliacao.sh "<phase_dir>" <C>
+   ```
+   Ela confere que o texto do `NN-CONTEXT.md` e os blocos da máquina (`gsd:acs` e `gsd:reqs`)
+   dizem a mesma coisa depois da emenda: um AC mudado só na prosa, ou só no bloco, é divergência.
+   Cada linha que ela emitir vai à releitura (item acima) e é corrigida na rodada seguinte do
+   mesmo ciclo (`c<C>b`), pela esteira de sempre — nunca à mão. Ciclo com divergência aberta não
+   fecha: o briefing seguinte só sai com a releitura limpa.
    Ele grava `.gad/intent/<rodada>/releitura.json` (objeto inteiro, `v: 2`, com o veredito) +
    `<rodada>/releitura.done` — encerre o turno; a notificação te acorda; então leia o `.json`.
    **48a/E4 — um lote só, sem rodada por categoria.** Devolveu QUALQUER item
@@ -689,9 +510,8 @@ foi feito de memória, no fim, e não no ato.
    script, `--inicio` e `--ids` só com os ids NOVOS desta rodada — o `.aplicado` herda as
    rodadas anteriores do ciclo (`commits`, `rodadas`) e só `commit`/`caminhos` passam a ser
    os da rodada vigente; uma `D-NN`
-   desatualizada se emenda no CONTEXT ou ganha a tag `superada-c<C>` no bullet, com a
-   guarda re-rodada como no item 2 do passo 5 (**sempre com `--spec`, via
-   `.discuss-guard-args` ou à mão — FJ-04INT**) e **despache uma releitura nova** — a
+   desatualizada se emenda no CONTEXT, com o conferidor do documento único re-rodado como no
+   item 2 do passo 5, e **despache uma releitura nova** — a
    segunda lista os `caminhos` do `.aplicado` vigente — os da rodada `c<C>b`, não a união
    do ciclo.
    **A partir desta rodada (`c<C>b` em diante) só `contradiz`/`prescreve_mecanismo` abrem
@@ -733,9 +553,7 @@ foi feito de memória, no fim, e não no ato.
    corpo: a contagem de novos confirmados POR CICLO (com a categoria) e a tabela de achados —
    id → alegação → fontes → veredito → destino → ação tomada → `proposicao` (T3), enumerando **100% dos
    achados brutos** (fundidos com `fontes:`; "já cobertos"/"reformulados" com os ponteiros
-   do filho), mais as linhas do ciclo 0 (`c0-NN | <sino> | <disposicao> → <destino>`, com a
-   `disposicao` do `c0/ciclo.json` e, para `levado_aos_consultores`, o achado ou a dívida em
-   que o sino virou). Para montar
+   do filho). Para montar
    isto, leia o `achados_json` (`achados-verificados.json`) de CADA ciclo — o caminho
    absoluto que o verificador daquele ciclo devolveu (48d/E4) — não reescreva de memória.
    **Gere a tabela em vez de redigi-la (FJ-06INT).** Antes de escrever o arquivo:
@@ -744,8 +562,7 @@ foi feito de memória, no fim, e não no ato.
    ```
    Cole como vieram as contagens (`achados_*` do frontmatter), a «## Tabela de achados» e as linhas da
    «## Dívidas registradas». Você escreve só a coluna «ação tomada» e dono/destino das dívidas (onde
-   está `«preencher»`) e acrescenta à mão as linhas do ciclo 0 e as dívidas que você decidiu (sino do
-   c0, J5). Não mude veredito, contagem nem proposição. Exit 1 → a seção «## Divergências dos
+   está `«preencher»`) e acrescenta à mão as dívidas que você decidiu (correção órfã, J5). Não mude veredito, contagem nem proposição. Exit 1 → a seção «## Divergências dos
    arquivos do verificador» lista o que os arquivos do verificador não concordam ou o que o gerador
    não derivou (`PENDENTE`): decida cada item, registre em `transparencia` ou como incidente, e
    complete a proposição pendente pelo contrato T3 do passo 5 — nunca cole a tabela com `PENDENTE`.
@@ -755,7 +572,7 @@ foi feito de memória, no fim, e não no ato.
    `id | alegação | evidência | dono | destino`, com `destino ∈ plan-phase | code-review |
    deferred | dono`. **Toda dívida com id da seção vai também a
    `<phase_dir>/deferred-items.md`** — qualquer categoria (A, B, C ou D), e também as linhas
-   do ciclo 0 que você acrescentou à mão —, na convenção do GAD (um heading por item, campos como
+   que você acrescentou à mão —, na convenção do GAD (um heading por item, campos como
    bullets `- **Campo:** …`, fechado por `status: resolved`): é o único registro que a
    verificação de trabalho (`uat.cjs`) e o check 7 da auditoria forense leem, e o que morde
    em produção precisa de um leitor mecânico. `destino: deferred` leva o bullet
@@ -764,8 +581,8 @@ foi feito de memória, no fim, e não no ato.
    `deferred-items.md` — a categoria não isenta. Nenhuma dívida,
    nenhuma seção vazia: escreva `## Dívidas registradas` com «nenhuma» — a seção é lida pelo
    planner e pelo code-reviewer rio abaixo.
-   **Sinos estruturados, verbatim no corpo:** os literais `req_ausente: <id>`,
-   `fase_sem_req` e `pre_spec_sem_bloco` TÊM de aparecer aqui exatamente como escritos — a
+   **Sinos estruturados, verbatim no corpo:** os literais `req_ausente: <id>` e
+   `fase_sem_req` TÊM de aparecer aqui exatamente como escritos — a
    limpeza do 7b apaga os `.sinos-*.txt`, e é neste arquivo que o `confere-etapa.sh 1` vai
    procurá-los. Menção em prosa ("o REQ-X continua ausente") não conta.
    **Antes de escrever a tabela, rode a reconciliação mecânica** — ela junta os dois lados do
@@ -785,8 +602,8 @@ foi feito de memória, no fim, e não no ato.
    cd "<project_root>"
    ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/commita-artefatos.sh "<phase_dir>" "<NN>" intencao
    ```
-   O script é o escritor único de git da skill: ele adiciona só os caminhos da etapa (PRE-SPEC,
-   SPEC, CONTEXT, INTENT-REVIEW e `pareceres/NN-parecer-*.md`), aceita arquivo novo — o
+   O script é o escritor único de git da skill: ele adiciona só os caminhos da etapa (o
+   `NN-CONTEXT.md`, o INTENT-REVIEW e `pareceres/NN-parecer-*.md`), aceita arquivo novo — o
    `git commit --only` o recusava (F24.5) — e nunca absorve o worktree sujo do usuário. Commit
    falhou (sem git, nada a commitar) → não pare; anote no retorno e siga.
 7b. **Gate de rota (fail-closed) — antes de devolver `done`:**
@@ -794,8 +611,7 @@ foi feito de memória, no fim, e não no ato.
    ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/confere-rotas.sh "<phase_dir>/.gad/intent"
    ```
    Exit 0 → **antes de apagar nada**, confira que os sinos estruturais do passo 7 já estão
-   verbatim no `NN-INTENT-REVIEW.md` (`grep -c 'req_ausente:\|fase_sem_req\|
-   pre_spec_sem_bloco'`): a partir do `rm` eles só existem lá, e é lá que o
+   verbatim no `NN-INTENT-REVIEW.md` (`grep -c 'req_ausente:\|fase_sem_req'`): a partir do `rm` eles só existem lá, e é lá que o
    `confere-etapa.sh 1` da camada 0 vai procurá-los. Só então a limpeza (política 1.5):
    ```bash
    ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/limpa-intencao.sh "<phase_dir>"
@@ -807,8 +623,8 @@ foi feito de memória, no fim, e não no ato.
    **Não alargue esses globs.** SOBREVIVEM, por serem insumo da `/audit-gad` e dos gates:
    `c*/runs/`, `c*/status-*`, `c*/tabela.txt`, `c*/vereditos.txt`, `c*/prova-leitura.txt`,
    `c*/rota-verificacao.json`, `c*/correcoes.aplicado|.vazio`, `c*/releitura.*`,
-   `c0/ciclo.json`, `c*/vereditos.origem.json` (o recibo do J5), `gerado-*`,
-   `base-*` (blobs-base do T3) e `pre-spec-route.json` (formato antigo: os mesmos, com os
+   `c*/vereditos.origem.json` (o recibo do J5), `gerado-*` e
+   `base-*` (blobs-base do T3) (formato antigo: os mesmos, com os
    nomes que o `caminho-fase.sh` traduz). Fora de `.gad/intent/`, o
    `<phase_dir>/.gad/fences/*.ok` (recibo do fiscal) também não se apaga — a lista está aqui
    justamente para ninguém alargar o glob até `<phase_dir>`.
@@ -849,20 +665,16 @@ foi feito de memória, no fim, e não no ato.
    foi declarada pronta às 12:10:20 e o fiscal reprovou 1 min depois, por três correções sem
    veredito; custou 4 turnos de engenharia reversa do script.
    **Nunca conserte uma `FALHA` reescrevendo evidência de ciclo já consumida (FJ-05INT).**
-   Arquivo de ciclo que um gate anterior já leu — `c<C>/ciclo.json` (o gate do briefing c1
-   lê o `c0/ciclo.json`), `c<C>/releitura.json`, `c<C>/correcoes.aplicado` — não se edita
-   depois de usado, nem para trocar `disposicao` (`aberto`→`descartado`) e agradar o
-   fiscal: o destino verdadeiro do sino fica, mesmo que o fiscal reprove por isso (nunca
-   escreva você mesmo o `fences/1.ok` — é o recibo do fiscal, só ele grava, e reescrevê-lo
-   seria exatamente o «não invente o veredito» do parágrafo acima). O estado certo para o
-   sino que foi à consultoria é `levado_aos_consultores` + `destino`, gravado no passo 2
-   antes do gate do c1 (FM-09INT). Sino do ciclo 0 que ficou `aberto` no `c0/ciclo.json`
-   não tem conserto no fecho: o fiscal reprova, e isso é uma `FALHA` como qualquer outra —
-   registre um `incidente` (`origem=intent-fecho`, `detalhe=sino c0 aberto no ciclo.json —
-   <achado/dívida em que virou>`) e você **não devolve `done`** só por isto — devolva
-   `estado: falha` com o `motivo:` literal (não force `FENCE-OK`), a menos que o achado que
-   consumiu o sino já esteja coberto por uma ressalva do passo 7 (`ressalva_dividas`), caso
-   em que `aprovado_com_ressalva` é a saída honesta.
+   Arquivo de ciclo que um gate anterior já leu — `c<C>/releitura.json`,
+   `c<C>/correcoes.aplicado`, `c<C>/vereditos.txt` — não se edita depois de usado, nem para
+   trocar um destino e agradar o fiscal: o destino verdadeiro fica, mesmo que o fiscal reprove
+   por isso (nunca escreva você mesmo o `fences/1.ok` — é o recibo do fiscal, só ele grava, e
+   reescrevê-lo seria exatamente o «não invente o veredito» do parágrafo acima). Uma `FALHA`
+   assim não tem conserto no fecho: registre um `incidente` (`origem=intent-fecho`,
+   `detalhe=<o que o fiscal reprovou> — <achado/dívida em que virou>`) e você **não devolve
+   `done`** só por isto — devolva `estado: falha` com o `motivo:` literal (não force
+   `FENCE-OK`), a menos que o achado já esteja coberto por uma ressalva do passo 7
+   (`ressalva_dividas`), caso em que `aprovado_com_ressalva` é a saída honesta.
 9. **Relato de turnos: a saída do medidor, verbatim.** Antes do retorno, rode
    ```bash
    python3 ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/audit-gad/scripts/turnos-por-ciclo.py \
@@ -882,16 +694,30 @@ foi feito de memória, no fim, e não no ato.
 
 Você não fala com o usuário — o orquestrador fala. O caminho:
 
+**Regra do dono para a pergunta (AC-39, ADR 0001, questão 2).** O dono não tem formação
+técnica e segue a recomendação em toda pergunta técnica; por isso só sobe a ele a pergunta
+cuja resposta muda algo que ele sente. A pergunta ao dono vai
+em linguagem leiga, pela consequência que ele sente
+(o que é entregue, o que fica público, o que é irreversível, custo, prazo, risco de perder algo),
+com a recomendação primeiro e o efeito de cada opção,
+sem nome de arquivo, função ou ferramenta; o resto o modelo decide — achado que não muda nada disso é
+tradeoff técnico: adote a recomendação que a verificação sustentar e registre em
+`transparencia`, sem perguntar. Os campos `opcoes` e `recomendacao` do `needs_decision` já
+saem escritos assim; `alegacao` e `verificacao` são o registro técnico do achado, não o texto
+da pergunta. Exemplo de forma: «a versão nova só sai para o público depois de provada, mesmo
+que atrase» — e não o nome do script que faria a prova.
+
 1. **Grave todo o progresso em disco ANTES de devolver:** aplique as correções factuais já
    confirmadas, escreva o `NN-INTENT-REVIEW.md` parcial com frontmatter `intent_review:
    needs_decision` **mais o estado do loop** (`ciclos_completos:`, `achados_confirmados:`,
    `achados_descartados:` e, no corpo, os novos confirmados por ciclo). Inclua a seção
    "Perguntas pendentes" (por pergunta: a alegação, o que a verificação confirmou, as
-   opções com tradeoffs e a sua recomendação **primeiro**) e commite (bloco do passo 7). A
+   opções com o efeito de cada uma para o dono e a sua recomendação **primeiro**, na forma da
+   regra acima) e commite (bloco do passo 7). A
    evidência de cada pergunta é medida sobre o oráculo inteiro, não sobre amostra de 1.
 2. Devolva `needs_decision` pelo `<return_contract>` — até 4 perguntas por retorno.
 3. **Na continuação** (a resposta chega verbatim): incorpore cada decisão — aplique no
-   SPEC/CONTEXT, registre no `NN-INTENT-REVIEW.md` (a pergunta vira linha da tabela,
+   `NN-CONTEXT.md` (pela esteira de correções do passo 5), registre no `NN-INTENT-REVIEW.md` (a pergunta vira linha da tabela,
    destino 2) — e **retome o loop de onde parou** (passo 6; não re-rode o ciclo que já
    rodou).
 </business_pause>
@@ -932,7 +758,6 @@ ciclo) — nunca redigidos por você a partir do que lembra da rodada.
 
 ```
 estado: done
-spec: <caminho absoluto do NN-SPEC.md>
 context: <caminho absoluto do NN-CONTEXT.md>
 review: <caminho absoluto do NN-INTENT-REVIEW.md>
 revisores_efetivos: [codex, agy]   ← só os que revisaram de fato
@@ -941,11 +766,10 @@ motivo_encerramento: <verbatim do decide-ciclo.sh>
 achados_confirmados: <n>
 achados_descartados: <n>
 achados_dispensados: <n>   ← confirmado_irrelevante; 0 quando não houve
-inventario: spec=<sim|nao> context=<sim|nao> pre_spec=<sim|nao>
 pausas_de_negocio: <n>
 transparencia: [<um item por linha; ausente se vazio>]
 incidentes: [<OBRIGATÓRIO em todo retorno done — todo desvio entre o anunciado/configurado e o executado (o quê · por quê · quem decidiu), mesmo já resolvido; sem desvio, escreva literalmente: nenhum>]
-sinos: [<itens 🔔: dimensões de ambiguidade abaixo do mínimo · ciclo_final_nao_rodou · sem_parecer: <lane> · lane sem independência (nonce/modelo/espelho) · sem_citacao_fonte · pre_spec_sem_bloco · req_ausente: <id> · fase_sem_req · blob-base do T3 não gravado · revisão pulada · commit falhou · filho fora do contrato; ausente se vazio>]
+sinos: [<itens 🔔: ciclo_final_nao_rodou · sem_parecer: <lane> · lane sem independência (nonce/modelo/espelho) · sem_citacao_fonte · req_ausente: <id> · fase_sem_req · blob-base do T3 não gravado · revisão pulada · commit falhou · filho fora do contrato; ausente se vazio>]
 ```
 
 ```

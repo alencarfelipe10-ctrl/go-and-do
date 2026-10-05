@@ -266,7 +266,6 @@ Every command below is also a live `/gad-*` slash command, grouped by purpose.
 ### Discovery & Specification
 
 - **`/gad-explore`** — Socratic ideation and idea routing before committing to plans.
-- **`/gad-spec-phase <phase> [--auto] [--text]`** — Clarify WHAT a phase delivers with ambiguity scoring; produces SPEC.md before discuss-phase.
 - **`/gad-ai-integration-phase [phase]`** — Generate an AI-SPEC.md design contract for phases building AI systems.
 - **`/gad-ui-phase [phase]`** — Generate UI design contract (UI-SPEC.md) for frontend phases.
 - **`/gad-import --from <filepath> | --from-gsd2`** — Ingest external plans with conflict detection, or reverse-migrate a GSD-2 project to v1 format.

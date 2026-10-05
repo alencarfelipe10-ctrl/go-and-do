@@ -1,5 +1,5 @@
 {
-  "_doc": "Schema do NN-DISCUSS-CHECKPOINT.json (fork, tarefas 3b e 35/onda 2). Escrito SOMENTE por bin/nosso/checkpoint-write.py; lido por bin/nosso/context-render.py. Nunca copiado/editado à mão. Apagado no finalize. CONTRATO: as chaves deste molde e as que o writer grava têm de bater 1:1 — tests/test-checkpoint-write.sh afirma isso (paridade molde × writer). `areas` é a lista CANÔNICA (nome + anchors do SPEC + anchors ainda descobertos); `areas_completed`/`areas_remaining` são DERIVADOS dela a cada gravação e existem para o context-render.py e o resto do fork seguirem lendo o que sempre leram.",
+  "_doc": "Schema do NN-DISCUSS-CHECKPOINT.json — o DEPÓSITO da fase do documento único (fork; plano 06-13, D-12). Escrito SOMENTE por bin/nosso/checkpoint-write.py; lido por bin/nosso/context-render.py (render do rascunho e promoção) e pelo discuss-init.sh (estado da intenção). Nunca copiado/editado à mão. CONTRATO: as chaves deste molde e as que o writer grava têm de bater 1:1 — tests/test-checkpoint-write.sh afirma isso (paridade molde × writer). Só decisão do DONO entra (`origin: owner`; outra → exit 2). `secoes` guarda o texto de cada seção do documento único por slug (os `*_json` validados e verbatim); `aprovado_sha256` é o sha do rascunho que o dono aprovou («ok») — sem ele, ou com sha diferente, a promoção recusa; qualquer mudança no depósito o zera. `areas` é a lista CANÔNICA (nome + anchors + anchors ainda descobertos); `areas_completed`/`areas_remaining` são DERIVADOS dela a cada gravação e são o que a retomada mostra. As chaves `domain` … `code_context` são do formato antigo: o init ainda as grava (vazias no fluxo novo) e o render do documento único não as lê.",
   "phase": "{padded_phase}",
   "phase_name": "{phase_name}",
   "date": "{YYYY-MM-DD}",
@@ -29,32 +29,24 @@
   "areas_remaining": [
     "Area 2"
   ],
-  "domain": "{phase boundary — free text → <domain>}",
-  "spec_loaded": true,
-  "spec_path": ".planning/phases/NN-slug/NN-SPEC.md",
-  "req_count": 3,
-  "req_ids": [
-    "R1",
-    "R2",
-    "R3"
-  ],
-  "spec_scope_in": [
-    "{In-scope bullet}"
-  ],
-  "spec_scope_out": [
-    "{Out-of-scope bullet}"
-  ],
+  "domain": "{formato antigo — vazio no fluxo do documento único}",
+  "spec_loaded": false,
+  "spec_path": "",
+  "req_count": 0,
+  "req_ids": [],
+  "spec_scope_in": [],
+  "spec_scope_out": [],
   "decisions": {
     "Area 1": [
       {
         "id": "D-01",
-        "question": "...",
+        "question": "{a pergunta de negócio feita ao dono}",
         "options_presented": [
           "A",
           "B"
         ],
         "chosen_option": 1,
-        "answer": "{the decision — one line}",
+        "answer": "{a decisão do dono — uma linha; vira `- **D-01:** <answer>` no <decisions>}",
         "evidence": "path:line | none",
         "reversibility": "reversible|costly|one-way|null",
         "reversibility_rationale": "{required when costly/one-way}",
@@ -62,43 +54,40 @@
         "anchors": [
           "R2 (first = anchor; N per decision, e.g. R4,R5 — P09)"
         ],
-        "origin": "owner|pre-spec|auto|prior-phase|todo",
-        "source_id": "PS-01 — só em decisão vinda do bloco gad:decisoes do PRE-SPEC (map-pre-spec); ausente nas demais",
-        "prose": "{rationale, discarded alternatives, cycle corrections — free form}"
+        "origin": "owner",
+        "prose": "{o porquê na fala do dono — indentado e neutralizado embaixo da decisão}"
       }
     ]
   },
-  "discretion": [
-    "{'you decide' items and anchor:none areas with the reason}"
-  ],
-  "folded_todos": [
-    "..."
-  ],
-  "reviewed_todos": [
-    "..."
-  ],
-  "deferred_ideas": [
-    "..."
-  ],
-  "canonical_refs": [
-    {
-      "path": "docs/adr-1.md",
-      "topic": "ADRs",
-      "note": "what it decides"
-    }
-  ],
-  "specifics": [
-    "..."
-  ],
+  "discretion": [],
+  "folded_todos": [],
+  "reviewed_todos": [],
+  "deferred_ideas": [],
+  "canonical_refs": [],
+  "specifics": [],
   "code_context": {
-    "reusable": [
-      "..."
-    ],
-    "patterns": [
-      "..."
-    ],
-    "integration": [
-      "..."
-    ]
-  }
+    "reusable": [],
+    "patterns": [],
+    "integration": []
+  },
+  "secoes": {
+    "goal": "{texto da seção ## Goal}",
+    "situacao": "{## Situação de hoje — toda medição com fonte executada ou [herdado]}",
+    "requisitos": "{## Requisitos}",
+    "criterios": "{## Critérios de aceite}",
+    "limites": "{## Limites e restrições}",
+    "proibicoes": "{## Prohibitions (Proibições)}",
+    "bordas": "{## Edge Coverage (Bordas)}",
+    "regression": "{## Regression Surface}",
+    "artefatos": "{## Artefatos novos — tabela Caminho | Público? | Dado pessoal? | Quem grava}",
+    "limitacoes": "{## Limitações declaradas}",
+    "discricao": "{## A critério do planner (Claude's Discretion)}",
+    "pendencias": "{## Pendências e ideias adiadas — vai dentro de <deferred>}",
+    "referencias": "{## Referências e mapa do código — vai dentro de <canonical_refs>}",
+    "codigo": "{## Referências e mapa do código — vai dentro de <code_context>}",
+    "reqs_json": "{JSON do bloco gsd:reqs, verbatim}",
+    "scope_json": "{JSON do bloco gsd:scope, verbatim}",
+    "acs_json": "{JSON do bloco gsd:acs, verbatim}"
+  },
+  "aprovado_sha256": "{sha256 do rascunho aprovado pelo dono | null}"
 }

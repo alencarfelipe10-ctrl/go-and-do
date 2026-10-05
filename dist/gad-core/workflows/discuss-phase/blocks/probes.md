@@ -1,20 +1,38 @@
-# spec-phase — Steps 5.5 and 5.6 (the two completeness probes)
+# discuss-phase — passo das sondas (bordas e proibições do documento único)
 
-Lazy block of `workflows/spec-phase.md` (S3). Read on arrival at Step 5.5, never before —
-a run that stops at the ambiguity gate must not pay for this text. The main workflow
-carries only the stub that points here.
+Lazy block do `/gad-discuss-phase` (comando único). Lido ao chegar no passo das sondas —
+DEPOIS da entrevista com o dono e DEPOIS do rascunho `gsd:reqs` —, nunca antes: uma rodada
+que para na entrevista não paga por este texto. O workflow principal leva só o ponteiro para cá.
+Herdado do `spec-phase/blocks/probes.md` (Steps 5.5 e 5.6): as duas sondas são as mesmas; o
+que muda é onde o rascunho mora e para onde o resultado vai (o documento único `NN-CONTEXT.md`).
 
 **Preconditions carried with the text (they break the probe silently if lost):**
-- The `gsd:reqs` draft MUST already be authored into `${phase_dir}/.spec-reqs.md` before the
+- The `gsd:reqs` draft MUST already be authored into `${phase_dir}/.discuss-reqs.md` before the
   Step 5.5 bash block runs — it is the probe's single input, authored once.
-- Step 6 (main workflow) transcribes that same block VERBATIM into SPEC.md and then deletes
-  the draft. Do not delete it here.
-- `gad_run` / `GAD_TOOLS` come from `.planning/.spec-tmp/env.sh` (Step 1 wrote it):
-  `. .planning/.spec-tmp/env.sh` — never re-paste a resolution cascade.
+- O render do documento único transcreve o mesmo bloco, VERBATIM, para `## Bloco da máquina` e
+  depois apaga o rascunho. Não o apague aqui.
+- `gad_run` / `GAD_TOOLS` come from `.planning/.discuss-tmp/env.sh` (o `discuss-init.sh` o gravou):
+  `. .planning/.discuss-tmp/env.sh` — never re-paste a resolution cascade.
+
+**Destino (documento único):** as bordas vão à seção `## Edge Coverage (Bordas)` e as proibições à
+seção `## Prohibitions (Proibições)` do `NN-CONTEXT.md` — os headings exatos, com acento e caixa,
+que os leitores (planner, plan-checker, verifier, conferidor) procuram. Os critérios que as sondas
+criam entram em `## Critérios de aceite` no formato do documento (`- [ ] AC-nn — …; FAIL: …`).
+
+**AC não duplicado (R3, adjacência):** uma borda ou proibição que cai num critério que JÁ existe
+reaproveita o AC existente — a linha da tabela cita o id dele (`✅ covered | AC-07 (…)` /
+`test — AC-03`) e nenhum AC novo é escrito. Nunca crie AC duplicado para dizer a mesma coisa: o
+conferidor do documento (`confere-documento.py`) reprova id repetido, e dois AC com o mesmo
+conteúdo viram duas tarefas no plano.
+
+**Nenhuma borda aplicável:** se, depois da resolução, nenhuma borda é aplicável, a seção
+`## Edge Coverage (Bordas)` recebe uma frase com o motivo (ex.: «Nenhuma borda aplicável: a fase só
+muda texto de documentação, sem entrada, estado nem formato de dado.») — nunca fica vazia em
+silêncio. Vale o mesmo para `## Prohibitions (Proibições)` sem nenhuma proibição mantida.
 
 ## Step 5.5: Edge-Completeness Probe
 
-Run AFTER the ambiguity gate passes (you probe edges of clear requirements, not vague
+Run AFTER the interview and the `gsd:reqs` draft (you probe edges of clear requirements, not vague
 ones). Reference: **Read** `~/.claude/gad-core/references/edge-probe-digest.md` now (S2a — the
 operating digest: the FLOOR-not-ceiling rule, the closed taxonomy of 8, the relevance filter
 and reason-string dismissal, `unclassified`/zero-applicable, and the resolution states). The
@@ -60,16 +78,17 @@ if [ -z "$EDGE_PROBE_JS" ]; then
   fi
 fi
 
-# The probe input is the SPEC's Machine-Readable Requirements block, authored ONCE and
+# The probe input is the document's Machine-Readable Requirements block, authored ONCE and
 # extracted here — never a re-typed heredoc. BEFORE this bash runs, write the draft block to
-# ${phase_dir}/.spec-reqs.md (Step 6 transcribes the same block verbatim into SPEC.md):
+# ${phase_dir}/.discuss-reqs.md (o render do documento único transcreve o mesmo bloco para
+# `## Bloco da máquina`):
 #
 #   <!-- gsd:reqs:begin -->
 #   [ { "id": "R1", "text": "<the requirement, verbatim, in the project language>",
 #       "text_en": "<faithful English translation>", "shapes": ["collection"], "trigger": "evidência" } ]
 #   <!-- gsd:reqs:end -->
 #
-# "text" is the requirement's own words (the language of the SPEC). "text_en" is a faithful
+# "text" is the requirement's own words (the language of the document). "text_en" is a faithful
 # ENGLISH translation, engine input only, never user-facing: the classifier's cues are English
 # word-boundary patterns, so original-language text classifies to zero shapes and lands in
 # `unclassified` (#1110). The engine reads `text_en ?? text` (upstream #3717/#4156) and REJECTS
@@ -88,7 +107,7 @@ fi
 # assertions, author the smallest shape set that describes what it actually manipulates, or
 # `shapes: []` — the engine accepts an empty array as a deliberate opt-out. A wide shape on a
 # requirement with no real data lights categories that have no case behind them (D5).
-REQS_SRC="${phase_dir}/.spec-reqs.md"
+REQS_SRC="${phase_dir}/.discuss-reqs.md"
 REQS_JSON=$(mktemp "${TMPDIR:-/tmp}/edge-probe-reqs-XXXXXX") && mv "$REQS_JSON" "${REQS_JSON}.json" && REQS_JSON="${REQS_JSON}.json" || exit 1
 sed -n '/<!-- gsd:reqs:begin -->/,/<!-- gsd:reqs:end -->/p' "$REQS_SRC" | sed '1d;$d' > "$REQS_JSON"
 # Guard — never invoke on an empty/invalid array or a leftover placeholder. Fail loud, not silent no-op.
@@ -144,8 +163,9 @@ fi
 
 If the guard above fired (`$APPLICABLE` is `0`, or every requirement is unclassified — `$UNCLASSIFIED = $APPLICABLE`, #4656), do NOT proceed silently: ask the author to confirm via AskUserQuestion
 ("The edge probe found no applicable edges for any requirement — is this genuinely an
-edge-free spec, or should we revisit the requirement wording / authored shapes?"). Only write
-an empty `## Edge Coverage` section after explicit confirmation.
+edge-free phase, or should we revisit the requirement wording / authored shapes?"). Only after
+explicit confirmation write, in `## Edge Coverage (Bordas)`, the sentence with the reason
+(«Nenhuma borda aplicável: <motivo>») — never an empty section.
 
 For each Requirement gathered so far:
 1. Start from the edge-probe rows RENDERED above — the deterministic `items[]` are the FLOOR:
@@ -155,12 +175,15 @@ For each Requirement gathered so far:
    gap on terse prose (ADR-857 §98 / ADR-550 D7b), e.g. a CSV-export requirement whose
    `encoding` edge the shape cue under-fires. Union the engine's rows with your own
    classification (relevance filter — see the taxonomy in the reference); do not narrow to them.
-   Reuse any edges the Round-4 Failure Analyst already surfaced as pre-resolved.
+   Reuse any edges the interview (the code reconnaissance and the owner's answers) already
+   surfaced as pre-resolved.
 2. For each raised category, propose a CONCRETE candidate edge (not "consider
    boundaries" — e.g. "R2 merges intervals; what about `[[1,2],[2,3]]` that only touch?").
 3. Resolve each with the user (AskUserQuestion; text mode → numbered list):
-   - **Specify it** → write a new pass/fail line into Acceptance Criteria AND mark the
-     edge `resolved` with `verification: explicit`.
+   - **Specify it** → write a new pass/fail line into `## Critérios de aceite`
+     (`- [ ] AC-nn — …; FAIL: …`) AND mark the edge `resolved` with `verification: explicit`.
+     If an existing criterion already covers the edge, reaproveite o AC existente: the row cites
+     its id and no new AC is written (no AC duplicado).
    - **Dismiss (reason)** → mark `dismissed` with a required non-empty reason.
    - **Backstop with a test** → mark `resolved` with `verification: backstop`; note
      "held-out edge test" for plan-phase.
@@ -174,35 +197,15 @@ For each Requirement gathered so far:
 - Any `unresolved` → AskUserQuestion:
   - header: "Edge Coverage"
   - question: "[N] edge(s) are unresolved: [list]. What do you want to do?"
-  - options: "Resolve now" (loop back) / "Write SPEC.md anyway — flag unresolved" /
+  - options: "Resolve now" (loop back) / "Write the document anyway — flag unresolved" /
     "Keep probing"
-  - On "anyway": write SPEC.md with those rows marked `⚠ Edge unresolved — planner must
-    treat as assumption`.
+  - On "anyway": write the document with those rows marked `⚠ Edge unresolved — planner must
+    treat as assumption` (a borda marcada como suposição).
 
-**`--auto` mode:** resolve over the **same rendered floor** (#3102) — every engine-proposed row
-from Step 5.5's report (step 1) plus any category the classifier missed, never a narrower set.
-For each: auto-`resolved` (verification: explicit) where a defensible acceptance criterion can be
-written; otherwise auto-`resolved` (verification: backstop) (never auto-dismiss — a wrong
-dismissal is the exact silent failure being eliminated). One dismissal is allowed in `--auto`:
-measured zero prevalence. Dismiss the cell only with the command and the number written into
-the reason string — `dismissed — prevalence 0 in 10/10 cases (cmd: …)` — and only where a real
-corpus exists to count (the data this phase processes, not the code). With no corpus there is
-nothing to measure: resolve as backstop instead. The measurement is a snapshot; new data
-carrying the case reopens the cell (D5). Log:
-`[auto] edge coverage: E explicit, B backstop, D dismissed-by-prevalence, U unresolved`.
-
-**`unclassified` exception (#1110):** `--auto` leaves an `unclassified` candidate
-**`unresolved`** (the soft gate surfaces it as a flagged planner assumption) — it never
-auto-resolves it with `verification: backstop`. A missing shape is not evidence an edge exists, so minting a held-out
-edge obligation on a requirement that may be genuinely edge-free would be a false claim and
-risks a vacuous edge test. Leaving it `unresolved` keeps the zero-cue requirement visible
-(never a silent drop) without fabricating an edge — which is exactly #1110's purpose: surface
-it for review, do not auto-handle it. Name each one as a question in the log and in the
-Edge Coverage row, e.g. `[auto] unclassified — R3 ("merge intervals"): no shape cue
-matched; is there an edge here?` — a named question travels into review briefings and
-stays answerable; a bare count disappears.
-
-Populate the `## Edge Coverage` section of SPEC.md from the resolved edges.
+Populate the `## Edge Coverage (Bordas)` section of the documento único (`NN-CONTEXT.md`) from the
+resolved edges — each applicable edge resolved, dismissed with a reason, or flagged as an assumption.
+If no edge is applicable, the section carries the sentence with the reason (see the top of this
+block), never an empty table.
 
 ## Step 5.6: Prohibition-Completeness Probe (must-NOT)
 
@@ -231,9 +234,9 @@ For each Requirement gathered so far, run the two-stage recall→precision pass:
    "must not throw on empty" — owned by the edge probe or code review); **KEEP
    values / safety / ethics** items (manipulative framing, protected-attribute proxies, raw
    PII in plaintext). This collapses ~10 → ~2–3 genuine prohibitions.
-   **KEEP a prohibition that mirrors an Out-of-scope bullet.** The SPEC's Out-of-scope section
-   has no reader downstream — planner, plan-checker, executor and verifier never read it — so
-   the prohibition is the only wiring that carries the boundary to the verifier (D6). Resolve
+   **KEEP a prohibition that mirrors an out-of-scope bullet** (the «Fora» lines of
+   `## Limites e restrições`). That prose is never checked mechanically downstream, so the
+   prohibition is the only wiring that carries the boundary to the verifier (D6). Resolve
    it `test` whenever a mechanical check exists (a diff, a grep, a lint rule); `judgment`
    otherwise.
 3. **Canon-referral (ADR-550 D6, PROB-13).** A kept candidate that is canon security/compliance
@@ -242,17 +245,19 @@ For each Requirement gathered so far, run the two-stage recall→precision pass:
    /gad-secure-phase + eslint; not minted here"*) and DROP it. Minting canon items duplicates
    /gad-secure-phase and drowns the bespoke signal.
 4. **Resolve each surfaced (non-canon) prohibition** (AskUserQuestion; text mode → numbered list):
-   - **Keep it** → write a NEGATIVE acceptance criterion (a must-NOT line) into Acceptance
-     Criteria AND mark the prohibition `resolved` with a verification tier: `test` (a
+   - **Keep it** → write a NEGATIVE acceptance criterion (a must-NOT line) into
+     `## Critérios de aceite` AND mark the prohibition `resolved` with a verification tier: `test` (a
      mechanical negative test/lint/assertion exists) or `judgment` (real but not mechanically
-     checkable — routes to judgment review). A `judgment` prohibition that only restates prose
-     already written elsewhere in the SPEC is a flag, not a task: it goes into the report and
+     checkable — routes to judgment review). If an existing criterion (or the AC an edge just
+     created) already says it, reaproveite o AC existente — cite its id, no AC duplicado. A
+     `judgment` prohibition that only restates prose
+     already written elsewhere in the document is a flag, not a task: it goes into the report and
      never into `must_haves` as work — the verifier's judgment routing (ADR-550 D4) already
      handles it as a flagged item (D6).
      - **Capture the wired-check descriptor on `test`-tier (#1278, SOFT).** When a prohibition is
        resolved `verification: test`, ALSO capture the descriptor of the wired check so
        `verify-phase` can LOCATE it deterministically (no verifier invention at verify time).
-       Capture the flat scalars — persisted into SPEC and projected onto the
+       Capture the flat scalars — persisted into the document and projected onto the
        `must_haves.prohibitions` item by `projectProhibitions`:
        - `check_kind` — `node-test` | `lint-rule`.
        - `check_target` — the negative-test file path (for `node-test`), or the path to lint
@@ -281,30 +286,22 @@ For each Requirement gathered so far, run the two-stage recall→precision pass:
    - **Defer** → leave `unresolved`.
 
 **Soft gate (after resolving) — PROB-06:**
-- All applicable prohibitions resolved → proceed to Step 6.
+- All applicable prohibitions resolved → proceed to the render of the documento único.
 - Any `unresolved` → AskUserQuestion:
   - header: "Prohibitions"
   - question: "[N] prohibition(s) are unresolved: [list]. What do you want to do?"
-  - options: "Resolve now" (loop back) / "Write SPEC.md anyway — flag unresolved" /
+  - options: "Resolve now" (loop back) / "Write the document anyway — flag unresolved" /
     "Keep probing"
-  - On "anyway": write SPEC.md with those rows marked `⚠ Prohibition unresolved — planner
+  - On "anyway": write the document with those rows marked `⚠ Prohibition unresolved — planner
     must treat as assumption`. This is a soft gate (write-anyway-with-flags), never a silent
     skip — the soft gate IS the control.
 
-**`--auto` mode:** auto-`resolved` where a defensible negative acceptance criterion can be
-written (test or judgment tier); otherwise leave `unresolved`. **`--auto` NEVER auto-dismisses
-a prohibition** — a wrong dismissal is the exact silent failure this probe eliminates (PROB-06,
-the load-bearing safety property). On a `test`-tier auto-resolution, capture the `check_kind` /
-`check_target` / `check_rule` / `check_violation_fixture` / `check_clean_fixture` descriptor **only when a wired check is unambiguous**; otherwise
-leave it empty — `--auto` NEVER fabricates a check path or fixture (a wrong locate is re-validated and
-fails closed at the producer, but a fabricated path is still noise to avoid). Log:
-`[auto] prohibitions: R resolved, U unresolved`.
-
-**Text mode (PROB-09):** per Step 5's text-mode rule, replace the AskUserQuestion menus above
+**Text mode (PROB-09):** per the discuss text-mode rule, replace the AskUserQuestion menus above
 with plain-text numbered lists — there is NO hard AskUserQuestion dependency, so the probe
 runs identically for non-Claude / text-mode hosts.
 
-Populate the `## Prohibitions` section of SPEC.md from the resolved prohibitions (each
+Populate the `## Prohibitions (Proibições)` section of the documento único (`NN-CONTEXT.md`) from
+the resolved prohibitions (each
 `resolved`/`test` row is a checkable negative acceptance criterion; `resolved`/`judgment`
 rows route to judgment review; `⚠ UNRESOLVED` rows are flagged as assumptions). A
 `resolved`/`test` row ALSO carries its captured `check_kind` / `check_target` / `check_rule` /

@@ -1,46 +1,47 @@
-<!-- workflow-etapa-1.md — Etapa 1 (Intenção — spec + discuss + consultoria especializada) of the go-and-do workflow: the
+<!-- workflow-etapa-1.md — Etapa 1 (Intenção — consultoria especializada) of the go-and-do workflow: the
      <stage id="1"> block, moved verbatim out of workflow.md (mapa-gad task 9). Layer 0 reads
      it on entering Etapa 1, in the same response as the stage's first command (workflow.md <pipeline_index>). -->
 
-<stage id="1" name="Intenção — spec + discuss + consultoria especializada">
+<stage id="1" name="Intenção — consultoria especializada">
 
-> Replaces the human stamp with a machine skeptic: SPEC and CONTEXT come out in `--auto` (each
-> choice logged) and the intent goes through cross-AI specialist consultancy — two external
-> consultants try to knock down the decisions reading the real code, and a verifier checks
-> each finding before it is accepted. The user is called only when a finding touches what is
-> theirs to decide.
+> Replaces the human stamp with a machine skeptic: the phase's single intent document
+> (`NN-CONTEXT.md`, written and approved by the owner in `/gad-discuss-phase NN`) goes
+> through cross-AI specialist consultancy — two external consultants try to knock down the
+> decisions reading the real code, and a verifier checks each finding before it is accepted.
+> The stage starts straight at cycle 1: nobody authors the intent here and there is no cycle 0.
+> The user is called only when a finding touches what is theirs to decide.
 
-**1.1 — Resume.** Obey `etapa_1` from abre-rodada: `pular` → Etapa 1.5 · `continuar_pergunta`
-→ re-present the pending question stored in the artifact and dispatch with the answer ·
-`despachar` → 1.2. Fine-grained per-file resume belongs to the subagent (`setup-intencao.sh`).
+Flow of the stage: abre-rodada stops a phase without the document → the setup returns
+`revisao` → consultancy cycles 1..4 (Codex + agy + the independent `releitura`, which in cycle 1
+also checks the document for internal inconsistency — AC × AC, declared number × list, repeated
+criterion — done by whoever did not write the text) → amendments touch only `NN-CONTEXT.md` →
+text × machine-block coherence (`confere-reconciliacao.sh`) at the end of each cycle →
+`NN-INTENT-REVIEW.md`.
+
+**1.1 — Resume.** Format barrier first: with `etapa_1: despachar`, abre-rodada stops with exit 6
+before any dispatch when the phase has no `NN-CONTEXT.md` in the new format, with the plain-language message
+telling the owner to run `/gad-discuss-phase NN` — relay it and stop; `pular` and
+`continuar_pergunta` are not checked. Then obey `etapa_1`: `pular` → Etapa 1.5 ·
+`continuar_pergunta` → re-present the pending question stored in the artifact and dispatch with
+the answer · `despachar` → 1.2. Fine-grained per-file resume belongs to the subagent
+(`setup-intencao.sh`, which returns `entrada: revisao` for new work — an interrupted cycle
+resumes in its cycle).
 
 **1.2 — Dispatch.** `pre-despacho.sh 1` → dispatch the agent `gad-intent` (own def: Opus 5.5
 medium — the coordinator routes; heavy judgment lives in the children and the external
 consultants) with `prompts/intent.md`, carrying absolute `N`, `NN`, `phase_dir`,
-`project_root` and, on a continuation, the verbatim answer. If abre-rodada reported a non-null
-`pre_spec` (`NN-PRE-SPEC.md` in the phase directory — decisions pre-locked by the user; the
-normal way to produce it is `/gad-pre-spec NN`, which writes the `gad:decisoes` block), pass
-its path in the dispatch and declare its use in the executive summary; `setup-intencao.sh`
-classifies the block (`pre_spec_bloco: ok|ausente|invalido`) and
-`pre_spec_mode: structured|legacy` goes explicitly to both children. With `NN-SPEC.md` and
-`NN-CONTEXT.md` already on disk, the PRE-SPEC is briefing input only (abre-rodada brings
-`inventario`, the setup returns `pre_spec_precedencia`). Inside: child `gad-spec` hosts
-`gad-spec-phase N --auto` (ends at the SPEC, no auto-advance) → child `gad-discuss` hosts
-`gad-discuss-phase N --auto` without running the `auto_advance`, zeroing
-`workflow._auto_chain_active` on return (layer 1 runs the scout and a `gad-explorador` first and
-hands `explore: <phase_dir>/.gad/intent/explore-discuss.md`) → specialist consultancy (Codex +
-agy — agy = Gemini 3.7 Flash — ↔ `gad-verificador`, which also re-reads each cycle's committed
-amendment in `releitura` mode, `prompts/intent-releitura.md`; loop by `decide-ciclo.sh`, hard
-ceiling 4; fail-closed at the "≥1 consultant" floor). The lanes run in
+`project_root` and, on a continuation, the verbatim answer. Inside: specialist consultancy on
+`NN-CONTEXT.md` (Codex + agy — agy = Gemini 3.7 Flash — ↔ `gad-verificador`, which also
+re-reads each cycle's committed amendment in `releitura` mode, `prompts/intent-releitura.md`;
+loop by `decide-ciclo.sh`, hard ceiling 4; fail-closed at the "≥1 consultant" floor). The
+coordinator's only layer-2 children are `gad-explorador` and `gad-verificador`. The lanes run in
 the background (`roda-lanes.sh`; lane authority is `.gad/intent/c<C>/status-<lane>.json`,
 `usable`/`independent`); the 4-turns-per-cycle budget (5 when the `releitura` corrected) is an
 audit ruler measured by `/audit-gad` in the transcript, not counted in session.
 
 Never pass `model` or `effort` in the `Agent` call of a `gad-*` (E7): the def pins both and
-`gad-lifecycle.sh` denies the call with `deny` + an `incidente` event. The same hook denies
-resuming a `gad-spec`/`gad-discuss` that already returned `done`, and a second dispatch of one
-when the artifact (`NN-SPEC.md`/`NN-CONTEXT.md`) is already on disk (E3). The denial carries
-the reason in `permissionDecisionReason` — read it and fix the route, do not retry.
+`gad-lifecycle.sh` denies the call with `deny` + an `incidente` event. The denial carries the
+reason in `permissionDecisionReason` — read it and fix the route, do not retry.
 
 **1.2a — Hand the subagent its transcript directory.** The dispatch of `gad-intent` also carries
 `subagents_dir: ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects/<slug do projeto>/<CLAUDE_CODE_SESSION_ID>/subagents` — it is
@@ -52,23 +53,21 @@ alcance`, which is a legitimate route (owner's decision of 11/09: layer 0 passes
 **1.3 — Routing the return.**
 - `done` → route gate: `confere-rotas.sh <phase_dir>/.gad/intent` (exit 1 → back to the SAME
   subagent, step 7b of intent.md, fail-closed) → `confere-etapa.sh 1` (includes
-  `confere-reconciliacao.sh --final`: lists the D-NN citing a criterion changed since the
-  sealed base, `D-NN-DESATUALIZADA`, informative; mechanical fence — SPEC/CONTEXT/review
+  `confere-reconciliacao.sh --final`, informative; mechanical fence — intent document/review
   closed/chain zeroed/`.gad/intent/` cleanup — and the measured `end`; exit 1 → same subagent).
   Keep from the return: `transparencia` (input of 6.2), `sinos` (for the banner) and announce
   `pausas_de_negocio` in one line. Bells with a skipped review (`intent_review: skipped`) →
   `skip` event + a line to the user + mandatory item in `itens_nao_rodados`. Continue.
 - `needs_decision` — finding that touches requirement/criterion/oracle, or a deadlock (hard
   gate by definition, criterion 2 of Sub-rotina I; silence window → graceful pause) →
-  `AskUserQuestion` (recommendation first) and continue the SAME subagent with the verbatim
-  answers; route the new return by this list.
-  - Sub-case `pre_spec_bloco: ausente|invalido` (only while SPEC or CONTEXT do not exist yet;
-    fail-closed of `confere-pre-spec.sh`): the question has two exits — (a) migrate the
-    PRE-SPEC to the block (`scripts/pre-spec-migra.py` drafts it from the prose for the owner to
-    review) or (b) authorize the legacy route (the child reads the whole file; the
-    `pre_spec_sem_bloco` bell is mandatory in the return and in the INTENT-REVIEW). Never
-    continue with "zero decisions" in silence. The answer is durable
-    (`.gad/intent/pre-spec-route.json`) while the PRE-SPEC hash does not change.
+  `AskUserQuestion` and continue the SAME subagent with the verbatim answers; route the new
+  return by this list. The question follows the owner's rule (ADR 0001, question 2 — the owner
+  has no technical background and follows the recommendation on every technical question):
+  a pergunta ao dono vai em linguagem leiga, pela consequência que ele sente
+  (o que é entregue, o que fica público, o que é irreversível, custo, prazo, risco de perder algo),
+  com a recomendação primeiro e o efeito de cada opção,
+  sem nome de arquivo, função ou ferramenta; o resto o modelo decide.
+  Rewrite a technical `alegacao` into that form before asking — never forward it verbatim.
 - `blocked` — BOTH consultants installed but failing with no complete cycle (fail-closed,
   decision of 02/07: without a second opinion the intent does not proceed; ONE failing
   continues degraded with a bell; NONE installed becomes `skipped` in the pre-check) →
@@ -85,9 +84,6 @@ gate already prescribes. `--dry-run` neither writes nor deletes a fence.
 
 **1.3b — What the `transparencia:` of the return may carry.** The field may bring a line
 `turnos: <literal output of turnos-por-ciclo.py>` or `turnos: nao_medido — <motivo>`; no new field
-is mandatory and no parser changes. `ciclo0: dispensado (sem sino)` is the record that the phase
-entered with SPEC and CONTEXT already done (written by the owner or already on disk) and that there
-was therefore no bell to triage — it is not a gap, it raises no incident and it asks the user
-nothing.
+is mandatory and no parser changes.
 
 </stage>

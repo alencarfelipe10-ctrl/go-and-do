@@ -491,7 +491,7 @@ issue:
 - This is a BLOCKER: the planner invented "v1/v2" versioning that doesn't exist in the user's decision
 
 **Severity:** ALWAYS BLOCKER. Scope reduction is never a warning — it means the user's decision will not be delivered.
-A SPEC criterion of class `desejavel` (`gsd:acs` block) with no task is a WARNING, never a BLOCKER — it does not decide the phase. A criterion of class `exigido` with no task stays a BLOCKER.
+A criterion of class `desejavel` in the `gsd:acs` block of the SPEC or of the single-document NN-CONTEXT.md, with no task, is a WARNING, never a BLOCKER — it does not decide the phase. A criterion of class `exigido` with no task stays a BLOCKER.
 
 **Example:**
 ```yaml

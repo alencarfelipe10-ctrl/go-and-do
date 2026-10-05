@@ -1,7 +1,7 @@
 # nomes-permitidos.txt — termos capitalizados que o confere-pii.sh NUNCA acusa.
 # Um termo por linha (comparação sem acento e sem caixa). `#` = comentário.
 # Entram aqui: modelos, ferramentas, produtos, projetos e siglas — nunca pessoas.
-# Para acrescentar nomes só de um PRE-SPEC, use um arquivo próprio e passe --permitidos.
+# Para acrescentar nomes só de um documento, use um arquivo próprio e passe --permitidos.
 
 # modelos e fabricantes
 Claude

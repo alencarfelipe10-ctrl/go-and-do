@@ -1,6 +1,6 @@
 ---
 name: go-and-do
-description: "Runs one GAD phase end-to-end without babysitting: intent (spec + discuss + cross-AI consultancy) → design contracts → plan → execute → code review → quality audits → automated UAT → executive summary → close/PR. Verbose stages run in disposable subagents; routine decisions are auto-triaged and logged; hard gates still wait for the user. Resumable: run again to continue. `--no-ship` stops after the UAT."
+description: "Runs one GAD phase end-to-end without babysitting: intent (cross-AI consultancy on the owner-approved CONTEXT) → design contracts → plan → execute → code review → quality audits → automated UAT → executive summary → close/PR. Verbose stages run in disposable subagents; routine decisions are auto-triaged and logged; hard gates still wait for the user. Resumable: run again to continue. `--no-ship` stops after the UAT."
 argument-hint: "<phase> [--ui] [--ai] [--no-ship] [--vault <profile>] [--obs \"<texto livre>\"]"
 allowed-tools:
   - Read
@@ -30,7 +30,7 @@ them. The full pipeline, the layered orchestration (layer 0 = this conversation;
 disposable host subagents; layer 2 = the agents GAD spawns), every gate and stop point, the
 decision triage, the telemetry and the resume logic are specified in workflow.md above (the
 core) and in the per-stage files it names (`workflow-etapa-*.md`, read on entering each stage).
-This file only carries what those do not: the argument contract and the PRE-SPEC contract.
+This file only carries what those do not: the argument contract and the intent prerequisite.
 
 Every phase runs the full pipeline. There is no size classifier: one was built, measured on
 real phases and removed because it always escalated to maximum rigor (decision of 2026-07-05;
@@ -59,37 +59,11 @@ Phase number + flags: $ARGUMENTS
   prefixed onto every subagent dispatch of this invocation (Sub-rotina H); each stage judges
   for itself whether it is relevant. Not persisted across sessions: repeat the flag on a resume.
 
-**PRE-SPEC (convention, not a flag).** If the phase directory contains `NN-PRE-SPEC.md` (exact
-name, zero-padded NN), `abre-rodada.sh` detects it (`pre_spec` field) and Etapa 1 uses it as
-input: spec and discuss adopt its decisions as user-locked, marked `[pre-spec:PS-nn, R-n]`,
-never re-asked or overridden (an irreconcilable conflict rings a bell); the consultancy briefing
-discloses their origin; the executive summary declares the file was used. The normal way to
-produce one is `/gad-pre-spec NN`.
-
-**PRE-SPEC decisions block (mandatory contract).** Decisions must be machine-readable; prose is
-not a source. The file carries exactly one block
-
-```
-<!-- gad:decisoes:begin v1 -->   …canonical JSON array…   <!-- gad:decisoes:end -->
-```
-
-one object per decision, keys `id` (`PS-nn`), `kind`, `area`, `req_anchor` (`R-n` / `SC-n` /
-a REQUIREMENTS id such as `DESC-01` / `none`), `decisao`, `opcoes_descartadas[]`, `evidencia`,
-`reversibilidade` (`reversible|costly|one-way`), `reversibilidade_justificativa` (required for
-`costly` and `one-way`), `ressalva` (optional), `span`.
-
-Two kinds, two destinations: `decisao_dono` locks (reviewers attack its consequences, never the
-decision); `fato_medido` does not lock — it enters the SPEC as `[medido:PS-nn]`, is listed to
-the reviewers as a fact to verify, and requires a reproducible `evidencia` (`file:line`, or
-command + output).
-
-Fail-closed: block missing or invalid → Etapa 1 returns `needs_decision` with two exits: migrate
-the file (`scripts/pre-spec-migra.py` drafts the block from the prose for the owner to review;
-legacy tool for PRE-SPECs written before 2.2.0) or authorize the legacy route (the child reads
-the whole file; mandatory `pre_spec_sem_bloco` bell). Never "zero decisions in silence". The
-answer is durable (`.gad/intent/pre-spec-route.json`); a changed file hash invalidates it and
-re-asks. `scripts/confere-pre-spec.sh` is the gate (it runs inside `setup-intencao.sh` and
-`confere-etapa.sh 1`); its header carries the exact failure codes.
+**Pré-requisito da rodada: o documento único da intenção.** Antes de `/go-and-do NN`, o dono roda `/gad-discuss-phase NN` (comando interativo, só perguntas de negócio, grava o `NN-CONTEXT.md` aprovado por ele). Sem esse documento, a Go & Do para e diz o que fazer.
+The stop is `abre-rodada.sh` exit 6 (no approved `NN-CONTEXT.md` in the new format); the run
+then starts straight at the cross-AI consultancy (Etapa 1), whose amendments land only in
+`NN-CONTEXT.md`. A phase opened before the single document keeps its old artifacts and is
+never migrated.
 
 **Rules workflow.md states only by example:**
 - Config gates are checked in layer 0 before dispatching a stage, never inside the subagent.

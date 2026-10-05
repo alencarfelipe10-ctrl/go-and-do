@@ -833,7 +833,8 @@ increases monotonically across waves. `{status}` is `complete` (success),
        - ${PROJECT_ROOT}/.claude/skills/ or ${PROJECT_ROOT}/.agents/skills/ (Project skills, if either exists — list skills, read SKILL.md for each, follow relevant rules during implementation)
 
        PROJECT.md, STATE.md, ${phase_dir}/*-CONTEXT.md, ${phase_dir}/*-RESEARCH.md and
-       ${phase_dir}/*-SPEC.md: read ONLY the range the plan cites —
+       ${phase_dir}/*-SPEC.md — and the single-document NN-CONTEXT.md (marked gad:documento-unico),
+       which carries the spec in the new format —: read ONLY the range the plan cites —
        somente a faixa que o plano cita. Your plan's `<read_first>` names section title and line numbers
        (`24.5-CONTEXT.md §D-06, linhas 167-183`); open that range with Read `offset`/`limit`, not
        the whole file. The section title is what lets you notice the range has drifted: if the

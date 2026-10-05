@@ -7,19 +7,16 @@
 # ancorou o consultor na F21) e a taxonomia vem de prompts/categorias-achados.md (mesma
 # régua do verificador).
 #
-# v2.2.0 (ajustes da intenção — E2c, R1, R3, R8):
+# v2.2.0 (ajustes da intenção — E2c, R1, R8):
 #   E2c/R1 GATE (exit 4, ANTES de qualquer escrita, inclusive do nonce):
-#     C = 1  → exige `.intent/.ciclo0.json` (schema v:1, arrays explícitos) coerente
-#              com `.correcoes-c0.aplicado` + `.releitura-c0.done`.
+#     C = 1  → não há ciclo anterior: o ciclo 1 nasce direto sobre o documento único
+#              (Fase 6 do gad, AC-36 — o ciclo 0 deixou de existir; ver abaixo).
 #     C >= 2 → exige `.correcoes-c<C-1>.aplicado` (ou `.correcoes-c<C-1>.vazio`) e
 #              `.releitura-c<C-1>.json` válido, amarrado ao commit e aos blobs.
 #     C1  → `hash` de correção tem de ser NÃO-VAZIO. Válvula: um `.aplicado` que traz
 #           o campo `hash_ausente` pode listar ali os ids sem hash (ausência declarada,
 #           passa); um `.aplicado` SEM esse campo é anterior ao conserto C1 (legado) e
 #           passa com aviso — senão toda fase antiga travaria.
-#   R3   → seção "Revalidação dirigida (ciclo 0)" no c1: cada correção do ciclo 0 volta
-#          ao consultor como pedido de confirmação (desde a v2.5.0, numa pergunta única —
-#          ver R8 abaixo). Nenhum sino sai do briefing.
 #   R8   → (1) seção "Perguntas dirigidas" com resposta estruturada obrigatória em
 #          `## Respostas dirigidas` + manifesto `.intent/.perguntas-c<C>.json`;
 #          (2) ROADMAP = SÓ a entrada da fase (antes: fase + vizinhas);
@@ -30,19 +27,27 @@
 #          (4) ciclo >= 2: "o que mudou" logo após a Missão.
 #
 # v2.5.0 (consultoria especializada — plano 3 da F24.4, R1/R5/R7/R8/R9):
-#   R1   → seção "Goal desta fase" (verbatim do `## Goal` do SPEC) e a Missão pede uma
-#          linha de campo `vinculo_goal:` por achado (sem marcador de lista — o fallback do
-#          `extrai_achados` do confere-ciclo.sh contaria um bullet com id `cN-NN`).
-#   R5   → ciclo 1 ganha "Obrigação do ciclo 1" (SPEC × régua a montante, CONTEXT como
-#          alvo, conjunto nomeado enumerado) e três perguntas dirigidas do montante.
+#   R1   → seção "Goal desta fase" e a Missão pede uma linha de campo `vinculo_goal:` por
+#          achado (sem marcador de lista — o fallback do `extrai_achados` do
+#          confere-ciclo.sh contaria um bullet com id `cN-NN`).
 #   R7   → `--mudancas` validado por FORMA: só `## O que corrigi` e `## Achados resolvidos`
 #          entram; o resto é omitido com aviso `MUDANCAS-SECAO-FORA-DO-CONTRATO: <heading>`.
-#   R8   → revalidação do ciclo 0 vira UMA pergunta (bloco único); a lista de sinos
-#          corrigidos continua inteira; a frase "evidência = o diff do commit" saiu.
 #   R9   → `valida_releitura` exige o veredito em disco quando `v: 2` (chaves `ciclo`,
 #          `contradiz`, `prescreve_mecanismo`, `omissoes_novas`, `cardinalidade`,
-#          `consistencia`, `ok`; `unicidade` no c0) e reprova `ok: false`; sem `v` = legado
-#          com aviso nomeado (retrocompatibilidade da F24.4).
+#          `consistencia`, `ok`) e reprova `ok: false`; sem `v` = legado com aviso nomeado
+#          (retrocompatibilidade da F24.4).
+#
+# Fase 6 do gad (documento único de intenção — GODO-03, AC-36, D-05):
+#   · o ciclo 0 deixou de existir: o ciclo 1 não exige arquivo de ciclo anterior (nem
+#     correções, nem releitura de ciclo 0) e o briefing não tem mais revalidação de ciclo 0
+#     nem lista de sinos de ciclo 0. Ciclo pedido que não seja inteiro ≥ 1 → exit 2.
+#   · R1: o Goal sai verbatim do `## Goal` do `NN-CONTEXT.md` (o documento único); sem a
+#     seção, aviso com o nome do CONTEXT e o briefing sai sem ela.
+#   · R5: "Obrigação do ciclo 1" é a conferência de inconsistência DENTRO do documento —
+#     AC × AC, número declarado × lista, critério repetido —, pedida aos consultores
+#     (Codex/agy) com três perguntas dirigidas; o comando que escreveu o texto não a faz.
+#   · a lista de artefatos cita só os arquivos que existem (o `NN-CONTEXT.md`; o `NN-SPEC.md`
+#     só numa fase antiga que o tenha) e nunca o PRE-SPEC.
 #
 # Uso: briefing-build.sh <phase_dir> <NN> <ciclo> [--varredura ARQ] [--mudancas ARQ]
 #   --varredura  arquivo com a seção "Asserções existentes que esta fase falsifica"
@@ -67,6 +72,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -d "$PD" ] || { echo "ERRO: phase_dir inexistente: $PD" >&2; exit 2; }
+# o ciclo é um inteiro >= 1 — não há ciclo 0 (Fase 6 do gad). Conferido antes de criar a
+# pasta do ciclo, para um pedido inválido não deixar rastro em disco.
+case "$C" in
+  ''|*[!0-9]*|0*) echo "ERRO: ciclo inválido: $C (inteiro >= 1; não há ciclo 0 — o ciclo 1 nasce sobre o documento único)" >&2; exit 2 ;;
+esac
 ROOT="$(gad_project_root "$PD")"
 # v2.10.1 (57): arquivos da intenção pelo helper (formato da fase).
 IC() { gad_fase_caminho "$PD" "intent/$1"; }
@@ -75,9 +85,10 @@ mkdir -p "$(dirname -- "$OUT")"
 AVISOS=()
 
 # ── GATE E2c/R1 — antes de escrever qualquer coisa (nonce inclusive) ──────────
-# Régua: o briefing do ciclo C só nasce se o ciclo anterior fechou o laço
+# Régua: o briefing do ciclo C >= 2 só nasce se o ciclo anterior fechou o laço
 # correção → commit → releitura, com os blobs conferidos contra o commit E contra o
-# worktree atual (edição depois da releitura invalida a releitura).
+# worktree atual (edição depois da releitura invalida a releitura). O ciclo 1 não tem
+# ciclo anterior: o gate dele só registra que passou.
 GATE_JSON=$(GAD_PD="$PD" GAD_C="$C" GAD_ROOT="$ROOT" GAD_LIB="$GAD_SCRIPTS_DIR/lib" python3 - <<'PY'
 import glob, json, os, re, subprocess, sys
 
@@ -179,8 +190,6 @@ def valida_veredito_releitura(rel, rotulo, ciclo):
     if v != 2:
         die("%s: schema v=%s desconhecido (esperado v=2 ou ausente=legado)" % (rotulo, v))
     listas = ["contradiz", "prescreve_mecanismo", "omissoes_novas", "cardinalidade"]
-    if str(ciclo) == "c0":
-        listas.append("unicidade")
     faltando = [k for k in ["ciclo", *listas, "consistencia", "ok"] if k not in rel]
     if faltando:
         die("%s: chave obrigatória faltando: %s — a releitura v2 responde às perguntas "
@@ -258,134 +267,17 @@ def valida_releitura(rel, aplicado, vazio, rotulo, ciclo):  # noqa: C901
                 "o commit do ciclo levou só o delta do ciclo)" % p)
     return paths
 
-def guarda_sinos_reais(diretorio):
-    """`sinos: []` (ou dispensa) com sino real no disco esconderia R3 — reprova."""
-    for nome in ("sinos-spec.txt", "sinos-discuss.txt"):
-        p = P(nome)
-        if not os.path.exists(p):
-            continue
-        # as respostas do checklist de lições (R8(3)) e as linhas `leitura_propria:` do
-        # discuss (evidência de auditoria, plano 2/C5) moram no mesmo arquivo e NÃO são
-        # sinos — um arquivo só com elas não contradiz `sinos: []`.
-        with open(p, encoding="utf-8", errors="replace") as fh:
-            reais = [l for l in fh
-                     if l.strip()
-                     and not re.match(r"^\s*(licao \d+:|leitura_propria:)", l)]
-        if reais:
-            die("`.ciclo0.json`.sinos=[] mas %s tem sino real — sino sumindo (R3)" % nome)
-
-
-info = {"ok": True, "gate": "c%s" % C, "avisos": [], "sinos": []}
+info = {"ok": True, "gate": "c%s" % C, "avisos": []}
 
 if str(C) == "1":
-    z = carrega(P("c0/ciclo.json"), "`.intent/.ciclo0.json` (E2c)")
-    exige_chaves(z, ["v", "sinos", "correcoes", "releitura"], "`.ciclo0.json`")
-    if z["v"] != 1:
-        die("`.ciclo0.json`: schema v=%s desconhecido (esperado v=1)" % z["v"])
-    # 46(h), F24.5: o ciclo 0 nasceu para triar sino de filho. Quando o dono escreve SPEC e
-    # CONTEXT à parte não há filho, não há sino — e na 24.5 o coordenador abriu o ciclo assim
-    # mesmo e inventou 15. `dispensado: true` é o registro dessa ausência: sinos e correções
-    # vazios, sem releitura e sem commit. A guarda anti-cegueira continua valendo — é
-    # ela que impede a dispensa de virar escapatória com sino real no disco.
-    if z.get("dispensado") is True:
-        if z["sinos"] or z["correcoes"]:
-            die("`.ciclo0.json`: `dispensado: true` com sinos/correções — dispensa é ausência, não atalho")
-        guarda_sinos_reais(IN)
-        info["ciclo0_vazio"] = True
-        info["ciclo0_dispensado"] = True
-        info["sinos"] = []
-        info["avisos"].append(
-            "ciclo 0 dispensado: %s" % str(z.get("motivo") or "sem motivo declarado"))
-    else:
-        sinos, cors = z["sinos"], z["correcoes"]
-        if not isinstance(sinos, list) or not isinstance(cors, list):
-            die("`.ciclo0.json`: sinos e correcoes têm de ser listas")
-
-        ids_cor = {}
-        sem_hash = []          # ids com `hash` presente mas VAZIO (C1)
-        for c in cors:
-            if not isinstance(c, dict) or "id" not in c or "hash" not in c:
-                die("`.ciclo0.json`.correcoes: item sem id/hash")
-            if c["id"] in ids_cor:
-                die("`.ciclo0.json`.correcoes: id duplicado %s" % c["id"])
-            ids_cor[c["id"]] = c["hash"]
-            if not str(c["hash"]).strip():
-                sem_hash.append(c["id"])
-
-        referenciados = set()
-        for s in sinos:
-            if not isinstance(s, dict):
-                die("`.ciclo0.json`.sinos: item não é objeto")
-            for k in ("id", "origem", "disposicao"):
-                if k not in s:
-                    die("`.ciclo0.json`.sinos: item sem `%s`" % k)
-            if s["origem"] not in ("spec", "discuss"):
-                die("sino %s: origem `%s` inválida (spec|discuss)" % (s["id"], s["origem"]))
-            # `levado_aos_consultores` (FM-F27INS-09INT, tarefa 59 b5): estado FINAL do sino
-            # entregue à consultoria que virou achado ou dívida — exige `destino` (o id em que
-            # ele se transformou); o `confere-sinos.sh` aceita o mesmo estado no fecho.
-            if s["disposicao"] not in ("corrigido", "descartado", "aberto",
-                                       "levado_aos_consultores"):
-                die("sino %s: disposicao `%s` inválida" % (s["id"], s["disposicao"]))
-            if s["disposicao"] == "levado_aos_consultores":
-                if not str(s.get("destino") or "").strip():
-                    die("sino %s: `levado_aos_consultores` exige `destino` (o achado ou a "
-                        "dívida em que o sino virou)" % s["id"])
-            elif "destino" in s:
-                die("sino %s: `%s` proíbe o campo `destino`" % (s["id"], s["disposicao"]))
-            if s["disposicao"] == "corrigido":
-                cid = s.get("correcao_id")
-                if not cid:
-                    die("sino %s: `corrigido` exige exatamente um `correcao_id`" % s["id"])
-                if cid not in ids_cor:
-                    die("sino %s: correcao_id `%s` não existe em correcoes[]" % (s["id"], cid))
-                referenciados.add(cid)
-            elif "correcao_id" in s:
-                die("sino %s: `%s` proíbe o campo `correcao_id`" % (s["id"], s["disposicao"]))
-        orfas = sorted(set(ids_cor) - referenciados)
-        if orfas:
-            die("`.ciclo0.json`.correcoes sem sino que as referencie: %s" % ", ".join(orfas))
-
-        if not sinos:
-            guarda_sinos_reais(IN)
-
-        aplicado = None
-        if cors:
-            aplicado = carrega(P("c0/correcoes.aplicado"),
-                               "`.intent/.correcoes-c0.aplicado` (E2c)")
-            exige_chaves(aplicado, ["commit", "caminhos", "correcoes"], "`.correcoes-c0.aplicado`")
-            par_z = sorted((c["id"], c["hash"]) for c in cors)
-            par_a = sorted((c.get("id"), c.get("hash")) for c in aplicado["correcoes"])
-            if par_z != par_a:
-                die("`.ciclo0.json`.correcoes %s != `.aplicado`.correcoes %s" % (par_z, par_a))
-        # C1: o veredito da válvula vem AQUI — logo depois de carregar o `.aplicado` e
-        # ANTES da releitura. Assim "hash vazio" nunca se disfarça de erro de releitura.
-        valida_hashes(aplicado, sem_hash, "`.ciclo0.json`.correcoes", info["avisos"])
-        valida_releitura(z["releitura"], aplicado, False, "`.ciclo0.json`.releitura", "c0")
-
-        # 45(h): o `.done` passou a carregar o rótulo da rodada (`c0`, `c0b`, `c0c`…). O gate
-        # exige que EXISTA um marcador da família do ciclo 0; qual rodada fechou por último é
-        # decidido pelo `.ciclo0.json`.`releitura` que o coordenador copiou do `.json` da
-        # rodada vigente (FM-F4RLR-10INT: `.releitura-c0.json` na 1ª rodada,
-        # `.releitura-c0b.json` na correção pós-releitura — ver `caminho_releitura`).
-        if not gad_caminhos.glob_fase(PD, "intent/c0*/releitura.done"):
-            die("`.intent/.releitura-c0*.done` ausente (R1: a releitura do ciclo 0 não fechou)")
-
-        info["ciclo0_vazio"] = not cors
-        info["sinos"] = [
-            {"id": s["id"], "origem": s["origem"], "disposicao": s["disposicao"],
-             "correcao_id": s.get("correcao_id", ""), "destino": s.get("destino", "")}
-            for s in sinos
-        ]
-        info["correcoes"] = [{"id": k, "hash": v} for k, v in ids_cor.items()]
-        if not cors:
-            info["avisos"].append("ciclo 0 declarou 0 correções (arrays vazios explícitos)")
+    # Fase 6 do gad (AC-36): não há ciclo 0. O ciclo 1 nasce direto sobre o documento
+    # único — nenhum arquivo de ciclo anterior, nenhuma correção, nenhuma releitura a
+    # conferir. A conferência que o ciclo 0 fazia (inconsistência dentro do documento) é
+    # a "Obrigação do ciclo 1" do próprio briefing, feita pelos consultores.
+    info["ciclo_anterior"] = None
 
 else:
-    try:
-        prev = int(str(C)) - 1
-    except ValueError:
-        die("ciclo `%s` não é numérico — o gate C>=2 não sabe qual é o anterior" % C)
+    prev = int(str(C)) - 1   # o bash já garantiu inteiro >= 1; aqui C >= 2
     ap_p  = P("c%d/correcoes.aplicado" % prev)
     vaz_p = P("c%d/correcoes.vazio" % prev)
     tem_ap, tem_vaz = os.path.exists(ap_p), os.path.exists(vaz_p)
@@ -397,8 +289,7 @@ else:
             % (prev, prev))
     aplicado = carrega(ap_p, "`.correcoes-c%d.aplicado`" % prev) if tem_ap else None
     if aplicado is not None:
-        # mesma régua do ciclo 0, mesma válvula — aqui a fonte dos ids é o próprio
-        # `.aplicado` (não há `.ciclo0.json` para os ciclos >= 2)
+        # a fonte dos ids sem hash é o próprio `.aplicado` do ciclo anterior
         sem_hash_ap = [c.get("id") for c in (aplicado.get("correcoes") or [])
                        if isinstance(c, dict) and not str(c.get("hash", "")).strip()]
         valida_hashes(aplicado, sem_hash_ap,
@@ -430,8 +321,8 @@ echo "Token de prova de leitura do ciclo $C: $NONCE" > "$PROVA"
 
 # ── perguntas dirigidas (R8): Q1–Q3 são canônicas e SEMPRE existem — manifesto
 # estável é o que dá sentido a "Q ausente vira bruto incerto". No ciclo 1 entram, nesta
-# ordem, as três do montante (R5, plano 3) e UMA de revalidação do ciclo 0 (R8 do plano
-# 3: bloco único — 13 perguntas de bênção renderam 25 ratificações e 1 achado na F24.4).
+# ordem, as três da conferência de inconsistência dentro do documento (R5; Fase 6 do gad,
+# AC-36 — a leitura que o ciclo 0 fazia passou para cá, feita pelos consultores).
 # Nenhum número de pergunta é escrito à mão: o `add_q` atribui e o texto interpola.
 QIDS=(); QTIPO=(); QREF=()
 add_q() { QIDS+=("Q$(( ${#QIDS[@]} + 1 ))"); QTIPO+=("$1"); QREF+=("${2:-}"); }
@@ -444,33 +335,23 @@ add_q raio_de_explosao
 LICOES="$(IC "c$C/licoes.txt")"
 : > "$LICOES"
 
-REVAL=()   # linhas "sino|origem|correcao_id" — a lista continua inteira (nenhum sino some)
-QMONT1=""; QMONT2=""; QMONT3=""; QREVAL=""
+QINT1=""; QINT2=""; QINT3=""
 if [ "$C" = 1 ]; then
-  add_q montante_prespec;  QMONT1="${QIDS[${#QIDS[@]}-1]}"
-  add_q montante_context;  QMONT2="${QIDS[${#QIDS[@]}-1]}"
-  add_q montante_conjunto; QMONT3="${QIDS[${#QIDS[@]}-1]}"
-  while IFS='|' read -r sid sorig sdisp scid; do
-    [ -n "$sid" ] || continue
-    case "$sid" in licao\ [0-9]*|licao[0-9]*) continue ;; esac
-    [ "$sdisp" = corrigido ] || continue
-    REVAL+=("$sid|$sorig|$scid")
-  done < <(printf '%s' "$GATE_JSON" | jq -r '.sinos[]? | [.id,.origem,.disposicao,.correcao_id] | join("|")')
-  if [ ${#REVAL[@]} -gt 0 ]; then
-    # `ref` = os ids dos sinos unidos por `;` — campo de auditoria, ninguém o parseia
-    add_q revalidacao_c0 "$(printf '%s\n' "${REVAL[@]}" | cut -d'|' -f1 | paste -sd';' -)"
-    QREVAL="${QIDS[${#QIDS[@]}-1]}"
-  fi
+  add_q interna_ac_x_ac;           QINT1="${QIDS[${#QIDS[@]}-1]}"
+  add_q interna_numero_x_lista;    QINT2="${QIDS[${#QIDS[@]}-1]}"
+  add_q interna_criterio_repetido; QINT3="${QIDS[${#QIDS[@]}-1]}"
 fi
 
-# Goal da fase (R1, plano 3): o alvo de todo achado, verbatim da seção `## Goal` do SPEC
+# Goal da fase (R1): o alvo de todo achado, verbatim da seção `## Goal` do documento único
+# (`NN-CONTEXT.md`). Fase 6 do gad: o SPEC não é mais a fonte — numa fase nova ele não existe.
+CTX="$PD/$NN-CONTEXT.md"
 GOAL_TXT=""
-if [ -f "$PD/$NN-SPEC.md" ]; then
-  GOAL_INI=$(grep -n '^## Goal' "$PD/$NN-SPEC.md" | head -1 | cut -d: -f1 || true)
-  [ -n "$GOAL_INI" ] && GOAL_TXT=$(awk -v s="$GOAL_INI" 'NR>s { if ($0 ~ /^## /) exit; print }' "$PD/$NN-SPEC.md")
+if [ -f "$CTX" ]; then
+  GOAL_INI=$(grep -n '^## Goal[[:space:]]*$' "$CTX" | head -1 | cut -d: -f1 || true)
+  [ -n "$GOAL_INI" ] && GOAL_TXT=$(awk -v s="$GOAL_INI" 'NR>s { if ($0 ~ /^## /) exit; print }' "$CTX")
 fi
 [ -n "$(printf '%s' "$GOAL_TXT" | tr -d '[:space:]')" ] \
-  || AVISOS+=("SPEC sem seção \`## Goal\` — o briefing sai sem o alvo dos achados")
+  || AVISOS+=("$NN-CONTEXT.md sem seção \`## Goal\` — o briefing sai sem o alvo dos achados")
 
 {
   echo "# Briefing da consultoria especializada de intenção — fase $NN, ciclo $C"
@@ -548,47 +429,40 @@ fi
   fi
   echo "## Artefatos (leia dos caminhos — qualquer arquivo do repositório é elegível)"
   echo
-  echo "- \`$PD/$NN-SPEC.md\`"
-  echo "- \`$PD/$NN-CONTEXT.md\`"
-  if [ -f "$PD/$NN-PRE-SPEC.md" ]; then
-    echo "- \`$PD/$NN-PRE-SPEC.md\` — decisões PRÉ-TRAVADAS pelo usuário numa sessão"
-    echo "  interativa anterior. Decisão marcada \`[pre-spec]\` nos artefatos tem dono:"
-    echo "  não a ataque como \"decisão não justificada\" — ataque, se for o caso, a"
-    echo "  consequência técnica dela."
-  fi
+  # só os arquivos que existem (Fase 6 do gad): numa fase nova o documento único
+  # (`NN-CONTEXT.md`) é a intenção inteira; o `NN-SPEC.md` só entra numa fase antiga que o
+  # tenha. O PRE-SPEC nunca entra — nem quando um arquivo dele ficou solto na pasta.
+  for f in "$CTX" "$PD/$NN-SPEC.md"; do
+    if [ -f "$f" ]; then echo "- \`$f\`"; fi
+  done
   [ -f "$ROOT/.planning/REQUIREMENTS.md" ] && echo "- \`$ROOT/.planning/REQUIREMENTS.md\`"
   echo "- Repositório sob revisão: \`$ROOT\`"
   echo
-  # R5 (plano 3) — obrigação do ciclo 1: os documentos a montante são objeto, não
-  # autoridade. Foi aqui que o AC-12 da F24.4 cairia: o PRE-SPEC proibia medir pelo Δ
-  # agregado, o AC media por Δ agregado, e nenhum dos quatro ciclos cruzou os dois.
+  # R5 — obrigação do ciclo 1: inconsistência DENTRO do documento (Fase 6 do gad, AC-36,
+  # D-05). É a leitura que o ciclo 0 fazia e que sobrou quando ele saiu; vai aos consultores
+  # (Codex/agy) e à releitura independente do ciclo, nunca ao comando que escreveu o texto.
+  # Na F24.4 o AC-41 dizia 7 com o AC-15 dizendo 8, «15 restantes» listava 16 e 50 critérios
+  # viraram 33 quando alguém finalmente contou — nenhum ciclo cruzou o documento consigo mesmo.
   if [ "$C" = 1 ]; then
-    echo "## Obrigação do ciclo 1 — os documentos a montante são objeto"
+    echo "## Obrigação do ciclo 1 — inconsistência dentro do documento"
     echo
-    echo "Antes de procurar defeito novo, faça estas três conferências e responda a elas nas"
-    echo "perguntas dirigidas $QMONT1, $QMONT2 e $QMONT3."
+    echo "Antes de procurar defeito novo, releia o \`$CTX\` inteiro — o documento único desta"
+    echo "fase — cruzando-o consigo mesmo. Esta leitura é sua: o comando que escreveu o texto não faz esta leitura"
+    echo "(ele não se autorrevisa antes de gravar), e nenhum ciclo anterior a fez. Faça as três"
+    echo "conferências abaixo e responda a elas nas perguntas dirigidas $QINT1, $QINT2 e $QINT3."
     echo
-    if [ -f "$PD/$NN-PRE-SPEC.md" ]; then
-      echo "1. **SPEC × régua do PRE-SPEC.** Para cada critério de aceite do SPEC, ache a régua"
-      echo "   candidata correspondente no \`$PD/$NN-PRE-SPEC.md\` (Anexo A e itens \`PS-nn\`)."
-      echo "   Critério que mede de um jeito que a régua candidata proíbe, sem uma linha de motivo"
-      echo "   no SPEC, é achado — a régua pode ter sido superada, mas a superação tem de estar"
-      echo "   escrita."
-    else
-      echo "1. **SPEC × REQUIREMENTS.** Para cada critério de aceite, ache o requisito \`REQ-*\` que"
-      echo "   ele fecha em \`$ROOT/.planning/REQUIREMENTS.md\`. Critério sem requisito que o"
-      echo "   sustente, ou requisito da fase que nenhum critério fecha, é achado."
-    fi
-    echo "2. **CONTEXT como alvo.** Leia o \`$PD/$NN-CONTEXT.md\` procurando decisão que contradiz"
-    echo "   outra, decisão que o SPEC já superou e decisão que prescreve como implementar em vez"
-    echo "   de dizer o que tem de ser verdade. O CONTEXT não é prova de nada: é mais um documento"
-    echo "   sob revisão."
-    echo "3. **Conjunto nomeado é conjunto enumerado.** Critério que fala de \"os 8 alunos\", \"as 4"
-    echo "   escolas\" ou \"os 3 mecanismos\" exige, no documento, a lista com os elementos."
-    echo "   Cardinalidade sem enumeração é achado: ninguém pode provar o critério."
+    echo "1. **AC × AC** (critérios que se contradizem). Para cada critério de aceite, procure"
+    echo "   outro que ele torne insatisfazível: um comportamento exigido por um e proibido pelo"
+    echo "   outro. Aponte os dois ids."
+    echo "2. **número declarado × lista** (contagem escrita que não bate com a lista). Todo"
+    echo "   \"os 8 alunos\", \"15 restantes\", \"os TRÊS pontos\" exige, no documento, a lista com"
+    echo "   os elementos — conte-a. Número sem lista, ou lista com outra contagem, é achado."
+    echo "3. **critério repetido** (o mesmo critério com dois ids). Dois critérios que a mesma"
+    echo "   verificação derruba de uma vez são um critério com dois números: diga qual fixture,"
+    echo "   \`grep\` ou \`diff\` derruba os dois."
     echo
-    echo "A decisão marcada \`[pre-spec]\` continua tendo dono: não ataque a escolha do usuário;"
-    echo "ataque o SPEC que não a honra, ou a consequência técnica dela."
+    echo "As decisões do dono (os \`D-NN\` de «Decisões do dono») continuam tendo dono: não"
+    echo "ataque a escolha; ataque o critério que não a honra, ou a consequência técnica dela."
     echo
   fi
   # ROADMAP: SÓ a entrada da fase (R8.2 — antes vinham as vizinhas junto)
@@ -652,20 +526,6 @@ fi
     printf '%s\n' "$RESTO"
     echo
   done
-  # R3 — ciclo 1: sino do ciclo 0 que NÃO virou correção continua visível.
-  if [ "$C" = 1 ]; then
-    NCOR=$(printf '%s' "$GATE_JSON" | jq -r '[.sinos[]? | select(.disposicao!="corrigido")
-      | select(.id | test("^licao ?[0-9]") | not)] | length')
-    if [ "${NCOR:-0}" -gt 0 ]; then
-      echo "## Sinos do ciclo 0 não corrigidos (contexto — seguem sendo alvo)"
-      echo
-      printf '%s' "$GATE_JSON" | jq -r '.sinos[]? | select(.disposicao!="corrigido")
-        | select(.id | test("^licao ?[0-9]") | not)
-        | "- `" + .id + "` (" + .origem + ") — " + .disposicao
-          + (if (.destino // "") != "" then " → `" + .destino + "`" else "" end)'
-      echo
-    fi
-  fi
   # ── Perguntas dirigidas (R8.1) ──────────────────────────────────────────────
   echo "## Perguntas dirigidas"
   echo
@@ -692,36 +552,16 @@ fi
   echo "  que ela toca de compartilhado, que contrato cria ou muda, o que não tem"
   echo "  análogo no código, quem depende dela nas fases seguintes?"
   if [ "$C" = 1 ]; then
-    echo "- **$QMONT1** (SPEC × régua a montante): existe critério de aceite que mede de um"
-    echo "  jeito que a régua candidata do documento a montante proíbe, sem motivo registrado"
-    echo "  no SPEC?"
-    echo "- **$QMONT2** (CONTEXT como alvo): existe decisão do CONTEXT contraditória, superada"
-    echo "  pelo SPEC ou que prescreve mecanismo em vez de comportamento?"
-    echo "- **$QMONT3** (conjunto nomeado): existe critério que fala de um conjunto cujos"
-    echo "  elementos o documento não enumera?"
+    echo "- **$QINT1** (AC × AC): existe par de critérios de aceite do documento que se"
+    echo "  contradizem — um exige o comportamento que o outro proíbe?"
+    echo "- **$QINT2** (número declarado × lista): existe contagem escrita no documento que não"
+    echo "  bate com a lista que ela anuncia, ou número de elementos sem a lista?"
+    echo "- **$QINT3** (critério repetido): existe o mesmo critério com dois ids — dois critérios"
+    echo "  que a mesma verificação derruba de uma vez?"
   fi
   echo "- Resposta \`não\` a qualquer pergunta que só vale porque o ponto não toca o Goal:"
   echo "  escreva na forma \`não — irrelevante para o Goal: <o efeito medido que não é tocado>,"
   echo "  ver <AC-nn | R-n | arquivo:linha>\` — a palavra \`irrelevante\` sozinha é resposta vazia."
-  if [ ${#REVAL[@]} -gt 0 ]; then
-    echo
-    echo "### Revalidação dirigida (ciclo 0)"
-    echo
-    echo "Antes deste ciclo o coordenador corrigiu os sinos abaixo, nos artefatos (commit"
-    echo "registrado em \`$(IC c0/correcoes.aplicado)\`). Responda à pergunta"
-    echo "**$QREVAL**: alguma dessas correções criou problema novo, ficou incompleta ou está"
-    echo "errada? \`sim\` exige qual e a evidência; \`não\` exige o que você conferiu para dizer"
-    echo "isso."
-    echo
-    for r in "${REVAL[@]}"; do
-      IFS='|' read -r sid sorig scid <<< "$r"
-      echo "- sino \`$sid\` (origem: $sorig) → correção \`$scid\`"
-    done
-    echo
-    echo "- **$QREVAL** (revalidação do ciclo 0): alguma correção do ciclo 0 criou problema"
-    echo "  novo, ficou incompleta ou está errada? \`sim\` exige qual e a evidência; \`não\`"
-    echo "  exige o que você conferiu."
-  fi
 } > "$OUT"
 
 # Manifesto de completude das perguntas (R8.3) — insumo do confere-ciclo.sh --perguntas

@@ -32,15 +32,16 @@ O despacho te entrega: `NN`, o `phase_dir` (absoluto), o `modo` ∈ {final, parc
 Leia (apenas os que existirem) na `phase_dir`: os `NN-*-SUMMARY.md`,
 `NN-REVIEW.md`/`NN-REVIEW-FIX.md`, `NN-UI-REVIEW.md`, `NN-EVAL-REVIEW.md`,
 `NN-SECURITY.md`, `NN-VALIDATION.md`, `NN-VERIFICATION.md`, `NN-UAT.md`,
-`NN-UI-SPEC.md`/`NN-AI-SPEC.md`/`NN-SPEC.md`/`NN-CONTEXT.md`, `NN-INTENT-REVIEW.md`,
+`NN-CONTEXT.md` (o documento único da intenção), `NN-UI-SPEC.md`/`NN-AI-SPEC.md`,
+`NN-SPEC.md` (só em fase antiga), `NN-INTENT-REVIEW.md`,
 `NN-DECISOES.md` e `NN-LEARNINGS.md`. **Não invente nada** que não esteja nesses
 arquivos — em especial, contexto externo de negócio.
 </leitura>
 
 <regras_duras>
 **Atribuição de autoria de decisão — só com fonte citável.** Está no `NN-DECISOES.md`
-→ foi a orquestração ("decidi por você"); está no Interview Log do SPEC, num
-`AskUserQuestion` respondido ou num `--obs` → foi o dono ("você decidiu"). Sem fonte
+→ foi a orquestração ("decidi por você"); é uma D-NN do bloco `<decisions>` do documento único
+(`NN-CONTEXT.md` — só decisões do dono, por construção), um `AskUserQuestion` respondido ou um `--obs` → foi o dono ("você decidiu"). Sem fonte
 que crave a autoria, voz neutra ("ficou decidido") — nunca "tomada por mim".
 
 **Números com fonte estrutural.** Planos, ondas e contagens: copie do

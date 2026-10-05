@@ -17,7 +17,6 @@ into `gad-capture` (with `--note`, default, `--backlog`, `--seed` modes) by
 | Explore an idea or opportunity | gad-explore |
 | Sketch out a rough design or plan | gad-sketch |
 | Time-boxed technical spike | gad-spike |
-| Write a spec for a phase | gad-spec-phase |
 | Capture a thought (todo / note / backlog / seed) | gad-capture |
 
 Invoke the matched skill directly using the Skill tool.

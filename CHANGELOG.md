@@ -3,6 +3,56 @@
 Todas as versões da go-and-do como produto próprio. Cada entrada diz qual GSD Core vai vendorizado dentro do pacote
 (a cópia congelada e renomeada para o namespace `gad`), conferido por hash na montagem.
 
+## [3.2.0] — 2026-10-05
+
+A intenção de uma fase passa a ser um **documento único**, aberto por um comando só. O Core vendorizado não muda:
+continua o **Core 1.15.0**, a mesma cópia conferida por hash desde a 3.1.0.
+
+### Core vendorizado
+
+- `@opengsd/gsd-core 1.15.0`, sem alteração desde a 3.1.0.
+- O manifesto do runtime (`dist/manifest.json`) registra `core.versao` 1.15.0 e `produto.versao` 3.2.0.
+
+### O que muda para você
+
+- **Um comando abre a intenção:** `/gad-discuss-phase NN`. Ele faz só perguntas de negócio e termina num documento
+  único da fase, aprovado por você. Depois, `/go-and-do NN` leva a fase do plano ao fim a partir desse documento.
+- **A `/go-and-do` começa direto na consultoria:** a etapa de intenção em três passos (spec, discuss e releitura
+  separados) saiu; o plano, a execução e a verificação leem o documento único.
+- **Saíram do produto:** o comando `/gad-spec-phase` (com o workflow e a skill dele), a skill `/gad-pre-spec`, os
+  agentes de autoria `gad-spec` e `gad-discuss` e os modos do discuss que o comando único não usa (`advisor`, `all`,
+  `analyze`, `auto`, `batch`, `chain`, `power`, `text`).
+- **O for-humans saiu do fluxo da intenção:** nenhum passo da intenção gera mais a versão «para humanos».
+
+### Voltar para a v3.1.1
+
+Se a 3.2.0 não servir, reinstale a versão anterior por cima, com o comando exato:
+
+```bash
+npx github:alencarfelipe10-ctrl/go-and-do#v3.1.1 update
+```
+
+O `update` troca o runtime pelo da 3.1.1 e ajusta os hooks; o que você já escreveu nas fases (`.planning/`) fica.
+
+Se esse `update` for interrompido no meio (o terminal fechou, a máquina desligou), rodá-lo de novo não conserta: ele
+recusa e manda desinstalar. Rode `npx github:alencarfelipe10-ctrl/go-and-do#v3.1.1 uninstall` e depois
+`npx github:alencarfelipe10-ctrl/go-and-do#v3.1.1 install`. A v3.1.1 não tem o conserto de queda da 3.2.0 (abaixo):
+se o `install` recusar com «conflito de destino» nomeando um arquivo, esse arquivo é sobra do update interrompido —
+apague só ele e rode o `install` de novo.
+
+### Update interrompido no meio
+
+- Um `update` para a 3.2.0 que cai no meio (o processo morto em qualquer ponto da troca) agora se conserta pelos
+  comandos do produto: o `verify` acusa instalação incompleta, o `update` de novo recusa e manda desinstalar, e
+  `npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0 uninstall` seguido de
+  `npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0 install` deixa a casa instalada e conferida. Antes, o `uninstall`
+  deixava para trás o `gad-file-manifest.json` (ou o `go-and-do/current`) da versão anterior e o `install` recusava.
+  O que você mudou à mão continua ficando, com aviso.
+
+### Pacote
+
+- Instalação pela tag nova: `npx github:alencarfelipe10-ctrl/go-and-do#v3.2.0`.
+
 ## [3.1.1] — 2026-10-02
 
 Versão de correções sobre a 3.1.0. O Core vendorizado não muda: continua o **Core 1.15.0**, a mesma cópia conferida

@@ -32,6 +32,8 @@ import sys
 
 PHASE_TOKEN = re.compile(r"^(?:[A-Z]+-)?(\d+)([A-Z])?((?:\.\d+)*)-?(.*)$")
 TITLE_RE = re.compile(r"^#\s+Phase\s+[^:]+:\s*(.+?)\s*-\s*Context\s*$", re.I)
+# documento único (06-11): «# Especificação da fase NN — <nome>»; o título antigo segue lido nas fases antigas
+TITLE_DOC_RE = re.compile(r"^#\s+Especificação da fase\s+[^—]+—\s*(.+?)\s*$")
 
 
 def log(msg):
@@ -54,7 +56,7 @@ def extract_block(text, tag):
 
 def phase_name(text, dirname):
     for ln in text.splitlines()[:5]:
-        m = TITLE_RE.match(ln.strip())
+        m = TITLE_RE.match(ln.strip()) or TITLE_DOC_RE.match(ln.strip())
         if m:
             return m.group(1)
     m = PHASE_TOKEN.match(dirname)

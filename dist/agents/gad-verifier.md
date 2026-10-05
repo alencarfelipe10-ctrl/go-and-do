@@ -161,7 +161,7 @@ must_haves:
 
 A flagged prohibition counts as a human-verification item (status `human_needed`) or a gap (status `gaps_found`) per the existing decision tree — it must never be silently absorbed into a `passed` verdict.
 
-**Also extract `must_haves.desejaveis`** when present. These are the SPEC's `desejável` criteria (class `desejavel` in the SPEC's `gsd:acs` block). They are reported, never scored: an unmet one does not create a gap and does not change the status. Silence about them is the failure to avoid, not their failure — list each one in the `## Desejáveis pendentes` section of the report.
+**Also extract `must_haves.desejaveis`** when present. These are the `desejável` criteria (class `desejavel` in the `gsd:acs` block of the SPEC or of the single-document NN-CONTEXT.md). They are reported, never scored: an unmet one does not create a gap and does not change the status. Silence about them is the failure to avoid, not their failure — list each one in the `## Desejáveis pendentes` section of the report.
 
 **Step 2c: Merge must-haves**
 

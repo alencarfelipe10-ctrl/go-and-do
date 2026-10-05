@@ -1,11 +1,14 @@
 <!-- prompts/intent-releitura.md — filho de camada 2 (agente gad-verificador, modo
      `releitura`) que RELÊ a emenda de UM ciclo antes do briefing do ciclo seguinte (R1).
      Lido do disco PELO FILHO. Escopo: contradição, mecanismo, omissão e cardinalidade —
-     relativas à emenda, e, no ciclo 0, também ao texto original que o ciclo 0 acabou de
-     produzir. Erro factual novo continua sendo trabalho dos consultores externos — esta
-     releitura NÃO é filtro de achado. O arquivo em disco É o objeto de retorno (v: 2):
-     um recibo em disco com o veredito só no retorno perde o veredito quando a janela
-     morre — na F24.4 dois ciclos ficaram com 235 bytes que não reliam nada. -->
+     relativas à emenda, e, no ciclo 1, também ao documento único inteiro (`NN-CONTEXT.md`):
+     a leitura de inconsistência dentro do documento (AC × AC, número declarado × lista,
+     critério repetido) que ninguém fez antes dos consultores — o comando que escreveu o
+     texto não se autorrevisa (Fase 6 do gad, GODO-03/AC-36). Erro factual novo continua
+     sendo trabalho dos consultores externos — esta releitura NÃO é filtro de achado. O
+     arquivo em disco É o objeto de retorno (v: 2): um recibo em disco com o veredito só no
+     retorno perde o veredito quando a janela morre — na F24.4 dois ciclos ficaram com 235
+     bytes que não reliam nada. -->
 
 # Filho da intenção — releitura da emenda (ciclo C)
 
@@ -13,13 +16,14 @@ O despacho te entrega: `project_root` e `phase_dir` (absolutos), `NN`, o número
 `C`, o conteúdo (ou o caminho) de `<phase_dir>/.gad/intent/c<C>/correcoes.aplicado` — JSON
 `{commit, caminhos:[...], correcoes:[{id, hash}]}` — e, conforme o ciclo:
 
-- **ciclo 0:** a seção "Consistência interna" do `NN-SPEC.md` (R4), o bloco `gsd:acs`
-  do SPEC (ou o SPEC inteiro), o Anexo A do `NN-PRE-SPEC.md` quando existir, e o bloco
-  `<decisions>` **original** do `NN-CONTEXT.md` recém-gerado;
-- **ciclo ≥ 1:** quando os `caminhos` do `.aplicado` incluem o SPEC, a lista
-  `D-NN-DESATUALIZADA c<C> …` que
+- **ciclo 1:** leitura de inconsistência dentro do documento — AC × AC, número declarado × lista, critério repetido — sobre o `NN-CONTEXT.md` inteiro; você não escreveu o texto
+  (o comando que o gravou não se autorrevisa antes de gravar, e não há ciclo anterior que o
+  tenha relido). É a mesma conferência que o briefing do ciclo 1 pede aos consultores; a
+  sua é a leitura independente. Ela vem **além** da emenda, pelos passos 2, 3b e 5b.
+- **todo ciclo (C ≥ 1, inclusive os ciclos ≥ 2):** a emenda do ciclo e as linhas `PROSA-BLOCO-DIVERGE c<C> …` que
   `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/confere-reconciliacao.sh "<phase_dir>" <C>` emitiu
-  (uma linha por decisão, o id `D-NN` como terceiro token).
+  — a conferência de coerência texto × bloco da máquina do `NN-CONTEXT.md` depois das
+  correções do ciclo (uma linha por divergência; nenhuma linha = nada divergiu).
 
 Comece todo bloco Bash com `cd "<project_root>"`. **Instrumento ausente** (script chamado
 sem existir no caminho absoluto, `command not found`) não é «pule e continue» — é
@@ -28,10 +32,11 @@ pare e devolva o objeto com `ok: false` e a falha em `observacao`, nunca contorn
 que o script faria. Os `caminhos` são relativos ao
 `project_root`.
 
-Você lê o que o ciclo **acabou de escrever nos artefatos** (SPEC, CONTEXT, INTENT-REVIEW e,
-quando o ciclo os tocou, ROADMAP/REQUIREMENTS) e responde uma pergunta só: **a emenda
-estragou alguma coisa?** No ciclo 0 a "emenda" inclui o texto original: é a única vez em
-que alguém relê o que o spec e o discuss produziram antes dos consultores.
+Você lê o que o ciclo **acabou de escrever nos artefatos** (o `NN-CONTEXT.md`, o
+INTENT-REVIEW e, quando o ciclo os tocou, ROADMAP/REQUIREMENTS) e responde uma pergunta só:
+**a emenda estragou alguma coisa?** No ciclo 1 a pergunta cresce: **o documento, inteiro,
+se contradiz?** — é a única vez em que alguém que não o escreveu o relê de ponta a ponta
+antes de a consultoria seguir.
 
 **Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
 `<phase_dir>/.gad/` e aparecem aqui pelo NOME NOVO (ex.: `.gad/intent/c<C>/vereditos.txt`) — o
@@ -43,7 +48,7 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
 
 ## Trabalho
 
-1. **Leia a emenda, não o artefato inteiro:**
+1. **Leia a emenda — e, no ciclo 1, o documento inteiro:**
 
    ```bash
    cd "<project_root>"
@@ -53,15 +58,18 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
    ```
 
    Leia o contexto ao redor de cada hunk (`sed -n` no arquivo do worktree) só o bastante
-   para julgar. Fora do ciclo 0, não releia o SPEC/CONTEXT de ponta a ponta — isso é
-   trabalho dos consultores.
+   para julgar. No ciclo 1, leia também o `NN-CONTEXT.md` de ponta a ponta (a versão do
+   commit). Do ciclo 2 em diante, não releia o documento inteiro — isso é trabalho dos
+   consultores.
 
 2. **`contradiz` — AC × AC.** Para cada AC/`MUST NOT`/requisito que a emenda criou ou
-   alterou, procure no artefato outro AC que ele torne insatisfazível ou que o torne
+   alterou, procure no documento outro AC que ele torne insatisfazível ou que o torne
    insatisfazível. Par insatisfazível = existe ao menos um comportamento exigido por um e
    proibido pelo outro. Ponteiro obrigatório aos dois ids (`AC-nn`, `R-n`, `D-nn`).
+   **No ciclo 1, o documento inteiro:** todo par de critérios do `NN-CONTEXT.md`, não só os
+   que a emenda tocou.
    <!-- H3, plano 1 P-06 (D7b) -->
-   Num SPEC escrito pelo dono (o despacho diz `spec_do_dono: sim`), critério que a
+   O documento é do dono (nasceu do `/gad-discuss-phase` com ele presente): critério que a
    emenda **acrescentou** como `[exigido]` sem passar por pergunta ao dono é item aqui,
    na forma `{"exigido_novo_sem_pergunta": "AC-nn"}`: endurecer um critério do dono sem
    pergunta é decidir no lugar dele.
@@ -86,70 +94,55 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
    cita. Confira contra o repositório, não contra a sua leitura da intenção; o item vai no
    mesmo array, com o `trecho` sendo a frase nova e o `path`/`linha` o que ela contradiz.
    <!-- H4, plano 1 P-06 — o AC-10 da 24.4 («nos TRÊS pontos») é o caso desta régua -->
-   <!-- H6 + H8, plano 2 P-05 (C2) -->
-   **Ciclo 0 — o texto original também.** Aplique a mesma régua ao bloco `<decisions>` do
-   CONTEXT que recebeu: decisão que prescreve função, linha, campo ou caminho («troque X
-   na linha 2253») entra aqui com `path`, `linha` e `trecho` verbatim. A seção
-   `### Implementation Notes (sugestões — não normativas)` fica fora: o parser do GAD não
-   a lê. Rode antes o screening determinístico para dirigir o olhar — ele não decide:
-   `grep -nE '[a-z0-9_/.-]+\.(py|sh|cjs|md):[0-9]+' <CONTEXT>` sobre os bullets, mais os
-   verbos de prescrição (`troque`, `substitua`, `renomeie`, `mova`, `adicione o campo`).
-   Na F24.4 ele acusa 16 de 23 contra 14 julgadas; a diferença é o seu trabalho.
 
-3b. **`cardinalidade` — número que a emenda escreveu tem de bater com a lista que a
-   acompanha.** Para cada linha nova ou alterada que declara um número de elementos
-   ("os 8 alunos", "15 restantes", "os TRÊS pontos"), conte a enumeração correspondente
-   no mesmo artefato e no artefato irmão. Divergência entre o número e a lista, ou entre
-   dois ids que falam do mesmo conjunto, é item de `cardinalidade`, com ponteiro aos
-   dois lugares (`declarado`, `contado`, `onde`). Na F24.4 o AC-41 passou a dizer 7 com o
-   AC-15 dizendo 8, e «15 restantes» listou 16 — dois ciclos releram e nenhum contou.
+3b. **`cardinalidade` — número declarado × lista.** Para cada linha nova ou alterada que
+   declara um número de elementos ("os 8 alunos", "15 restantes", "os TRÊS pontos"), conte a
+   enumeração correspondente no documento. Divergência entre o número e a lista, número sem
+   a lista, ou dois ids que falam do mesmo conjunto com contagens diferentes, é item de
+   `cardinalidade`, com ponteiro aos dois lugares (`declarado`, `contado`, `onde`). **No
+   ciclo 1, todo número declarado do documento inteiro**, não só o da emenda. Na F24.4 o
+   AC-41 passou a dizer 7 com o AC-15 dizendo 8, e «15 restantes» listou 16 — dois ciclos
+   releram e nenhum contou.
 
 4. **`omissoes_novas` — o que a emenda deixou pendurado.** Só o que a **própria emenda**
-   abriu: referência a id/seção/arquivo que ela cita e não existe; decisão trocada num
-   artefato e não propagada ao outro (SPEC × CONTEXT); AC removido cujo comportamento
-   nenhum outro AC passou a cobrir; correção que resolve o achado num ponto e deixa o mesmo
-   defeito no ponto irmão que a mesma emenda tocou. **Não** é lugar de lacuna pré-existente
-   nem de erro factual novo — esses são dos consultores externos.
-   <!-- H7, plano 2 P-06 (C3) -->
-   Cada linha `D-NN-DESATUALIZADA c<C> <D-NN> — …` que o despacho te entregou é um item
-   aqui, com `path` = o CONTEXT e `o_que` = o `D-NN` e os ids do SPEC que ele cita: o
-   ciclo emendou o critério e a decisão continuou apontando para o texto antigo. A
-   correção `c<C>b` emenda a decisão **ou** acrescenta a tag `superada-c<C>` ao bullet —
-   quem decide qual é quem te despachou.
+   abriu: referência a id/seção/arquivo que ela cita e não existe; decisão trocada numa
+   seção do documento e não propagada à outra (prosa × bloco da máquina, «Decisões do dono»
+   × critérios); AC removido cujo comportamento nenhum outro AC passou a cobrir; correção
+   que resolve o achado num ponto e deixa o mesmo defeito no ponto irmão que a mesma emenda
+   tocou. **Não** é lugar de lacuna pré-existente nem de erro factual novo — esses são dos
+   consultores externos.
+   <!-- H7, plano 2 P-06 (C3); Fase 6 do gad: a coerência texto × bloco no lugar da
+        reconciliação entre dois documentos -->
+   Cada linha `PROSA-BLOCO-DIVERGE c<C> …` que o despacho te entregou é um item aqui, com
+   `path` = o `NN-CONTEXT.md` e `o_que` = o que a prosa diz e o bloco da máquina não (ou o
+   contrário), com os ids envolvidos: o ciclo emendou um lado do documento e deixou o outro
+   para trás. A correção `c<C>b` emenda o lado que ficou para trás — quem decide qual é quem
+   te despachou.
 
-5. **`consistencia` — ciclo 0 apenas.** Recebeu a seção "Consistência interna" do SPEC (R4):
-   releia os pares que ela declara ter checado e diga se o passe se sustenta — o passe
-   deixa de ser autoatestado. Seção ausente (antes da onda 2) → `consistencia:
-   "não_disponível"`, **sem falha e sem achado**. Fora do ciclo 0 → também
-   `"não_disponível"`.
-   <!-- H1 e H5, plano 1 P-06 (D2/D9) -->
-   No mesmo passe, com o Anexo A do PRE-SPEC em mãos: exigido marcado
-   `[diverge: AA-n — porquê]` cujo porquê não se sustenta contra o item citado entra em
-   `pares_insatisfaziveis` como `{"divergencia_nao_sustentada": "AC-nn", "aa": "AA-n",
-   "porque": …}`; exigido que cobre um efeito do Anexo A **sem citar** o `AA-n` (a evasão
-   que o gate não vê — `[exigido: Δ agregado] [origem: Goal]` é a forma provável do AC-12
-   real) entra como `{"anexo_a_nao_citado": "AC-nn", "aa": "AA-n"}`. A linha
-   `**Goal coberto:**` da seção diz o que o gate já provou; você julga o que ele não prova.
+5. **`consistencia` — sem seção a reler.** O documento único não tem seção de
+   autoconferência para você julgar (a conferência dele é a sua leitura do ciclo 1, nos
+   passos 2, 3b e 5b): devolva sempre `consistencia: "não_disponível"`, **sem falha e sem
+   achado**. A chave continua obrigatória no objeto — o gate do `briefing-build.sh` a exige.
 
-5b. **`unicidade` — ciclo 0 apenas.** <!-- H2, plano 1 P-06 (D10) --> Dois critérios que a
-   mesma verificação derruba são um critério com dois números. A bandeira
-   `AC-ORIGEM-REPETIDA` do `confere-pre-spec.sh` (na `.varredura.md` ou no despacho) é o
-   convite; a resposta é sua: para cada par, diga qual fixture, `grep` ou `diff` derruba
-   os dois de uma vez, ou por que são distinguíveis. Par indistinguível → item
-   `{"ac_a": "AC-nn", "ac_b": "AC-nn", "verificacao": "<o que derruba os dois>"}`. Fora do
-   ciclo 0, `unicidade: []` — a chave só é obrigatória no c0 (na 24.4, 50 critérios viraram
-   33 quando alguém finalmente contou).
+5b. **`unicidade` — critério repetido.** <!-- H2, plano 1 P-06 (D10) --> Dois critérios que a
+   mesma verificação derruba são um critério com dois números. Para cada par suspeito, diga
+   qual fixture, `grep` ou `diff` derruba os dois de uma vez, ou por que são distinguíveis.
+   Par indistinguível → item `{"ac_a": "AC-nn", "ac_b": "AC-nn", "verificacao": "<o que
+   derruba os dois>"}`. **No ciclo 1, todos os critérios do documento inteiro**; do ciclo 2
+   em diante, só os pares que a emenda criou ou alterou (na 24.4, 50 critérios viraram 33
+   quando alguém finalmente contou).
 
 6. **Escopo — leia duas vezes.** Você checa **contradição, mecanismo, omissão e
-   cardinalidade relativas à emenda** — e, no ciclo 0, o texto original pelos passos 3, 5
-   e 5b. Você **não** verifica se a alegação corrigida era verdadeira, não procura bug
+   cardinalidade relativas à emenda** — e, no ciclo 1, o documento inteiro pelos passos 2,
+   3b e 5b. Você **não** verifica se a alegação corrigida era verdadeira, não procura bug
    novo no código, não reabre achado descartado e não julga a qualidade da decisão do dono.
    Achado factual que você tropeçar no caminho: **não** entra nas listas — no máximo uma
    linha em `observacao`. Achado verdadeiro sem vínculo ao Goal não vai ao lixo: vai ao
    registro de dívidas de quem te despachou (R1/R2), pela `observacao`.
 
 6b. **Rodada de correção (`c<C>b`, `c<C>c`, …) — escopo mais estreito (48a/E4).** Só a
-   PRIMEIRA rodada do ciclo (`c<C>`) roda os passos 2–5b inteiros sobre a emenda. A partir da
+   PRIMEIRA rodada do ciclo (`c<C>`) roda os passos 2–5b inteiros sobre a emenda (e, no
+   ciclo 1, sobre o documento inteiro). A partir da
    correção que promove tudo junto num lote só (bloqueante e documental, ver `intent.md`
    passo 5), a rodada seguinte roda de novo **só os passos 2 (`contradiz`) e 3
    (`prescreve_mecanismo`)**, sobre o diff DESSA correção — as duas categorias que ainda
@@ -176,7 +169,7 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
    {"v": 2, "ciclo": <C>, "commit": "<commit>",
     "artefatos": [{"path": "<caminho>", "blob": "<blob>"}, ...],
     "contradiz": [...], "prescreve_mecanismo": [...], "omissoes_novas": [...],
-    "cardinalidade": [...], "unicidade": [...], "consistencia": ..., "ok": true|false,
+    "cardinalidade": [...], "unicidade": [...], "consistencia": "não_disponível", "ok": true|false,
     "observacao": "..."}
    JSON
    mv -f "$R.tmp" "$R"
@@ -188,31 +181,33 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
      duplicata e sem sobra — o `briefing-build.sh` exige igualdade de conjunto, não
      subconjunto. Na segunda releitura de um ciclo (depois da correção `c<C>b`) o
      `.aplicado` guarda todas as rodadas do ciclo (`commits`, `rodadas`), mas o `commit` e
-     os `caminhos` do topo são só os da rodada vigente (o CONTEXT entra quando a `c<C>b`
-     emendou uma `D-NN`): liste esses, não a união das rodadas.
+     os `caminhos` do topo são só os da rodada vigente: liste esses, não a união das
+     rodadas.
    - `blob` = `git rev-parse <commit>:<path>` (o blob **do commit**; o gate confere contra
      o commit **e** contra o worktree atual).
    - **Ciclo sem correção** (`c<C>/correcoes.vazio` no lugar do `.aplicado`) → o mesmo
      objeto com `"commit": ""`, `"artefatos": []`, todas as listas vazias e `ok: true`, mais
-     o `.done`. O arquivo é obrigatório mesmo assim.
+     o `.done`. O arquivo é obrigatório mesmo assim. No ciclo 1 a leitura do documento
+     inteiro vale mesmo sem emenda: item que ela achar entra nas listas (e `ok: false`), como
+     em qualquer outro caso.
    - **Ordem obrigatória:** o `.json` completo primeiro, o `.done` por último — marcador na
      frente de JSON meio-escrito é fabricação de evidência.
-   - **`<RODADA>` é o rótulo que o despacho te passou**, não o número do ciclo: `c0` na primeira
-     rodada do ciclo 0, `c0b` na correção pós-releitura, `c0c` na seguinte, e assim por diante
-     (`c1`, `c1b`, …). O **`.json` leva o nome da própria rodada** (`<RODADA>/releitura.json`,
+   - **`<RODADA>` é o rótulo que o despacho te passou**, não o número do ciclo: `c1` na primeira
+     rodada do ciclo 1, `c1b` na correção pós-releitura, `c1c` na seguinte, e assim por diante
+     (`c2`, `c2b`, …). O **`.json` leva o nome da própria rodada** (`<RODADA>/releitura.json`,
      igual ao `.done`): a primeira rodada do ciclo (`c<C>`) grava `c<C>/releitura.json` — o
      nome fixo de sempre —, e CADA rodada de correção pós-releitura (`c<C>b`, `c<C>c`, …)
      grava um arquivo PRÓPRIO — `c<C>b/releitura.json`, `c<C>c/releitura.json`, … —, sem
      sobrescrever o da rodada anterior do mesmo ciclo. O `.done` já ganhava o nome da rodada
      por este mesmo motivo: sem isso, o marcador da rodada anterior satisfaz a espera da
      seguinte e o coordenador abre a rodada nova sobre premissa falsa (F24.5: 5 rodadas de
-     releitura no ciclo 0, `c0c` lançado 51 s antes de o `c0b` acabar — a mesma fase em que a
-     rodada MAIS RECENTE, não a primeira, importa). O gate do `briefing-build.sh` lê, para
+     releitura num mesmo ciclo, a 3ª lançada 51 s antes de a 2ª acabar — a mesma fase em que
+     a rodada MAIS RECENTE, não a primeira, importa). O gate do `briefing-build.sh` lê, para
      cada ciclo, a rodada de letra mais alta que existir — senão a primeira (`c<C>/releitura.json`).
    - Despacho sem `<RODADA>` declarado → use o próprio ciclo (`c<C>`), que é o comportamento antigo
      (grava `c<C>/releitura.json`, igual a sempre).
    - **Veredito dos itens que você devolveu (J5b).** Todo item que você devolve (`contradiz`,
-     `prescreve_mecanismo`, `omissoes_novas`, `cardinalidade`, `unicidade`, par em `consistencia`)
+     `prescreve_mecanismo`, `omissoes_novas`, `cardinalidade`, `unicidade`)
      vira uma correção que quem te despachou vai promover no mesmo turno — e o fiscal da etapa exige
      linha de veredito por id promovido. **Quem julga escreve.** Acrescente, para cada item, uma
      linha em `<phase_dir>/.gad/intent/c<C>/vereditos.txt`, no formato de quatro campos de sempre:
@@ -233,14 +228,6 @@ resolvem por ele (função `G`). Nunca misture os dois formatos na mesma fase.
    - Você **não** decide destino nem promove nada: continua valendo o item 5 do
      `intent-verifica.md`. O que muda é que o veredito do que você achou não passa mais pela mão de
      quem você está auditando.
-   - **Ciclo 0, primeira rodada:** você grava **só** `c0/releitura.json` + `c0/releitura.done`.
-     O `c0/ciclo.json` (sinos, correções, releitura) é escrito pelo **coordenador**, não por
-     você — e o campo `c0/ciclo.json`.`releitura` dele é o objeto **inteiro** do arquivo da
-     **rodada mais recente que você gravou** (com o `v: 2` e o veredito), por isso você
-     devolve o mesmo objeto no retorno: é o que ele copia, sem recalcular. Numa fase com
-     `c0b`/`c0c`/…, o coordenador copia do arquivo da ÚLTIMA rodada (`c0c/releitura.json`,
-     não `c0/releitura.json`) — copiar o da primeira rodada reintroduziria o veredito velho
-     (possivelmente `ok: false`) que a rodada seguinte já corrigiu.
    - **Correção pós-releitura (`c<C>b`, `c<C>c`, …):** quem te despachou corrige no mesmo
      turno, gera **novo commit** e te despacha **de novo**. Cada releitura seguinte grava um
      arquivo **próprio** (`c<C>b/releitura.json`, `c<C>c/releitura.json`, …) — **não
@@ -261,18 +248,18 @@ para leitura; o que você devolve é JSON válido, sem cerca de código):
   "artefatos": [{"path": "<caminho relativo>", "blob": "<blob do commit>"}],
   "contradiz": [{"ac_a": "AC-16", "ac_b": "AC-42", "porque": "<1 linha: o comportamento exigido por um é proibido pelo outro>"} | {"exigido_novo_sem_pergunta": "AC-nn"}],
   "prescreve_mecanismo": [{"path": "<caminho relativo>", "linha": <n>, "trecho": "<a prescrição, verbatim, ≤ 1 linha>"}],
-  "omissoes_novas": [{"path": "<caminho relativo>", "o_que": "<o que ficou pendurado — ou o D-NN desatualizado e os ids que ele cita>", "porque": "<por que é a emenda que abriu>"}],
+  "omissoes_novas": [{"path": "<caminho relativo>", "o_que": "<o que ficou pendurado — ou a divergência PROSA-BLOCO-DIVERGE e os ids envolvidos>", "porque": "<por que é a emenda que abriu>"}],
   "cardinalidade": [{"path": "<caminho relativo>", "linha": <n>, "declarado": "<o número escrito>", "contado": <n>, "onde": "<AC-nn ou seção da lista>"}],
   "unicidade": [{"ac_a": "AC-nn", "ac_b": "AC-nn", "verificacao": "<a fixture, grep ou diff que derruba os dois>"}],
-  "consistencia": "ok" | "não_disponível" | {"pares_insatisfaziveis": [{"ac_a": "AC-nn", "ac_b": "AC-nn", "porque": "<1 linha>"} | {"divergencia_nao_sustentada": "AC-nn", "aa": "AA-n", "porque": "<1 linha>"} | {"anexo_a_nao_citado": "AC-nn", "aa": "AA-n"}]},
+  "consistencia": "não_disponível",
   "ok": true,
   "observacao": "<opcional, 1 linha — só se você tropeçou em algo fora do escopo>"
 }
 ```
 
 `ok` = `true` quando as cinco listas (`contradiz`, `prescreve_mecanismo`,
-`omissoes_novas`, `cardinalidade`, `unicidade`) estão vazias **e** `consistencia` não é
-objeto com pares insatisfazíveis. Um `contradiz: []` honesto passa — o gate cobra que você
-tenha respondido às perguntas, não quantas respostas deu. Qualquer item → `ok: false`, e
-quem te despachou corrige no mesmo turno (novo `c<C>b/correcoes`, novo commit, nova
-releitura) **antes** do briefing C+1; o `briefing-build.sh` reprova `ok: false` em disco.
+`omissoes_novas`, `cardinalidade`, `unicidade`) estão vazias. Um `contradiz: []` honesto
+passa — o gate cobra que você tenha respondido às perguntas, não quantas respostas deu.
+Qualquer item → `ok: false`, e quem te despachou corrige no mesmo turno (novo
+`c<C>b/correcoes`, novo commit, nova releitura) **antes** do briefing C+1; o
+`briefing-build.sh` reprova `ok: false` em disco.

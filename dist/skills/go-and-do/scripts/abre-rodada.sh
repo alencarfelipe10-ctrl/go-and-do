@@ -14,13 +14,16 @@
 #   2. portões de entrada (gad-tools resolvível · .planning existe · fase no ROADMAP)
 #   3. retrato do disco (init.phase-op N) — diretório = `phase_dir`, ou `expected_phase_dir`
 #      quando a fase está no ROADMAP mas ainda não tem pasta (nunca um nome inventado) —
-#      + detecção do NN-PRE-SPEC.md (insumo
-#      pré-travado pelo usuário → campo `pre_spec` no JSON, repassado à Etapa 1)
+#      + inventário `context=sim|nao formato=novo|antigo|ausente` do NN-CONTEXT.md
 #   4. gate de contexto embutido (adendo 0.2: a Etapa 1 NÃO roda gate próprio;
 #      status=stop → exit 3 com instrução de retomar fresh)
 #   5. decisões de retomada mecânicas: `etapa_1` = pular|despachar|continuar_pergunta
 #      (retrato × frontmatter do NN-INTENT-REVIEW.md — por EXISTÊNCIA de artefato,
-#      agnóstico à versão que o criou, PC-2) · `etapa_2` = pular|despachar|continuar-2.4b
+#      agnóstico à versão que o criou, PC-2) · barreira do documento único (06-07, AC-37):
+#      `etapa_1 = despachar` sem NN-CONTEXT.md com `<!-- gad:documento-unico: v1 -->` na
+#      linha 2 → exit 6, ANTES de qualquer escrita (vale para rodada nova, retomada,
+#      --no-ship e --dry-run; `pular`/`continuar_pergunta` não passam por ela, AC-38)
+#      · `etapa_2` = pular|despachar|continuar-2.4b
 #      (2.A; `continuar-2.4b` — S-11, tarefa 48l — quando há `NN-PLAN.md` com
 #      `autonomous: false` e a fase ainda não tem `has_verification`: a marca de
 #      resolução é o próprio frontmatter virar `autonomous: true`, `nao_autonomos_pendentes`
@@ -48,7 +51,10 @@
 # a 1ª chave, `espelho`).
 # Exit: 0 ok · 2 argumento/portão · 3 contexto stop · 4 fase não encontrada (fora do
 #       ROADMAP) · 5 fase no ROADMAP mas diretório irresolúvel (phase_dir e
-#       expected_phase_dir vazios no init.phase-op).
+#       expected_phase_dir vazios no init.phase-op) · 6 a etapa 1 teria de começar e a
+#       fase não tem o documento de intenção no formato novo (NN-CONTEXT.md ausente ou sem
+#       `<!-- gad:documento-unico: v1 -->` na linha 2) — nada foi escrito; o dono roda
+#       /gad-discuss-phase N e depois /go-and-do N de novo.
 
 set -euo pipefail
 shopt -s nullglob
@@ -102,20 +108,21 @@ if [ -z "$PHASE_DIR" ]; then
   PHASE_DIR=$(jq -r '.expected_phase_dir // empty' <<<"$RETRATO")
 fi
 [ -n "$PHASE_DIR" ] || {
-  echo "ERRO: fase $FASE está no ROADMAP mas o diretório não pôde ser resolvido (phase_dir e expected_phase_dir vazios em init.phase-op $FASE) — confira o ROADMAP com /gad-phase, ou produza o insumo com /gad-pre-spec $FASE" >&2
+  echo "ERRO: fase $FASE está no ROADMAP mas o diretório não pôde ser resolvido (phase_dir e expected_phase_dir vazios em init.phase-op $FASE) — confira o ROADMAP com /gad-phase, ou abra a intenção da fase com /gad-discuss-phase $FASE" >&2
   exit 5
 }
 
-# PRE-SPEC: insumo pré-travado pelo usuário (sessão interativa anterior à rodada).
-# Detecção por existência exata, sem glob — se existe, a Etapa 1 o usa como insumo
-# do spec/discuss e a camada 0 o declara no sumário executivo.
-PRE_SPEC=""
-[ -f "$PHASE_DIR/$NN-PRE-SPEC.md" ] && PRE_SPEC="$PHASE_DIR/$NN-PRE-SPEC.md"
-# Inventário da fase (D7): só relata o que existe no disco — a decisão de rota é do
-# setup-intencao.sh. SPEC e CONTEXT presentes vencem o PRE-SPEC (o insumo não trava
-# uma intenção já escrita), e o coordenador declara o inventário no primeiro turno.
-sn() { [ -f "$1" ] && echo sim || echo nao; }
-INVENTARIO="spec=$(sn "$PHASE_DIR/$NN-SPEC.md") context=$(sn "$PHASE_DIR/$NN-CONTEXT.md") pre_spec=$(sn "$PHASE_DIR/$NN-PRE-SPEC.md")"
+# Documento único de intenção (06-07): a marca de formato é a linha 2 do NN-CONTEXT.md,
+# exatamente `<!-- gad:documento-unico: v1 -->` (o mesmo literal do conferidor do fork).
+# Inventário da fase (D7): só relata o que existe no disco; a barreira do estágio 5 é
+# quem decide parar.
+CTX_F="$PHASE_DIR/$NN-CONTEXT.md"
+MARCA_DOC='<!-- gad:documento-unico: v1 -->'
+if [ ! -f "$CTX_F" ]; then FORMATO_CTX=ausente
+elif [ "$(sed -n '2{s/\r$//;p;q}' "$CTX_F" 2>/dev/null)" = "$MARCA_DOC" ]; then FORMATO_CTX=novo
+else FORMATO_CTX=antigo
+fi
+INVENTARIO="context=$([ -f "$CTX_F" ] && echo sim || echo nao) formato=$FORMATO_CTX"
 tem() { [ -e "$PHASE_DIR/$NN-$1" ] && echo true || echo false; }
 gr()  { grep -qE "$2" "$PHASE_DIR/$NN-$1" 2>/dev/null && echo true || echo false; }
 
@@ -147,6 +154,15 @@ elif [ "$IR_ESTADO" = "needs_decision" ]; then
   ETAPA1=continuar_pergunta
 else
   ETAPA1=despachar   # sem artefato, ou blocked → re-tenta
+fi
+
+# Barreira do documento único (06-07, AC-37/AC-38): a etapa 1 começa na consultoria sobre o
+# documento que o dono aprovou no /gad-discuss-phase — sem ele, nada a revisar. Fica AQUI,
+# antes de qualquer escrita (formato da evidência, ponteiro, run-log, espelho), e vale com
+# ou sem --dry-run. Só barra o INÍCIO da etapa 1: `pular` e `continuar_pergunta` retomam.
+if [ "$ETAPA1" = despachar ] && [ "$FORMATO_CTX" != novo ]; then
+  echo "ERRO: a fase $FASE ainda não tem o documento de intenção aprovado por você. Rode /gad-discuss-phase $FASE (com você presente) e depois /go-and-do $FASE de novo." >&2
+  exit 6
 fi
 
 # S-11 (auditoria 48, tarefa 48l): plano `autonomous: false` sem resolução — a marca de
@@ -273,7 +289,6 @@ if [ "$DRY" = 0 ]; then
   gad_runlog "$PHASE_DIR" "$NN" run "0 abertura" \
     ${MODELO:+--modelo "$MODELO"} --camada 0 \
     --kv hook_instalado=$HOOK --kv etapa_1="$ETAPA1" --kv etapa_2="$ETAPA2" \
-    --kv pre_spec="$([ -n "$PRE_SPEC" ] && echo detectado || echo ausente)" \
     --kv inventario="$INVENTARIO" --kv cc_version="$CCV"
   ABERTA=true
 fi
@@ -308,13 +323,13 @@ gad_json_out "$SLUG" "$(jq -cn \
   --arg e1 "$ETAPA1" --arg e2 "$ETAPA2" \
   --argjson valerta "$VAULT_ALERTA" --arg vtermos "$VAULT_TERMOS" \
   --argjson tasks "$TASKS" --argjson aberta "$ABERTA" \
-  --arg ps "$PRE_SPEC" --arg inv "$INVENTARIO" \
+  --arg inv "$INVENTARIO" \
   --argjson posship "$POS_SHIP" --arg uats "$UAT_SUPERFICIE" --arg nal "$NAO_AUTONOMOS_LIST" \
   --argjson limp "$LIMPEZA" --argjson legr "$LEGADO_RASTREADO" \
   --arg fmt "$FORMATO" --arg fmc "$FORMATO_COMMIT" \
   '{args:{fase:$fase, ui:$ui, ai:$ai, no_ship:$ns, vault:$va, vault_profile:(if $vp == "" then null else $vp end), obs:$obs},
     retrato:$retrato, contexto:$ctx,
-    pre_spec:(if $ps != "" then $ps else null end), inventario:$inv,
+    inventario:$inv,
     etapa_1:$e1, etapa_2:$e2,
     nao_autonomos_pendentes:(if $nal == "" then [] else ($nal|split(",")) end),
     vault_alerta:(if $valerta then {alerta:true, termos:$vtermos,

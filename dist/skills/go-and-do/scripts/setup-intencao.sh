@@ -7,8 +7,6 @@
 # morre a classe "coordenador releu errado o estado e re-rodou o que estava pronto".
 #
 # Uso: setup-intencao.sh <phase_dir> <NN> [--com-resposta]
-#      setup-intencao.sh <phase_dir> <NN> --pre-spec-route legacy|structured
-#                        --resposta "<texto do dono>"   (grava a rota e devolve o setup)
 #      setup-intencao.sh --r6 <phase_dir> <NN>          (só o bloco R6, SEM efeito colateral)
 #
 # Higiene: se NN-CONTEXT.md existe e a revisão não está done/skipped, roda
@@ -16,42 +14,20 @@
 # um crash entre o discuss e o zeramento original deixaria a flag armada, e com ela o
 # plan-phase encadearia direto pro execute, atropelando a revisão).
 #
-# `entrada` (ordem de precedência, tudo por existência/frontmatter — PC-2: um CONTEXT
-# escrito à mão conta como pronto; o teste é existência, não autoria):
+# `entrada` (ordem de precedência, tudo por frontmatter do NN-INTENT-REVIEW.md — PC-2):
 #   incorporar_resposta  — despacho veio com --com-resposta (continuação de pausa)
-#   ja_pronto            — intent_review: done|skipped (idempotência: releia números e devolva)
+#   ja_pronto            — intent_review: done|skipped|aprovado_com_ressalva (idempotência:
+#                          releia números e devolva)
 #   reapresentar_pergunta— intent_review: needs_decision SEM resposta no despacho
-#   revisao              — intent_review: blocked (re-tenta) OU spec+context prontos
-#   spec                 — sem NN-SPEC.md
-#   discuss              — sem NN-CONTEXT.md
+#   revisao              — qualquer outro estado (sem INTENT-REVIEW, blocked, ciclo 1..4
+#                          interrompido): o primeiro trabalho da etapa 1 é a consultoria sobre o
+#                          documento único NN-CONTEXT.md
+# Desde a 06-07 (documento único, GODO-01/GODO-02) a etapa 1 não escreve intenção: o documento
+# chega aprovado pelo dono no /gad-discuss-phase, e a barreira do abre-rodada.sh (exit 6) só
+# deixa chegar aqui fase com ele no formato novo. Por isso não há mais as entradas `spec` e
+# `discuss`, nem a rota do PRE-SPEC (§0.5) e a conferência SPEC × PRE-SPEC (R2), que existiam
+# para alimentar os filhos de autoria. Garante a pasta de trabalho da intenção (decisão 1.5).
 #
-# Também detecta NN-PRE-SPEC.md (campo `pre_spec`: insumo pré-travado pelo usuário —
-# não muda a `entrada`, roteia o insumo aos filhos spec/discuss) e garante a pasta de
-# trabalho .intent/ (decisão 1.5).
-#
-# ── ACRÉSCIMOS DA v2.2.0 (plano dos 27 ajustes da intenção) ────────────────────
-# §0.5 ROTA DO PRE-SPEC (fail-closed). Com PRE-SPEC no disco, roda
-#   `confere-pre-spec.sh --so-bloco` e emite `pre_spec_bloco: ok|ausente|invalido`.
-#   `ausente|invalido` sem rota autorizada → `needs_decision` COM o texto do plano
-#   (migrar via pre-spec-migra.py OU autorizar a rota antiga). Nunca "zero decisões em
-#   silêncio". A resposta do dono vira estado durável em `.intent/pre-spec-route.json`
-#   `{path, sha256, mode, resposta_dono, ts}`, relido nas chegadas seguintes; sha256
-#   diferente do PRE-SPEC atual → a rota é invalidada e a pergunta volta.
-#   `pre_spec_mode` (structured|legacy|null) vai explícito no resultado — o coordenador
-#   repassa aos DOIS filhos; `legacy` acende `sino_pre_spec_sem_bloco` (obrigatório).
-#   Precedência (D7/D8): NN-SPEC.md e NN-CONTEXT.md no disco vencem o PRE-SPEC. A rota
-#   do §0.5 só roda em `entrada: spec|discuss` — com os dois artefatos presentes o
-#   PRE-SPEC já cumpriu o papel de insumo e não pode parar uma intenção pronta. Fora
-#   dessas entradas: `pre_spec_bloco: nao_aplicavel`, `pre_spec_mode: null`,
-#   `needs_decision: null` e `pre_spec_precedencia: spec_e_context_em_disco` (ou
-#   `estado_do_intent_review`, quando foi o INTENT-REVIEW que decidiu a entrada) — o
-#   coordenador declara no sumário que a rota foi pulada.
-# R2. Com SPEC **e** PRE-SPEC no disco, roda `confere-pre-spec.sh --exige-origem
-#   [--reqs .planning/REQUIREMENTS.md] <SPEC> <PRE-SPEC>` (paridade com o
-#   `confere-etapa.sh 1`, que passa as mesmas flags) e devolve `r2: {status, falhas[],
-#   avisos[]}` — as falhas (MARCA-SEM-ID, ID-INEXISTENTE, AC-SEM-ORIGEM,
-#   AC-ORIGEM-INEXISTENTE, …) reprovam no `confere-etapa.sh 1`; `EXTENSAO-SUSPEITA` e
-#   `ORIGEM-NAO-CONFERIDA` são avisos que o coordenador põe no briefing do revisor.
 # R6. `goal_roadmap` (Goal da entrada da fase no ROADMAP) + `issues` estruturadas:
 #   `{tipo: missing_requirement, id}` (id citado na linha **Requirements** da entrada e
 #   ausente do REQUIREMENTS.md) e `{tipo: phase_without_req_id}` (entrada sem linha
@@ -77,26 +53,17 @@ trap 'gad_autoregistro "setup-intencao.sh" "$?"' EXIT
 SO_R6=0
 if [ "${1:-}" = "--r6" ]; then SO_R6=1; shift; fi
 
-PD="${1:-}"; NN="${2:-}"; COM_RESPOSTA=0; ROTA_NOVA=""; RESPOSTA=""
-[ -n "$PD" ] && [ -n "$NN" ] || { echo "uso: setup-intencao.sh [--r6] <phase_dir> <NN> [--com-resposta] [--pre-spec-route legacy|structured --resposta \"<texto>\"]" >&2; exit 2; }
+PD="${1:-}"; NN="${2:-}"; COM_RESPOSTA=0
+[ -n "$PD" ] && [ -n "$NN" ] || { echo "uso: setup-intencao.sh [--r6] <phase_dir> <NN> [--com-resposta]" >&2; exit 2; }
 shift 2
 while [ $# -gt 0 ]; do case "$1" in
   --com-resposta)    COM_RESPOSTA=1; shift ;;
-  --pre-spec-route)  ROTA_NOVA="${2:-}"; shift 2 ;;
-  --resposta)        RESPOSTA="${2:-}"; shift 2 ;;
   *) echo "flag desconhecida: $1" >&2; exit 2 ;;
 esac; done
 [ -d "$PD" ] || { echo "ERRO: phase_dir inexistente: $PD" >&2; exit 2; }
-case "$ROTA_NOVA" in ""|legacy|structured) ;; *)
-  echo "ERRO: --pre-spec-route aceita 'legacy' ou 'structured' (veio: $ROTA_NOVA)" >&2; exit 2 ;;
-esac
-[ -z "$ROTA_NOVA" ] || [ -n "$RESPOSTA" ] || {
-  echo "ERRO: --pre-spec-route exige --resposta \"<texto do dono>\" (a rota é decisão dele, não do coordenador)" >&2; exit 2; }
 
-SPEC_F="$PD/$NN-SPEC.md"
+SPEC_F="$PD/$NN-SPEC.md"   # só para a T3 (fase antiga com SPEC no disco); não decide a entrada
 CTX_F="$PD/$NN-CONTEXT.md"
-PRE_SPEC=""
-[ -f "$PD/$NN-PRE-SPEC.md" ] && PRE_SPEC="$PD/$NN-PRE-SPEC.md"
 
 # ── raiz do projeto pela ÁRVORE (.planning/ROADMAP.md acima do phase_dir): a fase pode
 # morar fora de repo git (bancada, fixture) e o gad_project_root cairia no próprio dir.
@@ -240,95 +207,7 @@ fi
 if [ "$COM_RESPOSTA" = 1 ]; then          ENTRADA=incorporar_resposta
 elif [ "$ESTADO" = done ] || [ "$ESTADO" = skipped ] || [ "$ESTADO" = aprovado_com_ressalva ]; then ENTRADA=ja_pronto
 elif [ "$ESTADO" = needs_decision ]; then ENTRADA=reapresentar_pergunta
-elif [ "$ESTADO" = blocked ]; then        ENTRADA=revisao
-elif [ ! -f "$SPEC_F" ]; then             ENTRADA=spec
-elif [ ! -f "$CTX_F" ]; then              ENTRADA=discuss
-else                                      ENTRADA=revisao
-fi
-
-CPS="$GAD_SCRIPTS_DIR/confere-pre-spec.sh"
-ROTA_F="$(gad_fase_caminho "$PD" intent/pre-spec-route.json)"
-
-# ══ §0.5 — rota do PRE-SPEC (fail-closed) ════════════════════════════════════
-TEXTO_DECISAO='O PRE-SPEC não tem o bloco de decisões legível por máquina. Escolha: migrar o PRE-SPEC para o bloco (o `pre-spec-migra.py` gera um rascunho a partir da prosa para você revisar) OU autorizar a rota antiga (filho lê o arquivo inteiro, com sino `pre_spec_sem_bloco`).'
-
-BLOCO=nao_aplicavel; MODO=null; NEEDS=null; SINO_LEGACY=false; ROTA_ESTADO=nao_aplicavel
-SHA=""; PRECEDENCIA=null
-# A rota só roda quando ainda há artefato a gerar (entrada spec|discuss). Com SPEC e
-# CONTEXT no disco o PRE-SPEC é insumo já consumido: um PRE-SPEC sem bloco não pode
-# devolver `needs_decision` sobre uma intenção pronta (inversão de precedência, D8).
-if [ -n "$PRE_SPEC" ] && [ "$ENTRADA" != spec ] && [ "$ENTRADA" != discuss ]; then
-  if [ -f "$SPEC_F" ] && [ -f "$CTX_F" ]; then PRECEDENCIA='"spec_e_context_em_disco"'
-  else PRECEDENCIA='"estado_do_intent_review"'; fi
-elif [ -n "$PRE_SPEC" ]; then
-  SHA=$(sha256sum "$PRE_SPEC" | cut -d' ' -f1)
-  BLOCO=erro
-  if [ -f "$CPS" ]; then
-    SAIDA_BLOCO=$(bash "$CPS" --so-bloco "$PRE_SPEC" 2>&1) || true
-    B=$(printf '%s\n' "$SAIDA_BLOCO" | sed -n 's/^pre_spec_bloco: *//p' | tail -1)
-    case "$B" in ok|ausente|invalido) BLOCO="$B" ;; *) BLOCO=erro ;; esac
-  fi
-
-  # rota gravada anteriormente ainda vale? (o hash do PRE-SPEC tem de bater)
-  ROTA_MODO=""; ROTA_SHA=""
-  if [ -f "$ROTA_F" ]; then
-    ROTA_MODO=$(jq -r '.mode // empty' "$ROTA_F" 2>/dev/null || true)
-    ROTA_SHA=$(jq -r '.sha256 // empty' "$ROTA_F" 2>/dev/null || true)
-    if [ "$ROTA_SHA" = "$SHA" ]; then ROTA_ESTADO=valida; else ROTA_ESTADO=invalidada_por_hash; ROTA_MODO=""; fi
-  else
-    ROTA_ESTADO=ausente
-  fi
-
-  # gravação da resposta do dono (o coordenador chama com --pre-spec-route … --resposta …)
-  if [ -n "$ROTA_NOVA" ]; then
-    jq -n --arg p "$PRE_SPEC" --arg s "$SHA" --arg m "$ROTA_NOVA" --arg r "$RESPOSTA" \
-      --arg t "$(date -Is)" \
-      '{path:$p, sha256:$s, mode:$m, resposta_dono:$r, ts:$t}' > "$ROTA_F"
-    ROTA_MODO="$ROTA_NOVA"; ROTA_ESTADO=gravada
-  fi
-
-  if [ "$BLOCO" = ok ]; then
-    MODO='"structured"'
-    # rota estruturada por conferência mecânica (o bloco está lá e é válido)
-    if [ "$ROTA_MODO" != structured ]; then
-      jq -n --arg p "$PRE_SPEC" --arg s "$SHA" \
-        --arg r "${RESPOSTA:-bloco presente e válido — rota estruturada por conferência mecânica}" \
-        --arg t "$(date -Is)" \
-        '{path:$p, sha256:$s, mode:"structured", resposta_dono:$r, ts:$t}' > "$ROTA_F"
-      ROTA_ESTADO=gravada
-    fi
-  elif [ "$ROTA_ESTADO" = valida ] || [ "$ROTA_ESTADO" = gravada ]; then
-    case "$ROTA_MODO" in
-      legacy)     MODO='"legacy"'; SINO_LEGACY=true ;;
-      structured) # o dono mandou a estruturada e o bloco não está válido: fail-closed de novo
-                  MODO=null
-                  NEEDS=$(jq -cn --arg t "$TEXTO_DECISAO" --arg b "$BLOCO" \
-                    '{motivo:("pre_spec_bloco: " + $b + " — a rota gravada diz `structured` e o bloco não está válido no disco"), texto:$t}') ;;
-      *)          MODO=null
-                  NEEDS=$(jq -cn --arg t "$TEXTO_DECISAO" --arg b "$BLOCO" \
-                    '{motivo:("pre_spec_bloco: " + $b), texto:$t}') ;;
-    esac
-  else
-    MODO=null
-    NEEDS=$(jq -cn --arg t "$TEXTO_DECISAO" --arg b "$BLOCO" --arg r "$ROTA_ESTADO" \
-      '{motivo:("pre_spec_bloco: " + $b + " · rota: " + $r), texto:$t}')
-  fi
-fi
-
-# ══ R2 — SPEC × PRE-SPEC (mecânico) ══════════════════════════════════════════
-R2='{"status":"nao_aplicavel","motivo":"exige NN-SPEC.md e NN-PRE-SPEC.md no disco","falhas":[],"avisos":[]}'
-if [ -n "$PRE_SPEC" ] && [ -f "$SPEC_F" ] && [ -f "$CPS" ]; then
-  # Mesmas flags do confere-etapa.sh 1: sem `--exige-origem` o r2 do primeiro turno
-  # aceitava AC sem origem e o gate reprovava no fecho (fiação do P12 que não chegou aqui).
-  R2_ARGS=(--exige-origem)
-  R2_ROOT="$(raiz_planning "$PD" || true)"
-  [ -n "$R2_ROOT" ] && [ -f "$R2_ROOT/.planning/REQUIREMENTS.md" ] && R2_ARGS+=(--reqs "$R2_ROOT/.planning/REQUIREMENTS.md")
-  RC=0; OUT2=$(bash "$CPS" "${R2_ARGS[@]}" "$SPEC_F" "$PRE_SPEC" 2>&1) || RC=$?
-  FAL=$(printf '%s\n' "$OUT2" | { grep -E '^(MARCA-SEM-ID|ID-INEXISTENTE|FATO-SEM-EVIDENCIA|RESSALVA-SEM-LIMITACAO|AC-POR-PONTEIRO|AC-SEM-ORIGEM|AC-ORIGEM-INEXISTENTE|BLOCO-AUSENTE|BLOCO-INVALIDO) ' || true; } | jq -R . | jq -cs .)
-  AVI=$(printf '%s\n' "$OUT2" | { grep -E '^(EXTENSAO-SUSPEITA|ORIGEM-NAO-CONFERIDA) ' || true; } | jq -R . | jq -cs .)
-  case "$RC" in 0) ST=ok ;; 2) ST=bloco_invalido ;; *) ST=falha ;; esac
-  R2=$(jq -cn --arg s "$ST" --argjson f "$FAL" --argjson a "$AVI" --argjson rc "$RC" \
-    '{status:$s, exit:$rc, falhas:$f, avisos:$a}')
+else                                      ENTRADA=revisao   # sem INTENT-REVIEW, blocked ou ciclo interrompido
 fi
 
 # ══ T3 — salvaguarda do blob-base (só em entrada: revisao) ═══════════════════
@@ -379,14 +258,9 @@ T3=$(printf '%s' "$T3" | jq -cs .)
 R6=$(r6_json)
 
 gad_json_out setup-intencao "$(jq -cn --arg ch "$CHAIN" --arg e "$ENTRADA" --arg est "${ESTADO:-ausente}" \
-  --arg ps "$PRE_SPEC" --arg bl "$BLOCO" --argjson md "$MODO" --argjson nd "$NEEDS" \
-  --argjson sl "$SINO_LEGACY" --arg re "$ROTA_ESTADO" --arg rf "$ROTA_F" --argjson pc "$PRECEDENCIA" \
-  --argjson r2 "$R2" --argjson t3 "$T3" --argjson r6 "$R6" \
+  --argjson t3 "$T3" --argjson r6 "$R6" \
   '{chain_flag_zerada:$ch, entrada:$e, intent_review:$est,
-    pre_spec:(if $ps != "" then $ps else null end),
-    pre_spec_bloco:$bl, pre_spec_mode:$md, pre_spec_precedencia:$pc, pre_spec_rota:{estado:$re, arquivo:$rf},
-    sino_pre_spec_sem_bloco:$sl, needs_decision:$nd,
-    r2:$r2, t3:$t3,
+    t3:$t3,
     goal_roadmap:$r6.goal_roadmap, issues:$r6.issues,
     r6:{requirements_line:$r6.requirements_line, req_ids:($r6.req_ids // []),
         roadmap_entrada:$r6.roadmap_entrada, motivo:($r6.motivo // null)}}')"

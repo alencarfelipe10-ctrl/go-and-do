@@ -60,11 +60,6 @@
       "sha256": "e44331c9158f6698290adf5e1ac52cf7decf5d4b15f4677f4d4a9caf38820ca4",
       "tipo": "arquivo"
     },
-    "agents/gad-discuss.md": {
-      "modo": "644",
-      "sha256": "8d731bcf518453192e376a1ad4176a8d7127ce6863c67ba22cd4aa46f9f5db72",
-      "tipo": "arquivo"
-    },
     "agents/gad-doc-classifier.md": {
       "modo": "644",
       "sha256": "1aff7751d0827103da35d4ca8d4f680ba98fee889a44eb1d6ac3fb05d890d26d",
@@ -142,7 +137,7 @@
     },
     "agents/gad-intent.md": {
       "modo": "644",
-      "sha256": "018799aec1a92d63f45e03d973ae36af4ad5191b93204333a7aef695e07ceced",
+      "sha256": "05d4ec6714d37ae48977041521bd7689e24be2bf5c159c655c92118262c4cb1f",
       "tipo": "arquivo"
     },
     "agents/gad-mempalace-curator.md": {
@@ -167,7 +162,7 @@
     },
     "agents/gad-plan-checker.md": {
       "modo": "644",
-      "sha256": "42e91ec9895ae40bf68ee1f24b28d7a8ebd6b51160c6340a53afce5d3b94e91e",
+      "sha256": "98146c86c13765e932c8924801d794cd604c24b586492758faed8c2aac3bdf19",
       "tipo": "arquivo"
     },
     "agents/gad-plan.md": {
@@ -177,7 +172,7 @@
     },
     "agents/gad-planner.md": {
       "modo": "644",
-      "sha256": "252e1535f84b26a2039bc3165bc19f04efe9067d5c2a243007942adc90fd3172",
+      "sha256": "704d6f5688673119e1e6a25f84ada3df49dfe83e0a61b34a307b3460d1e9de0e",
       "tipo": "arquivo"
     },
     "agents/gad-project-researcher.md": {
@@ -198,11 +193,6 @@
     "agents/gad-security-auditor.md": {
       "modo": "644",
       "sha256": "30f36dba72655ec83a250d65dec5bf832380cd592966eb8f60521b5f87b11ccc",
-      "tipo": "arquivo"
-    },
-    "agents/gad-spec.md": {
-      "modo": "644",
-      "sha256": "6aab303cbc61dff5933138bb1377957f3cf4919329b0b76577bb3fd4f7b8459f",
       "tipo": "arquivo"
     },
     "agents/gad-ui-auditor.md": {
@@ -232,7 +222,7 @@
     },
     "agents/gad-verifier.md": {
       "modo": "644",
-      "sha256": "5bf20a8ad883bfe2103f041a3f14f19aa92ac5bff07eec93d4687336ab6c25ac",
+      "sha256": "eeca9f0e529e2b8c30b3dd67c4a9add8fed658536d9301f62f471a4e5b26fcd8",
       "tipo": "arquivo"
     },
     "gad-core/.gad-runtime": {
@@ -1820,29 +1810,34 @@
       "sha256": "ff26d783cf0ed22c46b6a12e66a50e21006df878d270fcd345aafe9b27ebc814",
       "tipo": "arquivo"
     },
-    "gad-core/bin/nosso/artefatos-novos.py": {
+    "gad-core/bin/nosso/abre-fase.sh": {
       "modo": "755",
-      "sha256": "b4ebe1f78e76703a2456bf1e250bf05b667861bb9f5a22a76a37ea44673e737d",
+      "sha256": "73d04380aa6220f53184974ef67f26c530bc882420eaea45c18c811d5ba44119",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/checkpoint-write.py": {
       "modo": "755",
-      "sha256": "e875bb3237e303c40cb47b918d79c43c34ca4fe83767a14feb1e34aa925d0fcb",
+      "sha256": "4b5de4f0033c16e65f401fc5f3eedfd3017fdcbbce15199b2b0aa3632703f788",
       "tipo": "arquivo"
     },
-    "gad-core/bin/nosso/context-guard.sh": {
+    "gad-core/bin/nosso/confere-documento.py": {
       "modo": "755",
-      "sha256": "79ef8e51f58724cb75065e30c48dd06ca9e9cb522657730329734334bb0cbff8",
+      "sha256": "bf3bb6e6f576d73dc422afe56ec9243a3a10597f727d3b00a0c5129d79aa031b",
+      "tipo": "arquivo"
+    },
+    "gad-core/bin/nosso/confere-pii.sh": {
+      "modo": "755",
+      "sha256": "1a152f82e88423b82ee91daee3197f52f26d7749f17e1e957b15f9278c24a99b",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/context-render.py": {
       "modo": "755",
-      "sha256": "d83ffebb7bc1c943ac7684fb75764a0949425a340d8e9585b994f26b146173a5",
+      "sha256": "ab04dbe1ac59c1db648b5daffc57cbe598c23b9fc9ef58912514da97948b86ce",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/decisions-index.py": {
       "modo": "755",
-      "sha256": "f92a1f897ddbde9b3a1b5d589f2682b3ea64fee9080a9519178114a231ef54f2",
+      "sha256": "90be63f2b510eb8f5a07ee9a3456656de9a0cc0ba303d2ffde3e36efa27b9727",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/digest-onda.sh": {
@@ -1852,7 +1847,7 @@
     },
     "gad-core/bin/nosso/discuss-finalize.sh": {
       "modo": "755",
-      "sha256": "60766819fe27ac1b6abc5f27b6b51cfe2271be7a780fd928ac7ccedc6dcc8615",
+      "sha256": "f26fc1ebb5cbe4988cf23fbc55f067086ebd6fa8b5a90632babbc5777d549cde",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/discuss-hooks-filter.sh": {
@@ -1862,17 +1857,17 @@
     },
     "gad-core/bin/nosso/discuss-init.sh": {
       "modo": "644",
-      "sha256": "d0d94584ff041b2c44c6c2e62408f01fa8384cd7b801c835ea7b1605e280507c",
+      "sha256": "ad10b979b58c3b78b9dc1ffe0b613152f89cd160f236874ecbdefd2d5aa151dd",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/discuss-render-guard.sh": {
       "modo": "755",
-      "sha256": "9175220db93710b0a9a31db8c126374d4293862537fdc3c2470453b5e977b549",
+      "sha256": "a04632d6f33cbdc5682fe65cda7100fdfc4d7246a597bfdeaa23503ad5acab2d",
       "tipo": "arquivo"
     },
-    "gad-core/bin/nosso/fh-render.py": {
-      "modo": "755",
-      "sha256": "fae04af53ed6ff525d614fab34aadb65e52c6ddf5691b90cc73aec3af5520fc4",
+    "gad-core/bin/nosso/nomes-permitidos.txt": {
+      "modo": "644",
+      "sha256": "9a044bfa881e8c4d6690abc0a21f068d3f1655754a4353fe88afc7a1292ed94f",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/plan-gate-irreversiveis.txt": {
@@ -1883,11 +1878,6 @@
     "gad-core/bin/nosso/plan-gate.py": {
       "modo": "644",
       "sha256": "aaf820650bc8ca91b8966eace33fde253e4f518e767d11fa8d0295dfbe26b8f1",
-      "tipo": "arquivo"
-    },
-    "gad-core/bin/nosso/pre-spec-batch.py": {
-      "modo": "755",
-      "sha256": "9c400f48b1cfcb8ba80e6cfe35fd62daa7226fcbf3dc8df19a9ae641002e411c",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/roda-suite.sh": {
@@ -1903,11 +1893,6 @@
     "gad-core/bin/nosso/scout.sh": {
       "modo": "755",
       "sha256": "57c400164768fa23e1e4baba460838727c446c07b7fc4d2b39fceceba75e2cd5",
-      "tipo": "arquivo"
-    },
-    "gad-core/bin/nosso/spec-init.sh": {
-      "modo": "755",
-      "sha256": "bac456011fea0b183c7b697e680ad6ea45bcd370da9619a5d79461e9dba4f8fb",
       "tipo": "arquivo"
     },
     "gad-core/bin/nosso/varre-pares.py": {
@@ -2132,7 +2117,7 @@
     },
     "gad-core/commands/gad/ns-ideate.md": {
       "modo": "644",
-      "sha256": "f37b510bd567e1d055a9f56073d8d9615ba1d46eb5c0e5e0bf19c1bfd4a69122",
+      "sha256": "2f9ad2750c1e359d935d4ea767c862e2f7e328c197198e94b117a1bca3a709a8",
       "tipo": "arquivo"
     },
     "gad-core/commands/gad/ns-manage.md": {
@@ -2152,7 +2137,7 @@
     },
     "gad-core/commands/gad/ns-workflow.md": {
       "modo": "644",
-      "sha256": "01f2b7ed531e770c45be1390c3b562b89b964c922643ee263fa99edee9812361",
+      "sha256": "3252243f0f82d5e669cdb661d49678bd68a39c197100e46b548eb3e2e953affe",
       "tipo": "arquivo"
     },
     "gad-core/commands/gad/onboard.md": {
@@ -2240,11 +2225,6 @@
       "sha256": "b393069a6f2dc7b161e5a4273acc1d574954a08391ee1005727b14ea61dbaa38",
       "tipo": "arquivo"
     },
-    "gad-core/commands/gad/spec-phase.md": {
-      "modo": "644",
-      "sha256": "3414c9da079c9438c3e907b6b29bdc1f185c94e3112cb03d5943d28f9fa18cba",
-      "tipo": "arquivo"
-    },
     "gad-core/commands/gad/spike.md": {
       "modo": "644",
       "sha256": "5462caa51a7f56a8ee955ebf48da987f0905b97a008a3376dfdee5eff51e43c6",
@@ -2322,7 +2302,7 @@
     },
     "gad-core/references/agent-contracts.md": {
       "modo": "644",
-      "sha256": "2ffa50ca4c3221aaa6265c697d1633afb4966a9ed02793546262b2a3057b1a36",
+      "sha256": "ecb698382a7df8a849e1563a9fd7f4af8047d65fd163c3a761232a468205c881",
       "tipo": "arquivo"
     },
     "gad-core/references/agent-skills-bootstrap.md": {
@@ -2578,11 +2558,6 @@
     "gad-core/references/few-shot-examples/verifier.md": {
       "modo": "644",
       "sha256": "6cdb7ef460d73336a6ba27b8c2c35f67f70655e94f8755d9d44c17d48fb303e4",
-      "tipo": "arquivo"
-    },
-    "gad-core/references/for-humans.md": {
-      "modo": "644",
-      "sha256": "f49b8efbeec3593a58489871152d50cc247bf2b870ba1a502e442af07ddf1d28",
       "tipo": "arquivo"
     },
     "gad-core/references/gad-run-resolver.md": {
@@ -3167,7 +3142,7 @@
     },
     "gad-core/templates/spec.md": {
       "modo": "644",
-      "sha256": "50013d671dcd8a5f095ad812a7ab89557c8df7fc42987cc0ab85b24b252f342e",
+      "sha256": "339264cfe2d0c2e2b4a478d07b07f1b3786a81a77251685241d962398d2d74e0",
       "tipo": "arquivo"
     },
     "gad-core/templates/state.md": {
@@ -3272,7 +3247,7 @@
     },
     "gad-core/workflows/autonomous.md": {
       "modo": "644",
-      "sha256": "dd8b5c43072a3ca96c6bc87606cb9b4deb4876c716f0b5578c30a52d2b6b17e5",
+      "sha256": "8ec604239a6de83b8dc5c6f329d27c92ee1c42eed4073b75bc6424ebecc54dc7",
       "tipo": "arquivo"
     },
     "gad-core/workflows/autonomous/steps/converge-banner.md": {
@@ -3357,7 +3332,7 @@
     },
     "gad-core/workflows/discuss-phase-assumptions.md": {
       "modo": "644",
-      "sha256": "bdacd729a7df88cb28b48efcd66b7f1389c0cd54c91b918d7ca0101983760039",
+      "sha256": "cea473ea47ea1688d16884d8fc2f4717cc11819934c8e320de83eed646635f95",
       "tipo": "arquivo"
     },
     "gad-core/workflows/discuss-phase-assumptions/steps/auto-advance-dispatch.md": {
@@ -3372,72 +3347,32 @@
     },
     "gad-core/workflows/discuss-phase.md": {
       "modo": "644",
-      "sha256": "6c56e71f45b3ab4c75fdf259064a8beaba91128add014448619e7d76762cf770",
+      "sha256": "9dcd23c0436fce5f85773c7e0c1d0cd860a8cc089a81fedfe46f1e02ecc0647d",
       "tipo": "arquivo"
     },
     "gad-core/workflows/discuss-phase/blocks/finish.md": {
       "modo": "644",
-      "sha256": "cd3c1e340a1a1d91ed701c38912a7f481242249f0caf67a7a5ccd82145cce767",
+      "sha256": "49d00c09758bed56856220e9213754fed21fee3bd3f58d725e4780ba7a21a8c8",
       "tipo": "arquivo"
     },
-    "gad-core/workflows/discuss-phase/modes/advisor.md": {
+    "gad-core/workflows/discuss-phase/blocks/probes.md": {
       "modo": "644",
-      "sha256": "30a7ccc999c9566ced4a7b38ca7d0e8a72135bd386382c2e6679ed5d93881b30",
-      "tipo": "arquivo"
-    },
-    "gad-core/workflows/discuss-phase/modes/all.md": {
-      "modo": "644",
-      "sha256": "c20f95c2c2e9f99f8a37fa292c91f745aa5b18444fe3a44bf6652ab6e323fd64",
-      "tipo": "arquivo"
-    },
-    "gad-core/workflows/discuss-phase/modes/analyze.md": {
-      "modo": "644",
-      "sha256": "440ef488ba9190d1f3e85729ad1a703614a024effb057e681e76265df04c71eb",
-      "tipo": "arquivo"
-    },
-    "gad-core/workflows/discuss-phase/modes/auto.md": {
-      "modo": "644",
-      "sha256": "64b67cf0817d552a3456aabe373c9e957c857221060c25599bc62af874a94a0c",
-      "tipo": "arquivo"
-    },
-    "gad-core/workflows/discuss-phase/modes/batch.md": {
-      "modo": "644",
-      "sha256": "9a73b49bc7f435cc4e027e5e7bc9d83fe3ccf1b1ba17dd4b770e20e5282fa8d0",
-      "tipo": "arquivo"
-    },
-    "gad-core/workflows/discuss-phase/modes/chain.md": {
-      "modo": "644",
-      "sha256": "107446837d13f81571fadbfd7b02feb9a0e1689a01840e7887a04679bd7629c9",
+      "sha256": "d632eae33cab4bc39afd30ed28edf253002fbebc16bfcecb2556388cf3ddbf5b",
       "tipo": "arquivo"
     },
     "gad-core/workflows/discuss-phase/modes/default.md": {
       "modo": "644",
-      "sha256": "656826ccf433a311938389f765df5a8f103b083362a8ad02afc991aa696a9867",
-      "tipo": "arquivo"
-    },
-    "gad-core/workflows/discuss-phase/modes/power.md": {
-      "modo": "644",
-      "sha256": "767ace1028398cc7047874071ee63e9685ec8eca2f2e6936fa88e5bfd9dc7bbc",
-      "tipo": "arquivo"
-    },
-    "gad-core/workflows/discuss-phase/modes/text.md": {
-      "modo": "644",
-      "sha256": "f82a89df68b2420a5fcb8592ab1b12a61619e105209e094f5df2e7f4a62b3a8d",
+      "sha256": "1793a01d739f98697b5597b186fa536f8d402cf14872d9423fc7cfb97aed3345",
       "tipo": "arquivo"
     },
     "gad-core/workflows/discuss-phase/templates/checkpoint.json": {
       "modo": "644",
-      "sha256": "1c8cf186e2c0b9a7f071504983d05eda8ca6a6c40618a48bfc1a02ff7d7e5def",
+      "sha256": "d1b785d5f70ac49a06d8b519d061c7b92fe66b6d164675a8c8ddc9bab522f258",
       "tipo": "arquivo"
     },
     "gad-core/workflows/discuss-phase/templates/context.md": {
       "modo": "644",
-      "sha256": "b79ca0239da58e8aedcc117ce00bb39e917203a94d41a4a581b270487dba3dff",
-      "tipo": "arquivo"
-    },
-    "gad-core/workflows/discuss-phase/templates/discussion-log.md": {
-      "modo": "644",
-      "sha256": "e829d02ec03db8bbc4157845e52283074ef57b9491c04f73833f2cb0876456df",
+      "sha256": "f1776af7b3c84da476557097ea9b5855c2434daed88bda7c2c1d4a8ea88c8b0d",
       "tipo": "arquivo"
     },
     "gad-core/workflows/do.md": {
@@ -3472,7 +3407,7 @@
     },
     "gad-core/workflows/execute-phase.md": {
       "modo": "644",
-      "sha256": "c1a394f84b406e9126f10e91282d4f71f41bbacd62996842d6e64b918e7be92c",
+      "sha256": "4c73c0ffc50fd7040c392d0daa9120e62b4e5af41facc8acee53037ae45db438",
       "tipo": "arquivo"
     },
     "gad-core/workflows/execute-phase/detail/elaboration.md": {
@@ -3637,12 +3572,12 @@
     },
     "gad-core/workflows/help/modes/full.compact.md": {
       "modo": "644",
-      "sha256": "0588b28525189ab145f1ff2f220ca8bfbd05959e46bdcd935c730341904b002c",
+      "sha256": "53de352ce6a1d4310c990fe8192c81d6f7e947f8ccfe19fb4a527cd9c6f2aa7c",
       "tipo": "arquivo"
     },
     "gad-core/workflows/help/modes/full.md": {
       "modo": "644",
-      "sha256": "619c36b382e08f285d201de51b6db19dfcfce4dfbec02d1ed66fc065ebec4e81",
+      "sha256": "3efec8d3e9b063a975b3f9873257013e0345da3b696d6d7aa51909e57285b65f",
       "tipo": "arquivo"
     },
     "gad-core/workflows/help/modes/topic.md": {
@@ -3777,7 +3712,7 @@
     },
     "gad-core/workflows/plan-phase.md": {
       "modo": "644",
-      "sha256": "81b297e89973f03ca5e319b991f3236a59bff9201eb20f455b0d0721fa8ce124",
+      "sha256": "f35285e3cd6e6ee1711187dc44dd7e602125880002dfb533dcd6d0c6357912df",
       "tipo": "arquivo"
     },
     "gad-core/workflows/plan-phase/blocks/auto-advance.md": {
@@ -3792,7 +3727,7 @@
     },
     "gad-core/workflows/plan-phase/blocks/contingencies.md": {
       "modo": "644",
-      "sha256": "790a391966b5d7b26c9ab0930f094f78623300ca9d7275fde46672f1bdc66a50",
+      "sha256": "591fa48a65e39340477f71276da89f57a2c01989aae514954aa019f15bb1c57e",
       "tipo": "arquivo"
     },
     "gad-core/workflows/plan-phase/blocks/gap-analysis.md": {
@@ -3802,7 +3737,7 @@
     },
     "gad-core/workflows/plan-phase/blocks/planner-prompt.md": {
       "modo": "644",
-      "sha256": "98d4d45428d114c2cd90e4588c307d96e7eb268cddf623d1450d96ea896b6f0e",
+      "sha256": "431b82e95266715b642a872f1fc34ddbd9d1116e5e5cc6d370046241681c0a26",
       "tipo": "arquivo"
     },
     "gad-core/workflows/plan-phase/blocks/pre-plan-gates.md": {
@@ -4070,16 +4005,6 @@
       "sha256": "bc40705ad04d08b5ade3dce112943cdbd215e0305e3055244ea05d0dd409bfdc",
       "tipo": "arquivo"
     },
-    "gad-core/workflows/spec-phase.md": {
-      "modo": "644",
-      "sha256": "d3214843f4bd4d1b40df3f2c0a519e6a36ffbc9b214d51a15a107a169b4a7575",
-      "tipo": "arquivo"
-    },
-    "gad-core/workflows/spec-phase/blocks/probes.md": {
-      "modo": "644",
-      "sha256": "c53d2001c1ec8522c8b9cfd318d236014933e3baaf878a67370e1355f3ce155e",
-      "tipo": "arquivo"
-    },
     "gad-core/workflows/spike-wrap-up.md": {
       "modo": "644",
       "sha256": "2c1677d801adf871700cc45263127f62c8f626cc23c18a12295f23af4e01b0bb",
@@ -4157,7 +4082,7 @@
     },
     "gad-file-manifest.json": {
       "modo": "644",
-      "sha256": "2640f6aa81ad18b67b4a7c6e0189570047ca562f528d49fb54a8702a32c7becb",
+      "sha256": "d47426793a8b1d56625f9a63c3352cc91ef45e410a17d5e69bb79520905d8c69",
       "tipo": "arquivo"
     },
     "hooks.json": {
@@ -4172,7 +4097,7 @@
     },
     "hooks/gad-bash-guard.sh": {
       "modo": "755",
-      "sha256": "d66337513948458d0150ce44f81c661a0a551404be6da6a26dba2a489d65d66d",
+      "sha256": "8d809faa4c2811260afe27762bb0b52b63d262943a30a366d95cc642e6102197",
       "tipo": "arquivo"
     },
     "hooks/gad-config-reload.js": {
@@ -4197,7 +4122,7 @@
     },
     "hooks/gad-lifecycle.sh": {
       "modo": "755",
-      "sha256": "12a3bfb8cec70f7b9c25a3af4f78a517d3b29ae0c71cb0aa7b5f9b4e77596723",
+      "sha256": "f6b472b1d06b9e2fdf9938381c82044a2b56d38d1064b56fa29c2ffa995e1739",
       "tipo": "arquivo"
     },
     "hooks/gad-node-runner.sh": {
@@ -4337,7 +4262,7 @@
     },
     "hooks/notify-telegram.sh": {
       "modo": "755",
-      "sha256": "4f1a0714b77369a25b9ad9ee922fa2602e95bd66346ce5e43e399f4b0c29e7fc",
+      "sha256": "55c3636b9cf5a34a38b95b2f8969717f034cf68db9f388715aef54dc2e8092f0",
       "tipo": "arquivo"
     },
     "hooks/package.json": {
@@ -4432,7 +4357,7 @@
     },
     "skills/gad-discuss-phase/SKILL.md": {
       "modo": "644",
-      "sha256": "8f0b59d956061ab932c09ecac1fdde6822586eadda061e101292be5abb5635a3",
+      "sha256": "c13b468f19028bb0e2655fcddc708db383c511c7797af024de1dd8c2d03c13f0",
       "tipo": "arquivo"
     },
     "skills/gad-docs-update/SKILL.md": {
@@ -4552,7 +4477,7 @@
     },
     "skills/gad-ns-ideate/SKILL.md": {
       "modo": "644",
-      "sha256": "55d632089378f660760e7ae9e7800683587e66376ef27890d5583f0074213b4b",
+      "sha256": "73a62acee68368652198230c01352a75c79bdbdb45fccc51c98e45b4b2c5b558",
       "tipo": "arquivo"
     },
     "skills/gad-ns-manage/SKILL.md": {
@@ -4572,7 +4497,7 @@
     },
     "skills/gad-ns-workflow/SKILL.md": {
       "modo": "644",
-      "sha256": "729100214bba2d6b2199919997c1c9320cd7320739cf75f1dff42bb2768426ad",
+      "sha256": "4988a5ecdaac02530694f281b83b5fe2a4d6576574bda6c18a251e0d665b14f6",
       "tipo": "arquivo"
     },
     "skills/gad-onboard/SKILL.md": {
@@ -4603,41 +4528,6 @@
     "skills/gad-pr-branch/SKILL.md": {
       "modo": "644",
       "sha256": "5d7fdc526646588a8051941dd62f7a8b5659af8075200d78ba22a78e5a981340",
-      "tipo": "arquivo"
-    },
-    "skills/gad-pre-spec/README.md": {
-      "modo": "644",
-      "sha256": "cfd49a03b3ff456a5338164a17b5f8c7a75db3aca83fa21cfa8bdd38ecad8cef",
-      "tipo": "arquivo"
-    },
-    "skills/gad-pre-spec/SKILL.md": {
-      "modo": "644",
-      "sha256": "926d4b91ba3427c2c14620e326226fc1ff660df612e3f24f13468a18c462d832",
-      "tipo": "arquivo"
-    },
-    "skills/gad-pre-spec/scripts/abre-fase.sh": {
-      "modo": "755",
-      "sha256": "99f214018c2d695b74b2fdc5fcb6e899e4e4a4c1d5d16d8bc61459f31f3aca83",
-      "tipo": "arquivo"
-    },
-    "skills/gad-pre-spec/scripts/confere-pii.sh": {
-      "modo": "755",
-      "sha256": "f0fce3bece6aef15a0539a0e46f29f466a1dab4a6f4365babba0d340ef0bb243",
-      "tipo": "arquivo"
-    },
-    "skills/gad-pre-spec/scripts/gera-bloco.py": {
-      "modo": "755",
-      "sha256": "17f006c6924f4fbf5a3e4820a2ebab2f794727b83b4b9dc89131bcf309feaf55",
-      "tipo": "arquivo"
-    },
-    "skills/gad-pre-spec/scripts/nomes-permitidos.txt": {
-      "modo": "644",
-      "sha256": "0449c078048f3a742ff4bb8321e2ce47cdb180cdd7365c942fd08e40cf8752b3",
-      "tipo": "arquivo"
-    },
-    "skills/gad-pre-spec/templates/PRE-SPEC.md": {
-      "modo": "644",
-      "sha256": "5f9713e2db41bd5e50451cf95c6a92a2fdf58ebecc7d0148d62f5495ac537296",
       "tipo": "arquivo"
     },
     "skills/gad-profile-user/SKILL.md": {
@@ -4693,11 +4583,6 @@
     "skills/gad-sketch/SKILL.md": {
       "modo": "644",
       "sha256": "3947745e7099543d9c5b62a19084c0af80e6e3b8e870e2ab66850483f8406ba4",
-      "tipo": "arquivo"
-    },
-    "skills/gad-spec-phase/SKILL.md": {
-      "modo": "644",
-      "sha256": "6c2a0829cfaaf78cb00d1283b65b343ec37d4171fa99cf994abcb5d8c46e4961",
       "tipo": "arquivo"
     },
     "skills/gad-spike/SKILL.md": {
@@ -4762,7 +4647,7 @@
     },
     "skills/go-and-do/SKILL.md": {
       "modo": "644",
-      "sha256": "26fcca1bfcaed54f34472aa089cda0a3d866d0f2db144477a46f8c66812016df",
+      "sha256": "ccba5ddfe39dbbfe078d3af4ef36510b05df4b671dd89a88b4711a805b9bdcdb",
       "tipo": "arquivo"
     },
     "skills/go-and-do/prompts/categorias-achados.md": {
@@ -4805,39 +4690,29 @@
       "sha256": "e1c2d89b5d3070c9198acf5d0e63ff4fe897ca527f068766528b3907928f406e",
       "tipo": "arquivo"
     },
-    "skills/go-and-do/prompts/intent-discuss.md": {
-      "modo": "644",
-      "sha256": "ad63efea52cdf4b7418f450e5dec38c028d6e5f6b96f65b5a5834dcea8c98ce8",
-      "tipo": "arquivo"
-    },
     "skills/go-and-do/prompts/intent-releitura.md": {
       "modo": "644",
-      "sha256": "9f88c4bee7c18c2acf7a4d11a348dd7c38827135046295ec1ec7d0b5809c934d",
-      "tipo": "arquivo"
-    },
-    "skills/go-and-do/prompts/intent-spec.md": {
-      "modo": "644",
-      "sha256": "d18ffc774e6c55029e1fc7cd5d629da18f1933a96131a5b6c53c6d72f6c25562",
+      "sha256": "33785741a96d097ca2cda94947ff6d3e788d3fc3c4abc8900effdcbeea98b615",
       "tipo": "arquivo"
     },
     "skills/go-and-do/prompts/intent-verifica.md": {
       "modo": "644",
-      "sha256": "5dd97c4a9e385f4c4326747f666d0b63bc0fbb0875d56cbd099f46865a411e98",
+      "sha256": "1a571053e8f8d079e58950171cac12aacade4750e8cdf9d58a456c0dfe18d191",
       "tipo": "arquivo"
     },
     "skills/go-and-do/prompts/intent.md": {
       "modo": "644",
-      "sha256": "54329863b582e6731f8d344ee07777dce997184cbe7effedd6921ffdb55d70d7",
+      "sha256": "6eff15acc2afada6f3ce1e50da1e900f920e4884196a7a16ff30f85a781e443b",
       "tipo": "arquivo"
     },
     "skills/go-and-do/prompts/plan.md": {
       "modo": "644",
-      "sha256": "c7a18f1bd4876d69885a6041aa1e2916daaf3be0e277ef9b13152e1df727dcc7",
+      "sha256": "52c2c421d0961e5345a6951766a0a9e7f8395d59de377db981869aaf371241be",
       "tipo": "arquivo"
     },
     "skills/go-and-do/prompts/resumo.md": {
       "modo": "644",
-      "sha256": "3e247529dba583dfddadfdfb3326da63fb941b822486ec49c1c4bd59e9534d82",
+      "sha256": "9db217fbd868c43a61c303688f5636e183d0033c9120878529f6bfd8040807be",
       "tipo": "arquivo"
     },
     "skills/go-and-do/prompts/secure.md": {
@@ -4862,12 +4737,12 @@
     },
     "skills/go-and-do/scripts/abre-rodada.sh": {
       "modo": "755",
-      "sha256": "8e223b0021948dfdbd8af7f7020edd669c0b3c8cc808fa8a0c16626d84daf811",
+      "sha256": "fa35483345d23a25453998ece422b3439018bf884f59f11b7a743256eea8561f",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/briefing-build.sh": {
       "modo": "755",
-      "sha256": "7b0b0ae3d3e266f0e0a75625314248f58b93910eb9f1fe2784d9e4ae729afa73",
+      "sha256": "f1b077a7d001aff0fe755aa34c6088ac1cf09f4231e155f86117145588bebb52",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/calcula-files.sh": {
@@ -4882,7 +4757,7 @@
     },
     "skills/go-and-do/scripts/commita-artefatos.sh": {
       "modo": "755",
-      "sha256": "94b6a4cb2b43ae8aa39527017866939a3ac78cea58140c7ead80df7f954b6b9e",
+      "sha256": "50e0008058ffc75eb0b18d0535437ad44570a98e37ced72767c2a4a6a5b45834",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/confere-arquivos-novos.sh": {
@@ -4902,22 +4777,17 @@
     },
     "skills/go-and-do/scripts/confere-etapa.sh": {
       "modo": "755",
-      "sha256": "feb0fc225780d97b135e75c51576198891fcb06ca38e24df957d11f250d406ea",
+      "sha256": "b61e609a7b9558ecf0864c432159a943b6c67b3babeaffe266440e98325876db",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/confere-plano.sh": {
       "modo": "755",
-      "sha256": "baad79a8f4967848505442b77d7fa93477636de4f6ed5ff3f79961feac9cb388",
+      "sha256": "d152b9ab281ab4c14ad8d0ff4c2c90504636ecfc6f222e90b1ad8b432da5d0f4",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/confere-ponteiros-plano.sh": {
       "modo": "755",
       "sha256": "393dd357b85e9729aa950fcf0feeeac41d58b2c2439a0e8516f63639a15b2597",
-      "tipo": "arquivo"
-    },
-    "skills/go-and-do/scripts/confere-pre-spec.sh": {
-      "modo": "755",
-      "sha256": "5715f467dd0ceccf5818206d51d5858723048386cda27c2da3b7010f246f5f71",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/confere-precondicoes.sh": {
@@ -4927,17 +4797,12 @@
     },
     "skills/go-and-do/scripts/confere-reconciliacao.sh": {
       "modo": "755",
-      "sha256": "ffb39b6ab506bd69e71c2d97c3f77c28165ec64be9705efd8817a3b17f584ea5",
+      "sha256": "06ad1a56161151f7bdbb57330744ca1e9f785992e9b3c8f5c2a2bdc66f97da86",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/confere-rotas.sh": {
       "modo": "755",
       "sha256": "84e1e77e79a34cac2aa1b1e1ec410053d03d1d45e2cd4e8a9e3d593ae6ad2d1e",
-      "tipo": "arquivo"
-    },
-    "skills/go-and-do/scripts/confere-sinos.sh": {
-      "modo": "755",
-      "sha256": "45da2c20123d862b007b8e02213b784224f4939cb1f6d7f690da0811eb5f63f1",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/confere-user-setup.sh": {
@@ -4952,7 +4817,7 @@
     },
     "skills/go-and-do/scripts/correcoes-commit.sh": {
       "modo": "755",
-      "sha256": "02e8854573558d2e553b7043f943f5d6763b7eef391ee201897ce56498fc9064",
+      "sha256": "24ce6f95b0a1dd2d337f0e735433848e3e0bbe89292e80a68af342c8eba26dd6",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/decide-ciclo.sh": {
@@ -4967,7 +4832,7 @@
     },
     "skills/go-and-do/scripts/gera-intent-review.sh": {
       "modo": "755",
-      "sha256": "ec969a27f02cf69bb35d6f392e85ed4d89cc1d1983e1fd3f9389c925dbe93a26",
+      "sha256": "b66f0ae098ea4db2ffe5612993cd9c0c1e3f38c5b0736b4a7de3fccdbc076d68",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/grava-convergence.sh": {
@@ -5027,7 +4892,7 @@
     },
     "skills/go-and-do/scripts/manifests/etapa-1.json": {
       "modo": "644",
-      "sha256": "bb09eff0752f8735e417f7a02d848cc095bf9cf3b90f0ced99c21f0334dd6ca7",
+      "sha256": "27ff8d0234ebe03695a77661e97fa4ba1b448d6de5136abb4c8d111da160ac56",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/manifests/etapa-2.5.json": {
@@ -5097,17 +4962,12 @@
     },
     "skills/go-and-do/scripts/pre-despacho.sh": {
       "modo": "755",
-      "sha256": "462d085c3cd804e9b9a2e8f77400b583b811b82d2ddf745c57af80b5d0d3c144",
+      "sha256": "215c52bc7ccfd81525e7c934ad2801fd039cde5e833c83e3a5dc4563b4a718f1",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/pre-gate.sh": {
       "modo": "755",
       "sha256": "c9df57391bf1bdbe5f676a2df0323f3de43a0e1990d7af91da1ed6923c10275b",
-      "tipo": "arquivo"
-    },
-    "skills/go-and-do/scripts/pre-spec-migra.py": {
-      "modo": "755",
-      "sha256": "7bc386fcf1b8ab2c9fd1483772f9bb711201b3e57705509fdf86328d6ee1a066",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/precos.json": {
@@ -5127,7 +4987,7 @@
     },
     "skills/go-and-do/scripts/revalida-documentos.sh": {
       "modo": "755",
-      "sha256": "286345d5142861f0011459854399a1b0918bc0995a199edc9ee186f209779dde",
+      "sha256": "dc4db1855dc7c0db7f926d05a80f8750f0b3b122935ce5189c6350660956e3d5",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/roda-agy.sh": {
@@ -5157,7 +5017,7 @@
     },
     "skills/go-and-do/scripts/setup-intencao.sh": {
       "modo": "755",
-      "sha256": "4109a778b731a8b61ab7a1b09522b99e8c831262866d077e4cce6531ff8b034f",
+      "sha256": "6368017d4f30f9767de7d73decbcb27148a32274cac786a1447873f797431606",
       "tipo": "arquivo"
     },
     "skills/go-and-do/scripts/spot-check-ponteiros.sh": {
@@ -5212,7 +5072,7 @@
     },
     "skills/go-and-do/workflow-etapa-1.md": {
       "modo": "644",
-      "sha256": "c25b5339f0d6c1491177ffa5045099c1ef404f85db39aec007effaad42cf529e",
+      "sha256": "92ae61bd6dd87774851f451ff90d5ccd10e4f7997fb3d2c5d59a7d95bcf9146b",
       "tipo": "arquivo"
     },
     "skills/go-and-do/workflow-etapa-2.5.md": {
@@ -5267,6 +5127,6 @@
     "commit": "be4bf9f9a654f103c1713618b9d662e9f44eb605"
   },
   "produto": {
-    "versao": "3.1.1"
+    "versao": "3.2.0"
   }
 }

@@ -1,207 +1,88 @@
 Apply response_language to all user-facing prose — narration between tool calls, status updates, progress notes, and findings included; preserve code, paths, and identifiers.
 
-# Default mode — interactive discuss-phase
+# Entrevista de negócio — o roteiro do /gad-discuss-phase
 
-> **Lazy-loaded.** Read this file from `workflows/discuss-phase.md` at `initialize`, for **every
-> interactive flow** (no `--auto`, no `--power`) — it is the base that `--all`,
-> `--chain`, `--text`, `--batch` and `--analyze` overlay; without it the questions of
-> `check_existing`/`present_gray_areas` and the checkpoint-writer instructions below would be
-> missing from those runs.
+> **Lido uma vez**, no `initialize` do `workflows/discuss-phase.md`: toda rodada do comando único é interativa
+> (sem dono, a barreira para antes). Aqui estão as telas de pergunta e as falas ao dono; a regra que as governa é a
+> `<regra_da_entrevista>` do workflow, e as gravações são as do passo `interview`.
 
-Read `~/.claude/gad-core/references/gate-prompts.md` now: it holds the checkpoint/gate prompt
-patterns the questions below follow. The core does not load it because `--auto` never asks.
+## Quem é quem
 
-This document defines the interview: the philosophy, the guardrails and `discuss_areas` for
-the default flow. The shared steps (`initialize`, `check_blocking_antipatterns`, `check_spec`,
-`check_existing`, `load_prior_context`, `cross_reference_todos`, `scout_codebase`,
-`analyze_phase`, `present_gray_areas`) live in the parent file and run for every mode.
+O dono decide o negócio: o que é entregue, o que fica público, o que é irreversível, custo, prazo e risco de perder
+algo. Ele não tem formação técnica e segue a recomendação do modelo em toda escolha técnica. O modelo constrói e
+decide sozinho todo o resto — arquitetura, bibliotecas, formato interno, como testar — e escreve isso em «A critério
+do planner» quando vale registrar.
 
-## Philosophy
+## A tela de perguntas
 
-User = founder/visionary. Claude = builder.
+- São até 4 perguntas por tela, cada uma com até 4 opções.
+- Cada opção traz um rótulo curto (a escolha) e uma descrição com: o que muda na prática · a consequência · e, na
+  recomendada, a palavra «recomendo» e o porquê em uma linha. A recomendada vem primeiro.
+- Só vira pergunta o que muda algo que o dono sente. O que o modelo resolve sozinho não vira tela.
+- O texto da pergunta e das opções nunca cita arquivo, função ou ferramenta, nem id (`D-NN`, `R-n`, `AC-nn`):
+  fala da consequência, em linguagem leiga. Exemplo: em vez de «a tag pública depende do gate de prova?», pergunte
+  «a versão nova só sai para o público depois de provada, mesmo que isso atrase a entrega?».
+- Quando a escolha sair caro ou sem volta, pergunte na mesma tela por quê aceitar o custo: essa frase vai ao depósito
+  como justificativa (`--reversibility costly|one-way --reversibility-rationale-file`).
+- Pergunta que só o cliente responde: redija-a para o dono encaminhar e espere a resposta.
 
-The user knows: how they imagine it working, what it should look/feel like, what's essential vs
-nice-to-have, specific behaviors or references they have in mind.
+## Depois de cada resposta
 
-The user doesn't know (and shouldn't be asked): codebase patterns (researcher reads the code),
-technical risks (researcher identifies these), implementation approach (planner figures this out),
-success metrics (inferred from the work).
+A resposta vai ao depósito assim que é dada, antes da próxima pergunta (`checkpoint-write.py add-decision "$CKPT"
+--origin owner …`, forma completa no passo `interview` do workflow): a pergunta, as opções mostradas, a escolhida e a
+resposta como o dono quis dizer. Só o dono decide; o depósito não aceita outra origem.
 
-Ask about vision and implementation choices. Capture decisions for downstream agents. You are a
-thinking partner, not an interviewer.
+- «Você decide» / «tanto faz» não é decisão: vira uma linha em «A critério do planner».
+- «Isso fica para depois» é resposta: vira pendência, com o motivo.
+- Ideia fora do escopo da fase: «[ideia] seria uma entrega nova — fica anotada para uma fase futura. Voltando a
+  [tema]: …». Vai para «Pendências e ideias adiadas»; não se discute agora.
+- Quando o dono citar um documento, leia-o (ou confirme que existe) na hora e acrescente-o às referências.
 
-## Scope guardrail
+## Respostas vazias
 
-The phase boundary comes from ROADMAP.md and is fixed — discussion clarifies HOW to implement
-what's scoped, never WHETHER to add new capabilities.
+Resposta vazia ou só com espaços: «Outro» sem texto → escreva «O que você quer dizer?», pare e espere a mensagem
+dele. Qualquer outra resposta vazia → repita a pergunta uma vez; se vier vazia de novo, mostre as opções como lista
+numerada em texto. Nunca siga com resposta vazia.
 
-Allowed (clarifying ambiguity): "How should posts be displayed?" (layout), "What happens on empty
-state?" (within the feature).
+## Sem menus (`--text`)
 
-Not allowed (scope creep): "Should we also add comments?" / "What about search/filtering?" /
-"Maybe include bookmarking?" — those are new capabilities and belong in their own phase.
+Com `TEXT_MODE=true` (o dono rodou com `--text`), não use AskUserQuestion: mostre as mesmas perguntas como
+lista numerada em texto normal, com as mesmas opções, consequências e «recomendo», e aceite a resposta por número ou por
+extenso.
 
-When the user suggests scope creep, say
-`"[Feature X] would be a new capability — that's its own phase. Want me to note it for the roadmap backlog? For now, let's focus on [phase domain]."`
-and capture the idea as a deferred idea (`$T/deferred.txt`). Don't lose it, don't act on it.
+## Retomada
 
-## Answer validation
+Estado `retomar` (a conversa caiu no meio): conte ao dono, em linguagem leiga, o que já ficou decidido e o que falta,
+sem id e sem arquivo. Exemplo: «Da última vez você já decidiu que o relatório sai com as mesmas colunas da tela e que
+o arquivo fica só na sua máquina. Falta decidir o que acontece num mês sem lançamentos. Vamos seguir daí.» Nada que
+já tem resposta é perguntado de novo.
 
-After every AskUserQuestion call, if the response is empty/whitespace-only:
+## Documento existente
 
-- "Other" with empty text (the user wants to type freeform): output `"What would you like to discuss?"`, stop generating, wait for the user's next message, then reflect it back and continue. Do not retry AskUserQuestion or call any tools.
-- Any other empty response: retry once with the same parameters; if still empty, present options as a plain-text numbered list. Never proceed with empty input.
+Estados `existe-novo` / `existe-antigo` — uma tela, nada muda antes da resposta. Diga o que existe e pergunte se
+refaz:
 
-Text mode (`--text` or `workflow.text_mode: true`): follow `workflows/discuss-phase/modes/text.md` — do not use AskUserQuestion at all.
+- formato novo: «Esta fase já tem uma especificação aprovada por você. Quer refazer?» — opções: «Manter a atual»
+  (recomendo, se nada mudou: ela continua valendo e nada é gravado) · «Refazer» (a atual só é trocada quando você
+  aprovar a nova; até lá ela continua valendo).
+- formato antigo: «Esta fase tem um documento de intenção num formato antigo, de antes do comando único. Quer
+  refazer?» — opções: «Refazer» (recomendo: o documento novo traz só as suas decisões e o planner lê melhor; o atual
+  só é trocado quando você aprovar o novo) · «Manter o antigo» (nada é gravado).
 
-## check_existing — the questions
+## Fase fora do plano
 
-The rules (what each answer does) are in the parent's `check_existing`; these are the prompts.
+Fase que ainda não está no ROADMAP: «Essa fase ainda não está no plano do projeto. Como ela se chama, em poucas
+palavras, e depois de qual fase ela entra?» — opções: as fases vizinhas, com a recomendada primeiro e o porquê. Se o
+número que o sistema der for outro, diga: «a fase ficou com o número X».
 
-- `has_context` true → AskUserQuestion (header: "Context"; question: "Phase [X] already has context. What do you want to do?"; options: "Update it" / "View it" / "Skip").
-- `CHECKS.checkpoint` true → AskUserQuestion (header: "Resume"; question: "Found interrupted discussion checkpoint ({N} areas completed out of {M}). Resume from where you left off?"; options: "Resume" / "Start fresh").
-- `has_plans` true → AskUserQuestion (header: "Plans exist"; question: "Phase [X] already has {plan_count} plan(s) created without user context. Your decisions here won't affect existing plans unless you replan."; options: "Continue and replan after" / "View existing plans" / "Cancel").
+## Aviso de ambiguidade
 
-## present_gray_areas — the question
+Quando a régua interna não passa: «Ainda há pontos vagos: [o que falta, em uma linha cada]. Se eu gravar assim, quem
+planeja vai ter de supor isso. Recomendo responder mais [N] perguntas antes de gravar. Quer seguir com as perguntas
+ou gravar assim mesmo?» Sem número de nota. Só grave com a ordem dele.
 
-After presenting the domain boundary, carried-forward decisions and gray areas: AskUserQuestion
-(multiSelect: true; header: "Discuss"; question: "Which areas do you want to discuss for [phase name]?";
-options: the phase-specific gray areas, each with a concrete label, 1–2 questions in the description
-and code-context / prior-decision annotations, e.g.
-`☐ Layout style — Cards vs list vs timeline? (You already have a Card component…)`).
-Offer only real, discussable choices.
+## Pergunta de gravação
 
-## discuss_areas (default, interactive)
-
-For each selected area, conduct a focused discussion loop.
-
-**Research-before-questions mode:** Check if `workflow.research_before_questions` is enabled in config (from init context or `.planning/config.json`). When enabled, before presenting questions for each area:
-1. Do a brief web search for best practices related to the area topic
-2. Summarize the top findings in 2-3 bullet points
-3. Present the research alongside the question so the user can make a more informed decision
-
-Example with research enabled:
-```text
-Let's talk about [Authentication Strategy].
-
-📊 Best practices research:
-• OAuth 2.0 + PKCE is the current standard for SPAs (replaces implicit flow)
-• Session tokens with httpOnly cookies preferred over localStorage for XSS protection
-• Consider passkey/WebAuthn support — adoption is accelerating in 2025-2026
-
-With that context: How should users authenticate?
-```
-
-When disabled (default), skip the research and present questions directly as before.
-
-**Philosophy:** stay adaptive. Default flow is 4 single-question turns, then
-check whether to continue. Each answer should reveal the next question.
-
-**For each area:**
-
-1. **Announce the area:**
-   ```text
-   Let's talk about [Area].
-   ```
-
-2. **Ask 4 questions using AskUserQuestion:**
-   - header: "[Area]" (max 12 chars — abbreviate if needed)
-   - question: Specific decision for this area
-   - options: 2-3 concrete choices (AskUserQuestion adds "Other" automatically), with the recommended choice highlighted and brief explanation why
-   - **Annotate options with code context** when relevant:
-     ```text
-     "How should posts be displayed?"
-     - Cards (reuses existing Card component — consistent with Messages)
-     - List (simpler, would be a new pattern)
-     - Timeline (needs new Timeline component — none exists yet)
-     ```
-   - Include "You decide" as an option when reasonable — captures Claude discretion
-   - **Context7 for library choices:** When a gray area involves library selection (e.g., "magic links" → query next-auth docs) or API approach decisions, use `mcp__context7__*` tools to fetch current documentation and inform the options. Don't use Context7 for every question — only when library-specific knowledge improves the options.
-
-3. **After the current set of questions, check:**
-   - header: "[Area]" (max 12 chars)
-   - question: "More questions about [area], or move to next? (Remaining: [list other unvisited areas])"
-   - options: "More questions" / "Next area"
-
-   When building the question text, list the remaining unvisited areas so the user knows what's ahead. For example: "More questions about Layout, or move to next? (Remaining: Loading behavior, Content ordering)"
-
-   If "More questions" → ask another 4 single questions, then check again
-   If "Next area" → proceed to next selected area
-   If "Other" (free text) → interpret intent: continuation phrases ("chat more", "keep going", "yes", "more") map to "More questions"; advancement phrases ("done", "move on", "next", "skip") map to "Next area". If ambiguous, ask: "Continue with more questions about [area], or move to the next area?"
-
-4. **After all initially-selected areas complete:**
-   - Summarize what was captured from the discussion so far
-   - AskUserQuestion:
-     - header: "Done"
-     - question: "We've discussed [list areas]. Which gray areas remain unclear?"
-     - options: "Explore more gray areas" / "I'm ready for context"
-   - If "Explore more gray areas":
-     - Identify 2-4 additional gray areas based on what was learned
-     - Return to present_gray_areas logic with these new areas
-     - Loop: discuss new areas, then prompt again
-   - If "I'm ready for context": Proceed to write_context
-
-**Canonical ref accumulation during discussion:**
-When the user references a doc, spec, or ADR during any answer — e.g., "read adr-014", "check the MCP spec", "per browse-spec.md" — immediately:
-1. Read the referenced doc (or confirm it exists)
-2. Add it to the canonical refs accumulator with full relative path
-3. Use what you learned from the doc to inform subsequent questions
-
-These user-referenced docs are often MORE important than ROADMAP.md refs because they represent docs the user specifically wants downstream agents to follow. Never drop them.
-
-**Question design:**
-- Options should be concrete, not abstract ("Cards" not "Option A")
-- Each answer should inform the next question or next batch
-- If user picks "Other" to provide freeform input (e.g., "let me describe it", "something else", or an open-ended reply), ask your follow-up as plain text — NOT another AskUserQuestion. Wait for them to type at the normal prompt, then reflect their input back and confirm before resuming AskUserQuestion or the next numbered batch.
-
-**Thinking partner (conditional):**
-If `features.thinking_partner` is enabled in config, check the user's answer for tradeoff signals
-(see `gad-core/references/thinking-partner.md` for signal list). If tradeoff detected:
-
-```text
-I notice competing priorities here — {option_A} optimizes for {goal_A} while {option_B} optimizes for {goal_B}.
-
-Want me to think through the tradeoffs before we lock this in?
-[Yes, analyze] / [No, decision made]
-```
-
-If yes: provide 3-5 bullet analysis (what each optimizes/sacrifices, alignment with PROJECT.md goals, recommendation). Then return to normal flow.
-
-**Scope creep handling:**
-If user mentions something outside the phase domain:
-```text
-"[Feature] sounds like a new capability — that belongs in its own phase.
-I'll note it as a deferred idea.
-
-Back to [current area]: [return to current question]"
-```
-
-Track deferred ideas internally.
-
-**Incremental checkpoint — one writer call per decision, never a hand-written JSON:**
-
-The checkpoint (`${phase_dir}/${padded_phase}-DISCUSS-CHECKPOINT.json`) was created by
-`checkpoint-write.py init` at the end of `analyze_phase`. After **each answer** the user
-gives, persist it immediately (the parent's `discuss_areas` shows the exact call): write
-the question, the answer as the user meant it, the options you presented and any rationale
-to files in `.planning/.discuss-tmp/` with `Write` (free text — quotes, newlines, backticks
-are fine), then `python3 "$NOSSO/checkpoint-write.py" add-decision "$CKPT" --area "<Area>"
---origin owner …` (`--origin prior-phase` when the answer merely confirms an earlier phase's
-decision; `--anchor` = the area's anchor). When the user says "you decide", it is not a
-decision — append one line to `.planning/.discuss-tmp/discretion.txt`. When the user
-picks "Next area", `complete-area`. This prevents data loss if the session is interrupted
-and is what `write_context` renders — nothing you say in chat reaches CONTEXT.md unless
-it went through the writer. Do not read `templates/checkpoint.json` (documentation only).
-
-**On session resume:** Handled in the parent's `check_existing` step. After
-`write_context` completes successfully, the parent's `git_commit` step
-deletes the checkpoint.
-
-**Track discussion log data internally (only when `LOG_ON=true`):**
-For each question asked, accumulate:
-- Area name
-- All options presented (label + description)
-- Which option the user selected (or their free-text response)
-- Any follow-up notes or clarifications the user provided
-
-This data is used to generate DISCUSSION-LOG.md in the parent's `finalize` step — opt-in via `features.discussion_log`; the rationale downstream agents need is already in CONTEXT.md as `options:`/`evidence:`/prose lines.
+Depois da explicação do passo `write_context` (o que a fase entrega, o que fica de fora, o que você decidiu, o que
+ficou como suposição): «Posso gravar a especificação assim?» — opções: «ok, pode gravar» · «Quero mudar algo». Só um
+«ok» explícito grava; qualquer outra resposta volta à entrevista.

@@ -44,8 +44,9 @@ imprime (ex.: `intent/c1/vereditos.txt` → `.intent/.vereditos-c1.txt`). Nunca 
 
 ## Julgamento inicial (1º turno, ANTES de invocar o plan-phase)
 
-Leia `NN-SPEC.md`, `NN-CONTEXT.md`, a seção `## Dívidas registradas` do
-`NN-INTENT-REVIEW.md` (`sed -n '/^## Dívidas registradas/,/^## /p'`) e confira a existência
+Leia o `NN-CONTEXT.md` (o documento único da intenção: Goal, requisitos, critérios com
+classe, bordas, proibições e `<decisions>`) — numa fase antiga, também o `NN-SPEC.md` —, a
+seção `## Dívidas registradas` do `NN-INTENT-REVIEW.md` (`sed -n '/^## Dívidas registradas/,/^## /p'`) e confira a existência
 de `NN-RESEARCH.md`. Cada dívida com `destino: plan-phase` é insumo do plano — vira tarefa
 ou entra no `## Out-of-scope` do plano com o motivo — porque é um achado verdadeiro que a
 consultoria dispensou do ciclo, não do registro; um planner que não a vê é o que a torna
@@ -59,7 +60,7 @@ comando auto-usa o existente; `--research` fixo era force-refresh e regenerava ~
 por retomada). Senão, as **três** perguntas — pular exige as três fechadas com convicção:
 *(a) a correção desta fase depende de fatos que não estão escritos em nenhum artefato da
 árvore (banco vivo, daemon/imagem, payload real, planilha, lib nova)?* · *(b) as decisões
-do CONTEXT/SPEC já resolvem o desenho?* · *(c) **a validação Nyquist vai rodar nesta
+do documento único (`<decisions>` do `NN-CONTEXT.md`) já resolvem o desenho?* · *(c) **a validação Nyquist vai rodar nesta
 fase?*** — confira em `nyquist_validation_enabled` do `init.plan-phase`: se for `true`,
 **a pesquisa não é opcional**, porque a validação consome o RESEARCH; **chave ausente =
 trate como `true`** (o viés é pesquisar). **Viés
@@ -69,16 +70,16 @@ errado = fixture mentirosa (caso RLR-02) ou o vaivém da F24.5 (skip anunciado �
 desfeito às 12:18, 2 decisões registradas para 1 resultado; reincidente da F24.3).
 
 **2. Pattern-mapper (2.E).** Critério ex-ante: *a fase cria ≥1 arquivo novo de
-produção?* — **leia dos artefatos que LISTAM arquivos** (SPEC `files:`/AC de "criar",
-RESEARCH "Files to create", e — se já houver — os PLAN.md `files_modified`/`creates`),
-não de uma impressão do CONTEXT: na F24.3 o mapper foi suprimido "porque nenhum plano
+produção?* — **leia dos artefatos que LISTAM arquivos** (o bloco `gsd:reqs` (`files`) e a tabela de Artefatos novos do documento único,
+os AC de "criar", RESEARCH "Files to create", e — se já houver — os PLAN.md
+`files_modified`/`creates`), não de uma impressão da prosa do documento: na F24.3 o mapper foi suprimido "porque nenhum plano
 cria arquivo novo" e o plano 02 criava `src/comparison/roteamento_responsavel.py`; o
 checker rodou sem PATTERNS. **Antes de decidir, o critério deixa de ser opinião.** Se já houver PLAN.md no
 `phase_dir` (replan, `--reviews`, retomada), rode
 `bash ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/go-and-do/scripts/confere-arquivos-novos.sh "<phase_dir>" "<project_root>"`:
 `veredito: mapper_obrigatorio` → **o mapper roda, sem discussão**, e você registra em
 `sinos:` `mapper_obrigatorio: <os caminhos>`. Não havendo plano ainda (1.ª passada), a
-lista de arquivos dos artefatos (SPEC/RESEARCH) é o insumo, e vale a mesma régua: **na
+lista de arquivos dos artefatos (documento único/RESEARCH) é o insumo, e vale a mesma régua: **na
 dúvida, o mapper roda**. Cria → o mapper roda (não faça nada).
 Só modifica existentes → **suprima o passo do pattern-mapper do workflow hospedado**
 (ele roda na SUA janela — ao chegar no passo que despacha `gad-pattern-mapper`,
@@ -127,10 +128,11 @@ overhead compra paralelismo real no motor de waves — 6× provado) · na dúvid
    dizendo que o plano roda sem worktree.» Sem essa linha o planner conclui sozinho, do
    "arquivo gitignored", a premissa stale — hoje só pega DEPOIS de escrita, pelo
    `confere-precondicoes.sh` do passo 4 abaixo.
-   **SPEC/CONTEXT grande demais para uma leitura só (48j/S-9):** quando o `pre-despacho.sh 2`
-   acusar `extras.sino_tamanho` (SPEC/CONTEXT acima do teto — `GAD_TETO_BRIEFING_KB`, default
-   60 KB — alarme, nunca muro), acrescente ao mesmo despacho do `gad-phase-researcher`/
-   `gad-planner` a linha literal: «`NN-SPEC.md`/`NN-CONTEXT.md` passa do teto de leitura —
+   **Documento único grande demais para uma leitura só (48j/S-9):** quando o `pre-despacho.sh 2`
+   acusar `extras.sino_tamanho` (`NN-CONTEXT.md` — e, em fase antiga, `NN-SPEC.md` — acima do
+   teto — `GAD_TETO_BRIEFING_KB`, default 60 KB — alarme, nunca muro), acrescente ao mesmo
+   despacho do `gad-phase-researcher`/`gad-planner` a linha literal:
+   «`NN-CONTEXT.md` (e, em fase antiga, `NN-SPEC.md`) passa do teto de leitura —
    leia em fatias (`sed -n` por faixa de linha) e confira a ÚLTIMA linha do arquivo contra o
    tamanho declarado antes de dar por lido; leitura truncada pelo teto da tool é
    indistinguível de leitura completa sem essa checagem.»

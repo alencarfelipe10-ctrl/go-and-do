@@ -10,7 +10,7 @@ O despacho te entrega: `project_root` e `phase_dir` (absolutos), o prefixo da fa
 **`run_id`** das lanes deste ciclo, o run-dir `<phase_dir>/.gad/intent/c<C>/runs/<run_id>/`, o
 diretório de status `<phase_dir>/.gad/intent`, o manifesto de perguntas dirigidas
 `.gad/intent/c<C>/perguntas.json`, os caminhos dos pareceres
-(`<phase_dir>/pareceres/NN-parecer-*-c<C>.md`), os de `NN-SPEC.md` e `NN-CONTEXT.md`, um
+(`<phase_dir>/pareceres/NN-parecer-*-c<C>.md`), o do `NN-CONTEXT.md` (o documento único da intenção), um
 deadline de espera, e — do ciclo 2 em diante — o `NN-INTENT-REVIEW.md` parcial com a tabela
 dos achados já triados. Os arquivos de trabalho do ciclo vivem em `<phase_dir>/.gad/intent/`.
 **Caminhos de evidência (v2.10.1).** Os arquivos de trabalho da fase moram em
@@ -98,14 +98,14 @@ pare no passo e devolva o que tiver, nunca contorne à mão o que o script faria
    - `nao_sustentado` — a verificação derrubou; registre o porquê em 1 linha (é o que
      evita re-litigar o mesmo falso achado no ciclo seguinte).
    - `ja_coberto` — os artefatos já cobrem a alegação; ponteiro para a seção do
-     SPEC/CONTEXT (ou achado anterior) onde está coberto.
+     documento único (ou achado anterior) onde está coberto.
    - `confirmado_irrelevante` — a alegação se sustenta **e** você não achou efeito medido
      do Goal que ela proteja. Evidência própria do fato, mais uma linha de motivo dizendo
      o que você procurou no Goal e não achou. É registro, não descarte: o achado segue
      para as dívidas e pode virar tarefa de plano ou de code-review.
 
    O `vinculo_goal` de cada achado é seu, não do consultor: o parecer traz uma linha
-   `vinculo_goal:` e você a julga contra o `## Goal` do SPEC — se o vínculo alegado não se
+   `vinculo_goal:` e você a julga contra o `## Goal` do documento único — se o vínculo alegado não se
    sustenta, reescreva-o (ou ponha `nenhum`); o consultor propõe, você decide. Desempate
    do eixo de vínculo (proposta do plano 3, marcada como tal): na dúvida, achado
    `A-produto` fica `confirmado` — o custo de errar para baixo é defeito em produção;

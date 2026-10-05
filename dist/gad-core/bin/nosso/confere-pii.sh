@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# confere-pii.sh — gate de PII do PRE-SPEC: nenhuma pessoa aparece por nome.
-#
+# confere-pii.sh — gate de PII do documento de intenção (NN-CONTEXT.md): nenhuma pessoa aparece
+# por nome; pessoas só por número ou papel (AC-14). Realocado da skill gad-pre-spec (plano 06-04).
 # Uso:
 #   confere-pii.sh <arquivo.md> [<arquivo.md>…]
 #                  [--nomes <lista.txt>]       lista de nomes VISTOS nos insumos (bloqueio duro)
@@ -14,7 +14,7 @@
 #   2. Heurística "Nome Sobrenome": dois tokens capitalizados seguidos (com `da/de/dos`
 #      opcional no meio), fora de heading, bloco de código, código inline, caminho de
 #      arquivo e URL, e com nenhum dos dois tokens na lista de permitidos
-#      (`scripts/nomes-permitidos.txt` + `--permitidos`) → `PII-NOME-SUSPEITO`.
+#      (`nomes-permitidos.txt`, ao lado deste script, + `--permitidos`) → `PII-NOME-SUSPEITO`.
 #
 # FALSOS POSITIVOS ESPERADOS (a heurística não entende semântica — a lista de permitidos é o remédio)
 #   * produto/empresa de duas palavras que não esteja na lista ("Google Workspace",
